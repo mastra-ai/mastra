@@ -57,21 +57,24 @@ describe('LibSQLStore domain wiring', () => {
     const injectedUrl = pathToFileURL(join(directory, 'injected.db')).href;
     const ownedStore = new LibSQLStore({ id: 'libsql-owned-harness-init', url: ownedUrl });
     const ownedClient = (ownedStore as unknown as { client: ReturnType<typeof createClient> }).client;
-    const ownedExecute = vi.spyOn(ownedClient, 'execute');
+    // @libsql/client >= 0.18.0 pools file: connections; the atomic init opens
+    // its critical section through client.transaction('write') rather than a
+    // raw BEGIN IMMEDIATE on a pooled borrow.
+    const ownedTransaction = vi.spyOn(ownedClient, 'transaction');
     const injectedClient = createClient({ url: injectedUrl });
     const injectedExecute = vi.spyOn(injectedClient, 'execute');
+    const injectedTransaction = vi.spyOn(injectedClient, 'transaction');
     const injectedStore = new LibSQLStore({ id: 'libsql-injected-harness-init', client: injectedClient });
     const statementSql = (statement: Parameters<typeof ownedClient.execute>[0]) =>
       typeof statement === 'string' ? statement : statement.sql;
 
     try {
       await ownedStore.stores.harness!.init();
-      expect(ownedExecute.mock.calls.some(([statement]) => statementSql(statement) === 'BEGIN IMMEDIATE')).toBe(true);
+      expect(ownedTransaction).toHaveBeenCalledWith('write');
 
       await injectedStore.stores.harness!.init();
-      expect(injectedExecute.mock.calls.some(([statement]) => statementSql(statement) === 'BEGIN IMMEDIATE')).toBe(
-        false,
-      );
+      expect(injectedTransaction).not.toHaveBeenCalled();
+      expect(injectedExecute.mock.calls.some(([statement]) => statementSql(statement).startsWith('BEGIN'))).toBe(false);
     } finally {
       await ownedStore.close();
       await injectedStore.close();

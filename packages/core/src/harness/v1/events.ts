@@ -17,7 +17,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { HarnessStorageDomainError } from '../../storage/domains/harness';
+import { HarnessStorageDomainError, HarnessTerminalHandoffError } from '../../storage/domains/harness';
 import type {
   ChannelActionReceipt,
   ChannelOutboxItem,
@@ -1109,6 +1109,9 @@ export function projectHarnessPublicError(err: unknown): { code: string; message
     return { code: 'harness.storage', message: err.message };
   }
   if (err instanceof HarnessStorageDomainError) {
+    return { code: err.code, message: err.message };
+  }
+  if (err instanceof HarnessTerminalHandoffError) {
     return { code: err.code, message: err.message };
   }
   if (err instanceof HarnessError) {

@@ -978,6 +978,7 @@ export class Harness {
    * awaits it after the snapshot policy resolves.
    */
   private readonly _onBeforeToolExecution: NonNullable<HarnessConfig['sessions']>['onBeforeToolExecution'];
+  private readonly _terminalFinalizer?: import('../../storage/domains/harness').HarnessTerminalFinalizer;
   private readonly _closeTimeoutMs: number;
   private readonly _pendingInteractionTtlMs: number;
   /** Validated per-kind TTL overrides; kinds absent here use the default. */
@@ -1081,6 +1082,7 @@ export class Harness {
     this._persistTransientStreamingEvents = config.sessions?.persistTransientStreamingEvents ?? true;
     this._onBeforeQueuedTurn = config.sessions?.onBeforeQueuedTurn;
     this._onBeforeToolExecution = config.sessions?.onBeforeToolExecution;
+    this._terminalFinalizer = config.sessions?.terminalHandoff?.finalizer;
     this._lockRenewMs = config.sessions?.lockRenewMs ?? DEFAULT_LEASE_RENEW_MS;
     if (!Number.isInteger(this._lockRenewMs) || this._lockRenewMs < 1 || this._lockRenewMs >= this._leaseTtlMs) {
       throw new HarnessConfigError('sessions.lockRenewMs', 'must be a positive integer less than lockTtlMs');
@@ -4593,6 +4595,7 @@ export class Harness {
       leaseExpiresAt: record.leaseExpiresAt ?? Date.now() + this._leaseTtlMs,
       eventReplaySeed: opts.eventReplaySeed,
       persistTransientStreamingEvents: this._persistTransientStreamingEvents,
+      terminalFinalizer: this._terminalFinalizer,
     });
     if (workspaceLost) session._markWorkspaceLost();
 
@@ -4964,6 +4967,7 @@ export class Harness {
         leaseExpiresAt: lease.expiresAt,
         eventReplaySeed: await this._eventReplaySeedFor(storage, record),
         persistTransientStreamingEvents: this._persistTransientStreamingEvents,
+        terminalFinalizer: this._terminalFinalizer,
       });
       bridge = transientSession._subscribeInternal(event => this._emitter.forward(event));
       await transientSession._internalExpirePendingInteractionGeneration(generation, { drainQueue: false });

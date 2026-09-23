@@ -53,6 +53,48 @@ import {
   buildHarnessSessionRecordProjectionIntent,
   projectHarnessSessionRecordProjectionFence,
 } from './session-record-projection';
+import {
+  HarnessTerminalHandoffClaimConflictError,
+  HarnessTerminalHandoffFencedError,
+  HarnessTerminalHandoffIdentityConflictError,
+  HarnessTerminalHandoffNotFoundError,
+  HarnessTerminalHandoffUnsupportedError,
+  HarnessTerminalHandoffValidationError,
+  canonicalHarnessTerminalResult,
+  cloneHarnessTerminal,
+  harnessTerminalAdmissionId,
+  harnessTerminalGrantTombstoneId,
+  harnessTerminalIntentId,
+  canonicalJson,
+  prepareHarnessTerminalAdmission,
+  prepareHarnessTerminalProjection,
+  terminalClaimId,
+  validateHarnessTerminalIdentity,
+} from './terminal-handoff';
+import type {
+  HarnessTerminalAckReceipt,
+  HarnessTerminalAdmissionInput,
+  HarnessPendingTerminalAdmissionLoadInput,
+  HarnessTerminalAdmissionLoadInput,
+  HarnessTerminalAdmissionRecord,
+  HarnessTerminalAdmissionReceipt,
+  HarnessTerminalCancelInput,
+  HarnessTerminalCancelReceipt,
+  HarnessTerminalClaimIdentity,
+  HarnessTerminalClaimInput,
+  HarnessTerminalClaimReceipt,
+  HarnessTerminalCommitReceipt,
+  HarnessTerminalError,
+  HarnessTerminalFailReceipt,
+  HarnessTerminalHandoffOption,
+  HarnessTerminalIdentity,
+  HarnessTerminalIntent,
+  HarnessTerminalIntentLoadInput,
+  HarnessTerminalProjection,
+  HarnessTerminalQueuePressure,
+  HarnessTerminalRenewReceipt,
+  HarnessTerminalResult,
+} from './terminal-handoff';
 import type {
   AcquireSessionLeaseInput,
   AgentSignalResultEvidence,
@@ -162,15 +204,21 @@ export class InMemoryHarness extends HarnessStorage {
   constructor({
     db,
     harnessName = 'default',
+    terminalHandoff,
     sessionRecordProjection,
   }: {
     db: InMemoryDB;
     harnessName?: string;
+    terminalHandoff?: HarnessTerminalHandoffOption;
     sessionRecordProjection?: HarnessSessionRecordProjectionOption;
   }) {
-    super({ sessionRecordProjection });
+    super({ terminalHandoff, sessionRecordProjection });
     this.db = db;
     this.harnessName = harnessName;
+  }
+
+  override get supportsTerminalHandoff(): boolean {
+    return this.terminalHandoff.enabled;
   }
 
   override get supportsSessionRecordProjection(): boolean {
@@ -520,7 +568,8 @@ export class InMemoryHarness extends HarnessStorage {
     }
 
     const expiresAt = storageNow + opts.initialLease.ttlMs;
-    const sessionIncarnation = this.sessionRecordProjection.enabled ? randomUUID() : undefined;
+    const sessionIncarnation =
+      this.sessionRecordProjection.enabled || this.terminalHandoff.enabled ? randomUUID() : undefined;
     const stored: SessionRecord = {
       ...record,
       harnessName: namespace,
@@ -562,7 +611,15 @@ export class InMemoryHarness extends HarnessStorage {
       existingSessions.set(sessionKey(namespace, sessionId), { namespace, sessionId, record: existing });
     }
 
-    for (const { namespace, sessionId } of existingSessions.values()) {
+    for (const { namespace, sessionId, record } of existingSessions.values()) {
+      // Synchronous within the delete critical section — awaiting here would
+      // let a concurrent saveSession interleave between guard and removal.
+      this.fenceTerminalHandoffsForSessionSync({
+        harnessName: namespace,
+        sessionId,
+        sessionIncarnation: record.sessionIncarnation,
+        deletedAt: Date.now(),
+      });
       this.db.harnessSessions.delete(sessionKey(namespace, sessionId));
     }
 
@@ -829,6 +886,12 @@ export class InMemoryHarness extends HarnessStorage {
     }
   }
 
+  private assertTerminalHandoffEnabled(): void {
+    if (!this.terminalHandoff.enabled) {
+      throw new HarnessTerminalHandoffUnsupportedError();
+    }
+  }
+
   private assertProjectionIncarnation(
     record: SessionRecord,
   ): asserts record is SessionRecord & { sessionIncarnation: string } {
@@ -838,7 +901,13 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   private projectionSessionIncarnation(record: SessionRecord, existing: SessionRecord | undefined): string | undefined {
-    if (!this.sessionRecordProjection.enabled) return record.sessionIncarnation;
+    if (!this.sessionRecordProjection.enabled) {
+      if (!this.terminalHandoff.enabled) return record.sessionIncarnation;
+      // Terminal handoff owns its incarnation fence without requiring the
+      // session-record projection feature: mint on create, preserve on update.
+      if (existing === undefined) return record.sessionIncarnation ?? randomUUID();
+      return existing.sessionIncarnation ?? record.sessionIncarnation;
+    }
     if (existing !== undefined) {
       this.assertProjectionIncarnation(existing);
       if (record.sessionIncarnation !== undefined && record.sessionIncarnation !== existing.sessionIncarnation) {
@@ -1405,6 +1474,628 @@ export class InMemoryHarness extends HarnessStorage {
       : { created: false, applied: true, evidence: cloneJson(stored) };
   }
 
+  // -------------------------------------------------------------------------
+  // Native chat terminal handoff
+  // -------------------------------------------------------------------------
+
+  async admitTerminalHandoff(input: HarnessTerminalAdmissionInput): Promise<HarnessTerminalAdmissionReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const normalizedInput = { ...input, harnessName: namespace };
+    const admission = prepareHarnessTerminalAdmission(normalizedInput, this.terminalHandoff);
+    const tombstone = this.db.harnessTerminalTombstones.get(harnessTerminalGrantTombstoneId(normalizedInput));
+    if (tombstone) {
+      return { status: 'cancelled', admission: { ...admission, status: 'cancelled' } };
+    }
+    const currentSession = this.db.harnessSessions.get(sessionKey(namespace, input.sessionId));
+    if (!currentSession || currentSession.sessionIncarnation !== input.sessionIncarnation) {
+      return { status: 'fenced', admission: { ...admission, status: 'fenced' } };
+    }
+    const existing = this.db.harnessTerminalAdmissions.get(admission.id);
+    if (existing) {
+      if (!sameTerminalAdmissionIdentity(existing, admission)) {
+        throw new HarnessTerminalHandoffIdentityConflictError(input.executionGrant.key);
+      }
+      return { status: 'duplicate', admission: cloneHarnessTerminal(existing) };
+    }
+    // The durable incarnation fence covers admissions inserted after a fence
+    // sweep: a fenced incarnation rejects new admissions even while the
+    // session row itself still reports that incarnation.
+    if (
+      this.db.harnessTerminalSessionFences.has(
+        terminalSessionFenceKey(namespace, input.sessionId, input.sessionIncarnation),
+      )
+    ) {
+      return { status: 'fenced', admission: { ...admission, status: 'fenced' } };
+    }
+    // A grant generation binds to at most one admission across the harness.
+    const grantWinner = [...this.db.harnessTerminalAdmissions.values()].find(
+      candidate =>
+        candidate.harnessName === namespace &&
+        candidate.executionGrant.key === admission.executionGrant.key &&
+        candidate.executionGrant.generation === admission.executionGrant.generation,
+    );
+    if (grantWinner) {
+      return { status: 'conflict', admission: cloneHarnessTerminal(grantWinner) };
+    }
+    this.db.harnessTerminalAdmissions.set(admission.id, cloneHarnessTerminal(admission));
+    return { status: 'created', admission: cloneHarnessTerminal(admission) };
+  }
+
+  async loadTerminalAdmission(input: HarnessTerminalAdmissionLoadInput) {
+    this.assertTerminalHandoffEnabled();
+    const id = harnessTerminalAdmissionId({
+      harnessName: resolveHarnessName(input.harnessName, this.harnessName),
+      sessionId: input.sessionId,
+      executionGrant: input.executionGrant,
+    });
+    const admission = this.db.harnessTerminalAdmissions.get(id);
+    if (!admission) return null;
+    if (admission.admissionId !== input.admissionId) {
+      throw new HarnessTerminalHandoffIdentityConflictError(input.executionGrant.key);
+    }
+    return cloneHarnessTerminal(admission);
+  }
+
+  async loadPendingTerminalAdmission(input: HarnessPendingTerminalAdmissionLoadInput) {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    for (const admission of this.db.harnessTerminalAdmissions.values()) {
+      if (
+        admission.harnessName === namespace &&
+        admission.sessionId === input.sessionId &&
+        admission.sessionIncarnation === input.sessionIncarnation &&
+        admission.runId === input.runId &&
+        admission.status === 'pending'
+      ) {
+        return cloneHarnessTerminal(admission);
+      }
+    }
+    return null;
+  }
+
+  async loadTerminalAdmissionByRun(input: HarnessPendingTerminalAdmissionLoadInput) {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    for (const admission of this.db.harnessTerminalAdmissions.values()) {
+      if (
+        admission.harnessName === namespace &&
+        admission.sessionId === input.sessionId &&
+        admission.sessionIncarnation === input.sessionIncarnation &&
+        admission.runId === input.runId
+      ) {
+        return cloneHarnessTerminal(admission);
+      }
+    }
+    return null;
+  }
+
+  async commitTerminalHandoff(input: {
+    admission: HarnessTerminalAdmissionInput;
+    resultEvidence: AgentSignalResultEvidence;
+    terminalResult: HarnessTerminalResult;
+    projection: HarnessTerminalProjection;
+  }): Promise<HarnessTerminalCommitReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.admission.harnessName, this.harnessName);
+    const admissionInput = { ...input.admission, harnessName: namespace };
+    validateHarnessTerminalIdentity(admissionInput);
+    const admissionId = harnessTerminalAdmissionId(admissionInput);
+    const stored = this.db.harnessTerminalAdmissions.get(admissionId);
+    if (!stored) throw new HarnessTerminalHandoffFencedError(admissionInput.sessionId);
+    if (!sameTerminalAdmissionInput(stored, admissionInput)) {
+      throw new HarnessTerminalHandoffIdentityConflictError(admissionInput.executionGrant.key);
+    }
+    if (stored.status === 'fenced') throw new HarnessTerminalHandoffFencedError(stored.sessionId);
+    const tombstone = this.db.harnessTerminalTombstones.get(harnessTerminalGrantTombstoneId(admissionInput));
+    if (tombstone && stored.status !== 'committed') {
+      return { status: 'cancelled', admission: cloneHarnessTerminal({ ...stored, status: 'cancelled' }) };
+    }
+    const currentSession = this.db.harnessSessions.get(sessionKey(namespace, stored.sessionId));
+    if (
+      stored.status !== 'committed' &&
+      (!currentSession || currentSession.sessionIncarnation !== stored.sessionIncarnation)
+    ) {
+      stored.status = 'fenced';
+      stored.updatedAt = Date.now();
+      throw new HarnessTerminalHandoffFencedError(stored.sessionId);
+    }
+    const resultEvidence = {
+      ...input.resultEvidence,
+      harnessName: namespace,
+    };
+    if (
+      resultEvidence.status !== 'completed' ||
+      resultEvidence.signalId !== stored.signalId ||
+      resultEvidence.runId !== stored.runId ||
+      resultEvidence.sessionId !== stored.sessionId ||
+      resultEvidence.resourceId !== stored.resourceId ||
+      resultEvidence.threadId !== stored.threadId ||
+      resultEvidence.admissionId !== stored.admissionId ||
+      resultEvidence.admissionHash !== stored.admissionHash
+    ) {
+      throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+    }
+    const evidenceKey = messageEvidenceKey(namespace, stored.sessionId, stored.signalId);
+    const currentEvidence = this.db.harnessMessageResultEvidence.get(evidenceKey);
+    if (!currentEvidence) {
+      throw new HarnessTerminalHandoffValidationError(
+        'resultEvidence',
+        'canonical pending message-result evidence is missing',
+      );
+    }
+    if (!sameMessageEvidenceIdentity(currentEvidence, resultEvidence)) {
+      throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+    }
+    if (currentEvidence.status === 'failed') {
+      throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+    }
+    const terminalResult = canonicalHarnessTerminalResult(input.terminalResult);
+    const projection = prepareHarnessTerminalProjection(input.projection, this.terminalHandoff.maxPayloadBytes);
+    const intentId = harnessTerminalIntentId(stored.id);
+    const existingIntent = this.db.harnessTerminalIntents.get(intentId);
+    if (stored.status === 'committed') {
+      if (
+        !existingIntent ||
+        !sameTerminalIntentValue(existingIntent, terminalResult, projection) ||
+        currentEvidence.status !== 'completed' ||
+        stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
+      ) {
+        throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+      }
+      return {
+        status: 'duplicate',
+        admission: cloneHarnessTerminal(stored),
+        intent: cloneHarnessTerminal(existingIntent),
+      };
+    }
+    if (existingIntent) {
+      if (!sameTerminalIntentValue(existingIntent, terminalResult, projection)) {
+        throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+      }
+      if (
+        currentEvidence.status === 'completed' &&
+        stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
+      ) {
+        throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+      }
+      // Materialize every clone that can throw BEFORE mutating durable rows —
+      // a thrown clone mid-commit would leave a committed admission with
+      // pending evidence, violating the atomic commit contract.
+      const committedEvidence =
+        currentEvidence.status === 'pending'
+          ? { ...cloneJson(resultEvidence), createdAt: currentEvidence.createdAt }
+          : undefined;
+      const committedProjection = cloneHarnessTerminal(existingIntent.projection);
+      const committedTerminalResult = cloneHarnessTerminal(existingIntent.terminalResult);
+      if (committedEvidence !== undefined) {
+        this.db.harnessMessageResultEvidence.set(evidenceKey, committedEvidence);
+      }
+      stored.status = 'committed';
+      stored.projection = committedProjection;
+      stored.terminalResult = committedTerminalResult;
+      stored.revision = existingIntent.revision;
+      stored.updatedAt = Date.now();
+      return {
+        status: 'duplicate',
+        admission: cloneHarnessTerminal(stored),
+        intent: cloneHarnessTerminal(existingIntent),
+      };
+    }
+    // Canonical evidence that already sealed must be preserved even when no
+    // intent exists yet — the same comparison the committed/existing-intent
+    // branches (and the Postgres adapter) apply before mutating anything.
+    if (
+      currentEvidence.status === 'completed' &&
+      stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
+    ) {
+      throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
+    }
+    const pressure = this.terminalPressure(namespace);
+    if (
+      pressure.pendingIntents >= this.terminalHandoff.maxPendingIntents ||
+      pressure.pendingBytes + projection.payloadBytes > this.terminalHandoff.maxPendingBytes
+    ) {
+      throw new HarnessTerminalHandoffValidationError('terminal intent', 'queue capacity is exhausted');
+    }
+    const revision = this.nextTerminalRevision(namespace, stored.sessionId, stored.sessionIncarnation);
+    const now = Date.now();
+    const intent: HarnessTerminalIntent = {
+      ...cloneHarnessTerminal(stored),
+      id: intentId,
+      admissionId: stored.admissionId,
+      revision,
+      protocolVersion: stored.protocolVersion,
+      finalizerId: stored.finalizerId,
+      finalizerVersion: stored.finalizerVersion,
+      terminalResult,
+      projection,
+      status: 'pending',
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    // Materialize every clone that can throw BEFORE mutating durable rows —
+    // an uncloneable result (e.g. a function in a tool payload) must not leave
+    // a committed admission with pending evidence and no intent.
+    const committedEvidence = {
+      ...cloneJson(resultEvidence),
+      createdAt: currentEvidence?.createdAt ?? resultEvidence.createdAt,
+      updatedAt: resultEvidence.updatedAt,
+    };
+    const committedTerminalResult = cloneHarnessTerminal(terminalResult);
+    const committedProjection = cloneHarnessTerminal(projection);
+    const storedIntent = cloneHarnessTerminal(intent);
+    stored.status = 'committed';
+    stored.terminalResult = committedTerminalResult;
+    stored.projection = committedProjection;
+    stored.revision = revision;
+    stored.updatedAt = now;
+    this.db.harnessMessageResultEvidence.set(evidenceKey, committedEvidence);
+    this.db.harnessTerminalIntents.set(intent.id, storedIntent);
+    this.adjustTerminalPressure(namespace, 1, intent.projection.payloadBytes);
+    return { status: 'committed', admission: cloneHarnessTerminal(stored), intent: cloneHarnessTerminal(intent) };
+  }
+
+  async loadTerminalIntent(input: HarnessTerminalIntentLoadInput): Promise<HarnessTerminalIntent | null> {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const intent = this.db.harnessTerminalIntents.get(input.intentId);
+    if (!intent || intent.harnessName !== namespace) return null;
+    return cloneHarnessTerminal(intent);
+  }
+
+  async cancelTerminalHandoff(input: HarnessTerminalCancelInput): Promise<HarnessTerminalCancelReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const now = input.cancelledAt ?? Date.now();
+    if (!Number.isSafeInteger(now) || now < 0)
+      throw new HarnessTerminalHandoffValidationError('cancelledAt', 'must be a non-negative safe integer');
+    const grantInput = { harnessName: namespace, executionGrant: input.executionGrant };
+    const tombstoneId = harnessTerminalGrantTombstoneId(grantInput);
+    // Grants bind to a single admission across the harness — resolve it by the
+    // grant identity rather than the caller's claimed session.
+    const existing = [...this.db.harnessTerminalAdmissions.values()].find(
+      candidate =>
+        candidate.harnessName === namespace &&
+        candidate.executionGrant.key === input.executionGrant.key &&
+        candidate.executionGrant.generation === input.executionGrant.generation,
+    );
+    if (existing) {
+      if (
+        existing.sessionId !== input.sessionId ||
+        existing.sessionIncarnation !== input.sessionIncarnation ||
+        existing.admissionId !== input.admissionId ||
+        existing.admissionHash !== input.admissionHash
+      ) {
+        throw new HarnessTerminalHandoffIdentityConflictError(input.executionGrant.key);
+      }
+    }
+    if (existing?.status === 'committed') {
+      return {
+        status: 'committed',
+        grant: { ...input.executionGrant },
+        tombstoneId,
+        admission: cloneHarnessTerminal(existing),
+      };
+    }
+    const prior = this.db.harnessTerminalTombstones.get(tombstoneId);
+    if (prior) {
+      return {
+        status: 'duplicate',
+        grant: { ...input.executionGrant },
+        tombstoneId,
+        cancelledAt: prior.createdAt,
+        ...(existing ? { admission: cloneHarnessTerminal(existing) } : {}),
+      };
+    }
+    const tombstone = {
+      id: tombstoneId,
+      harnessName: namespace,
+      grant: { ...input.executionGrant },
+      sessionId: input.sessionId,
+      sessionIncarnation: input.sessionIncarnation,
+      admissionId: input.admissionId,
+      admissionHash: input.admissionHash,
+      reason: cloneHarnessTerminal(input.reason),
+      createdAt: now,
+    };
+    this.db.harnessTerminalTombstones.set(tombstoneId, tombstone);
+    if (existing && existing.status === 'pending') {
+      existing.status = 'cancelled';
+      existing.updatedAt = now;
+    }
+    // Report the row's stored status: a fenced admission stays fenced — the
+    // tombstone still records this cancel for fencing, but the receipt must
+    // not claim a transition storage never made.
+    return {
+      status: existing?.status === 'fenced' ? 'fenced' : 'cancelled',
+      grant: { ...input.executionGrant },
+      tombstoneId,
+      cancelledAt: now,
+      ...(existing ? { admission: cloneHarnessTerminal(existing) } : {}),
+    };
+  }
+
+  async claimTerminalIntents(input: HarnessTerminalClaimInput): Promise<HarnessTerminalClaimReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    if (
+      !Number.isSafeInteger(input.limit) ||
+      input.limit <= 0 ||
+      input.limit > this.terminalHandoff.maxPendingIntents
+    ) {
+      throw new HarnessTerminalHandoffValidationError('limit', 'must be a positive bounded safe integer');
+    }
+    const now = input.now ?? Date.now();
+    const leaseMs = input.leaseMs ?? this.terminalHandoff.claimLeaseMs;
+    if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(leaseMs) || leaseMs <= 0) {
+      throw new HarnessTerminalHandoffValidationError('claim', 'clock and lease must be positive safe integers');
+    }
+    const claimed: HarnessTerminalIntent[] = [];
+    const candidates = [...this.db.harnessTerminalIntents.values()]
+      .filter(intent => intent.harnessName === namespace)
+      .sort((a, b) => a.revision - b.revision || a.id.localeCompare(b.id));
+    for (const current of candidates) {
+      if (claimed.length >= input.limit) break;
+      if (current.status === 'claimed' && (current.claimExpiresAt ?? 0) > now) continue;
+      if (
+        current.status !== 'pending' &&
+        current.status !== 'claimed' &&
+        !(current.status === 'failed' && (current.nextAttemptAt ?? 0) <= now)
+      )
+        continue;
+      if (this.hasEarlierUnsettledTerminalIntent(current)) continue;
+      if (current.attempts >= this.terminalHandoff.maxAttempts) {
+        // Release before the status mutation so a cold derive still counts
+        // this intent; otherwise the -1 below double-subtracts.
+        this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
+        current.status = 'dead';
+        current.deadAt = now;
+        current.updatedAt = now;
+        continue;
+      }
+      current.status = 'claimed';
+      current.claimId = terminalClaimId();
+      current.claimExpiresAt = now + leaseMs;
+      current.attempts += 1;
+      current.updatedAt = now;
+      claimed.push(cloneHarnessTerminal(current));
+    }
+    return { intents: claimed, claimedAt: now };
+  }
+
+  async renewTerminalIntent(
+    input: HarnessTerminalClaimIdentity & { leaseMs?: number },
+  ): Promise<HarnessTerminalRenewReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const current = this.requireTerminalClaim(input);
+    const now = input.now ?? Date.now();
+    const leaseMs = input.leaseMs ?? this.terminalHandoff.claimLeaseMs;
+    current.claimExpiresAt = now + leaseMs;
+    current.updatedAt = now;
+    return { status: 'renewed', intent: cloneHarnessTerminal(current) };
+  }
+
+  async ackTerminalIntent(input: HarnessTerminalClaimIdentity): Promise<HarnessTerminalAckReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const current = this.requireTerminalIdentity(input);
+    if (current.status === 'fenced') return { status: 'fenced', intent: cloneHarnessTerminal(current) };
+    if (current.status === 'acked') return { status: 'duplicate', intent: cloneHarnessTerminal(current) };
+    this.requireTerminalClaim(input);
+    this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
+    current.status = 'acked';
+    current.ackedAt = input.now ?? Date.now();
+    current.claimId = undefined;
+    current.claimExpiresAt = undefined;
+    current.updatedAt = current.ackedAt;
+    return { status: 'acked', intent: cloneHarnessTerminal(current) };
+  }
+
+  async failTerminalIntent(
+    input: HarnessTerminalClaimIdentity & { error: HarnessTerminalError },
+  ): Promise<HarnessTerminalFailReceipt> {
+    this.assertTerminalHandoffEnabled();
+    const current = this.requireTerminalIdentity(input);
+    if (current.status === 'fenced') return { status: 'fenced', intent: cloneHarnessTerminal(current) };
+    this.requireTerminalClaim(input);
+    const now = input.now ?? Date.now();
+    current.lastError = cloneHarnessTerminal(input.error);
+    current.claimId = undefined;
+    current.claimExpiresAt = undefined;
+    current.updatedAt = now;
+    if (current.attempts >= this.terminalHandoff.maxAttempts) {
+      this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
+      current.status = 'dead';
+      current.deadAt = now;
+      return { status: 'dead', intent: cloneHarnessTerminal(current) };
+    }
+    current.status = 'failed';
+    current.nextAttemptAt = now + Math.min(60_000, 1_000 * 2 ** Math.min(current.attempts, 6));
+    return { status: 'failed', intent: cloneHarnessTerminal(current) };
+  }
+
+  async getTerminalQueuePressure(input: { harnessName?: string }): Promise<HarnessTerminalQueuePressure> {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    return { ...this.terminalPressure(namespace) };
+  }
+
+  async fenceTerminalHandoffsForSession(input: {
+    harnessName: string;
+    sessionId: string;
+    sessionIncarnation?: string;
+    deletedAt?: number;
+  }): Promise<void> {
+    this.fenceTerminalHandoffsForSessionSync(input);
+  }
+
+  private fenceTerminalHandoffsForSessionSync(input: {
+    harnessName: string;
+    sessionId: string;
+    sessionIncarnation?: string;
+    deletedAt?: number;
+  }): void {
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    const now = input.deletedAt ?? Date.now();
+    // Durable per-incarnation marker: the row sweep below only rewrites
+    // admissions and intents that already exist, so without a marker a later
+    // admitTerminalHandoff for the same incarnation could still commit. When
+    // the fence is scoped to one incarnation only that marker is written; a
+    // whole-session fence marks every incarnation the session has admitted
+    // under plus its current incarnation, so a deleted session re-created
+    // with a replayed incarnation stays fenced too.
+    const fencedIncarnations = new Set<string>();
+    if (input.sessionIncarnation !== undefined) {
+      fencedIncarnations.add(input.sessionIncarnation);
+    } else {
+      const session = this.db.harnessSessions.get(sessionKey(namespace, input.sessionId));
+      if (session?.sessionIncarnation !== undefined) fencedIncarnations.add(session.sessionIncarnation);
+      for (const admission of this.db.harnessTerminalAdmissions.values()) {
+        if (admission.harnessName === namespace && admission.sessionId === input.sessionId) {
+          fencedIncarnations.add(admission.sessionIncarnation);
+        }
+      }
+    }
+    for (const incarnation of fencedIncarnations) {
+      this.db.harnessTerminalSessionFences.set(terminalSessionFenceKey(namespace, input.sessionId, incarnation), now);
+    }
+    for (const admission of this.db.harnessTerminalAdmissions.values()) {
+      if (
+        admission.harnessName !== namespace ||
+        admission.sessionId !== input.sessionId ||
+        (input.sessionIncarnation !== undefined && admission.sessionIncarnation !== input.sessionIncarnation)
+      )
+        continue;
+      if (admission.status === 'pending') {
+        admission.status = 'fenced';
+        admission.updatedAt = now;
+      }
+    }
+    for (const intent of this.db.harnessTerminalIntents.values()) {
+      if (
+        intent.harnessName !== namespace ||
+        intent.sessionId !== input.sessionId ||
+        (input.sessionIncarnation !== undefined && intent.sessionIncarnation !== input.sessionIncarnation)
+      )
+        continue;
+      if (intent.status === 'pending' || intent.status === 'claimed' || intent.status === 'failed') {
+        this.adjustTerminalPressure(intent.harnessName, -1, -intent.projection.payloadBytes);
+        intent.status = 'fenced';
+        intent.claimId = undefined;
+        intent.claimExpiresAt = undefined;
+        intent.updatedAt = now;
+      }
+    }
+  }
+
+  private nextTerminalRevision(namespace: string, sessionId: string, sessionIncarnation: string): number {
+    let revision = 0;
+    for (const intent of this.db.harnessTerminalIntents.values()) {
+      if (
+        intent.harnessName === namespace &&
+        intent.sessionId === sessionId &&
+        intent.sessionIncarnation === sessionIncarnation
+      ) {
+        revision = Math.max(revision, intent.revision);
+      }
+    }
+    if (revision >= Number.MAX_SAFE_INTEGER)
+      throw new HarnessTerminalHandoffValidationError('revision', 'cannot increment safely');
+    return revision + 1;
+  }
+
+  /**
+   * In-memory equivalent of the PG pressure row. This helper is synchronous so
+   * commit admission cannot yield between the capacity check and reservation.
+   */
+  private terminalPressure(namespace: string): HarnessTerminalQueuePressure {
+    const existing = this.db.harnessTerminalPressure.get(namespace);
+    if (existing) return existing;
+    const derived: HarnessTerminalQueuePressure = { pendingIntents: 0, pendingBytes: 0 };
+    for (const intent of this.db.harnessTerminalIntents.values()) {
+      if (intent.harnessName !== namespace || !['pending', 'claimed', 'failed'].includes(intent.status)) continue;
+      derived.pendingIntents += 1;
+      derived.pendingBytes += intent.projection.payloadBytes;
+    }
+    this.db.harnessTerminalPressure.set(namespace, derived);
+    return derived;
+  }
+
+  /**
+   * Message-result evidence bound to a committed terminal admission is the
+   * canonical source a committed retry replays; every evidence cleanup path
+   * must retain it (the PG adapter mirrors this with a NOT EXISTS probe).
+   */
+  private hasCommittedTerminalAdmissionFor(evidence: AgentSignalResultEvidence): boolean {
+    for (const admission of this.db.harnessTerminalAdmissions.values()) {
+      if (
+        admission.status === 'committed' &&
+        admission.harnessName === evidence.harnessName &&
+        admission.sessionId === evidence.sessionId &&
+        admission.signalId === evidence.signalId &&
+        admission.admissionId === evidence.admissionId &&
+        admission.admissionHash === evidence.admissionHash
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private adjustTerminalPressure(namespace: string, intentDelta: number, byteDelta: number): void {
+    const pressure = this.terminalPressure(namespace);
+    const pendingIntents = pressure.pendingIntents + intentDelta;
+    const pendingBytes = pressure.pendingBytes + byteDelta;
+    if (pendingIntents < 0 || pendingBytes < 0) {
+      throw new HarnessTerminalHandoffValidationError('terminal pressure', 'counter would become negative');
+    }
+    pressure.pendingIntents = pendingIntents;
+    pressure.pendingBytes = pendingBytes;
+  }
+
+  private requireTerminalIdentity(input: HarnessTerminalClaimIdentity): HarnessTerminalIntent {
+    const current = this.db.harnessTerminalIntents.get(input.intentId);
+    if (!current) throw new HarnessTerminalHandoffNotFoundError(input.intentId);
+    if (
+      current.harnessName !== input.harnessName ||
+      current.sessionId !== input.sessionId ||
+      current.sessionIncarnation !== input.sessionIncarnation ||
+      current.revision !== input.revision ||
+      current.projection.payloadHash !== input.payloadHash
+    )
+      throw new HarnessTerminalHandoffFencedError(input.sessionId);
+    return current;
+  }
+
+  private requireTerminalClaim(input: HarnessTerminalClaimIdentity): HarnessTerminalIntent {
+    const current = this.requireTerminalIdentity(input);
+    const now = input.now ?? Date.now();
+    if (
+      current.status !== 'claimed' ||
+      current.claimId !== input.claimId ||
+      current.claimExpiresAt === undefined ||
+      current.claimExpiresAt <= now
+    ) {
+      throw new HarnessTerminalHandoffClaimConflictError(input.intentId, input.claimId);
+    }
+    return current;
+  }
+
+  private hasEarlierUnsettledTerminalIntent(candidate: HarnessTerminalIntent): boolean {
+    for (const intent of this.db.harnessTerminalIntents.values()) {
+      if (intent.id === candidate.id) continue;
+      if (
+        intent.harnessName !== candidate.harnessName ||
+        intent.sessionId !== candidate.sessionId ||
+        intent.sessionIncarnation !== candidate.sessionIncarnation
+      )
+        continue;
+      if (intent.revision < candidate.revision && !['acked', 'dead', 'fenced'].includes(intent.status)) return true;
+    }
+    return false;
+  }
+
   async compareAndSwapSignalDispatch(
     input: CompareAndSwapSignalDispatchInput,
   ): Promise<CompareAndSwapSignalDispatchResult> {
@@ -1420,7 +2111,8 @@ export class InMemoryHarness extends HarnessStorage {
     ) {
       throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
     }
-    if (!isSignalAdmissionEvidence(existing)) {
+    const operationKind = input.operationKind ?? 'signal';
+    if (!messageEvidenceMatchesDispatchKind(existing, operationKind)) {
       throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
     }
     if (isTerminalMessageEvidence(existing)) {
@@ -1432,7 +2124,7 @@ export class InMemoryHarness extends HarnessStorage {
     const pending = existing as Extract<AgentSignalResultEvidence, { status: 'pending' }>;
     const next: AgentSignalResultEvidence = {
       ...pending,
-      operationKind: 'signal',
+      operationKind,
       dispatch: cloneJson(input.next),
       ...(input.next.state === 'reserved' ? { runId: undefined } : { runId: input.next.runId }),
       updatedAt: input.updatedAt,
@@ -1628,6 +2320,10 @@ export class InMemoryHarness extends HarnessStorage {
       const key = signalId ? messageEvidenceKey(namespace, sessionId, signalId) : undefined;
       const retained = key ? this.db.harnessMessageResultEvidence.get(key) : undefined;
       if (!retained || retained.resourceId !== resourceId || retained.status === 'pending') return null;
+      // A committed terminal admission replays its durable outcome from the
+      // canonical evidence row; compacting it into a tombstone would orphan
+      // the retry path.
+      if (this.hasCommittedTerminalAdmissionFor(retained)) return null;
       const tombstone: OperationAdmissionTombstone = {
         kind: 'signal',
         harnessName: namespace,
@@ -1700,7 +2396,10 @@ export class InMemoryHarness extends HarnessStorage {
         evidence.sessionId === sessionId &&
         evidence.resourceId === resourceId &&
         (threadId === undefined || evidence.threadId === threadId) &&
-        (signalId === undefined || evidence.signalId === signalId)
+        (signalId === undefined || evidence.signalId === signalId) &&
+        // Evidence bound to a committed terminal admission is the canonical
+        // source for a committed retry — it must survive session cleanup.
+        !this.hasCommittedTerminalAdmissionFor(evidence)
       ) {
         this.db.harnessMessageResultEvidence.delete(key);
       }
@@ -3695,6 +4394,10 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessAttachmentBytes.clear();
     this.db.harnessAttachmentReferences.clear();
     this.db.harnessMessageResultEvidence.clear();
+    this.db.harnessTerminalAdmissions.clear();
+    this.db.harnessTerminalIntents.clear();
+    this.db.harnessTerminalPressure.clear();
+    this.db.harnessTerminalTombstones.clear();
     this.db.harnessOperationTombstones.clear();
     this.db.harnessSessionEvents.clear();
     this.db.harnessSessionRecordProjectionIntents.clear();
@@ -3874,6 +4577,12 @@ function channelBindingKey(_harnessName: string, bindingId: string): string {
   return bindingId;
 }
 
+const TERMINAL_SESSION_FENCE_KEY_SEPARATOR = String.fromCharCode(0);
+
+function terminalSessionFenceKey(harnessName: string, sessionId: string, sessionIncarnation: string): string {
+  return [harnessName, sessionId, sessionIncarnation].join(TERMINAL_SESSION_FENCE_KEY_SEPARATOR);
+}
+
 // §14.1: missing optional external IDs normalise to the shared
 // CHANNEL_BINDING_EXTERNAL_ID_SENTINEL (defined in ./base) for tuple uniqueness
 // (storage must not rely on SQL NULL uniqueness semantics). Sharing the constant
@@ -4004,6 +4713,55 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
   return cloneJson(record);
 }
 
+function sameTerminalAdmissionIdentity(
+  left: HarnessTerminalAdmissionRecord,
+  right: HarnessTerminalAdmissionRecord,
+): boolean {
+  return sameTerminalAdmissionInput(left, right);
+}
+
+function sameTerminalAdmissionInput(
+  left: HarnessTerminalAdmissionRecord,
+  right: HarnessTerminalAdmissionInput,
+): boolean {
+  return (
+    left.harnessName === right.harnessName &&
+    left.sessionId === right.sessionId &&
+    left.resourceId === right.resourceId &&
+    left.threadId === right.threadId &&
+    left.sessionIncarnation === right.sessionIncarnation &&
+    left.admissionId === right.admissionId &&
+    left.admissionHash === right.admissionHash &&
+    left.signalId === right.signalId &&
+    left.runId === right.runId &&
+    left.executionGrant.key === right.executionGrant.key &&
+    left.executionGrant.generation === right.executionGrant.generation &&
+    left.finalizerId === right.finalizerId &&
+    left.finalizerVersion === right.finalizerVersion &&
+    canonicalJson(left.seed) === canonicalJson(right.seed)
+  );
+}
+
+function sameTerminalIntentValue(
+  intent: HarnessTerminalIntent,
+  terminalResult: HarnessTerminalResult,
+  projection: HarnessTerminalIntent['projection'],
+): boolean {
+  // `completedAt` is the committer's wall clock, not outcome content — a
+  // duplicate caller or lost-ack retry that recomputes the result legitimately
+  // stamps a different time while settling the same logical winner.
+  const { completedAt: _storedAt, ...storedResult } = intent.terminalResult;
+  const { completedAt: _incomingAt, ...incomingResult } = terminalResult;
+  return (
+    stableJsonString(storedResult) === stableJsonString(incomingResult) &&
+    intent.projection.projectionKind === projection.projectionKind &&
+    intent.projection.projectionId === projection.projectionId &&
+    intent.projection.payloadHash === projection.payloadHash &&
+    intent.projection.payloadBytes === projection.payloadBytes &&
+    intent.projection.payloadJson === projection.payloadJson
+  );
+}
+
 function cloneJson<T>(value: T): T {
   return structuredClone(value);
 }
@@ -4088,11 +4846,19 @@ function normalizedSignalDispatch(record: AgentSignalResultEvidence): AgentSigna
 }
 
 function signalDispatchMatches(record: AgentSignalResultEvidence, expected: AgentSignalDispatchState): boolean {
-  if (record.dispatch === undefined && record.status === 'pending' && record.runId !== undefined) {
-    // This branch is reached only after `isSignalAdmissionEvidence` proved an
-    // explicit signal discriminator (or the stable pre-discriminator signal-id
-    // namespace). The run id matches state; it never classifies the operation.
-    return expected.state === 'accepted' && expected.runId === record.runId;
+  if (record.dispatch === undefined && record.status === 'pending') {
+    if (record.operationKind === 'message') {
+      // An admitted message row is written without a dispatch column and
+      // already carries its run id; an unstamped pending message row is the
+      // reservation the terminal dispatch CAS claims, so it is 'reserved'.
+      return expected.state === 'reserved';
+    }
+    if (record.runId !== undefined) {
+      // This branch is reached only after `isSignalAdmissionEvidence` proved an
+      // explicit signal discriminator (or the stable pre-discriminator signal-id
+      // namespace). The run id matches state; it never classifies the operation.
+      return expected.state === 'accepted' && expected.runId === record.runId;
+    }
   }
   return sameSignalDispatch(normalizedSignalDispatch(record), expected);
 }
@@ -4100,6 +4866,16 @@ function signalDispatchMatches(record: AgentSignalResultEvidence, expected: Agen
 function isSignalAdmissionEvidence(record: AgentSignalResultEvidence): boolean {
   if (record.operationKind !== undefined) return record.operationKind === 'signal';
   return record.dispatch !== undefined || record.signalId.startsWith('harness-channel-signal-');
+}
+
+/**
+ * Dispatch-CAS discriminator check: `'signal'` keeps the admitted-signal
+ * contract (including legacy undiscriminated rows); `'message'` covers the
+ * admitted message rows a native terminal handoff stamps before send.
+ */
+function messageEvidenceMatchesDispatchKind(record: AgentSignalResultEvidence, kind: 'message' | 'signal'): boolean {
+  if (kind === 'message') return record.operationKind === 'message';
+  return isSignalAdmissionEvidence(record);
 }
 
 function sameSignalDispatch(a: AgentSignalDispatchState | undefined, b: AgentSignalDispatchState | undefined): boolean {

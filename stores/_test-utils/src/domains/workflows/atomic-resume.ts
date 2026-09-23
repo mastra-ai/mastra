@@ -208,7 +208,7 @@ export async function expectAtomicWorkflowResumeStorageContract(options: {
         expectedLifecycleResumeAttempt: 1,
         snapshot: { ...admitted!, status: 'running', value: { stale: 'true' } },
       }),
-    ).resolves.toEqual({ status: 'finalized' });
+    ).resolves.toEqual({ status: 'finalized', disposition: 'superseded' });
 
     const missingAdmission = admissionFor(runIds.missing);
     await expect(
@@ -319,7 +319,7 @@ export async function expectAtomicWorkflowResumeStorageContract(options: {
         expectedLifecycleResumeAttempt: 0,
         snapshot: { ...suspendedSnapshot(runIds.skipped, resourceId), status: 'running' },
       }),
-    ).resolves.toEqual({ status: 'finalized' });
+    ).resolves.toEqual({ status: 'finalized', disposition: 'skipped' });
   } finally {
     await Promise.all(
       Object.values(runIds).map(runId =>

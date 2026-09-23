@@ -3,6 +3,32 @@ import {
   normalizeHarnessSessionRecordProjectionConfig,
   type NormalizedHarnessSessionRecordProjectionConfig,
 } from './session-record-projection';
+import {
+  HarnessTerminalHandoffUnsupportedError,
+  normalizeHarnessTerminalHandoffOption as normalizeTerminalHandoff,
+  type HarnessTerminalAckReceipt,
+  type HarnessTerminalAdmissionInput,
+  type HarnessTerminalAdmissionLoadInput,
+  type HarnessPendingTerminalAdmissionLoadInput,
+  type HarnessTerminalAdmissionRecord,
+  type HarnessTerminalAdmissionReceipt,
+  type HarnessTerminalCancelInput,
+  type HarnessTerminalCancelReceipt,
+  type HarnessTerminalClaimIdentity,
+  type HarnessTerminalClaimInput,
+  type HarnessTerminalClaimReceipt,
+  type HarnessTerminalCommitReceipt,
+  type HarnessTerminalError,
+  type HarnessTerminalFailReceipt,
+  type HarnessTerminalHandoffOption,
+  type HarnessTerminalIntent,
+  type HarnessTerminalIntentLoadInput,
+  type HarnessTerminalProjection,
+  type HarnessTerminalQueuePressure,
+  type HarnessTerminalResult,
+  type HarnessTerminalRenewReceipt,
+  type NormalizedHarnessTerminalHandoffOption,
+} from './terminal-handoff';
 import type {
   AcquireSessionLeaseInput,
   AckSessionRecordProjectionInput,
@@ -141,6 +167,13 @@ export interface CompareAndSwapSignalDispatchInput {
   signalId: string;
   admissionId: string;
   admissionHash: string;
+  /**
+   * Durable operation discriminator of the admitted row. `'signal'` (the
+   * default) keeps the admitted-signal CAS contract; `'message'` covers the
+   * admitted message rows a native terminal handoff dispatches through the
+   * same evidence table. The stored row's operation kind must match.
+   */
+  operationKind?: 'message' | 'signal';
   expected: AgentSignalDispatchState;
   next: AgentSignalDispatchState;
   updatedAt: number;
@@ -740,21 +773,33 @@ export class HarnessStorageWakeupTransitionError extends HarnessStorageDomainErr
  * `MemoryStorage`. The harness layer composes the two.
  */
 export abstract class HarnessStorage extends StorageDomain {
+  protected readonly terminalHandoff: NormalizedHarnessTerminalHandoffOption;
   protected readonly sessionRecordProjection: NormalizedHarnessSessionRecordProjectionConfig;
 
   get supportsAtomicDeleteSessions(): boolean {
     return this.deleteSessions !== HarnessStorage.prototype.deleteSessions;
   }
 
+  /** Native adapters override this after implementing the terminal domain. */
+  get supportsTerminalHandoff(): boolean {
+    return false;
+  }
+
   get supportsSessionRecordProjection(): boolean {
     return false;
   }
 
-  constructor(options: { sessionRecordProjection?: HarnessSessionRecordProjectionOption } = {}) {
+  constructor(
+    options: {
+      terminalHandoff?: HarnessTerminalHandoffOption;
+      sessionRecordProjection?: HarnessSessionRecordProjectionOption;
+    } = {},
+  ) {
     super({
       component: 'STORAGE',
       name: 'HARNESS',
     });
+    this.terminalHandoff = normalizeTerminalHandoff(options.terminalHandoff);
     this.sessionRecordProjection = normalizeHarnessSessionRecordProjectionConfig(options.sessionRecordProjection);
   }
 
@@ -1104,6 +1149,99 @@ export abstract class HarnessStorage extends StorageDomain {
   }): Promise<AgentSignalResultEvidence | OperationAdmissionTombstone | null>;
 
   abstract writeMessageResultEvidence(record: AgentSignalResultEvidence): Promise<WriteMessageResultEvidenceResult>;
+
+  // -------------------------------------------------------------------------
+  // Native chat terminal handoff
+  // -------------------------------------------------------------------------
+
+  /**
+   * Atomically insert-or-read the bounded terminal admission. The adapter must
+   * serialize this against the grant cancellation tombstone, so a missing
+   * session or missing admission can never be interpreted as refundable work.
+   */
+  async admitTerminalHandoff(_input: HarnessTerminalAdmissionInput): Promise<HarnessTerminalAdmissionReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  /**
+   * Commit the existing canonical completed message-result evidence together
+   * with the exact finalizer bytes and durable delivery intent in one adapter
+   * transaction. This replaces the ordinary completed-evidence write on the
+   * opted-in path; there is no completed → prepare → commit sequence.
+   */
+  async commitTerminalHandoff(_input: {
+    admission: HarnessTerminalAdmissionInput;
+    resultEvidence: AgentSignalResultEvidence;
+    terminalResult: HarnessTerminalResult;
+    projection: HarnessTerminalProjection;
+  }): Promise<HarnessTerminalCommitReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async loadTerminalAdmission(
+    _input: HarnessTerminalAdmissionLoadInput,
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async loadPendingTerminalAdmission(
+    _input: HarnessPendingTerminalAdmissionLoadInput,
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async loadTerminalAdmissionByRun(
+    _input: HarnessPendingTerminalAdmissionLoadInput,
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async loadTerminalIntent(_input: HarnessTerminalIntentLoadInput): Promise<HarnessTerminalIntent | null> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async cancelTerminalHandoff(_input: HarnessTerminalCancelInput): Promise<HarnessTerminalCancelReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async claimTerminalIntents(_input: HarnessTerminalClaimInput): Promise<HarnessTerminalClaimReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async renewTerminalIntent(
+    _input: HarnessTerminalClaimIdentity & { leaseMs?: number },
+  ): Promise<HarnessTerminalRenewReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async ackTerminalIntent(_input: HarnessTerminalClaimIdentity): Promise<HarnessTerminalAckReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async failTerminalIntent(
+    _input: HarnessTerminalClaimIdentity & { error: HarnessTerminalError },
+  ): Promise<HarnessTerminalFailReceipt> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  async getTerminalQueuePressure(_input: { harnessName?: string }): Promise<HarnessTerminalQueuePressure> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
+  /**
+   * Hard deletion must fence old terminal callbacks before removing the
+   * session row. Adapters retain the grant tombstone/intent fence across a
+   * delete-and-recreate of the same session id.
+   */
+  async fenceTerminalHandoffsForSession(_input: {
+    harnessName: string;
+    sessionId: string;
+    sessionIncarnation?: string;
+    deletedAt?: number;
+  }): Promise<void> {
+    if (!this.supportsTerminalHandoff) return;
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
 
   /**
    * Atomically compare-and-swap the durable execution owner for an admitted

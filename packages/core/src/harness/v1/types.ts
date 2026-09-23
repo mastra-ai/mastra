@@ -35,6 +35,10 @@ import type {
   HarnessPrimitiveType,
   PersistedRequestContextInput,
   HarnessStorage,
+  HarnessTerminalFinalizer,
+  HarnessTerminalExecutionGrant,
+  HarnessTerminalCommitReceipt,
+  HarnessTerminalHandoffError,
   JsonValue,
   PendingResume,
   PermissionRules,
@@ -1142,6 +1146,13 @@ export interface HarnessConfigCommon {
      */
     persistTransientStreamingEvents?: boolean;
 
+    /** Opt-in native chat terminal finalizer. The storage adapter owns the
+     * admission/result/intent transaction; the callback only sanitizes the
+     * bounded product projection immediately before that commit. */
+    terminalHandoff?: {
+      finalizer: HarnessTerminalFinalizer;
+    };
+
     /**
      * Maximum number of items allowed to wait in `pendingQueue` per session.
      * `session.queue(...)` rejects with `HarnessQueueFullError` when full.
@@ -1978,6 +1989,26 @@ interface MessageOptionsBase extends MessageOverrides {
 
   /** Optional idempotency key for retry-safe signal-driven messages. */
   admissionId?: string;
+
+  /** Immutable product execution authority bound to this terminal handoff. */
+  executionAuthorityGrant?: HarnessTerminalExecutionGrant;
+
+  /**
+   * Bounded Doxa/product context persisted with the native admission. The
+   * registered finalizer receives this exact seed after a restart.
+   */
+  terminalAdmissionSeed?: JsonValue;
+
+  /** Receives the durable native commit receipt independently of raw stream EOF. */
+  onTerminalCommit?: (receipt: HarnessTerminalCommitReceipt) => void;
+
+  /**
+   * Receives a typed native finalization failure. Stream callers must use this
+   * barrier (or the returned message promise for non-stream calls) before
+   * treating a provider EOF as a settled terminal result. The callback is
+   * diagnostic/coordination only; it cannot alter the durable winner.
+   */
+  onTerminalCommitError?: (error: HarnessTerminalHandoffError) => void;
 
   /** Optional pre-uploaded attachments to include with the user message. */
   attachments?: AttachmentRef[];

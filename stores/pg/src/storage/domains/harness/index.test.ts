@@ -68,6 +68,10 @@ describe('HarnessPG', () => {
     expect(ddl).toContain(TABLE_HARNESS_ATTACHMENT_OPERATIONS);
     expect(ddl).toContain('mastra_harness_channel_inbox');
     expect(ddl).toContain('mastra_harness_wakeups');
+    expect(ddl).toContain('mastra_harness_terminal_admissions');
+    expect(ddl).toContain('mastra_harness_terminal_intents');
+    expect(ddl).toContain('mastra_harness_terminal_pressure');
+    expect(ddl).toContain('mastra_harness_terminal_tombstones');
     expect(ddl).toContain(TABLE_HARNESS_SESSION_EVENTS);
     expect(ddl).toContain(TABLE_HARNESS_WORKSPACE_ACTIONS);
     expect(ddl).toContain('idx_harness_sessions_active_key');
