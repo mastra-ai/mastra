@@ -195,4 +195,88 @@ describe('MemoryInputFilter', () => {
     expect(parts[0]).toHaveProperty('providerMetadata', { openai: { itemId: 'rs_1' } });
     expect(parts[1]).toHaveProperty('providerMetadata', { openai: { itemId: 'msg_1' } });
   });
+
+  describe.each([
+    ['result', { state: 'result', result: 'done' }],
+    ['output-error', { state: 'output-error', errorText: 'failed' }],
+    ['output-denied', { state: 'output-denied' }],
+    ['approval-responded', { state: 'approval-responded', approval: { id: 'approval', approved: true } }],
+  ] as const)('client %s update', (_, update) => {
+    const toolPart = (toolInvocation: Record<string, unknown>) =>
+      ({
+        type: 'tool-invocation',
+        toolInvocation: { toolCallId: 'call', toolName: 'tool', args: {}, ...toolInvocation },
+      }) as MastraDBMessage['content']['parts'][number];
+    const storedPending = message('a1', 'assistant', [{ type: 'text', text: 'calling' }, toolPart({ state: 'call' })]);
+
+    it('is kept from a trailing assistant message', async () => {
+      const { messageList, processor } = setup([storedPending]);
+      messageList.add(message('a1', 'assistant', [{ type: 'text', text: 'calling' }, toolPart(update)]), 'input');
+
+      await process(processor, messageList);
+
+      expect(messageList.get.input.db()[0]?.content.parts).toMatchObject([{ toolInvocation: update }]);
+    });
+
+    it('is kept from the assistant message before a new user message when the stored call is pending', async () => {
+      const { messageList, processor } = setup([storedPending]);
+      messageList.add(
+        [
+          message('a1', 'assistant', [{ type: 'text', text: 'calling' }, toolPart(update)]),
+          message('u2', 'user', [{ type: 'text', text: 'next' }]),
+        ],
+        'input',
+      );
+
+      await process(processor, messageList);
+
+      const retained = messageList.get.input.db();
+      expect(retained.map(item => item.id)).toEqual(['a1', 'u2']);
+      expect(retained[0]?.content.parts).toMatchObject([{ toolInvocation: update }]);
+    });
+
+    it('is dropped before a new user message when the stored call already finished', async () => {
+      const { messageList, processor } = setup([
+        message('a1', 'assistant', [toolPart({ state: 'result', result: 'server' })]),
+      ]);
+      messageList.add(
+        [message('a1', 'assistant', [toolPart(update)]), message('u2', 'user', [{ type: 'text', text: 'next' }])],
+        'input',
+      );
+
+      await process(processor, messageList);
+
+      expect(messageList.get.input.db().map(item => item.id)).toEqual(['u2']);
+    });
+
+    it('is dropped before a new user message when the assistant id is not stored', async () => {
+      const { listMessagesById, messageList, processor } = setup([storedPending]);
+      messageList.add(
+        [message('f1', 'assistant', [toolPart(update)]), message('u2', 'user', [{ type: 'text', text: 'next' }])],
+        'input',
+      );
+
+      await process(processor, messageList);
+
+      expect(listMessagesById).toHaveBeenCalledWith({ messageIds: ['f1'] });
+      expect(messageList.get.input.db().map(item => item.id)).toEqual(['u2']);
+    });
+  });
+
+  it('does not look up the assistant before a new user message when it carries no tool updates', async () => {
+    const { listMessagesById, messageList, processor } = setup([
+      message('stored', 'assistant', [{ type: 'text', text: 'stored' }]),
+    ]);
+    messageList.add(
+      [
+        message('a1', 'assistant', [{ type: 'text', text: 'answer' }]),
+        message('u2', 'user', [{ type: 'text', text: 'new' }]),
+      ],
+      'input',
+    );
+
+    await process(processor, messageList);
+
+    expect(listMessagesById).not.toHaveBeenCalled();
+  });
 });

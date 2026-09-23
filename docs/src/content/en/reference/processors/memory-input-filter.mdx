@@ -85,18 +85,20 @@ const processor = new MemoryInputFilter({
 
 For a thread that already has stored messages, the input is reduced based on what its last message is:
 
-- **Ends with one or more user messages**: those messages are kept and everything back to the last assistant message is dropped. Several consecutive user messages are all kept because they're all new.
-- **Ends with an assistant message**: only its trailing run of `state: 'result'` tool invocations is kept, which is the client-side tool flow where a stored assistant turn contains a pending call and the client returns the result.
-- **Ends with an assistant message with no new tool results**: the message is dropped only if it exists in storage. Assistant messages that were never persisted, such as internal instruction messages, are left in place.
+- **Ends with one or more user messages**: those messages are kept and everything back to the last assistant message is dropped. Several consecutive user messages are all kept because they're all new. If that assistant message carries client tool outcomes, the ones for calls its stored copy still has pending are kept too. This is the shape `useChat` sends when a client tool result goes out with the next user message.
+- **Ends with an assistant message**: only its trailing run of client tool outcomes is kept. This is the client-side tool flow, where a stored assistant turn contains a pending call and the client returns its outcome.
+- **Ends with an assistant message with no new tool outcomes**: the message is dropped only if it exists in storage. Assistant messages that were never persisted, such as internal instruction messages, are left in place.
 - **Contains nothing new**: the input is cleared and the run continues on stored history alone.
 
 For a thread with no stored messages, the entire input seeds the conversation. Provider metadata is stripped from assistant messages so that item references to server-side items from another conversation aren't replayed.
+
+A client tool outcome is a tool invocation in the `result`, `output-error`, `output-denied`, or `approval-responded` state. An outcome on an assistant message that isn't stored under its ID is dropped, because the AI SDK client can fold several server messages into one UI message under a new ID, and then a client outcome can't be told apart from a duplicated server result.
 
 Trailing user messages are treated as new messages and kept as sent. When they carry no ID the server assigns one. Echoed copies of already-stored messages never replace the stored row, so the stored timestamps and provider metadata stay authoritative for that message.
 
 ### Stored messages as the base layer
 
-Loaders add stored messages with a `memory` source. When a stored message and an input message share an ID, the stored copy takes the slot with its reasoning, provider metadata, and `createdAt`, and the input's parts are layered on top. That preserves the original assistant turn while still persisting new contributions such as tool results.
+Loaders add stored messages with a `memory` source. When a stored message and an input message share an ID, the stored copy takes the slot with its reasoning, provider metadata, and `createdAt`, and the input's parts are layered on top. That preserves the original assistant turn while still persisting new contributions such as tool results. A tool outcome from the input only fills in a call that's still pending in the stored copy, so an echo can't overwrite a stored result.
 
 ## Related
 

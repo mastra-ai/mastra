@@ -38,11 +38,14 @@
  *   - ends with user message(s) → keep those, back to the last assistant message. Several
  *     consecutive user messages are all kept: they are all new, and they are stamped server-side
  *     (the normal client shape sends no ids, so ids and `createdAt` come from the server, and a
- *     client-supplied `createdAt` cannot reorder the thread).
- *   - ends with an assistant message → keep only its trailing run of `state: 'result'`
- *     tool-invocation parts. This is the client-side tool flow: the assistant turn was stored
- *     with a pending call, and the client is returning the result for it. Everything earlier in
- *     that message is already stored.
+ *     client-supplied `createdAt` cannot reorder the thread). If that assistant message carries
+ *     client tool updates (a result, error, denial, or approval answer), keep the ones that fill
+ *     in a call its stored copy still has pending; see `advanceStoredToolCalls`.
+ *   - ends with an assistant message → keep only its trailing run of client tool updates. This
+ *     is the client-side tool flow: the assistant turn was stored with a pending call, and the
+ *     client is returning the outcome for it. Everything earlier in that message is already
+ *     stored. An update for a call the stored copy already finished is ignored when the two
+ *     copies are layered in `MessageList.add`.
  *   - ends with an assistant message and no new results → drop it, but only if it exists in
  *     storage (see the `listMessagesById` check below). Internal callers such as the agent
  *     network pass assistant-role instruction messages that were never persisted; those are
@@ -68,6 +71,11 @@
  */
 import type { Processor } from '..';
 import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../agent';
+import type { MastraToolInvocationPart } from '../../agent/message-list';
+import {
+  advancesToolInvocationState,
+  isClientToolInvocationUpdate,
+} from '../../agent/message-list/utils/tool-invocation-state';
 import { parseMemoryRequestContext } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -91,7 +99,7 @@ function stripAssistantProviderMetadata(message: MastraDBMessage): MastraDBMessa
     content: {
       ...message.content,
       parts: message.content.parts.map(part => {
-        if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') return part;
+        if (part.type === 'tool-invocation' && isClientToolInvocationUpdate(part.toolInvocation.state)) return part;
         const {
           providerMetadata: _providerMetadata,
           providerOptions: _providerOptions,
@@ -140,10 +148,12 @@ export class MemoryInputFilter implements Processor {
 
     const lastMessage = input.at(-1)!;
     let retainedInput: MastraDBMessage[];
+    let boundaryAssistant: MastraDBMessage | undefined;
 
     if (lastMessage.role === 'user') {
       const lastAssistantIndex = input.findLastIndex(message => message.role === 'assistant');
       retainedInput = input.slice(lastAssistantIndex + 1);
+      boundaryAssistant = input[lastAssistantIndex];
     } else if (lastMessage.role === 'assistant') {
       const trailingResults: Extract<MastraMessagePart, { type: 'tool-invocation' }>[] = [];
       for (let index = lastMessage.content.parts.length - 1; index >= 0; index--) {
@@ -152,7 +162,7 @@ export class MemoryInputFilter implements Processor {
         // after the parts they annotate and carry no model content. Skip them so they
         // don't terminate the trailing-result run and drop the client's tool result.
         if (part.type.startsWith('data-')) continue;
-        if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') break;
+        if (part.type !== 'tool-invocation' || !isClientToolInvocationUpdate(part.toolInvocation.state)) break;
         trailingResults.unshift(part);
       }
       retainedInput =
@@ -205,11 +215,51 @@ export class MemoryInputFilter implements Processor {
       if (persisted.length === 0) return messageList;
     }
 
+    if (boundaryAssistant) {
+      const advanced = await this.advanceStoredToolCalls(boundaryAssistant, threadId);
+      if (advanced) retainedInput = [advanced, ...retainedInput];
+    }
+
     messageList.clear.input.db();
     for (const message of retainedInput) {
       messageList.add(message, 'input', { merge: false });
     }
 
     return messageList;
+  }
+
+  /**
+   * `useChat` without `sendAutomaticallyWhen` sends a client tool result together with the next
+   * user message, so the result rides on the assistant message just before the user tail. Keep a
+   * tool part from that message only when it fills in a call the stored copy still has pending.
+   * If the message isn't stored under that id, keep none: the AI SDK client can fold several
+   * server messages into one UI message under a new id, and then a client result can't be told
+   * apart from a duplicated server result.
+   */
+  private async advanceStoredToolCalls(
+    message: MastraDBMessage,
+    threadId: string,
+  ): Promise<MastraDBMessage | undefined> {
+    const updates = message.content.parts.filter(
+      (part): part is MastraToolInvocationPart =>
+        part.type === 'tool-invocation' && isClientToolInvocationUpdate(part.toolInvocation.state),
+    );
+    if (updates.length === 0 || !message.id) return undefined;
+
+    const { messages } = await this.storage.listMessagesById({ messageIds: [message.id] });
+    const stored = messages.find(candidate => candidate.id === message.id && candidate.threadId === threadId);
+    if (!stored) return undefined;
+
+    const storedStates = new Map<string, MastraToolInvocationPart['toolInvocation']['state']>();
+    for (const part of stored.content.parts) {
+      if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+    }
+    const advancing = updates.filter(part => {
+      const storedState = storedStates.get(part.toolInvocation.toolCallId);
+      return storedState !== undefined && advancesToolInvocationState(storedState, part.toolInvocation.state);
+    });
+    if (advancing.length === 0) return undefined;
+
+    return { ...message, content: { ...message.content, content: '', parts: advancing } };
   }
 }

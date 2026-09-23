@@ -44,10 +44,12 @@ import type {
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
+import type { MastraToolInvocation } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
+import { advancesToolInvocationState } from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -103,6 +105,31 @@ function mergeBackgroundTasks(
       isPlainRecord(existingTask) && isPlainRecord(incomingTask) ? { ...existingTask, ...incomingTask } : incomingTask;
   }
   return merged;
+}
+
+/**
+ * Returns `live` with every tool part that would not move its stored counterpart forward turned
+ * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
+ * stays canonical, and a stale or edited echo can't overwrite it. Live state may only fill in a
+ * call the stored copy still has pending.
+ */
+function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
+  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  for (const part of stored.content.parts) {
+    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+  }
+  if (storedStates.size === 0) return live;
+
+  let changed = false;
+  const parts = live.content.parts.map(part => {
+    if (part.type !== 'tool-invocation') return part;
+    const storedState = storedStates.get(part.toolInvocation.toolCallId);
+    if (!storedState || advancesToolInvocationState(storedState, part.toolInvocation.state)) return part;
+    changed = true;
+    const { toolCallId, toolName, args } = part.toolInvocation;
+    return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
+  });
+  return changed ? { ...live, content: { ...live.content, parts } } : live;
 }
 
 type MessageListAddOptions = {
@@ -2112,7 +2139,7 @@ export class MessageList {
           );
           if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
         }
-        MessageMerger.merge(messageV2, replacementTarget);
+        MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
       }
       this.stateManager.removeMessage(replacementTarget);
       this.messages[replacementIndex] = messageV2;

@@ -73,6 +73,83 @@ describe.each(['input', 'response'] as const)('stored history layering over a li
   });
 });
 
+type ToolInvocation = Extract<
+  MastraDBMessage['content']['parts'][number],
+  { type: 'tool-invocation' }
+>['toolInvocation'];
+
+function withToolState(id: string, createdAt: number, toolInvocation: Partial<ToolInvocation>): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    createdAt: new Date(createdAt),
+    threadId: 'thread',
+    resourceId: 'resource',
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            toolCallId: 'color',
+            toolName: 'changeColor',
+            args: { color: 'green' },
+            ...toolInvocation,
+          } as ToolInvocation,
+        },
+      ],
+    },
+  };
+}
+
+function layeredToolState(stored: Partial<ToolInvocation>, live: Partial<ToolInvocation>) {
+  const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+  list.add(withToolState('assistant', 2, live), 'input');
+  list.add(withToolState('assistant', 1, stored), 'memory');
+  const [part] = list.get.all.db()[0]!.content.parts;
+  return part?.type === 'tool-invocation' ? part.toolInvocation : undefined;
+}
+
+describe('live tool state only moves a stored call forward', () => {
+  const storedResult = { state: 'result', result: { applied: true } } as const;
+
+  it.each([
+    ['result', { state: 'result', result: { applied: false } }],
+    ['output-error', { state: 'output-error', errorText: 'stale error' }],
+    ['output-denied', { state: 'output-denied' }],
+    ['approval-requested', { state: 'approval-requested' }],
+  ] as const)('keeps a stored result over a live %s echo', (_, live) => {
+    expect(layeredToolState(storedResult, live)).toMatchObject(storedResult);
+  });
+
+  it.each([
+    ['result', { state: 'result', result: { applied: true } }],
+    ['output-error', { state: 'output-error', errorText: 'user closed the picker' }],
+    ['output-denied', { state: 'output-denied' }],
+    ['approval-responded', { state: 'approval-responded', approval: { id: 'a', approved: true } }],
+  ] as const)('fills a stored pending call with a live %s', (_, live) => {
+    expect(layeredToolState({ state: 'call' }, live)).toMatchObject({ state: live.state });
+  });
+
+  it('fills a stored answered approval with the live outcome of the same run', () => {
+    expect(
+      layeredToolState(
+        { state: 'approval-responded', approval: { id: 'a', approved: true } },
+        { state: 'result', result: { applied: true } },
+      ),
+    ).toMatchObject({ state: 'result', result: { applied: true } });
+  });
+
+  it('does not move a stored answered approval back to a live approval request', () => {
+    expect(
+      layeredToolState(
+        { state: 'approval-responded', approval: { id: 'a', approved: true } },
+        { state: 'approval-requested', approval: { id: 'a' } },
+      ),
+    ).toMatchObject({ state: 'approval-responded', approval: { approved: true } });
+  });
+});
+
 describe('stored history is not layered onto stored history', () => {
   it('still replaces one stored duplicate with another', () => {
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
