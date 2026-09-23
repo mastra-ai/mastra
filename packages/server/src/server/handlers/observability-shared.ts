@@ -19,6 +19,10 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
+const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
+export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE = 'observability-trace-query-tenant-scope';
+export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE =
+  'Trusted tenant scope requires a newer @mastra/core with trace-query tenant scope support. Please upgrade.';
 
 export function supportsTraceQueryDiscoveryCore() {
   return (
@@ -98,6 +102,23 @@ export function assertObservabilityTraceQueryDiscoverySupported(observabilitySto
 
   throw new HTTPException(501, {
     message: 'Trace query discovery is not supported by the configured observability store',
+  });
+}
+
+/**
+ * A scoped request must never run unscoped: a store that predates tenant scope would
+ * silently ignore `plan.scope` and return every tenant's rows, so it is rejected instead.
+ * Unscoped requests are unaffected.
+ */
+export function assertObservabilityTraceQueryTenantScopeSupported(
+  observabilityStore: ObservabilityStorage,
+  scope: coreStorage.TraceQueryTenantScope | undefined,
+) {
+  if (scope === undefined) return;
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'The configured observability store cannot enforce the trusted tenant scope',
   });
 }
 

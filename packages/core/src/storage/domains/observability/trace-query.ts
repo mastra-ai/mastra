@@ -614,9 +614,20 @@ export type TrustedThreadPredicate =
       predicate: TrustedTraceQueryPredicate;
     };
 
+/**
+ * Tenant scope resolved by the host outside the query document. Stores AND it into
+ * every root and related-signal scan; it is never derived from caller predicates.
+ * Mirrors the `organizationId` / `resourceId` tenant scope of `BatchDeleteTracesArgs`.
+ */
+export interface TraceQueryTenantScope {
+  organizationId: string;
+  resourceId?: string;
+}
+
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
+  scope?: TraceQueryTenantScope;
 }
 
 export interface TrustedTraceQueryKeysetPlan {
@@ -673,6 +684,7 @@ export interface TrustedThreadQueryPlan {
     where?: TrustedTraceQueryPredicate;
   };
   where?: TrustedThreadPredicate;
+  scope?: TraceQueryTenantScope;
   orderBy: { field: 'threadId'; direction: 'asc' };
   limit: number;
   binding: string;
@@ -684,6 +696,7 @@ export interface TrustedTraceQueryObservedFieldsPlan {
   predicateScope: TraceQueryPredicateScope;
   search?: string;
   limit: number;
+  scope?: TraceQueryTenantScope;
 }
 
 export interface TrustedTraceQueryValuesPlan extends TrustedTraceQueryObservedFieldsPlan {
@@ -901,8 +914,16 @@ export function parseGetTraceQueryValuesArgs(input: unknown): NormalizedGetTrace
   return result.data;
 }
 
+export interface TraceQueryPlanOptions {
+  /** Opaque host authorization state bound into keyset cursors. */
+  authorizationBinding?: string;
+  /** Trusted tenant scope; applied by stores and bound into keyset cursors. */
+  scope?: TraceQueryTenantScope;
+}
+
 export function planTraceQueryObservedFields(
   args: NormalizedGetTraceQueryFieldsArgs,
+  options: Pick<TraceQueryPlanOptions, 'scope'> = {},
 ): TrustedTraceQueryObservedFieldsPlan {
   return {
     timeRange: {
@@ -912,11 +933,23 @@ export function planTraceQueryObservedFields(
     predicateScope: args.predicateScope,
     search: args.search,
     limit: args.limit,
+    scope: normalizeTenantScope(options.scope),
   };
 }
 
-export function planTraceQueryValues(args: NormalizedGetTraceQueryValuesArgs): TrustedTraceQueryValuesPlan {
-  return { ...planTraceQueryObservedFields(args), path: args.path };
+export function planTraceQueryValues(
+  args: NormalizedGetTraceQueryValuesArgs,
+  options: Pick<TraceQueryPlanOptions, 'scope'> = {},
+): TrustedTraceQueryValuesPlan {
+  return { ...planTraceQueryObservedFields(args, options), path: args.path };
+}
+
+/** Drops an absent `resourceId` so the plan and cursor binding are canonical. */
+function normalizeTenantScope(scope: TraceQueryTenantScope | undefined): TraceQueryTenantScope | undefined {
+  if (!scope) return undefined;
+  return scope.resourceId === undefined
+    ? { organizationId: scope.organizationId }
+    : { organizationId: scope.organizationId, resourceId: scope.resourceId };
 }
 
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
@@ -959,7 +992,7 @@ export function parseQueryThreadsInput(input: unknown): NormalizedQueryThreadsIn
  */
 export function planTraceQuery(
   request: NormalizedTraceQueryRequest,
-  options: { authorizationBinding?: string } = {},
+  options: TraceQueryPlanOptions = {},
 ): TrustedTraceQueryPlan {
   const issues: TraceQueryIssue[] = [];
   const from = new Date(request.timeRange.from);
@@ -986,17 +1019,26 @@ export function planTraceQuery(
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
+  const scope = normalizeTenantScope(options.scope);
 
   if (request.group) {
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
-    const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
+    const binding = digestBinding({
+      timeRange,
+      where,
+      result,
+      orderBy,
+      authorization: options.authorizationBinding,
+      scope,
+    });
     const page = request.page ?? { limit: 100 };
     const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
       timeRange,
       where,
+      scope,
       orderBy,
       paginationMode: 'keyset',
       limit: page.limit,
@@ -1012,12 +1054,14 @@ export function planTraceQuery(
     where,
     result: 'trace-delta',
     authorization: options.authorizationBinding,
+    scope,
   });
   if (request.mode === 'delta') {
     return {
       result,
       timeRange,
       where,
+      scope,
       orderBy,
       paginationMode: 'delta',
       limit: request.limit ?? defaultDeltaLimit,
@@ -1030,6 +1074,7 @@ export function planTraceQuery(
       result,
       timeRange,
       where,
+      scope,
       orderBy,
       paginationMode: 'page',
       page: request.pagination.page,
@@ -1039,12 +1084,20 @@ export function planTraceQuery(
   }
 
   const page = request.page ?? { limit: 100 };
-  const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
+  const binding = digestBinding({
+    timeRange,
+    where,
+    result,
+    orderBy,
+    authorization: options.authorizationBinding,
+    scope,
+  });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
   return {
     result,
     timeRange,
     where,
+    scope,
     orderBy,
     paginationMode: 'keyset',
     limit: page.limit,
@@ -1061,7 +1114,7 @@ export function planTraceQuery(
  */
 export function planThreadQuery(
   request: NormalizedQueryThreadsInput,
-  options: { authorizationBinding?: string } = {},
+  options: TraceQueryPlanOptions = {},
 ): TrustedThreadQueryPlan {
   const issues: TraceQueryIssue[] = [];
   const from = new Date(request.traces.timeRange.from);
@@ -1093,13 +1146,15 @@ export function planThreadQuery(
     where: traceWhere,
   };
   const orderBy = { field: 'threadId', direction: 'asc' } as const;
-  const binding = digestBinding({ traces, where, result, orderBy, authorization: options.authorizationBinding });
+  const scope = normalizeTenantScope(options.scope);
+  const binding = digestBinding({ traces, where, result, orderBy, authorization: options.authorizationBinding, scope });
   const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
 
   return {
     result,
     traces,
     where,
+    scope,
     orderBy,
     limit: request.page.limit,
     binding,
