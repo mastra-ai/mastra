@@ -5224,16 +5224,38 @@ export class Mastra<
             ]),
           )
         : undefined;
-      const valueProperties = questions
+      const answerProperties = questions
         ? Object.fromEntries(
             Object.entries(questions).map(([questionId, question]) => [
               questionId,
               question.type === 'choice'
-                ? { type: 'string', enum: question.choices }
-                : {
-                    type: 'number',
-                    ...(question.type === 'score' ? { minimum: question.min, maximum: question.max } : {}),
-                  },
+                ? {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['choice'] },
+                      choice: { type: 'string', enum: question.choices },
+                      probabilities: { type: 'object', additionalProperties: { type: 'number' } },
+                    },
+                    required: ['type', 'choice'],
+                  }
+                : question.type === 'score'
+                  ? {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['score'] },
+                        score: { type: 'number', minimum: question.min, maximum: question.max },
+                        probabilities: { type: 'object', additionalProperties: { type: 'number' } },
+                      },
+                      required: ['type', 'score'],
+                    }
+                  : {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['boolean'] },
+                        probability: { type: 'number', minimum: 0, maximum: 1 },
+                      },
+                      required: ['type', 'probability'],
+                    },
             ]),
           )
         : {};
@@ -5242,11 +5264,10 @@ export class Mastra<
         outputSchema: {
           type: 'object',
           properties: {
-            values: { type: 'object', properties: valueProperties, required: Object.keys(valueProperties) },
-            answers: { type: 'object' },
+            answers: { type: 'object', properties: answerProperties, required: Object.keys(answerProperties) },
             usage: { type: 'object' },
           },
-          required: ['values', 'answers', 'usage'],
+          required: ['answers', 'usage'],
         },
         questions,
       };

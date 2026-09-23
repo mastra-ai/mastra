@@ -330,7 +330,6 @@ function rehydrateSingleEntry(
         id: entry.id,
         classifierId: entry.classifierId,
         classifier,
-        state: entry.state,
         options: entry.options,
       };
     }

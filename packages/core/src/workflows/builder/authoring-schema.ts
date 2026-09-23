@@ -130,7 +130,7 @@ export const workflowBuilderToolEntryInputSchema = workflowBuilderToolEntrySchem
   .describe(TOOL_ENTRY_DESCRIPTION);
 
 const CLASSIFIER_ENTRY_DESCRIPTION =
-  'Classifier step. Evaluates workflow data with a registered configured classifier and returns { values, answers, usage }. Use values.<question> for routine routing, answers.<question> for full evidence, and usage for token accounting. Route with a following conditional entry.';
+  'Classifier step. Evaluates its complete input with a registered configured classifier and returns { answers, usage }. Route with a following conditional entry using answers.<question>.choice, answers.<question>.score, or answers.<question>.probability. Use a mapping entry before the classifier to reshape its input.';
 
 const classifierOptionsSchema = z
   .object({
@@ -159,12 +159,6 @@ export const workflowBuilderClassifierEntrySchema = z
       .min(1)
       .describe('Id of a configured classifier registered on this Mastra instance (from resource discovery).'),
     description: z.string().optional(),
-    state: z
-      .strictObject({ path: z.string().min(1) })
-      .optional()
-      .describe(
-        'Optional canonical path selecting classifier state, for example { "path": "inputData.message" }. Defaults to all inputData.',
-      ),
     options: classifierOptionsSchema,
   })
   .describe(CLASSIFIER_ENTRY_DESCRIPTION);
@@ -172,7 +166,6 @@ export const workflowBuilderClassifierEntrySchema = z
 export const workflowBuilderClassifierEntryInputSchema = workflowBuilderClassifierEntrySchema
   .extend({
     description: z.string().nullish(),
-    state: z.strictObject({ path: z.string().min(1) }).nullish(),
     options: classifierOptionsInputSchema,
   })
   .describe(CLASSIFIER_ENTRY_DESCRIPTION);

@@ -15,8 +15,10 @@ function describeQuestions(questions: ClassifierQuestions | undefined) {
     instructions: question.instructions,
     choices: question.type === 'choice' ? Object.keys(question.criteria) : undefined,
     criteria: question.criteria,
-    valuePath: `inputData.values.${id}`,
     answerPath: `inputData.answers.${id}`,
+    routingPath: `inputData.answers.${id}.${
+      question.type === 'choice' ? 'choice' : question.type === 'score' ? 'score' : 'probability'
+    }`,
   }));
 }
 
@@ -37,13 +39,12 @@ export const listAvailableClassifiersTool = createTool({
               instructions: z.any().optional(),
               choices: z.array(z.string()).optional(),
               criteria: z.any().optional(),
-              valuePath: z.string(),
               answerPath: z.string(),
+              routingPath: z.string(),
             }),
           )
           .optional(),
         outputPaths: z.object({
-          values: z.string(),
           answers: z.string(),
           usage: z.string(),
         }),
@@ -64,7 +65,6 @@ export const listAvailableClassifiersTool = createTool({
           id,
           questions: describeQuestions(classifier.questions),
           outputPaths: {
-            values: 'inputData.values.<question>',
             answers: 'inputData.answers.<question>',
             usage: 'inputData.usage',
           },

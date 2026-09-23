@@ -5,6 +5,6 @@
  */
 export { runAgentEntry } from './run-agent-entry';
 export { runClassifierEntry } from './run-classifier-entry';
-export type { ClassifierStepOutput, ClassifierStepValues } from './run-classifier-entry';
+export type { ClassifierStepOutput } from './run-classifier-entry';
 export { runToolEntry } from './run-tool-entry';
 export { runMappingEntry } from './run-mapping-entry';

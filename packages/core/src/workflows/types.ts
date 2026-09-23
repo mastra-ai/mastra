@@ -653,9 +653,6 @@ export type StepFlowEntryOptions = {
  * (`any`) because the public type-safety for these entries is enforced by the
  * `Workflow` builder method overloads, not by this internal union.
  */
-export type ClassifierStateMapping = { path: string };
-export type ClassifierStateSelector = (context: any) => any | Promise<any>;
-
 export type SerializableClassifierStepOptions = {
   maxRetries?: number;
   providerOptions?: Record<string, Record<string, unknown>>;
@@ -672,7 +669,6 @@ export type SingleStepEntry<TEngineType = DefaultEngineType> =
       id: string;
       classifierId: string;
       classifier?: any;
-      state?: ClassifierStateMapping | ClassifierStateSelector;
       options?: SerializableClassifierStepOptions;
     }
   | {
@@ -847,7 +843,6 @@ export type SerializedSingleStepEntry =
       type: 'classifier';
       id: string;
       classifierId: string;
-      state?: ClassifierStateMapping;
       options?: SerializableClassifierStepOptions;
     }
   | { type: 'mapping'; id: string; description?: string; metadata?: StepMetadata; mapConfig: string }

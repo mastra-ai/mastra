@@ -133,7 +133,7 @@ import {
 // so the execution engines can use them without importing this module.
 export { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 export type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
-export type { ClassifierStepOutput, ClassifierStepValues } from './entry-executors';
+export type { ClassifierStepOutput } from './entry-executors';
 
 /**
  * Extract the JSON-safe subset of an agent-step options bag for the in-process
@@ -202,7 +202,6 @@ function serializeToolStepFields(options: any): { options?: { retries?: number; 
 }
 
 type SerializedClassifierStepFields = {
-  state?: { path: string };
   options?: {
     retries?: number;
     metadata?: StepMetadata;
@@ -215,14 +214,6 @@ function serializeClassifierStepFields(
   options: ClassifierStepOptions<any> | undefined,
 ): SerializedClassifierStepFields {
   const out: SerializedClassifierStepFields = {};
-  if (
-    options?.state &&
-    typeof options.state === 'object' &&
-    typeof (options.state as { path?: unknown }).path === 'string'
-  ) {
-    out.state = options.state as { path: string };
-  }
-
   const opts: NonNullable<SerializedClassifierStepFields['options']> = {};
   if (typeof options?.retries === 'number') opts.retries = options.retries;
   if (options?.metadata && typeof options.metadata === 'object') opts.metadata = options.metadata;
@@ -644,7 +635,6 @@ function toSingleStepEntry(step: StepWithRefMetadata): SingleStepEntry {
       id: step.id,
       classifierId: step.__classifierRef.id,
       classifier: step.__classifierRef,
-      state: step.__classifierOptions?.state,
       options: step.__classifierOptions,
     };
   }
@@ -2081,7 +2071,6 @@ export class Workflow<
       id,
       classifierId,
       classifier: isId ? undefined : classifierOrId,
-      state: options?.state,
       options,
     };
     this.stepFlow.push(entry as any);

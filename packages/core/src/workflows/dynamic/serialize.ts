@@ -156,17 +156,11 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
     };
   }
   if (entry.type === 'classifier') {
-    if (typeof entry.state === 'function') {
-      throw new Error(
-        `Classifier step "${entry.id}" cannot be stored: the state selector function does not round-trip. Use a path mapping instead.`,
-      );
-    }
     const options = pickSerializableClassifierStepOptions(entry.options);
     return {
       type: 'classifier',
       id: entry.id,
       classifierId: entry.classifierId,
-      ...(entry.state ? { state: entry.state } : {}),
       ...(options ? { options } : {}),
     };
   }

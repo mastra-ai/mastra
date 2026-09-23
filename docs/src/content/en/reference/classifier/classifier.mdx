@@ -385,7 +385,7 @@ mastra.listClassifiers()
 
 ## Using classifiers in workflows
 
-A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains a routing-oriented `values` map, complete `answers`, and normalized `usage`.
+A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains complete typed `answers` and normalized `usage`.
 
 ```typescript
 const workflow = createWorkflow({
@@ -393,9 +393,8 @@ const workflow = createWorkflow({
   inputSchema: z.object({ message: z.string() }),
   outputSchema: z.any(),
 })
-  .classifier('safety', {
-    state: { path: 'inputData.message' },
-  })
+  .map({ message: { initData: true, path: 'message' } })
+  .classifier('safety')
   .commit()
 ```
 

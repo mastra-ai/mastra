@@ -50,7 +50,7 @@ describe('shared workflow builder authoring schema', () => {
     expect(workflowBuilderAgentEntrySchema.description).toContain(
       'Default agents consume { prompt: string } and return { text: string }',
     );
-    expect(workflowBuilderClassifierEntrySchema.description).toContain('{ values, answers, usage }');
+    expect(workflowBuilderClassifierEntrySchema.description).toContain('{ answers, usage }');
     expect(workflowBuilderClassifierEntrySchema.description).toContain('following conditional entry');
     // The call-site id addresses the nested workflow's result; it is independent
     // of the referenced workflowId (registry keys and intrinsic ids can differ).
@@ -88,7 +88,7 @@ describe('shared workflow builder authoring schema', () => {
       expect(() => workflowBuilderDefinitionInputSchema.parse(authoringDefinition)).not.toThrow();
     });
 
-    it('accepts classifier entries and their serializable state and options', () => {
+    it('accepts classifier entries and their serializable options', () => {
       const definition = {
         ...authoringDefinition,
         graph: [
@@ -96,7 +96,6 @@ describe('shared workflow builder authoring schema', () => {
             type: 'classifier',
             id: 'classify-ticket',
             classifierId: 'ticket-router',
-            state: { path: 'inputData.email' },
             options: { maxRetries: 1, retries: 2, metadata: { owner: 'support' } },
           },
         ],
@@ -112,7 +111,7 @@ describe('shared workflow builder authoring schema', () => {
       expect(
         workflowBuilderDefinitionInputSchema.safeParse({
           ...authoringDefinition,
-          graph: [{ type: 'classifier', id: 'classify-ticket', classifierId: '', state: { path: '' } }],
+          graph: [{ type: 'classifier', id: 'classify-ticket', classifierId: '' }],
         }).success,
       ).toBe(false);
     });

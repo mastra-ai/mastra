@@ -158,7 +158,6 @@ A `classifier` entry evaluates workflow data with a classifier registered on the
   "type": "classifier",
   "id": "classify-ticket",
   "classifierId": "ticket-router",
-  "state": { "path": "inputData.message" },
   "options": {
     "maxRetries": 2,
     "retries": 1,
@@ -167,15 +166,14 @@ A `classifier` entry evaluates workflow data with a classifier registered on the
 }
 ```
 
-If `state` is omitted, the classifier evaluates the complete entry input. A state path can start with `inputData`, `initData`, `state`, or `stepResults`. Live selector functions are omitted from the serialized graph, so use a path mapping when the workflow will be stored and rehydrated.
+The classifier evaluates the complete entry input. Add a preceding `mapping` entry when the classifier needs a selected or reshaped input.
 
-Classifier output has three stable paths:
+Classifier output has two stable paths:
 
-- `values.<question>` contains the routing-oriented choice literal, numeric score, or boolean `P(true)` probability.
-- `answers.<question>` contains complete classifier evidence, including distributions when provided.
+- `answers.<question>` contains the typed answer. Route on its `choice`, `score`, or `probability` field according to the question type. Choice and score answers may include distributions.
 - `usage` contains normalized token usage.
 
-Use an existing `conditional` entry to route on classifier output. For example, a following condition can compare `{ "path": "stepResults.classify-ticket.values.route" }` with `{ "literal": "billing" }`.
+Use an existing `conditional` entry to route on classifier output. For example, a following condition can compare `{ "path": "stepResults.classify-ticket.answers.route.choice" }` with `{ "literal": "billing" }`.
 
 The `options` object can contain classifier model-call `maxRetries`, JSON-safe `providerOptions`, workflow step `retries`, and `metadata`. Classifier errors fail the workflow step.
 

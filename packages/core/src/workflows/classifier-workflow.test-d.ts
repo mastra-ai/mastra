@@ -15,17 +15,9 @@ const questions = {
 } as const;
 const classifier = new Classifier({ id: 'ticket-router', model, questions });
 
-const step = createStep(classifier, {
-  state: ({ inputData }) => {
-    expectTypeOf(inputData).toEqualTypeOf<unknown>();
-    return inputData as string;
-  },
-});
+const step = createStep(classifier);
 type StepOutput<T> = T extends Step<any, any, any, infer OUTPUT, any, any, any> ? OUTPUT : never;
 type Output = StepOutput<typeof step>;
-expectTypeOf<Output['values']['route']>().toEqualTypeOf<'billing' | 'support'>();
-expectTypeOf<Output['values']['quality']>().toEqualTypeOf<number>();
-expectTypeOf<Output['values']['urgent']>().toEqualTypeOf<number>();
 expectTypeOf<Output['answers']['route']>().toEqualTypeOf<ChoiceAnswer<'billing' | 'support'>>();
 expectTypeOf<Output['answers']['quality']>().toEqualTypeOf<ScoreAnswer>();
 expectTypeOf<Output['answers']['urgent']>().toEqualTypeOf<BooleanAnswer>();
@@ -35,18 +27,12 @@ createWorkflow({
   inputSchema: z.object({ message: z.string() }),
   outputSchema: z.any(),
 })
-  .classifier(classifier, {
-    state: ({ inputData }) => {
-      expectTypeOf(inputData).toEqualTypeOf<{ message: string }>();
-      return inputData.message;
-    },
-  })
+  .classifier(classifier)
   .branch([
     [
       async ({ inputData }) => {
-        expectTypeOf(inputData.values.route).toEqualTypeOf<'billing' | 'support'>();
         expectTypeOf(inputData.answers.route).toEqualTypeOf<ChoiceAnswer<'billing' | 'support'>>();
-        return inputData.values.route === 'billing';
+        return inputData.answers.route.choice === 'billing';
       },
       createStep({
         id: 'billing',

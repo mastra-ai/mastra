@@ -1223,7 +1223,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       step: createStepFromClassifier(classifier as any, {
         ...entry.options,
         id: entry.id,
-        state: entry.state as any,
       }),
     });
   }

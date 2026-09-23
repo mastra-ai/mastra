@@ -3,15 +3,18 @@
 '@mastra/client-js': patch
 '@mastra/playground-ui': patch
 '@mastra/react': patch
+'@mastra/server': patch
+'@mastra/code-sdk': patch
 ---
 
-Added configured classifiers as typed workflow steps with fluent and dynamic graph support. Classifier steps expose routing values, complete answers, and token usage for existing branch and conditional control flow.
+Added configured classifiers as typed workflow steps with fluent and dynamic graph support. Classifier steps expose complete typed answers and token usage for existing branch and conditional control flow. The server schema accepts serialized classifier entries, and the code SDK exposes configured classifiers to workflow authoring tools.
 
 ```ts
 workflow
-  .classifier(router, { state: { path: 'inputData.message' } })
+  .map({ message: { initData: true, path: 'message' } })
+  .classifier(router)
   .branch([
-    [async ({ inputData }) => inputData.values.route === 'billing', billingStep],
-    [async ({ inputData }) => inputData.values.route === 'support', supportStep],
+    [async ({ inputData }) => inputData.answers.route.choice === 'billing', billingStep],
+    [async ({ inputData }) => inputData.answers.route.choice === 'support', supportStep],
   ]);
 ```

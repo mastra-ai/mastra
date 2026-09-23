@@ -74,7 +74,7 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
     vi.restoreAllMocks();
   });
 
-  it('executes inline and projects JSON-safe routing values', async () => {
+  it('executes inline and returns typed answers', async () => {
     if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
     const classifier = createClassifier();
     const workflow = createWorkflow({
@@ -90,13 +90,12 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
-      expect(result.result.values).toEqual({ route: 'billing', quality: 1.5, urgent: 0.9 });
       expect(result.result.answers.route.probabilities).toEqual({ billing: 0.8, support: 0.15, other: 0.05 });
       expect(result.result.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
     }
   });
 
-  it('resolves a registered classifier and a path-mapped state', async () => {
+  it('resolves a registered classifier with mapped input', async () => {
     if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
     const sourceClassifier = createClassifier();
     const doEvaluate = vi.fn(options => sourceClassifier.model.doEvaluate(options));
@@ -106,14 +105,15 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
       inputSchema: z.object({ message: z.string() }),
       outputSchema: z.any(),
     })
-      .classifier('ticket-router', { state: { path: 'inputData.message' } }, { id: 'classify-ticket' })
+      .map({ message: { initData: true, path: 'message' } })
+      .classifier('ticket-router', undefined, { id: 'classify-ticket' })
       .commit();
     bind(workflow, classifier);
 
     const result = await (await workflow.createRun()).start({ inputData: { message: 'Account locked' } });
 
     expect(result.status).toBe('success');
-    expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: 'Account locked' }));
+    expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { message: 'Account locked' } }));
   });
 
   it('passes classifier output to a following branch', async () => {
@@ -138,8 +138,8 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
     })
       .classifier(classifier)
       .branch([
-        [async ({ inputData }) => inputData.values.route === 'billing', billingStep],
-        [async ({ inputData }) => inputData.values.route === 'other', fallbackStep],
+        [async ({ inputData }) => inputData.answers.route.choice === 'billing', billingStep],
+        [async ({ inputData }) => inputData.answers.route.choice === 'other', fallbackStep],
       ])
       .commit();
     bind(workflow, classifier);
@@ -154,14 +154,13 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
 });
 
 describe('classifier workflow construction', () => {
-  it('omits function state selectors from serialized classifier entries', () => {
+  it('serializes classifier entries with JSON-safe options', () => {
     const workflow = createWorkflow({
       id: 'selector-builder',
       inputSchema: z.object({ message: z.string() }),
       outputSchema: z.any(),
     })
       .classifier('ticket-router', {
-        state: ({ inputData }) => inputData.message,
         retries: 2,
         maxRetries: 3,
         providerOptions: { test: { mode: 'fast' } },
@@ -212,7 +211,7 @@ describe('classifier workflow construction', () => {
     ]);
   });
 
-  it('supports live state selectors and preserves classifier entries from createStep()', async () => {
+  it('passes mapped input and preserves classifier entries from createStep()', async () => {
     const states: unknown[] = [];
     const classifier = createClassifier(async options => {
       states.push(options.state);
@@ -226,25 +225,26 @@ describe('classifier workflow construction', () => {
         warnings: [],
       };
     });
-    const step = createStep(classifier, { state: ({ inputData }) => inputData.message });
+    const step = createStep(classifier);
     const workflow = createWorkflow({
       id: 'selector-step',
       inputSchema: z.object({ message: z.string() }),
       outputSchema: z.any(),
     })
+      .map({ message: { initData: true, path: 'message' } })
       .then(step)
       .commit();
     bind(workflow, classifier);
 
-    expect(workflow.stepGraph[0]).toMatchObject({ type: 'classifier', classifierId: 'ticket-router' });
-    expect(workflow.serializedStepGraph[0]).toEqual({
+    expect(workflow.stepGraph[1]).toMatchObject({ type: 'classifier', classifierId: 'ticket-router' });
+    expect(workflow.serializedStepGraph[1]).toEqual({
       type: 'classifier',
       id: 'ticket-router',
       classifierId: 'ticket-router',
     });
     const result = await (await workflow.createRun()).start({ inputData: { message: 'Need help' } });
     expect(result.status).toBe('success');
-    expect(states).toEqual(['Need help']);
+    expect(states).toEqual([{ message: 'Need help' }]);
   });
 
   it('fails clearly when a registered classifier is missing', async () => {

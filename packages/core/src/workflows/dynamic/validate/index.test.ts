@@ -364,55 +364,6 @@ describe('validateDynamicWorkflow', () => {
       );
     });
 
-    it('rejects classifier state paths that reference missing or non-preceding steps', () => {
-      const issues = validateDynamicWorkflow(
-        def({
-          graph: [
-            {
-              type: 'classifier',
-              id: 'future-reference',
-              classifierId: 'router',
-              state: { path: 'stepResults.lookup-customer.values.route' },
-            },
-            { type: 'tool', id: 'lookup-customer', toolId: 'lookupCustomer' },
-            {
-              type: 'classifier',
-              id: 'missing-reference',
-              classifierId: 'router',
-              state: { path: 'stepResults.not-a-step.values.route' },
-            },
-          ],
-        }),
-        { classifiers: { router: {} }, tools: { lookupCustomer: {} } },
-      );
-
-      expect(issues).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ code: 'invalid-map-reference', path: 'graph.0.state.path' }),
-          expect.objectContaining({ code: 'invalid-map-reference', path: 'graph.2.state.path' }),
-        ]),
-      );
-    });
-
-    it('accepts classifier state paths that reference preceding steps', () => {
-      const issues = validateDynamicWorkflow(
-        def({
-          graph: [
-            { type: 'tool', id: 'lookup-customer', toolId: 'lookupCustomer' },
-            {
-              type: 'classifier',
-              id: 'route-customer',
-              classifierId: 'router',
-              state: { path: 'stepResults.lookup-customer.values.route' },
-            },
-          ],
-        }),
-        { classifiers: { router: {} }, tools: { lookupCustomer: {} } },
-      );
-
-      expect(issues).toEqual([]);
-    });
-
     it('validates template placeholders with the runtime template parser', () => {
       const issues = validateDynamicWorkflow(
         def({

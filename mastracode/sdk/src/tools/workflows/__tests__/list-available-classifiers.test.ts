@@ -29,12 +29,11 @@ describe('listAvailableClassifiersTool', () => {
         questions: [
           expect.objectContaining({
             id: 'route',
-            valuePath: 'inputData.values.route',
             answerPath: 'inputData.answers.route',
+            routingPath: 'inputData.answers.route.choice',
           }),
         ],
         outputPaths: {
-          values: 'inputData.values.<question>',
           answers: 'inputData.answers.<question>',
           usage: 'inputData.usage',
         },
