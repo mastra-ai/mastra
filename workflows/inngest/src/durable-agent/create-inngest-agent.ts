@@ -1102,6 +1102,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and sends an event to the same trigger name (not a .resume suffix)
       const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
+      // Set when the run is not resumable: that rejection belongs to this caller only
+      // and must not be published to the run's shared stream topic, which would close
+      // the original run's stream too.
+      let notResumable = false;
+
       const dispatch = ready.then(async () => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
         const loadSnapshot = async (): Promise<any> =>
@@ -1118,6 +1123,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           snapshot = await loadSnapshot();
         }
         if (workflowsStore && snapshot?.status !== 'suspended') {
+          notResumable = true;
           throw new NonRetriableError(
             `Cannot resume run ${runId}: it is not suspended` +
               (snapshot?.status ? ` (status: ${snapshot.status}).` : ' (no snapshot found).'),
@@ -1198,7 +1204,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // The registry entry still tracks the whole dispatch so watchers keep seeing
       // dispatch failures as a stream error, exactly as before.
       const workflowExecution = dispatch.catch(error => {
-        void emitError(runId, error);
+        if (!notResumable) void emitError(runId, error);
       });
       existingEntry.workflowExecution = workflowExecution;
 

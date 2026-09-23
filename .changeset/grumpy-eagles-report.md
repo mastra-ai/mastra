@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Fixed `InngestAgent.resume()` crashing with `Cannot read properties of undefined (reading 'threadId')` when called right after a tool suspends. `resume()` now waits for the suspended run to be saved before resuming it, and rejects with a clear error if the run is not suspended. Fixes #24749.
+Fixed a crash when resuming a durable agent run immediately after a tool suspends. Resuming a run that is not suspended now rejects with a clear error. Fixes #24749.

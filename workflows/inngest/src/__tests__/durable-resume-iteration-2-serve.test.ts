@@ -68,7 +68,7 @@ function mockModel(): any {
   };
 }
 
-async function drain(stream: AsyncIterable<any>, timeoutMs: number) {
+async function drain(stream: AsyncIterable<any>, timeoutMs: number, stopOnSuspension = true) {
   const types: string[] = [];
   const errors: unknown[] = [];
   await Promise.race([
@@ -77,7 +77,7 @@ async function drain(stream: AsyncIterable<any>, timeoutMs: number) {
         for await (const chunk of stream) {
           types.push(chunk?.type);
           if (chunk?.type === 'error') errors.push(chunk.payload?.error ?? chunk);
-          if (chunk?.type === 'finish' || chunk?.type === 'tool-call-suspended') return;
+          if (chunk?.type === 'finish' || (stopOnSuspension && chunk?.type === 'tool-call-suspended')) return;
         }
       } catch (e) {
         errors.push(e);
@@ -143,10 +143,11 @@ describe('durable agent resume after a suspend in a later loop iteration (#24749
     expect(firstResult.types).toContain('tool-call-suspended');
 
     const resumed = await inngestAgent.resume(first.runId, { approved: true });
-    const resumedResult = await drain(resumed.output.fullStream, 60_000);
+    const resumedResult = await drain(resumed.output.fullStream, 60_000, false);
     resumed.cleanup();
 
     expect(resumedResult.errors).toEqual([]);
+    expect(resumedResult.types).toContain('finish');
     await vi.waitFor(() => expect(approvals).toEqual([true]), { timeout: 30_000, interval: 250 });
   });
 });
