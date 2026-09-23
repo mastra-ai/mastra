@@ -32,9 +32,19 @@ export function loadHooksConfig(projectDir: string, configDirName = DEFAULT_CONF
   const projectPath = getProjectHooksPath(projectDir, configDirName);
 
   const globalConfig = loadSingleConfig(globalPath);
-  const projectConfig = loadSingleConfig(projectPath);
+  // A session started in the home directory resolves both paths to the same
+  // file; loading it twice would register (and run) every hook twice.
+  const projectConfig = isSameFile(globalPath, projectPath) ? {} : loadSingleConfig(projectPath);
 
   return mergeConfigs(globalConfig, projectConfig);
+}
+
+function isSameFile(a: string, b: string): boolean {
+  try {
+    return fs.realpathSync(a) === fs.realpathSync(b);
+  } catch {
+    return path.resolve(a) === path.resolve(b);
+  }
 }
 
 export function getProjectHooksPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {

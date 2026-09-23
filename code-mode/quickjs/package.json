@@ -1,6 +1,6 @@
 {
   "name": "@mastra/quickjs",
-  "version": "0.1.1",
+  "version": "0.1.2-alpha.0",
   "description": "In-process WebAssembly Code Mode transport for Mastra, backed by QuickJS — no native binaries and no Node flags required",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,7 @@
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "test:watch": "vitest watch",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."

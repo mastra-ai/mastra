@@ -11,8 +11,8 @@ export function AgentRunsKpiCard() {
   return (
     <KpiCardView
       label="Total Agent Runs"
-      value={data?.value != null ? data.value.toLocaleString() : null}
-      prevValue={data?.previousValue != null ? data.previousValue.toLocaleString() : undefined}
+      value={data?.value != null ? formatCompact(data.value) : null}
+      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}
@@ -28,6 +28,7 @@ export function ModelCostKpiCard() {
       value={data?.cost != null ? formatCost(data.cost, data.costUnit) : null}
       prevValue={data?.previousCost != null ? formatCost(data.previousCost, data.costUnit) : undefined}
       changePct={data?.costChangePercent ?? null}
+      lowerIsBetter
       isLoading={isLoading}
       isError={isError}
     />
