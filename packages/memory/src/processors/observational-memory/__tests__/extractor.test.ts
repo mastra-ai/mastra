@@ -459,6 +459,28 @@ describe('Extractor', () => {
       await applyWorkingMemoryValue(memory, { budget: 50 });
       expect(memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
     });
+
+    it("saves the configured validator's output", async () => {
+      const jsonSchema = {
+        type: 'object',
+        properties: { city: { type: 'string' } },
+        required: ['city'],
+        additionalProperties: false,
+      };
+      const memory = createSchemaMemory({
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: (value: unknown) => ({ value: { city: (value as { city: string }).city.trim() } }),
+          jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
+        },
+      } as any);
+
+      await applyWorkingMemoryValue(memory, { city: '  Toronto  ' });
+      expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ workingMemory: JSON.stringify({ city: 'Toronto' }) }),
+      );
+    });
   });
 
   it('returns extractor failures when the structured extraction call fails', async () => {

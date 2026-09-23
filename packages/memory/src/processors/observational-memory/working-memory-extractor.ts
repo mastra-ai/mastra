@@ -40,14 +40,19 @@ function getWorkingMemoryDocumentSchema(
 /**
  * Validates a document with the configured schema's own validator. Non-Zod validators may enforce
  * rules their JSON Schema form can't express, so the converted Zod schema isn't enough here.
+ * Returns the validator's output so any normalization it applies is what gets saved.
  */
-async function isValidWorkingMemoryDocument(schema: WorkingMemoryConfigSchema, value: unknown): Promise<boolean> {
+async function validateWorkingMemoryDocument(
+  schema: WorkingMemoryConfigSchema,
+  value: unknown,
+): Promise<{ value: unknown } | undefined> {
   if (schema instanceof z.ZodType) {
-    return schema.safeParse(value).success;
+    const result = schema.safeParse(value);
+    return result.success ? { value: result.data } : undefined;
   }
   const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
   const result = await standardSchema['~standard'].validate(value);
-  return !result.issues;
+  return result.issues ? undefined : { value: result.value };
 }
 
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
@@ -120,14 +125,17 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
         const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
         const configuredSchema = getConfiguredSchema(memory!, requestContext);
 
-        if (
-          configuredSchema &&
-          (current === null || !(await isValidWorkingMemoryDocument(configuredSchema, current)))
-        ) {
-          return undefined;
+        let document: unknown = current;
+        if (configuredSchema) {
+          const validated =
+            current === null ? undefined : await validateWorkingMemoryDocument(configuredSchema, current);
+          if (!validated) {
+            return undefined;
+          }
+          document = validated.value;
         }
 
-        const workingMemory = typeof current === 'string' ? current : (JSON.stringify(current) ?? '');
+        const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');
         if (!workingMemory.trim()) {
           return undefined;
         }
