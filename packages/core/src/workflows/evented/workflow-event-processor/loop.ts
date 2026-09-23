@@ -154,6 +154,7 @@ export async function processWorkflowLoop(
       stepId: getEntryId(step.step),
       result: nextIterationResult,
       requestContext: getPersistedRequestContext(requestContext),
+      executionGeneration: lifecycleExecution.executionGeneration,
     });
   };
 
@@ -474,6 +475,7 @@ export async function processWorkflowForEach(
           output: updatedOutput,
         } as any,
         requestContext: getPersistedRequestContext(requestContext),
+        executionGeneration: lifecycleExecution.executionGeneration,
       });
 
       // Check if inner step is a nested workflow
@@ -559,6 +561,7 @@ export async function processWorkflowForEach(
       stepId,
       result: currentResult,
       requestContext: getPersistedRequestContext(requestContext),
+      executionGeneration: lifecycleExecution.executionGeneration,
     });
     stepResults[stepId] = currentResult;
   }
@@ -586,6 +589,7 @@ export async function processWorkflowForEach(
         stepId,
         result: { ...currentResult, output: updatedOutput } as any,
         requestContext: getPersistedRequestContext(requestContext),
+        executionGeneration: lifecycleExecution.executionGeneration,
       });
 
       const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
@@ -644,6 +648,7 @@ export async function processWorkflowForEach(
         stepId: getEntryId(step.step),
         result,
         requestContext: getPersistedRequestContext(requestContext),
+        executionGeneration: lifecycleExecution.executionGeneration,
       });
       stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
     } else if (result) {
@@ -658,6 +663,7 @@ export async function processWorkflowForEach(
         stepId: getEntryId(step.step),
         result: { ...result, suspendPayload: undefined, suspendOutput: undefined } as any,
         requestContext: getPersistedRequestContext(requestContext),
+        executionGeneration: lifecycleExecution.executionGeneration,
       });
       stepResults[getEntryId(step.step)] = result as any;
     }
@@ -712,6 +718,7 @@ export async function processWorkflowForEach(
         payload: (prevResult as any)?.output,
       } as any,
       requestContext: getPersistedRequestContext(requestContext),
+      executionGeneration: lifecycleExecution.executionGeneration,
     });
 
     // Check if inner step is a nested workflow - only then extract individual items
@@ -765,6 +772,7 @@ export async function processWorkflowForEach(
       payload: (prevResult as any)?.output,
     } as any,
     requestContext: getPersistedRequestContext(requestContext),
+    executionGeneration: lifecycleExecution.executionGeneration,
   });
 
   // For nested workflows, extract individual item since they receive prevResult directly

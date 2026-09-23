@@ -5463,12 +5463,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionGeneration,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    executionGeneration?: string;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       // Use a transaction with row-level locking to ensure atomicity
@@ -5508,6 +5510,21 @@ export class WorkflowsPG extends WorkflowsStorage {
           // Parse existing snapshot
           const existingSnapshot = existingSnapshotResult.snapshot;
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        }
+
+        // Compare-and-set guard before any merge: a delayed result write from
+        // a deleted execution lifetime must not merge into the snapshot a
+        // reopened lifetime installed under the same runId (PF-4385 tombstone
+        // reopen). A missing row also fails a supplied generation — a writer
+        // that declares a lineage never resurrects a deleted run. Mirrors the
+        // updateWorkflowState guard below.
+        if (
+          !matchesExpectedWorkflowState(snapshot, {
+            expectedExecutionGeneration: executionGeneration,
+          })
+        ) {
+          await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created);
+          return {};
         }
 
         // Merge the new step result using element-wise array merging

@@ -1302,6 +1302,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             stepId: parentWorkflow.stepId,
             result: { ...parentResult, metadata: nestedRunMetadata },
             requestContext: getPersistedRequestContext(requestContext),
+            executionGeneration: parentWorkflow.executionGeneration,
           });
         } else if (ownership.status !== 'bound' && ownership.status !== 'already_bound') {
           throw new MastraError({
@@ -3546,6 +3547,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepId: '__state',
           result: currentState as any,
           requestContext: getPersistedRequestContext(requestContext),
+          executionGeneration: lifecycleExecution.executionGeneration,
         });
         const suspendTracingContext = this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
@@ -3810,6 +3812,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             stepId: getEntryId(step.step),
             result: bailedResult as any,
             requestContext: getPersistedRequestContext(requestContext),
+            executionGeneration: lifecycleExecution.executionGeneration,
           });
 
           // End workflow with bail result
@@ -3917,6 +3920,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepId: getEntryId(step.step),
         result: storageResult ?? newResult,
         requestContext: getPersistedRequestContext(requestContext),
+        executionGeneration: lifecycleExecution.executionGeneration,
       });
 
       // Persist (and thread forward) any state changes made inside the foreach body.
@@ -3932,6 +3936,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepId: '__state',
           result: currentState as any,
           requestContext: getPersistedRequestContext(requestContext),
+          executionGeneration: lifecycleExecution.executionGeneration,
         });
       }
 
@@ -4175,6 +4180,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             stepId: getEntryId(step.step),
             result: foreachSuspendResult as any,
             requestContext: getPersistedRequestContext(requestContext),
+            executionGeneration: lifecycleExecution.executionGeneration,
           });
 
           // Check shouldPersistSnapshot option - default to true if not specified
@@ -4192,6 +4198,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: '__state',
               result: currentState as any,
               requestContext: getPersistedRequestContext(requestContext),
+              executionGeneration: lifecycleExecution.executionGeneration,
             });
 
             const suspendTracingContext = this.resolveSuspendTracingContext(runId);
@@ -4299,6 +4306,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepId,
         result: storedResult,
         requestContext: getPersistedRequestContext(requestContext),
+        executionGeneration: lifecycleExecution.executionGeneration,
       });
 
       // When the Mastra has no storage configured, workflowsStore is undefined
@@ -4438,6 +4446,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepId: '__state',
           result: currentState as any,
           requestContext: getPersistedRequestContext(requestContext),
+          executionGeneration: lifecycleExecution.executionGeneration,
         });
 
         const suspendTracingContext = this.resolveSuspendTracingContext(runId);

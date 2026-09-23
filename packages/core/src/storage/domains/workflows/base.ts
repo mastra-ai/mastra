@@ -248,12 +248,14 @@ export abstract class WorkflowsStorage extends StorageDomain {
     stepId,
     result,
     requestContext,
+    executionGeneration,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    executionGeneration?: string;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({

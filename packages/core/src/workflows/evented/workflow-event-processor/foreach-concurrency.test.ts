@@ -150,6 +150,9 @@ describe('processWorkflowForEach concurrency resolution', () => {
     const publish = vi.spyOn(mastra.pubsub, 'publish').mockResolvedValue(undefined);
     const workflowsStore = (await storage.getStore('workflows'))!;
     const snapshot = createEmptyWorkflowSnapshot('concurrent-retry');
+    // The completion handlers forward this lineage to updateWorkflowResults;
+    // the persisted row must declare it or the stale-lifetime fence drops the merge.
+    snapshot.executionGeneration = 'retry-generation';
     snapshot.context.body = {
       status: 'failed',
       output: [null, null],
