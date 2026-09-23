@@ -5192,6 +5192,15 @@ export type PostAgentsAgentIdThreadsSubscribe_PathParams = GetAgentsAgentId_Path
 export type PostAgentsAgentIdThreadsSubscribe_Body = {
   resourceId?: string | undefined;
   threadId: string;
+  /** Emit one thread-history chunk with stored messages before live parts */
+  withInitialHistory?:
+    | (
+        | boolean
+        | {
+            perPage?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 export type PostAgentsAgentIdThreadsSubscribe_Response = PostAgentsAgentIdGenerate_Response;
