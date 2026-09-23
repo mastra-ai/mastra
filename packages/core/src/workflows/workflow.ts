@@ -88,6 +88,7 @@ import type {
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { claimWorkflowRestart } from './restart-claim';
 import { claimWorkflowResume } from './resume-claim';
 import type {
   ConditionFunction,
@@ -5319,6 +5320,35 @@ export class Run<
     });
   }
 
+  /**
+   * Atomically adopts a fresh lifecycle generation for restart() or timeTravel() on
+   * stores that fence the row's lifetime discriminator.
+   *
+   * Throws `WORKFLOW_RESTART_NOT_CLAIMED` when another generation already owns the
+   * run, so a losing caller never enters the execution engine.
+   */
+  protected async claimRestartLifecycleExecution({
+    workflowsStore,
+    snapshot,
+    lifecycleExecution,
+  }: {
+    workflowsStore: WorkflowsStorage | undefined;
+    snapshot: WorkflowRunState;
+    lifecycleExecution: {
+      executionGeneration: WorkflowExecutionGeneration;
+      lifecycleResumeAttempt: number;
+      lifecycleStepStates: WorkflowStepLifecycleStateMap;
+    };
+  }): Promise<void> {
+    await claimWorkflowRestart({
+      workflowsStore,
+      snapshot,
+      lifecycleExecution,
+      workflowId: this.workflowId,
+      runId: this.runId,
+    });
+  }
+
   protected async _resume<TResume>(
     params: {
       resumeData?: TResume;
@@ -5713,10 +5743,10 @@ export class Run<
     const spanId = workflowSpan?.id;
 
     const lifecycleExecution = this.beginLifecycleExecution();
-    await workflowsStore?.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'running', ...lifecycleExecution },
+    await this.claimRestartLifecycleExecution({
+      workflowsStore,
+      snapshot,
+      lifecycleExecution,
     });
 
     const result = await this.#withActiveExecution(lifecycleExecution.executionGeneration, () =>
@@ -5873,10 +5903,10 @@ export class Run<
     const spanId = workflowSpan?.id;
 
     const lifecycleExecution = this.beginLifecycleExecution();
-    await workflowsStore?.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'running', ...lifecycleExecution },
+    await this.claimRestartLifecycleExecution({
+      workflowsStore,
+      snapshot,
+      lifecycleExecution,
     });
 
     const result = await this.#withActiveExecution(lifecycleExecution.executionGeneration, () =>
