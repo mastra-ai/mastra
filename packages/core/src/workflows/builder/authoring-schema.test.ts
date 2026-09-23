@@ -116,6 +116,19 @@ describe('shared workflow builder authoring schema', () => {
       ).toBe(false);
     });
 
+    it.each([{ providerOptions: { temperature: Infinity } }, { metadata: { transform: () => 'invalid' } }])(
+      'rejects non-JSON classifier options in both schema dialects',
+      options => {
+        const definition = {
+          ...authoringDefinition,
+          graph: [{ type: 'classifier', id: 'classify-ticket', classifierId: 'ticket-router', options }],
+        };
+
+        expect(workflowBuilderDefinitionInputSchema.safeParse(definition).success).toBe(false);
+        expect(workflowBuilderDefinitionSchema.safeParse(definition).success).toBe(false);
+      },
+    );
+
     it('accepts the normalized form of the same definition through the strict schema', () => {
       const normalized = normalizeWorkflowBuilderDefinition(authoringDefinition);
       const parsed = workflowBuilderDefinitionSchema.parse(normalized);

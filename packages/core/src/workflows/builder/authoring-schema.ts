@@ -30,7 +30,17 @@ import { validateCron } from '../scheduler/cron';
 export const WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION =
   'An object whose top-level keys become the mapping output fields. Each value must use exactly one canonical source form: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": true, "path": "<workflow-input-field.path>" }, or { "requestContextPath": "<field.path>" }. IMPORTANT: initData is the boolean true, never a field name string; put the workflow input field name in path. Template placeholders use JavaScript-style ${initData.<field>}, ${inputData.<field>}, ${stepResults.<stepId>.<field>}, ${state.<field>}, or ${requestContext.<field>} — never Handlebars {{...}} and never separate sources/data bindings. May also be provided as a JSON-encoded string of the same object.';
 
-const jsonSchema = z.record(z.string(), z.unknown());
+const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.boolean(),
+    z.string(),
+    z.number().finite(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const jsonSchema = z.record(z.string(), jsonValueSchema);
 
 const STEP_OPTIONS_DESCRIPTION =
   'JSON-safe subset of step options that round-trips through storage. `onFinish` callbacks and function-valued scorers are NOT supported.';
@@ -144,9 +154,9 @@ const classifierOptionsSchema = z
 const classifierOptionsInputSchema = z
   .object({
     maxRetries: z.number().int().nonnegative().nullish().describe('Retry count for the classifier model call.'),
-    providerOptions: z.unknown().nullish().describe('JSON-safe provider-specific classifier model options.'),
+    providerOptions: jsonSchema.nullish().describe('JSON-safe provider-specific classifier model options.'),
     retries: z.number().int().nonnegative().nullish().describe('Workflow step retry count, separate from maxRetries.'),
-    metadata: z.unknown().nullish().describe('Arbitrary JSON-safe metadata attached to the step.'),
+    metadata: jsonSchema.nullish().describe('Arbitrary JSON-safe metadata attached to the step.'),
   })
   .nullish();
 

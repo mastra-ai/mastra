@@ -1024,9 +1024,9 @@ describe('predicate round-trip', () => {
     );
     expect(rehydrated.engineType === 'evented').toBe(evented);
     mastra.addWorkflow(rehydrated, 'classifier-round-trip');
-    if (evented) await mastra.startWorkers();
 
     try {
+      if (evented) await mastra.startWorkers();
       const result = await (
         await mastra.getWorkflow('classifier-round-trip').createRun()
       ).start({
