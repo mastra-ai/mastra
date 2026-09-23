@@ -3,7 +3,7 @@ import { RequestContext } from '../../../request-context';
 import {
   effectiveToolSetRequiresSequentialExecution,
   normalizeToolCallConcurrency,
-  resolveCalledToolCallConcurrency,
+  resolveEmittedToolCallConcurrency,
   resolveConfiguredToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './tool-call-concurrency';
@@ -216,7 +216,7 @@ describe('tool call concurrency resolution', () => {
   });
 });
 
-describe('resolveCalledToolCallConcurrency', () => {
+describe('resolveEmittedToolCallConcurrency', () => {
   const base = { configuredConcurrency: 5 };
   const dynamicTool = (result: boolean | (() => never)) => ({
     // Mirrors an MCP tool built from a function policy: static flag plus the real policy.
@@ -226,7 +226,7 @@ describe('resolveCalledToolCallConcurrency', () => {
 
   it('runs a batch in parallel when a function policy returns false (#24232)', async () => {
     const tool = dynamicTool(false);
-    const concurrency = await resolveCalledToolCallConcurrency({
+    const concurrency = await resolveEmittedToolCallConcurrency({
       ...base,
       strategy: 'called',
       tools: { dyn: tool, safe: {} } as any,
@@ -240,7 +240,7 @@ describe('resolveCalledToolCallConcurrency', () => {
   });
 
   it('resolves called tools by id like the tool-call step', async () => {
-    const concurrency = await resolveCalledToolCallConcurrency({
+    const concurrency = await resolveEmittedToolCallConcurrency({
       ...base,
       strategy: 'called',
       tools: { key: { id: 'aliased', requireApproval: true } } as any,
@@ -250,7 +250,7 @@ describe('resolveCalledToolCallConcurrency', () => {
   });
 
   it('forces sequential when a called tool cannot be resolved', async () => {
-    const concurrency = await resolveCalledToolCallConcurrency({
+    const concurrency = await resolveEmittedToolCallConcurrency({
       ...base,
       strategy: 'called',
       tools: { safe: {} } as any,
@@ -260,7 +260,7 @@ describe('resolveCalledToolCallConcurrency', () => {
   });
 
   it('forces sequential when a function policy returns true', async () => {
-    const concurrency = await resolveCalledToolCallConcurrency({
+    const concurrency = await resolveEmittedToolCallConcurrency({
       ...base,
       strategy: 'called',
       tools: { dyn: dynamicTool(true), safe: {} } as any,
@@ -273,7 +273,7 @@ describe('resolveCalledToolCallConcurrency', () => {
   });
 
   it('forces sequential when a function policy throws', async () => {
-    const concurrency = await resolveCalledToolCallConcurrency({
+    const concurrency = await resolveEmittedToolCallConcurrency({
       ...base,
       strategy: 'called',
       tools: {
@@ -288,7 +288,7 @@ describe('resolveCalledToolCallConcurrency', () => {
 
   it('forces sequential for static approval and suspend tools', async () => {
     for (const tool of [{ requireApproval: true }, { hasSuspendSchema: true }]) {
-      const concurrency = await resolveCalledToolCallConcurrency({
+      const concurrency = await resolveEmittedToolCallConcurrency({
         ...base,
         strategy: 'called',
         tools: { t: tool, safe: {} } as any,
@@ -307,7 +307,7 @@ describe('resolveCalledToolCallConcurrency', () => {
     const policy = vi.fn(({ toolName }: { toolName: string }) => toolName === 'danger');
 
     await expect(
-      resolveCalledToolCallConcurrency({
+      resolveEmittedToolCallConcurrency({
         ...base,
         strategy: 'called',
         requireToolApproval: policy,
@@ -324,7 +324,7 @@ describe('resolveCalledToolCallConcurrency', () => {
     );
 
     await expect(
-      resolveCalledToolCallConcurrency({
+      resolveEmittedToolCallConcurrency({
         ...base,
         strategy: 'called',
         requireToolApproval: policy,
@@ -337,14 +337,99 @@ describe('resolveCalledToolCallConcurrency', () => {
     ).resolves.toBe(1);
   });
 
-  it('keeps the available strategy conservative for function policies', async () => {
-    const tool = dynamicTool(false);
-    const concurrency = await resolveCalledToolCallConcurrency({
-      ...base,
-      tools: { dyn: tool, safe: {} } as any,
-      toolCalls: [{ toolName: 'safe', args: {} }],
+  describe("default 'available' strategy", () => {
+    it('runs in parallel when called function policies return false (#24232)', async () => {
+      const tool = dynamicTool(false);
+      const verdicts = new Map<string, boolean>();
+      const concurrency = await resolveEmittedToolCallConcurrency({
+        ...base,
+        tools: { dyn: tool, uncalledDyn: dynamicTool(true), safe: {} } as any,
+        toolCalls: [
+          { toolCallId: 'c1', toolName: 'dyn', args: {} },
+          { toolCallId: 'c2', toolName: 'safe', args: {} },
+        ],
+        approvalVerdicts: verdicts,
+      });
+      expect(concurrency).toBe(5);
+      expect(tool.needsApprovalFn).toHaveBeenCalledTimes(1);
+      expect(verdicts).toEqual(
+        new Map([
+          ['c1', false],
+          ['c2', false],
+        ]),
+      );
     });
-    expect(concurrency).toBe(1);
-    expect(tool.needsApprovalFn).not.toHaveBeenCalled();
+
+    it('forces sequential when a called function policy returns true', async () => {
+      const concurrency = await resolveEmittedToolCallConcurrency({
+        ...base,
+        tools: { dyn: dynamicTool(true), safe: {} } as any,
+        toolCalls: [
+          { toolName: 'dyn', args: {} },
+          { toolName: 'safe', args: {} },
+        ],
+      });
+      expect(concurrency).toBe(1);
+    });
+
+    it('evaluates a run-wide function policy per call', async () => {
+      const policy = vi.fn(({ toolName }: { toolName: string }) => toolName === 'danger');
+      const tools = { a: {}, b: {}, danger: {} } as any;
+      await expect(
+        resolveEmittedToolCallConcurrency({
+          ...base,
+          requireToolApproval: policy,
+          tools,
+          toolCalls: [
+            { toolName: 'a', args: {} },
+            { toolName: 'b', args: {} },
+          ],
+        }),
+      ).resolves.toBe(5);
+      await expect(
+        resolveEmittedToolCallConcurrency({
+          ...base,
+          requireToolApproval: policy,
+          tools,
+          toolCalls: [
+            { toolName: 'a', args: {} },
+            { toolName: 'danger', args: {} },
+          ],
+        }),
+      ).resolves.toBe(1);
+    });
+
+    it('still forces sequential for an uncalled static approval or suspend tool without evaluating policies', async () => {
+      for (const staticTool of [{ requireApproval: true }, { hasSuspendSchema: true }]) {
+        const tool = dynamicTool(false);
+        const concurrency = await resolveEmittedToolCallConcurrency({
+          ...base,
+          tools: { dyn: tool, staticTool, safe: {} } as any,
+          toolCalls: [{ toolName: 'dyn', args: {} }],
+        });
+        expect(concurrency).toBe(1);
+        expect(tool.needsApprovalFn).not.toHaveBeenCalled();
+      }
+    });
+
+    it('still forces sequential when run-wide requireToolApproval is true', async () => {
+      const concurrency = await resolveEmittedToolCallConcurrency({
+        ...base,
+        requireToolApproval: true,
+        tools: { safe: {} } as any,
+        toolCalls: [{ toolName: 'safe', args: {} }],
+      });
+      expect(concurrency).toBe(1);
+    });
+
+    it('ignores inactive static approval tools', async () => {
+      const concurrency = await resolveEmittedToolCallConcurrency({
+        ...base,
+        tools: { dyn: dynamicTool(false), staticTool: { requireApproval: true } } as any,
+        activeTools: ['dyn'],
+        toolCalls: [{ toolName: 'dyn', args: {} }],
+      });
+      expect(concurrency).toBe(5);
+    });
   });
 });

@@ -212,3 +212,65 @@ describe("toolCallConcurrency strategy: 'called'", () => {
     expect(tracker.peak).toBe(2);
   });
 });
+
+describe("toolCallConcurrency default 'available' strategy with function approval policies (#24232)", () => {
+  // Mirrors what MCPClient builds when `requireToolApproval` is a function:
+  // a static `requireApproval: true` plus the real policy on `needsApprovalFn`.
+  function mcpShapedTool(id: string, tracker: ConcurrencyTracker, policy: () => boolean) {
+    const tool = createTool({
+      id,
+      description: id,
+      inputSchema: z.object({ data: z.string() }),
+      requireApproval: true,
+      execute: async () => {
+        tracker.running++;
+        tracker.peak = Math.max(tracker.peak, tracker.running);
+        await delay(50);
+        tracker.running--;
+        return { ok: true };
+      },
+    });
+    (tool as { needsApprovalFn?: unknown }).needsApprovalFn = policy;
+    return tool;
+  }
+
+  it('parallelizes MCP-style tools whose function policy returns false', async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const policy = vi.fn(() => false);
+    const agent = new Agent({
+      id: 'available-mcp-fn',
+      name: 'available-mcp-fn',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': mcpShapedTool('tool-1', tracker, policy),
+        'tool-2': mcpShapedTool('tool-2', tracker, policy),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1 }));
+
+    expect(tracker.peak).toBe(2);
+    expect(policy).toHaveBeenCalledTimes(2);
+  });
+
+  it('parallelizes calls when a run-wide function policy returns false', async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const policy = vi.fn(() => false);
+    const agent = new Agent({
+      id: 'available-global-fn',
+      name: 'available-global-fn',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker),
+        'tool-2': trackedTool('tool-2', tracker),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, requireToolApproval: policy }));
+
+    expect(tracker.peak).toBe(2);
+    expect(policy).toHaveBeenCalledTimes(2);
+  });
+});

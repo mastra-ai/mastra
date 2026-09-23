@@ -2,11 +2,4 @@
 '@mastra/core': patch
 ---
 
-Tool calls whose approval policy is a function now run in parallel under `toolCallConcurrency: { strategy: 'called' }` when that policy returns `false` for the actual call. Previously any function-based policy — including MCP clients configured with a `requireToolApproval` function — forced the whole batch to run one at a time, even when no approval was needed.
-
-```ts
-await agent.stream('go', {
-  requireToolApproval: ({ toolName }) => toolName === 'delete_file',
-  toolCallConcurrency: { limit: 10, strategy: 'called' },
-});
-```
+Tool calls whose approval policy is a function now run in parallel when that policy returns `false` for the actual call. This applies to the default `toolCallConcurrency` strategy and to `strategy: 'called'`. Previously, any function policy forced sequential execution. This included the policy that `MCPClient` attaches when `requireToolApproval` is a function. Each call's policy is evaluated once, and that verdict is reused when the tool runs.

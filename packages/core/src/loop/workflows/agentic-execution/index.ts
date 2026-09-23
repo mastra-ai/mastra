@@ -20,7 +20,7 @@ import { createLLMMappingStep } from './llm-mapping-step';
 import { createSignalDrainStep } from './signal-drain-step';
 import {
   normalizeToolCallConcurrency,
-  resolveCalledToolCallConcurrency,
+  resolveEmittedToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
@@ -134,26 +134,23 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         const toolCalls = typedInputData.output.toolCalls || [];
         // Recompute concurrency now that the model has emitted its tool calls.
         //
-        // Default ('available') strategy: resolve from the step's effective
-        // active tool set (set by llm-execution-step), NOT from the tools the
-        // model actually called. A registered approval/suspending tool that the
-        // model did not call this step must still force sequential execution.
+        // Function approval policies (run-wide `requireToolApproval` or a tool's
+        // `needsApprovalFn`, e.g. MCP tools) are evaluated with each emitted call's args,
+        // so a policy returning false does not serialize. Called tools that need approval
+        // or can suspend still serialize.
         //
-        // Opt-in ('called') strategy: resolve from the tools the model actually
-        // called this step. A pure-safe batch parallelizes even while an
-        // approval/suspend tool stays registered; a batch that calls one still
-        // serializes; run-wide requireToolApproval still forces sequential.
+        // Default ('available') strategy: a static approval flag or suspend schema on any
+        // active tool still forces sequential execution, even if the model did not call it.
+        // Opt-in ('called') strategy: only the tools the model actually called count.
+        //
         // Read step tools through the run scope like toolCallStep does: on resume, `_internal`
         // is rebuilt without them while the scope still holds the suspended step's values.
         const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
         const stepActiveTools = readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools');
-        //
-        // Under 'called', function approval policies are evaluated with each call's args (the
-        // same rule toolCallStep applies), so a policy returning false does not serialize.
         // Cache each verdict so toolCallStep applies the exact scheduling decision without
         // evaluating a potentially stateful policy a second time.
         const approvalVerdicts = new Map<string, boolean>();
-        toolCallForeachOptions.concurrency = await resolveCalledToolCallConcurrency({
+        toolCallForeachOptions.concurrency = await resolveEmittedToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
           tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
           activeTools: stepActiveTools,
