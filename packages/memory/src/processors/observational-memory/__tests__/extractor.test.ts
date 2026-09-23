@@ -21,6 +21,7 @@ import {
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
+import { RETRY_CONFIG } from '../retry';
 import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 describe('Extractor', () => {
@@ -384,6 +385,36 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries transient provider failures on the OM retry ladder', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi
+        .fn()
+        .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { statusCode: 429 }))
+        .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        maxRetries: 1,
+      });
+
+      expect(result.values).toEqual({ priority: 'high' });
+      expect(result.failures).toEqual([]);
+      expect(stream).toHaveBeenCalledTimes(2);
+      // Retried in the same (native) output mode rather than falling through to
+      // the json-prompt-injection fallback.
+      expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
+  });
+
   it('uses streaming for structured extraction', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi.fn();
@@ -487,6 +518,28 @@ describe('Extractor', () => {
         abortSignal,
       }),
     ).rejects.toThrow(/aborted/);
+
+    // Already-aborted signal short-circuits on the OM retry ladder, so no
+    // provider call is issued at all.
+    expect(stream).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    ['plain', () => new DOMException('aborted', 'AbortError')],
+    ['wrapped', () => new Error('request timeout', { cause: new DOMException('aborted', 'AbortError') })],
+    ['code-only', () => Object.assign(new Error('aborted'), { code: 'ABORT_ERR' })],
+  ])('rethrows %s mid-flight abort errors without retrying structured extraction', async (_label, createError) => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const stream = vi.fn().mockRejectedValue(createError());
+
+    await expect(
+      extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toThrow();
 
     expect(stream).toHaveBeenCalledTimes(1);
   });

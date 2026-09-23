@@ -462,6 +462,12 @@ export interface ObservationalMemoryObservationConfig {
    */
   model?: AgentConfig['model'];
 
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
+
   /**
    * Manage working memory through Observational Memory extraction.
    * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
@@ -680,6 +686,12 @@ export interface ObservationalMemoryReflectionConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of observations that triggers reflection.
@@ -1412,6 +1424,10 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Number of retries after the initial Observer model call */
+  maxRetries?: number;
+  /** Terminal policy after Observer model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Manage working memory through Observational Memory extraction. */
   manageWorkingMemory?: boolean;
 
@@ -1445,6 +1461,10 @@ export type SerializedObservationalMemoryObservationConfig = {
 export type SerializedObservationalMemoryReflectionConfig = {
   /** Reflector model ID */
   model?: string;
+  /** Number of retries after the initial Reflector model call */
+  maxRetries?: number;
+  /** Terminal policy after Reflector model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Token count threshold that triggers reflection */
   observationTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */
