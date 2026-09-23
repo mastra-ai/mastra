@@ -1,7 +1,7 @@
 /**
- * BDD coverage for the sidebar's owner scope: the work and review session lists show every
- * session in the org, and each heading carries one icon that narrows its list to the viewer's
- * own sessions and back again. Before this, a busy factory rendered everyone's sessions as one
+ * BDD coverage for the sidebar's owner scope: the work and review session lists open on the
+ * viewer's own sessions, and each heading carries one icon that widens its list to every session
+ * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
  * undifferentiated list, and the reader had no way to cut it down to their own work.
  */
 import { screen, waitFor, within } from '@testing-library/react';
@@ -48,7 +48,7 @@ function stubSessions(sessions: FactoryUserSession[]) {
     http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ items: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
   );
 }
 
@@ -95,7 +95,7 @@ describe('Workspaces sidebar owner scope', () => {
     delete window.__MASTRACODE_CONFIG__;
   });
 
-  it('narrows a sessions group to the viewer and back', async () => {
+  it('opens each sessions group on the viewer and widens it to everyone and back', async () => {
     stubSessions([reviewSession(1, viewerUserId), reviewSession(2, 'user-grace')]);
     const user = userEvent.setup();
 
@@ -104,14 +104,7 @@ describe('Workspaces sidebar owner scope', () => {
 
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
-
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
-
-    await waitFor(() => {
-      expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    });
-    expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
     expect(within(group).getByRole('button', { name: 'Show all review sessions' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -120,10 +113,18 @@ describe('Workspaces sidebar owner scope', () => {
     await user.click(within(group).getByRole('button', { name: 'Show all review sessions' }));
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
+
+    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+
+    await waitFor(() => {
+      expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
+    });
+    expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
   });
 
   it('keeps the heading and its toggle when the viewer owns nothing in the group', async () => {
@@ -134,17 +135,22 @@ describe('Workspaces sidebar owner scope', () => {
     await waitForMutationsIdle(rendered.client);
 
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
-
     expect(await within(group).findByText('No sessions of your own.')).toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
     await user.click(within(group).getByRole('button', { name: 'Show all review sessions' }));
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(within(group).queryByText('No sessions of your own.')).not.toBeInTheDocument();
   });
 
   it('scopes each sessions group on its own', async () => {
-    stubSessions([reviewSession(1, viewerUserId), reviewSession(2, 'user-grace'), workSession(3, 'user-grace')]);
+    stubSessions([
+      reviewSession(1, viewerUserId),
+      reviewSession(2, 'user-grace'),
+      workSession(3, viewerUserId),
+      workSession(4, 'user-grace'),
+    ]);
     const user = userEvent.setup();
 
     const rendered = renderSection();
@@ -153,16 +159,15 @@ describe('Workspaces sidebar owner scope', () => {
     const review = await screen.findByRole('region', { name: 'Review Sessions' });
     const work = await screen.findByRole('region', { name: 'Work Sessions' });
     expect(await within(work).findByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
+    expect(within(work).queryByRole('button', { name: 'factory/issue-20004' })).not.toBeInTheDocument();
 
-    await user.click(within(review).getByRole('button', { name: 'Show only my review sessions' }));
+    await user.click(within(work).getByRole('button', { name: 'Show all work sessions' }));
 
-    await waitFor(() => {
-      expect(within(review).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    });
-    expect(within(work).getByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
-    expect(within(work).getByRole('button', { name: 'Show only my work sessions' })).toHaveAttribute(
+    expect(await within(work).findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
+    expect(within(review).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
+    expect(within(review).getByRole('button', { name: 'Show all review sessions' })).toHaveAttribute(
       'aria-pressed',
-      'false',
+      'true',
     );
   });
 });

@@ -1,11 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ListFilter } from 'lucide-react';
+import { UserRound, UsersRound } from 'lucide-react';
 
 /**
- * The one-click owner cut for a sessions list: everything, or just the viewer's own sessions.
+ * The one-click owner cut for a sessions list: just the viewer's own sessions, or everyone's.
  * The user-session list carries the full filter popover, but the work and review lists only
  * need this distinction, so it lives on the section heading as a single toggle rather than a
- * second popover. Filled while it is on, so the narrowed list never reads as the whole list.
+ * second popover. The narrowed list is the default, so the toggle stays quiet and its icon names
+ * the current scope instead of filling in like an applied filter.
  */
 export function SessionOwnerToggle({
   label,
@@ -22,14 +23,14 @@ export function SessionOwnerToggle({
   return (
     <Button
       type="button"
-      variant={mineOnly ? 'default' : 'ghost'}
+      variant="ghost"
       size="icon-sm"
       aria-label={actionLabel}
       aria-pressed={mineOnly}
       tooltip={actionLabel}
       onClick={() => onChange(!mineOnly)}
     >
-      <ListFilter size={15} />
+      {mineOnly ? <UserRound size={15} /> : <UsersRound size={15} />}
     </Button>
   );
 }

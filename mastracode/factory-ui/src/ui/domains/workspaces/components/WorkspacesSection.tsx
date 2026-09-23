@@ -72,8 +72,9 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  // Each sessions group filters on its own, so narrowing one list never hides the other.
-  const [ownerScope, setOwnerScope] = useState({ work: false, review: false });
+  // Each sessions group starts on the viewer's own sessions and widens on its own, so showing
+  // everyone's sessions in one list never floods the other.
+  const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
