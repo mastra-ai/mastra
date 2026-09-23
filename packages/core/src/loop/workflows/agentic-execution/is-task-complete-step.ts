@@ -46,11 +46,14 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
 
       const outcome = await evaluateTaskCompletion({
         policy: isTaskComplete,
-        // D2a/b/c — the in-process engine's released contract: a throwing
+        // The in-process engine's released contract: a throwing
         // scorer, onComplete callback, or chunk enqueue propagates and fails
         // the run. No redelivery exists here, so a throw surfaces exactly
         // once; swallowing it would hide bugs in user code.
         errorPolicy: 'fatal',
+        // Released in-process contract: errored iterations are still graded
+        // (the durable-only #21897 skip does not apply here).
+        engineMode: 'default',
         iteration: currentIteration,
         maxIterations: maxSteps,
         llmSignaledDone: !inputData.stepResult?.isContinued,

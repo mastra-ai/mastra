@@ -68,12 +68,15 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
       const outcome = await evaluateTaskCompletion({
         policy: registryEntry?.isTaskComplete,
-        // D2a/b/c — durable steps replay under at-least-once redelivery: a
+        // Durable steps replay under at-least-once redelivery: a
         // throwing scorer/callback would fail the step and be re-invoked
         // against the same state forever, so failures are logged and grading
-        // is skipped (ledger L4). Chunk emission is post-verdict publish —
+        // is skipped. Chunk emission is post-verdict publish —
         // best-effort by the same argument.
         errorPolicy: 'best-effort',
+        // Durable shipped the errored-iteration grading skip (#21897)
+        // pre-extraction — keep it here.
+        engineMode: 'durable',
         iteration: state.iterationCount,
         maxIterations: state.options?.maxSteps ?? defaultMaxSteps,
         llmSignaledDone: state.lastStepResult?.isContinued === false,

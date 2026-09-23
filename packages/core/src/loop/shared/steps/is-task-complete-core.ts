@@ -12,7 +12,7 @@ const isWorkingMemoryToolName = (name?: string) =>
   name === 'updateWorkingMemory' || name === 'setWorkingMemory' || name === 'update-working-memory';
 
 /**
- * Shared is-task-complete behavior (PHASE3 Step 3): decide whether this
+ * Shared is-task-complete behavior: decide whether this
  * iteration should be graded, run the completion scorers, invoke the
  * `onComplete` callback, append course-correction feedback to the transcript
  * when the check fails, and emit the `is-task-complete` chunk. Callers own
@@ -23,12 +23,11 @@ const isWorkingMemoryToolName = (name?: string) =>
  * Grading is skipped when: no scorers are configured; the LLM hasn't
  * signaled it's done (don't interrupt mid-tool loops — `llmSignaledDone` is
  * engine-computed because the engines treat a missing step result
- * differently); the iteration errored (`reason === 'error'`, #21897 — a
- * failing scorer must not flip `isContinued` back on and re-issue the
- * failing request until maxSteps; previously durable-only, ledger L9, now
- * shared); a background task result was just injected (the LLM hasn't
- * processed it yet); or the iteration only updated working memory
- * (housekeeping, not task progress).
+ * differently); on the durable engine only, the iteration errored
+ * (`reason === 'error'`, #21897 — see `engineMode` below); a
+ * background task result was just injected (the LLM hasn't processed it
+ * yet); or the iteration only updated working memory (housekeeping, not
+ * task progress).
  *
  * Error policy is per-engine (`errorPolicy`, required so every call site's
  * choice is explicit):
@@ -44,19 +43,29 @@ const isWorkingMemoryToolName = (name?: string) =>
  *   grading is skipped. A scorer throw fails the durable *step*, and
  *   at-least-once redelivery re-runs the step — re-invoking the throwing
  *   scorer against the same state, potentially forever. Log-and-skip is
- *   the only stable policy under redelivery (ledger L4). Post-verdict
+ *   the only stable policy under redelivery. Post-verdict
  *   publish failure must not fail a step whose verdict is already settled
  *   and persisted.
  *
- * The errored-iteration skip (`reason === 'error'` above) is unconditional
- * on BOTH policies — it is a bug fix (#21897), not an engine policy: a
- * failing scorer must not flip `isContinued` back on and re-issue the
- * failing request until maxSteps.
+ * The errored-iteration skip (`reason === 'error'` above) is gated on
+ * `engineMode: 'durable'`: it shipped on the durable engine before the
+ * extraction (#21897 — a failing scorer must not flip `isContinued` back on
+ * and re-issue the failing request until maxSteps), while the released
+ * default (in-process) contract still grades errored iterations. Extending
+ * the fix to the default engine changes observable scorer invocation
+ * counts, so it ships separately with its own product decision.
  */
 export async function evaluateTaskCompletion(deps: {
   policy: IsTaskCompleteConfig | undefined;
   /** Per-engine failure policy for scorer / onComplete / chunk-emission errors (see docblock). */
   errorPolicy: 'fatal' | 'best-effort';
+  /**
+   * Which engine's shipped grading contract to apply. Only the
+   * errored-iteration skip consumes this (durable-only, see docblock).
+   * Required (no default) so every call site's choice is explicit and a
+   * missed site is a compile error — same doctrine as ContinuationPolicy.
+   */
+  engineMode: 'default' | 'durable';
   /** 1-based iteration number used for maxIterations bookkeeping + the chunk payload. */
   iteration: number;
   maxIterations: number | undefined;
@@ -90,7 +99,12 @@ export async function evaluateTaskCompletion(deps: {
   if (!deps.llmSignaledDone) {
     return { evaluated: false };
   }
-  if (deps.stepReason === 'error') {
+  // Errored-iteration skip (#21897), durable-only: the durable engine
+  // shipped this guard pre-extraction; the released default contract still
+  // grades errored iterations, and preserving that (scorer invocation
+  // counts are observable behavior) is required for the default engine's
+  // "released behavior survives unchanged" contract.
+  if (deps.stepReason === 'error' && deps.engineMode === 'durable') {
     return { evaluated: false };
   }
   if (deps.backgroundTaskPending) {
@@ -143,7 +157,7 @@ export async function evaluateTaskCompletion(deps: {
       timeout: policy.timeout,
     });
   } catch (error) {
-    // D2a — 'fatal' (default engine): a throwing user scorer fails the run,
+    // 'fatal' (default engine): a throwing user scorer fails the run,
     // as released. 'best-effort' (durable): log-and-skip — redelivery would
     // re-invoke the throwing scorer against the same state forever.
     if (deps.errorPolicy === 'fatal') {
@@ -160,7 +174,7 @@ export async function evaluateTaskCompletion(deps: {
     try {
       await policy.onComplete(result);
     } catch (error) {
-      // D2b — 'fatal' (default engine): a throwing user callback is user
+      // 'fatal' (default engine): a throwing user callback is user
       // code signaling failure; the released contract surfaced it.
       // 'best-effort' (durable): log-and-keep-verdict under redelivery.
       if (deps.errorPolicy === 'fatal') {
@@ -218,7 +232,7 @@ export async function evaluateTaskCompletion(deps: {
       }),
     );
   } catch (error) {
-    // D2c — 'fatal' (default engine): a failing enqueue means the consumer's
+    // 'fatal' (default engine): a failing enqueue means the consumer's
     // stream is broken; the released contract surfaced that instead of
     // continuing against a dead stream. 'best-effort' (durable): the pubsub
     // transport may be closed — the verdict is already settled and
