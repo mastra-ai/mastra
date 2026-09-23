@@ -146,7 +146,12 @@ export function Combobox(props: ComboboxProps) {
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         data-shape={iconOnly ? 'icon' : undefined}
-        className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
+        className={comboboxTriggerClass({
+          variant,
+          size,
+          error: Boolean(error),
+          className: cn(iconOnlyValue && 'px-2.5', className),
+        })}
       >
         {iconOnly ? (
           <span className="sr-only">{multiple ? triggerText : <BaseCombobox.Value placeholder={placeholder} />}</span>
@@ -167,7 +172,7 @@ export function Combobox(props: ComboboxProps) {
             escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
         {showChevron ? (
           <span className="flex shrink-0 items-center">
-            <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
+            <ChevronsUpDown className={cn(comboboxStyles.chevron, (iconOnly || iconOnlyValue) && 'ml-0')} />
           </span>
         ) : null}
       </BaseCombobox.Trigger>
