@@ -151,6 +151,218 @@ describe('InMemoryMemory listMessages include resource scope', () => {
   });
 });
 
+describe('InMemoryMemory observation archives', () => {
+  const retiredObservations = 'alpha-body\n\nbeta-body';
+  const retiredGroups = [
+    {
+      groupId: 'group-alpha',
+      summary: 'Alpha summary',
+      searchText: 'alpha summary alpha-body',
+      messageRange: 'message-1:message-2',
+      sourceThreadId: 'thread-alpha',
+      observedAt: { from: new Date('2026-01-01T00:00:00.000Z'), to: new Date('2026-01-02T00:00:00.000Z') },
+      tokenCount: 4,
+      textStart: 0,
+      textEnd: 10,
+    },
+    {
+      groupId: 'group-beta',
+      summary: 'Beta summary',
+      searchText: 'beta summary beta-body',
+      messageRange: 'message-3:message-4',
+      sourceThreadId: 'thread-beta',
+      observedAt: { from: new Date('2026-02-01T00:00:00.000Z'), to: new Date('2026-02-02T00:00:00.000Z') },
+      tokenCount: 4,
+      textStart: 12,
+      textEnd: 21,
+    },
+  ];
+
+  it('atomically seals the retired generation, preserves mutable state, and fences stale writes', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const current = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-archive',
+      scope: 'resource',
+      config: { observationThreshold: 100 },
+    });
+    await memory.updateActiveObservations({
+      id: current.id,
+      expectedWriteEpoch: 0,
+      observations: `${retiredObservations}\n\nretained-body`,
+      observationGroups: retiredGroups,
+      tokenCount: 12,
+      totalTokensObserved: 20,
+      lastObservedAt: new Date('2026-02-03T00:00:00.000Z'),
+      observedMessageIds: ['message-4'],
+    });
+    await memory.updateBufferedObservations({
+      id: current.id,
+      expectedWriteEpoch: 0,
+      chunk: {
+        cycleId: 'cycle-pending',
+        observations: 'pending-body',
+        tokenCount: 3,
+        messageIds: ['message-5'],
+        messageTokens: 6,
+        lastObservedAt: new Date('2026-02-04T00:00:00.000Z'),
+      },
+    });
+    await memory.setPendingMessageTokens(current.id, 6, 0);
+
+    const transition = {
+      currentRecordId: current.id,
+      expectedGenerationCount: 0,
+      expectedWriteEpoch: 0,
+      archiveId: 'archive-one',
+      archivedAt: new Date('2026-03-01T00:00:00.000Z'),
+      contentDigest: 'digest-one',
+      retiredObservations,
+      retiredObservationTokenCount: 8,
+      retiredGroups,
+      retainedObservations: 'retained-body',
+      retainedObservationTokenCount: 4,
+      retainedGroups: [],
+    };
+    const successor = await memory.createObservationArchiveGeneration(transition);
+
+    expect(successor).toMatchObject({
+      originType: 'archive',
+      recordState: 'active',
+      writeEpoch: 0,
+      generationCount: 1,
+      activeObservations: 'retained-body',
+      observationTokenCount: 4,
+      pendingMessageTokens: 6,
+      observedMessageIds: ['message-4'],
+    });
+    expect(successor.bufferedObservationChunks?.[0]?.cycleId).toBe('cycle-pending');
+    expect((await memory.getObservationalMemory(null, 'resource-archive'))?.id).toBe(successor.id);
+
+    const history = await memory.getObservationalMemoryHistory(null, 'resource-archive');
+    expect(history[1]).toMatchObject({
+      id: current.id,
+      recordState: 'sealed',
+      activeObservations: retiredObservations,
+      observationTokenCount: 8,
+      archive: { archiveId: 'archive-one', successorRecordId: successor.id },
+    });
+    await expect(
+      memory.updateActiveObservations({
+        id: current.id,
+        expectedWriteEpoch: 0,
+        observations: 'stale',
+        tokenCount: 1,
+        totalTokensObserved: 1,
+      }),
+    ).rejects.toThrow('is sealed');
+
+    await expect(memory.createObservationArchiveGeneration(transition)).resolves.toMatchObject({ id: successor.id });
+    await expect(
+      memory.createObservationArchiveGeneration({ ...transition, contentDigest: 'different-digest' }),
+    ).rejects.toThrow('different transition');
+  });
+
+  it('lists and resolves only groups visible to the requested scope and filters', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const current = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-query',
+      scope: 'resource',
+      config: {},
+    });
+    await memory.createObservationArchiveGeneration({
+      currentRecordId: current.id,
+      expectedGenerationCount: 0,
+      expectedWriteEpoch: 0,
+      archiveId: 'archive-query',
+      archivedAt: new Date('2026-03-01T00:00:00.000Z'),
+      contentDigest: 'query-digest',
+      retiredObservations,
+      retiredObservationTokenCount: 8,
+      retiredGroups,
+      retainedObservations: '',
+      retainedObservationTokenCount: 0,
+      retainedGroups: [],
+    });
+
+    const alphaPage = await memory.listObservationArchives({
+      scope: 'thread',
+      threadId: 'thread-alpha',
+      resourceId: 'resource-query',
+      text: 'ALPHA',
+      from: new Date('2026-01-01T12:00:00.000Z'),
+      limit: 1,
+    });
+    expect(alphaPage.archives).toHaveLength(1);
+    expect(alphaPage.archives[0]?.groups.map(group => group.groupId)).toEqual(['group-alpha']);
+
+    const alpha = await memory.getObservationArchive({
+      scope: 'thread',
+      threadId: 'thread-alpha',
+      resourceId: 'resource-query',
+      archiveId: 'archive-query',
+      groupId: 'group-alpha',
+    });
+    expect(alpha?.observations).toBe('alpha-body');
+    expect(
+      await memory.getObservationArchive({
+        scope: 'thread',
+        threadId: 'thread-alpha',
+        resourceId: 'resource-query',
+        archiveId: 'archive-query',
+        groupId: 'group-beta',
+      }),
+    ).toBeNull();
+    expect(
+      await memory.getObservationArchive({
+        scope: 'resource',
+        resourceId: 'another-resource',
+        archiveId: 'archive-query',
+      }),
+    ).toBeNull();
+
+    const matches = await memory.getObservationArchivesByGroupIds({
+      scope: 'resource',
+      resourceId: 'resource-query',
+      groupIds: ['group-beta', 'missing'],
+    });
+    expect(matches.matches[0]?.groupIds).toEqual(['group-beta']);
+    await expect(
+      memory.getObservationArchivesByGroupIds({
+        scope: 'resource',
+        resourceId: 'resource-query',
+        groupIds: Array.from({ length: 21 }, (_, index) => `group-${index}`),
+      }),
+    ).rejects.toThrow('at most 20');
+  });
+
+  it('clears buffered reflection state while advancing the write epoch', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const record = await memory.initializeObservationalMemory({
+      threadId: 'thread-cleanup',
+      resourceId: 'resource-cleanup',
+      scope: 'thread',
+      config: {},
+    });
+    await memory.updateBufferedReflection({
+      id: record.id,
+      expectedWriteEpoch: 0,
+      reflection: 'buffered reflection',
+      tokenCount: 5,
+      inputTokenCount: 10,
+      reflectedObservationLineCount: 1,
+    });
+    await memory.setBufferingReflectionFlag(record.id, true, 0);
+
+    const cleaned = await memory.clearBufferedReflection({ id: record.id, expectedWriteEpoch: 0 });
+    expect(cleaned).toMatchObject({ writeEpoch: 1, isReflecting: false, isBufferingReflection: false });
+    expect(cleaned.bufferedReflection).toBeUndefined();
+    await expect(memory.setReflectingFlag(record.id, true, 0)).rejects.toThrow('write epoch mismatch');
+    await expect(memory.setReflectingFlag(record.id, true, 1)).resolves.toBeUndefined();
+  });
+});
+
 describe('InMemoryMemory updateThread partial updates', () => {
   it('leaves the stored title alone when only metadata is provided', async () => {
     const memory = new InMemoryMemory({ db: new InMemoryDB() });

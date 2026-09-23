@@ -25,7 +25,11 @@ export const OM_LOOKUP_KEY = '"lookupKey"';
 export const OM_SCOPE = '"scope"';
 export const OM_RESOURCE_ID = '"resourceId"';
 export const OM_THREAD_ID = '"threadId"';
+export const OM_RECORD_STATE = '"recordState"';
+export const OM_WRITE_EPOCH = '"writeEpoch"';
 export const OM_ACTIVE_OBSERVATIONS = '"activeObservations"';
+export const OM_OBSERVATION_GROUPS = '"observationGroups"';
+export const OM_ARCHIVE = '"archive"';
 export const OM_ACTIVE_OBSERVATIONS_PENDING_UPDATE = '"activeObservationsPendingUpdate"';
 export const OM_ORIGIN_TYPE = '"originType"';
 export const OM_GENERATION_COUNT = '"generationCount"';
@@ -132,8 +136,12 @@ async function createTables(ctx: MemoryContext, connection: Connection): Promise
       ${OM_SCOPE} VARCHAR2(32) NOT NULL,
       ${OM_RESOURCE_ID} VARCHAR2(512) NOT NULL,
       ${OM_THREAD_ID} VARCHAR2(512),
+      ${OM_RECORD_STATE} VARCHAR2(16) DEFAULT 'active' NOT NULL,
+      ${OM_WRITE_EPOCH} NUMBER(20) DEFAULT 0 NOT NULL,
       ${OM_ACTIVE_OBSERVATIONS} CLOB,
       ${OM_ACTIVE_OBSERVATIONS_PENDING_UPDATE} CLOB,
+      ${OM_OBSERVATION_GROUPS} JSON,
+      ${OM_ARCHIVE} JSON,
       ${OM_ORIGIN_TYPE} VARCHAR2(32) NOT NULL,
       config JSON NOT NULL,
       ${OM_GENERATION_COUNT} NUMBER(10) DEFAULT 0 NOT NULL,
@@ -177,8 +185,12 @@ async function ensureObservationalMemoryColumns(ctx: MemoryContext, connection: 
     { name: OM_SCOPE, type: 'VARCHAR2(32)' },
     { name: OM_RESOURCE_ID, type: 'VARCHAR2(512)' },
     { name: OM_THREAD_ID, type: 'VARCHAR2(512)' },
+    { name: OM_RECORD_STATE, type: "VARCHAR2(16) DEFAULT 'active'" },
+    { name: OM_WRITE_EPOCH, type: 'NUMBER(20) DEFAULT 0' },
     { name: OM_ACTIVE_OBSERVATIONS, type: 'CLOB' },
     { name: OM_ACTIVE_OBSERVATIONS_PENDING_UPDATE, type: 'CLOB' },
+    { name: OM_OBSERVATION_GROUPS, type: 'JSON' },
+    { name: OM_ARCHIVE, type: 'JSON' },
     { name: OM_ORIGIN_TYPE, type: 'VARCHAR2(32)' },
     { name: 'config', type: 'JSON' },
     { name: OM_GENERATION_COUNT, type: 'NUMBER(10) DEFAULT 0' },

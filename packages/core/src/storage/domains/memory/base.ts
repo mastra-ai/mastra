@@ -23,6 +23,14 @@ import type {
   SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  CreateObservationArchiveGenerationInput,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ClearBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import { StorageDomain } from '../base';
@@ -515,6 +523,45 @@ export abstract class MemoryStorage extends StorageDomain {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
+  /** Atomically seal the active generation as an archive and create its retained-tail successor. */
+  async createObservationArchiveGeneration(
+    _input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    throw new Error(
+      `Observational memory archives are not implemented by this storage adapter (${this.constructor.name}).`,
+    );
+  }
+
+  /** List bounded archive metadata without returning retired observation text. */
+  async listObservationArchives(_input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    throw new Error(
+      `Observational memory archives are not implemented by this storage adapter (${this.constructor.name}).`,
+    );
+  }
+
+  /** Resolve one scope-owned archive and its retired observation text. */
+  async getObservationArchive(_input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    throw new Error(
+      `Observational memory archives are not implemented by this storage adapter (${this.constructor.name}).`,
+    );
+  }
+
+  /** Resolve at most 20 observation-group IDs to scope-owned archives. */
+  async getObservationArchivesByGroupIds(
+    _input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    throw new Error(
+      `Observational memory archives are not implemented by this storage adapter (${this.constructor.name}).`,
+    );
+  }
+
+  /** Clear stale buffered-reflection state and advance the active row's write epoch. */
+  async clearBufferedReflection(_input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    throw new Error(
+      `Observational memory archives are not implemented by this storage adapter (${this.constructor.name}).`,
+    );
+  }
+
   /**
    * Update buffered reflection (async reflection in progress).
    * Called when reflection runs asynchronously via `bufferTokens`.
@@ -537,14 +584,14 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Set the isReflecting flag.
    */
-  async setReflectingFlag(_id: string, _isReflecting: boolean): Promise<void> {
+  async setReflectingFlag(_id: string, _isReflecting: boolean, _expectedWriteEpoch?: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
   /**
    * Set the isObserving flag.
    */
-  async setObservingFlag(_id: string, _isObserving: boolean): Promise<void> {
+  async setObservingFlag(_id: string, _isObserving: boolean, _expectedWriteEpoch?: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
@@ -555,7 +602,12 @@ export abstract class MemoryStorage extends StorageDomain {
    * @param isBuffering - Whether buffering is in progress
    * @param lastBufferedAtTokens - The pending token count at which this buffer was triggered (only set when isBuffering=true)
    */
-  async setBufferingObservationFlag(_id: string, _isBuffering: boolean, _lastBufferedAtTokens?: number): Promise<void> {
+  async setBufferingObservationFlag(
+    _id: string,
+    _isBuffering: boolean,
+    _lastBufferedAtTokens?: number,
+    _expectedWriteEpoch?: number,
+  ): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
@@ -563,7 +615,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Set the isBufferingReflection flag.
    * Called when async reflection buffering starts (true) or ends/fails (false).
    */
-  async setBufferingReflectionFlag(_id: string, _isBuffering: boolean): Promise<void> {
+  async setBufferingReflectionFlag(_id: string, _isBuffering: boolean, _expectedWriteEpoch?: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
@@ -588,7 +640,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Called at the end of each OM processing step to persist the current
    * context window token count so the UI can display it on page load.
    */
-  async setPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(_id: string, _tokenCount: number, _expectedWriteEpoch?: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 

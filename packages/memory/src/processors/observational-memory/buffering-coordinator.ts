@@ -109,7 +109,9 @@ export class BufferingCoordinator {
     currentTokens: number,
     lockKey: string,
     record: ObservationalMemoryRecord,
-    storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> },
+    storage?: {
+      setBufferingObservationFlag(id: string, flag: boolean, tokens?: number, epoch?: number): Promise<void>;
+    },
     messageTokensThreshold?: number,
   ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
@@ -117,7 +119,7 @@ export class BufferingCoordinator {
     if (record.isBufferingObservation) {
       if (isOpActiveInProcess(record.id, 'bufferingObservation')) return false;
       omDebug(`[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale, clearing`);
-      storage?.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+      storage?.setBufferingObservationFlag(record.id, false, undefined, record.writeEpoch ?? 0)?.catch(() => {});
     }
 
     const bufferKey = this.getObservationBufferKey(lockKey);

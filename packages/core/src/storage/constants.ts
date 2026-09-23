@@ -522,9 +522,13 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   scope: { type: 'text', nullable: false }, // 'resource' or 'thread'
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
+  recordState: { type: 'text', nullable: true },
+  writeEpoch: { type: 'integer', nullable: true },
   activeObservations: { type: 'text', nullable: false }, // JSON array of observations
+  observationGroups: { type: 'jsonb', nullable: true },
+  archive: { type: 'jsonb', nullable: true },
   activeObservationsPendingUpdate: { type: 'text', nullable: true }, // JSON array, used during updates
-  originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
+  originType: { type: 'text', nullable: false }, // 'initial', 'reflection', or 'archive'
   config: { type: 'text', nullable: false }, // JSON object
   generationCount: { type: 'integer', nullable: false },
   lastObservedAt: { type: 'timestamp', nullable: true },

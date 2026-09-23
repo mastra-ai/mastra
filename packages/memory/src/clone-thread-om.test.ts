@@ -195,6 +195,98 @@ describe('cloneThread – Observational Memory', () => {
       ]);
     });
 
+    it('should clone only active archive state and remap observation group provenance', async () => {
+      await seedThread('src-thread-archive', 4);
+      const memoryStore = await getMemoryStore(memory);
+
+      await seedThreadScopedOM(memoryStore, 'src-thread-archive', {
+        originType: 'archive',
+        generationCount: 3,
+        recordState: 'active',
+        writeEpoch: 7,
+        activeObservations: '* Retained live observation',
+        observationGroups: [
+          {
+            groupId: 'active-group',
+            summary: 'Retained live observation',
+            searchText: 'retained live observation',
+            messageRange: 'msg-src-thread-archive-0:msg-src-thread-archive-1',
+            sourceThreadId: 'src-thread-archive',
+            tokenCount: 5,
+          },
+          {
+            groupId: 'missing-source-group',
+            summary: 'Missing source observation',
+            searchText: 'missing source observation',
+            messageRange: 'missing-start:missing-end',
+            sourceThreadId: 'src-thread-archive',
+            tokenCount: 4,
+          },
+        ],
+        bufferedObservationChunks: [
+          {
+            id: 'archive-chunk',
+            cycleId: 'archive-cycle',
+            observations: '* Buffered observation',
+            tokenCount: 4,
+            messageIds: ['msg-src-thread-archive-2', 'msg-src-thread-archive-3'],
+            messageTokens: 10,
+            lastObservedAt: new Date('2024-01-01T10:03:00Z'),
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+            observationGroups: [
+              {
+                groupId: 'buffered-group',
+                summary: 'Buffered observation',
+                searchText: 'buffered observation',
+                messageRange: 'msg-src-thread-archive-2:msg-src-thread-archive-3',
+                sourceThreadId: 'src-thread-archive',
+                tokenCount: 4,
+              },
+            ],
+          },
+        ],
+      });
+
+      const { thread: clonedThread, messageIdMap } = await memory.cloneThread({
+        sourceThreadId: 'src-thread-archive',
+      });
+
+      const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+      expect(clonedOM).not.toBeNull();
+      expect(clonedOM).toMatchObject({
+        originType: 'archive',
+        generationCount: 3,
+        recordState: 'active',
+        writeEpoch: 0,
+        archive: undefined,
+      });
+      expect(clonedOM!.observationGroups).toEqual([
+        expect.objectContaining({
+          groupId: 'active-group',
+          messageRange: `${messageIdMap!['msg-src-thread-archive-0']}:${messageIdMap!['msg-src-thread-archive-1']}`,
+          sourceThreadId: clonedThread.id,
+          sourceUnavailable: undefined,
+        }),
+        expect.objectContaining({
+          groupId: 'missing-source-group',
+          messageRange: undefined,
+          sourceThreadId: clonedThread.id,
+          sourceUnavailable: true,
+        }),
+      ]);
+      expect(clonedOM!.bufferedObservationChunks?.[0]?.observationGroups).toEqual([
+        expect.objectContaining({
+          groupId: 'buffered-group',
+          messageRange: `${messageIdMap!['msg-src-thread-archive-2']}:${messageIdMap!['msg-src-thread-archive-3']}`,
+          sourceThreadId: clonedThread.id,
+        }),
+      ]);
+
+      expect(await memoryStore.listObservationArchives({ resourceId, threadId: clonedThread.id })).toMatchObject({
+        archives: [],
+      });
+    });
+
     it('should reset transient state flags on cloned OM', async () => {
       await seedThread('src-thread-3', 2);
       const memoryStore = await getMemoryStore(memory);

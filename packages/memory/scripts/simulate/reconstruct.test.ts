@@ -90,6 +90,55 @@ describe('reconstructCycles', () => {
     expect(texts.some(t => t.includes('REFLECTION'))).toBe(false);
   });
 
+  it('replays the retained head of archive-origin generations', () => {
+    const records = [
+      record({
+        id: 'rec-0',
+        generationCount: 0,
+        recordState: 'sealed',
+        activeObservations: '* retired archive cycle',
+      }),
+      record({
+        id: 'rec-1',
+        generationCount: 1,
+        originType: 'archive',
+        recordState: 'active',
+        activeObservations: [
+          '* retained archive head',
+          boundary('2026-01-02T01:00:00.000Z'),
+          '* cycle after archive transition',
+        ].join(''),
+      }),
+    ];
+
+    const { cycles, excluded, warnings } = reconstructCycles(records);
+
+    expect(warnings).toEqual([]);
+    expect(excluded).toEqual([]);
+    expect(cycles.map(cycle => cycle.source)).toEqual(['generation-head', 'archive-head', 'boundary']);
+    expect(cycles.map(cycle => cycle.observations)).toEqual([
+      '* retired archive cycle',
+      '* retained archive head',
+      '* cycle after archive transition',
+    ]);
+  });
+
+  it('replays legacy archive-origin heads without archive metadata', () => {
+    const { cycles, excluded } = reconstructCycles([
+      record({
+        id: 'rec-1',
+        generationCount: 1,
+        originType: 'archive',
+        activeObservations: '* retained legacy tail',
+      }),
+    ]);
+
+    expect(excluded).toEqual([]);
+    expect(cycles).toEqual([
+      expect.objectContaining({ observations: '* retained legacy tail', source: 'archive-head' }),
+    ]);
+  });
+
   it('keeps generation 0 leading chunk as a real cycle', () => {
     const { cycles, excluded } = reconstructCycles([record({ activeObservations: '* only chunk' })]);
 

@@ -16,9 +16,20 @@ import {
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
+  ArchivedObservationGroup,
   BufferedObservationChunk,
+  ClearBufferedReflectionInput,
+  CreateObservationArchiveGenerationInput,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
+  ObservationArchiveMetadata,
+  ObservationGroupMetadata,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
   StorageListMessagesByResourceIdInput,
@@ -93,8 +104,12 @@ type StoredOMRecord = {
   scope: string;
   resourceId: string;
   threadId?: string | null;
+  recordState?: string | null;
+  writeEpoch?: number | null;
   activeObservations: string;
   activeObservationsPendingUpdate?: string | null;
+  observationGroups?: string | null;
+  archive?: string | null;
   originType: string;
   config: string;
   generationCount: number;
@@ -151,6 +166,56 @@ function parseStoredOMChunks(value: string | null | undefined): BufferedObservat
   return parsed.map(chunk => parseOMChunk(chunk));
 }
 
+function parseObservationGroups(value: string | null | undefined): ObservationGroupMetadata[] | undefined {
+  if (!value) return undefined;
+  const parsed = safelyParseJSON(value);
+  if (!Array.isArray(parsed)) return undefined;
+  return parsed.map(group => {
+    const typed = group as ObservationGroupMetadata & { observedAt?: { from: string | Date; to: string | Date } };
+    return {
+      ...typed,
+      observedAt: typed.observedAt
+        ? { from: new Date(typed.observedAt.from), to: new Date(typed.observedAt.to) }
+        : undefined,
+    };
+  });
+}
+
+function parseObservationArchive(value: string | null | undefined): ObservationArchiveMetadata | undefined {
+  if (!value) return undefined;
+  const parsed = safelyParseJSON(value) as
+    | (Omit<ObservationArchiveMetadata, 'archivedAt' | 'groups'> & {
+        archivedAt: string | Date;
+        groups: Array<ArchivedObservationGroup & { observedAt?: { from: string | Date; to: string | Date } }>;
+      })
+    | undefined;
+  if (!parsed?.archiveId) return undefined;
+  return {
+    ...parsed,
+    archivedAt: new Date(parsed.archivedAt),
+    groups: (parseObservationGroups(JSON.stringify(parsed.groups)) as ArchivedObservationGroup[] | undefined) ?? [],
+  };
+}
+
+function parseArchiveEntryDates<T extends { archivedAt: string | Date; groups: ObservationGroupMetadata[] }>(
+  entry: T,
+): T {
+  return {
+    ...entry,
+    archivedAt: new Date(entry.archivedAt),
+    groups: entry.groups.map(group => ({
+      ...group,
+      observedAt: group.observedAt
+        ? { from: new Date(group.observedAt.from), to: new Date(group.observedAt.to) }
+        : undefined,
+    })),
+  };
+}
+
+function serializeArchiveInput(input: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(input)) as Record<string, unknown>;
+}
+
 function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
   const config = safelyParseJSON(doc.config);
   const metadata = doc.metadata ? safelyParseJSON(doc.metadata) : undefined;
@@ -159,12 +224,16 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
     scope: doc.scope as ObservationalMemoryRecord['scope'],
     threadId: doc.threadId || null,
     resourceId: doc.resourceId,
+    recordState: (doc.recordState ?? 'active') as ObservationalMemoryRecord['recordState'],
+    writeEpoch: Number(doc.writeEpoch ?? 0),
     createdAt: new Date(doc.createdAt),
     updatedAt: new Date(doc.updatedAt),
     lastObservedAt: doc.lastObservedAt ? new Date(doc.lastObservedAt) : undefined,
     originType: (doc.originType || 'initial') as ObservationalMemoryRecord['originType'],
     generationCount: Number(doc.generationCount || 0),
     activeObservations: doc.activeObservations || '',
+    observationGroups: parseObservationGroups(doc.observationGroups),
+    archive: parseObservationArchive(doc.archive),
     bufferedObservationChunks: parseStoredOMChunks(doc.bufferedObservationChunks),
     // Deprecated fields (for backward compatibility)
     bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
@@ -940,6 +1009,8 @@ export class MemoryConvex extends MemoryStorage {
       scope: input.scope,
       threadId: input.threadId,
       resourceId: input.resourceId,
+      recordState: 'active',
+      writeEpoch: 0,
       createdAt: now,
       updatedAt: now,
       // lastObservedAt starts undefined - all messages are "unobserved" initially
@@ -968,7 +1039,11 @@ export class MemoryConvex extends MemoryStorage {
         scope: input.scope,
         resourceId: input.resourceId,
         threadId: input.threadId || null,
+        recordState: 'active',
+        writeEpoch: 0,
         activeObservations: '',
+        observationGroups: null,
+        archive: null,
         activeObservationsPendingUpdate: null,
         originType: 'initial',
         config: JSON.stringify(input.config ?? {}),
@@ -1003,8 +1078,12 @@ export class MemoryConvex extends MemoryStorage {
         scope: record.scope,
         resourceId: record.resourceId,
         threadId: record.threadId || null,
+        recordState: record.recordState ?? 'active',
+        writeEpoch: record.writeEpoch ?? 0,
         activeObservations: record.activeObservations || '',
         activeObservationsPendingUpdate: null,
+        observationGroups: record.observationGroups ? JSON.stringify(record.observationGroups) : null,
+        archive: record.archive ? JSON.stringify(record.archive) : null,
         originType: record.originType || 'initial',
         config: JSON.stringify(record.config ?? {}),
         generationCount: record.generationCount || 0,
@@ -1044,6 +1123,8 @@ export class MemoryConvex extends MemoryStorage {
       tokenCount: input.tokenCount,
       lastObservedAt: toISO(input.lastObservedAt),
       observedMessageIds: input.observedMessageIds ?? null,
+      observationGroups: input.observationGroups,
+      expectedWriteEpoch: input.expectedWriteEpoch,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1063,12 +1144,14 @@ export class MemoryConvex extends MemoryStorage {
       threadTitle: input.chunk.threadTitle,
       extractedValues: input.chunk.extractedValues,
       extractionFailures: input.chunk.extractionFailures,
+      observationGroups: input.chunk.observationGroups,
     };
 
     await this.#db.omAppendBufferedChunk({
       id: input.id,
       chunk,
       lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
+      expectedWriteEpoch: input.expectedWriteEpoch,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1085,6 +1168,7 @@ export class MemoryConvex extends MemoryStorage {
         ? input.bufferedChunks.map(chunk => serializeOMChunk(chunk))
         : undefined,
       now: new Date().toISOString(),
+      expectedWriteEpoch: input.expectedWriteEpoch,
     });
   }
 
@@ -1098,6 +1182,8 @@ export class MemoryConvex extends MemoryStorage {
       scope: input.currentRecord.scope,
       threadId: input.currentRecord.threadId,
       resourceId: input.currentRecord.resourceId,
+      recordState: 'active',
+      writeEpoch: 0,
       createdAt: now,
       updatedAt: now,
       lastObservedAt: input.currentRecord.lastObservedAt,
@@ -1118,38 +1204,89 @@ export class MemoryConvex extends MemoryStorage {
       observedTimezone: input.currentRecord.observedTimezone,
     };
 
-    await this.#db.insert({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      record: {
-        id,
-        lookupKey,
-        scope: record.scope,
-        resourceId: record.resourceId,
-        threadId: record.threadId || null,
-        activeObservations: input.reflection,
-        activeObservationsPendingUpdate: null,
-        originType: 'reflection',
-        config: JSON.stringify(record.config ?? {}),
-        generationCount: record.generationCount,
-        lastObservedAt: record.lastObservedAt ? toISO(record.lastObservedAt) : null,
-        lastReflectionAt: now.toISOString(),
-        pendingMessageTokens: 0,
-        totalTokensObserved: record.totalTokensObserved,
-        observationTokenCount: record.observationTokenCount,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: record.observedTimezone || null,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      },
+    const newRecord = {
+      id,
+      lookupKey,
+      scope: record.scope,
+      resourceId: record.resourceId,
+      threadId: record.threadId || null,
+      recordState: 'active',
+      writeEpoch: 0,
+      activeObservations: input.reflection,
+      activeObservationsPendingUpdate: null,
+      observationGroups: null,
+      archive: null,
+      originType: 'reflection',
+      config: JSON.stringify(record.config ?? {}),
+      generationCount: record.generationCount,
+      lastObservedAt: record.lastObservedAt ? toISO(record.lastObservedAt) : null,
+      lastReflectionAt: now.toISOString(),
+      pendingMessageTokens: 0,
+      totalTokensObserved: record.totalTokensObserved,
+      observationTokenCount: record.observationTokenCount,
+      isObserving: false,
+      isReflecting: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      observedTimezone: record.observedTimezone || null,
+      metadata: record.metadata ? JSON.stringify(record.metadata) : null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    await this.#db.omCreateReflectionGeneration({
+      currentRecordId: input.currentRecord.id,
+      expectedGenerationCount: input.currentRecord.generationCount,
+      expectedWriteEpoch: input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0,
+      newRecord,
     });
 
     return record;
+  }
+
+  async createObservationArchiveGeneration(
+    input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    const doc = await this.#db.omCreateArchiveGeneration<StoredOMRecord>(
+      serializeArchiveInput(input as unknown as Record<string, unknown>),
+      crypto.randomUUID(),
+    );
+    return parseStoredOMRecord(doc);
+  }
+
+  async listObservationArchives(input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    const result = await this.#db.omListArchives<ListObservationArchivesResult>(
+      serializeArchiveInput(input as unknown as Record<string, unknown>),
+    );
+    return { ...result, archives: result.archives.map(entry => parseArchiveEntryDates(entry)) };
+  }
+
+  async getObservationArchive(input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    const result = await this.#db.omGetArchive<GetObservationArchiveResult | null>(
+      serializeArchiveInput(input as unknown as Record<string, unknown>),
+    );
+    return result ? { ...result, archive: parseArchiveEntryDates(result.archive) } : null;
+  }
+
+  async getObservationArchivesByGroupIds(
+    input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    const result = await this.#db.omGetArchivesByGroupIds<GetObservationArchivesByGroupIdsResult>(
+      serializeArchiveInput(input as unknown as Record<string, unknown>),
+    );
+    return {
+      matches: result.matches.map(match => ({ ...match, archive: parseArchiveEntryDates(match.archive) })),
+    };
+  }
+
+  async clearBufferedReflection(input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    const doc = await this.#db.omClearBufferedReflection<StoredOMRecord>({
+      id: input.id,
+      expectedWriteEpoch: input.expectedWriteEpoch,
+      updatedAt: new Date().toISOString(),
+    });
+    return parseStoredOMRecord(doc);
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
@@ -1159,6 +1296,7 @@ export class MemoryConvex extends MemoryStorage {
       tokenCount: input.tokenCount,
       inputTokenCount: input.inputTokenCount,
       reflectedObservationLineCount: input.reflectedObservationLineCount,
+      expectedWriteEpoch: input.expectedWriteEpoch,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1177,6 +1315,7 @@ export class MemoryConvex extends MemoryStorage {
       lastObservedAt: currentRecord.lastObservedAt ? toISO(currentRecord.lastObservedAt) : null,
       totalTokensObserved: currentRecord.totalTokensObserved,
       generationCount: currentRecord.generationCount,
+      writeEpoch: currentRecord.writeEpoch ?? 0,
     };
 
     const doc = await this.#db.omSwapBufferedReflection<StoredOMRecord>({
@@ -1184,34 +1323,42 @@ export class MemoryConvex extends MemoryStorage {
       newId: crypto.randomUUID(),
       tokenCount: input.tokenCount,
       now: new Date().toISOString(),
+      expectedWriteEpoch: input.expectedWriteEpoch,
     });
 
     return parseStoredOMRecord(doc);
   }
 
-  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+  async setReflectingFlag(id: string, isReflecting: boolean, expectedWriteEpoch?: number): Promise<void> {
     const found = await this.#db.patch({
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       id,
       record: { isReflecting, updatedAt: new Date() },
+      expected: { recordState: 'active', writeEpoch: expectedWriteEpoch ?? 0 },
     });
     if (!found) {
       throw this.omRecordNotFound('SET_REFLECTING_FLAG', id);
     }
   }
 
-  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+  async setObservingFlag(id: string, isObserving: boolean, expectedWriteEpoch?: number): Promise<void> {
     const found = await this.#db.patch({
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       id,
       record: { isObserving, updatedAt: new Date() },
+      expected: { recordState: 'active', writeEpoch: expectedWriteEpoch ?? 0 },
     });
     if (!found) {
       throw this.omRecordNotFound('SET_OBSERVING_FLAG', id);
     }
   }
 
-  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+  async setBufferingObservationFlag(
+    id: string,
+    isBuffering: boolean,
+    lastBufferedAtTokens?: number,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
     const found = await this.#db.patch({
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       id,
@@ -1220,24 +1367,26 @@ export class MemoryConvex extends MemoryStorage {
         ...(lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens } : {}),
         updatedAt: new Date(),
       },
+      expected: { recordState: 'active', writeEpoch: expectedWriteEpoch ?? 0 },
     });
     if (!found) {
       throw this.omRecordNotFound('SET_BUFFERING_OBSERVATION_FLAG', id);
     }
   }
 
-  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean, expectedWriteEpoch?: number): Promise<void> {
     const found = await this.#db.patch({
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       id,
       record: { isBufferingReflection: isBuffering, updatedAt: new Date() },
+      expected: { recordState: 'active', writeEpoch: expectedWriteEpoch ?? 0 },
     });
     if (!found) {
       throw this.omRecordNotFound('SET_BUFFERING_REFLECTION_FLAG', id);
     }
   }
 
-  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number, expectedWriteEpoch?: number): Promise<void> {
     if (typeof tokenCount !== 'number' || !Number.isFinite(tokenCount) || tokenCount < 0) {
       throw new MastraError({
         id: createStorageErrorId('CONVEX', 'SET_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
@@ -1252,6 +1401,7 @@ export class MemoryConvex extends MemoryStorage {
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       id,
       record: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
+      expected: { recordState: 'active', writeEpoch: expectedWriteEpoch ?? 0 },
     });
     if (!found) {
       throw this.omRecordNotFound('SET_PENDING_MESSAGE_TOKENS', id);
@@ -1273,6 +1423,7 @@ export class MemoryConvex extends MemoryStorage {
     await this.#db.omUpdateConfig({
       id: input.id,
       config: JSON.stringify(input.config ?? {}),
+      expectedWriteEpoch: input.expectedWriteEpoch,
       updatedAt: new Date().toISOString(),
     });
   }

@@ -644,7 +644,7 @@ export class ReflectorRunner {
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
-    this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
+    this.storage.setBufferingReflectionFlag(record.id, true, record.writeEpoch ?? 0).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
@@ -709,7 +709,7 @@ export class ReflectorRunner {
 
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
-        this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
+        this.storage.setBufferingReflectionFlag(record.id, false, record.writeEpoch ?? 0).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
       }
@@ -839,6 +839,7 @@ export class ReflectorRunner {
 
     await this.storage.updateBufferedReflection({
       id: currentRecord.id,
+      expectedWriteEpoch: currentRecord.writeEpoch ?? 0,
       reflection: reflectResult.observations,
       tokenCount: reflectionTokenCount,
       inputTokenCount: sliceTokenEstimate,
@@ -990,6 +991,7 @@ export class ReflectorRunner {
     );
     await this.storage.swapBufferedReflectionToActive({
       currentRecord: freshRecord,
+      expectedWriteEpoch: freshRecord.writeEpoch ?? 0,
       tokenCount: combinedTokenCount,
     });
     if (committedContext) {
@@ -1112,7 +1114,7 @@ export class ReflectorRunner {
         if (record.isBufferingReflection) {
           if (isOpActiveInProcess(record.id, 'bufferingReflection')) return false;
           omDebug(`[OM:shouldTriggerAsyncRefl] isBufferingReflection=true but stale, clearing`);
-          this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
+          this.storage.setBufferingReflectionFlag(record.id, false, record.writeEpoch ?? 0).catch(() => {});
         }
         const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
         if (this.buffering.isAsyncBufferingInProgress(bufferKey)) return false;
@@ -1176,7 +1178,7 @@ export class ReflectorRunner {
         return;
       }
       omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
-      await this.storage.setReflectingFlag(record.id, false);
+      await this.storage.setReflectingFlag(record.id, false, record.writeEpoch ?? 0);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1267,7 +1269,7 @@ export class ReflectorRunner {
       }
     }
 
-    await this.storage.setReflectingFlag(record.id, true);
+    await this.storage.setReflectingFlag(record.id, true, record.writeEpoch ?? 0);
     registerOp(record.id, 'reflecting');
 
     const cycleId = crypto.randomUUID();
@@ -1361,6 +1363,7 @@ export class ReflectorRunner {
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,
+        expectedWriteEpoch: record.writeEpoch ?? 0,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
@@ -1439,7 +1442,14 @@ export class ReflectorRunner {
       omError('[OM] Reflection failed', error);
     } finally {
       try {
-        await this.storage.setReflectingFlag(record.id, false);
+        const activeRecord = await this.storage.getObservationalMemory?.(record.threadId, record.resourceId);
+        if (activeRecord?.id === record.id) {
+          await this.storage.setReflectingFlag(record.id, false, record.writeEpoch ?? 0);
+        }
+      } catch (error) {
+        omDebug(
+          `[OM:reflect] Failed to clear reflection state during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+        );
       } finally {
         unregisterOp(record.id, 'reflecting');
       }

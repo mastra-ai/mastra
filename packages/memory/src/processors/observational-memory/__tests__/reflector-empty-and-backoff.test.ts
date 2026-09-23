@@ -147,6 +147,25 @@ describe('reflector empty-output guard', () => {
     expect(createReflectionGeneration).not.toHaveBeenCalled();
   });
 
+  it('does not let cleanup failures mask the reflection result', async () => {
+    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
+    const { runner } = createReflectorRunner(scripted.model, {
+      storage: {
+        getObservationalMemory: vi.fn(async () => {
+          throw new Error('cleanup lookup failed');
+        }),
+      },
+    });
+
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it('escalates the ladder on a non-degenerate empty block and succeeds on a later attempt', async () => {
     const scripted = createScriptedModel(['<observations>\n</observations>', observationsPayload('recovered summary')]);
     const { runner } = createReflectorRunner(scripted.model);

@@ -7,7 +7,12 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { StorageColumn, StorageResourceType, UpdateWorkflowStateOptions } from '@mastra/core/storage';
+import type {
+  ObservationGroupMetadata,
+  StorageColumn,
+  StorageResourceType,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
@@ -447,6 +452,8 @@ export class ConvexDB extends MastraBase {
     tokenCount: number;
     lastObservedAt: string;
     observedMessageIds: string[] | null;
+    observationGroups?: ObservationGroupMetadata[];
+    expectedWriteEpoch?: number;
     updatedAt: string;
   }): Promise<void> {
     await this.client.callStorage({
@@ -460,6 +467,7 @@ export class ConvexDB extends MastraBase {
     id: string;
     chunk: SerializedOMChunk;
     lastBufferedAtTime?: string;
+    expectedWriteEpoch?: number;
     updatedAt: string;
   }): Promise<void> {
     await this.client.callStorage({
@@ -478,6 +486,7 @@ export class ConvexDB extends MastraBase {
     lastObservedAt?: string;
     bufferedChunks?: SerializedOMChunk[];
     now: string;
+    expectedWriteEpoch?: number;
   }): Promise<R> {
     return this.client.callStorage<R>({
       op: 'omSwapBuffered',
@@ -492,6 +501,7 @@ export class ConvexDB extends MastraBase {
     tokenCount: number;
     inputTokenCount: number;
     reflectedObservationLineCount: number;
+    expectedWriteEpoch?: number;
     updatedAt: string;
   }): Promise<void> {
     await this.client.callStorage({
@@ -506,6 +516,7 @@ export class ConvexDB extends MastraBase {
     newId: string;
     tokenCount: number;
     now: string;
+    expectedWriteEpoch?: number;
   }): Promise<R> {
     return this.client.callStorage<R>({
       op: 'omSwapBufferedReflection',
@@ -514,9 +525,64 @@ export class ConvexDB extends MastraBase {
     });
   }
 
-  public async omUpdateConfig(args: { id: string; config: string; updatedAt: string }): Promise<void> {
+  public async omUpdateConfig(args: {
+    id: string;
+    config: string;
+    expectedWriteEpoch?: number;
+    updatedAt: string;
+  }): Promise<void> {
     await this.client.callStorage({
       op: 'omUpdateConfig',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omCreateReflectionGeneration<R>(args: {
+    currentRecordId: string;
+    expectedGenerationCount: number;
+    expectedWriteEpoch: number;
+    newRecord: Record<string, any>;
+  }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omCreateReflectionGeneration',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omCreateArchiveGeneration<R>(input: Record<string, any>, successorId: string): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omCreateArchiveGeneration',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      input,
+      successorId,
+    });
+  }
+
+  public async omListArchives<R>(input: Record<string, any>): Promise<R> {
+    return this.client.callStorage<R>({ op: 'omListArchives', tableName: TABLE_OBSERVATIONAL_MEMORY, input });
+  }
+
+  public async omGetArchive<R>(input: Record<string, any>): Promise<R> {
+    return this.client.callStorage<R>({ op: 'omGetArchive', tableName: TABLE_OBSERVATIONAL_MEMORY, input });
+  }
+
+  public async omGetArchivesByGroupIds<R>(input: Record<string, any>): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omGetArchivesByGroupIds',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      input,
+    });
+  }
+
+  public async omClearBufferedReflection<R>(args: {
+    id: string;
+    expectedWriteEpoch: number;
+    updatedAt: string;
+  }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omClearBufferedReflection',
       tableName: TABLE_OBSERVATIONAL_MEMORY,
       ...args,
     });

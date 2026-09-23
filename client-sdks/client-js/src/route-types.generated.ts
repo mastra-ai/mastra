@@ -3206,7 +3206,7 @@ type Shared_Type_52 = {
   bufferedObservations?: string | undefined;
   bufferedObservationChunks?: Shared_Type_51[] | undefined;
   bufferedReflection?: string | undefined;
-  originType: 'initial' | 'observation' | 'reflection';
+  originType: 'initial' | 'observation' | 'reflection' | 'archive';
   generationCount: number;
   lastObservedAt?: Date | undefined;
   totalTokensObserved: number;
