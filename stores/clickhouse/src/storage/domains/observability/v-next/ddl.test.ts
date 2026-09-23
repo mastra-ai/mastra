@@ -32,8 +32,10 @@ describe('span usage columns DDL (OBS-381)', () => {
   it('declares every usage column on span_events and both MV targets', () => {
     for (const [table, ddl] of SPAN_TABLES) {
       for (const [column, type] of USAGE_COLUMNS) {
-        const definition = new RegExp(`^\\s*${column}\\s+${type.replace(/[()]/g, '\\$&')},?\\s*$`, 'm');
-        expect(ddl, `${table} should declare ${column} ${type}`).toMatch(definition);
+        const declaresColumn = ddl
+          .split('\n')
+          .some(line => line.trim().replace(/,$/, '').replace(/\s+/g, ' ') === `${column} ${type}`);
+        expect(declaresColumn, `${table} should declare ${column} ${type}`).toBe(true);
       }
     }
   });
