@@ -22,6 +22,7 @@ import {
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from '../../session/factory-session.js';
+import { applyPersonalMemorySettings } from '../../session/memory-settings-hydration.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
 import type {
   ChannelAccountLink,
@@ -101,7 +102,8 @@ interface SlackChannelDeps {
   /**
    * Observational-memory settings domain. When provided, a repo-backed session
    * adopts its factory project's shared memory settings on start, matching the
-   * web kickoff.
+   * web kickoff — and the linked sender's own settings win over them for every
+   * knob the sender has saved.
    */
   memorySettings?: MemorySettingsStorage;
   /**
@@ -463,10 +465,19 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * default, else the SDK's built-in mode default. The choice is persisted on the
  * thread as `modeModelId_<mode>`, so it outlives the process that made it.
  *
- * Skips a session whose mode already has a model persisted on the thread. That
- * is the durable record of a deliberate choice — either an earlier start or a
- * user's own switch — and re-applying a preference over it would undo the
- * user's selection every time the process restarts.
+ * Observational memory is configured here too, in the same order of who chose
+ * it: the project's shared settings first, then the linked sender's own row,
+ * which wins for every knob they have saved. The pair is re-applied on every
+ * start rather than once — memory settings are stored preference, not a choice
+ * made on this thread, and a restarted process re-resolves the project's row
+ * before this hook runs.
+ *
+ * The model resolution is skipped on a session whose mode already has a model
+ * persisted on the thread. That is the durable record of a deliberate choice —
+ * either an earlier start or a user's own switch — and re-applying a preference
+ * over it would undo the user's selection every time the process restarts.
+ * Memory settings have no such per-thread record, so they are re-applied on
+ * every start.
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
   const { projects, memorySettings, modelPacks } = deps;
@@ -474,10 +485,10 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
   return async ({ session, thread, requestContext }) => {
     // Seed the tenant org above every guard below. `gateDispatch` stamps it on
     // the message's request context before the session exists, so this needs no
-    // storage read — which matters, because the guards below deliberately skip
-    // storage on a restarted session. A channel-only thread and a thread whose
-    // dispatch was ungated both land here with no org and are marked unresolved
-    // rather than being left to look like a local session.
+    // storage read — which matters, because the model lookups below deliberately
+    // skip storage on a restarted session. A channel-only thread and a thread
+    // whose dispatch was ungated both land here with no org and are marked
+    // unresolved rather than being left to look like a local session.
     await seedSessionOrg(session, readRequestContextOrgId(requestContext));
 
     if (!projects) return;
@@ -498,39 +509,51 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     await seedSessionOrg(session, owner.orgId);
 
     const modeModelKey = `modeModelId_${session.mode.get()}`;
-    if (await session.thread.getSetting({ key: modeModelKey })) return;
+    if (!(await session.thread.getSetting({ key: modeModelKey }))) {
+      const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
+      const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
 
-    const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
-    const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
+      await hydrateFactorySession(session, {
+        orgId: owner.orgId,
+        factoryProjectId: owner.factoryProjectId,
+        // The FACTORY model drives observational-memory's provider-aware
+        // fallback, even when the sender's pack supplies the model the session
+        // actually runs — a factory connected only to Anthropic should not
+        // observe with an uncredentialed provider.
+        defaultModelId: factoryModelId,
+        memorySettings,
+      });
 
-    await hydrateFactorySession(session, {
-      orgId: owner.orgId,
-      factoryProjectId: owner.factoryProjectId,
-      // The FACTORY model drives observational-memory's provider-aware
-      // fallback, even when the sender's pack supplies the model the session
-      // actually runs — a factory connected only to Anthropic should not
-      // observe with an uncredentialed provider.
-      defaultModelId: factoryModelId,
-      memorySettings,
-    });
-
-    const selectedModelId = userModelId ?? factoryModelId;
-    if (selectedModelId && selectedModelId !== factoryModelId) {
-      // The sender's own choice beats the factory's. `switch` applies the model
-      // and persists it as this mode's model on the thread in one step — which
-      // is what makes the choice outlive this process. A switch that fails is
-      // logged by the channel machinery and leaves the factory/SDK model that
-      // `hydrateFactorySession` already applied: the message still answers.
-      await session.model.switch({ modelId: selectedModelId });
-    } else if (!selectedModelId) {
-      // Neither preference exists, so the SDK's built-in mode default is this
-      // thread's model of record. Pin it too: a later SDK upgrade that moves
-      // that default must not silently retarget a thread that already started.
-      const currentModelId = session.model.get();
-      if (currentModelId) {
-        await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+      const selectedModelId = userModelId ?? factoryModelId;
+      if (selectedModelId && selectedModelId !== factoryModelId) {
+        // The sender's own choice beats the factory's. `switch` applies the model
+        // and persists it as this mode's model on the thread in one step — which
+        // is what makes the choice outlive this process. A switch that fails is
+        // logged by the channel machinery and leaves the factory/SDK model that
+        // `hydrateFactorySession` already applied: the message still answers.
+        await session.model.switch({ modelId: selectedModelId });
+      } else if (!selectedModelId) {
+        // Neither preference exists, so the SDK's built-in mode default is this
+        // thread's model of record. Pin it too: a later SDK upgrade that moves
+        // that default must not silently retarget a thread that already started.
+        const currentModelId = session.model.get();
+        if (currentModelId) {
+          await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+        }
       }
     }
+
+    // The sender's own observational-memory settings, applied last so they beat
+    // the project's — and on EVERY start, not just the first. Unlike the model,
+    // this is stored preference rather than a choice made on this thread: a
+    // restarted process re-resolves the project row before this hook runs, so
+    // skipping it here would quietly put a thread back on the project's OM
+    // configuration. Chat-only threads never reach this point.
+    await applyPersonalMemorySettings(session, {
+      memorySettings,
+      orgId: owner.orgId,
+      userId: owner.userId,
+    });
   };
 }
 

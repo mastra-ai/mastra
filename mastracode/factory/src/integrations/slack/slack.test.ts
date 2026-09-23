@@ -928,8 +928,8 @@ describe('session start (onSessionStart)', () => {
         }),
       },
       om: {
-        observer: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
-        reflector: { modelId: vi.fn(() => 'initial/model'), switchModel: vi.fn(async () => {}) },
+        observer: makeOmRole('initial/model'),
+        reflector: makeOmRole('initial/model'),
       },
       state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
       /** The model a restarted process would restore from the thread. */
@@ -937,10 +937,23 @@ describe('session start (onSessionStart)', () => {
     };
   }
 
+  /** Mirrors the real roles: `modelId()` reports what the last switch selected. */
+  function makeOmRole(initial: string) {
+    let current = initial;
+    return {
+      modelId: vi.fn(() => current),
+      switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
+        current = modelId;
+      }),
+    };
+  }
+
   function makeStartDeps({
     defaultModelId = 'anthropic/claude-opus-5' as string | null,
     session = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' } as Record<string, string> | null,
     memoryRecord = null as Record<string, unknown> | null,
+    personalMemoryRecord = null as Record<string, unknown> | null,
+    personalMemoryLookupError = null as Error | null,
     activePack = null as { build?: string; plan?: string; fast?: string } | null,
     packLookupError = null as Error | null,
   } = {}) {
@@ -951,7 +964,15 @@ describe('session start (onSessionStart)', () => {
         projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
         connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
       } as any,
-      memorySettings: { get: vi.fn(async () => memoryRecord) } as any,
+      memorySettings: {
+        // Two rows share this table: the project's (a `factory-project:` sentinel
+        // key) and the sender's own (their user id).
+        get: vi.fn(async ({ userId }: { userId: string }) => {
+          if (userId.startsWith('factory-project:')) return memoryRecord;
+          if (personalMemoryLookupError) throw personalMemoryLookupError;
+          return personalMemoryRecord;
+        }),
+      } as any,
       modelPacks: {
         getActive: vi.fn(async () => {
           if (packLookupError) throw packLookupError;
@@ -1070,6 +1091,82 @@ describe('session start (onSessionStart)', () => {
     expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:fp-1' });
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
+    // The sender's own row is read too, and an absent one simply leaves the
+    // project's configuration in place.
+    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+  });
+
+  // Observational memory is the sender's to configure: a thread they are talking
+  // to should observe the way their own settings say, not the way the project's
+  // shared row does.
+  it("applies the linked sender's own memory settings over the project's", async () => {
+    const deps = makeStartDeps({
+      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
+      personalMemoryRecord: { observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 222 },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    // Applied last, so the sender's row is what the session ends up running.
+    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.modelId()).toBe('openai/gpt-5.4-mini');
+    expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
+  });
+
+  // The row is authoritative only for what the sender saved. A knob they never
+  // touched must keep the project's value rather than snapping back to the
+  // built-in default — the factory's provider may be the only credentialed one.
+  it("keeps the project's memory settings for the knobs the sender never saved", async () => {
+    const deps = makeStartDeps({
+      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
+      personalMemoryRecord: { observerModelId: null, observationThreshold: 222 },
+    });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
+  });
+
+  // Memory settings are stored preference, not a choice made on this thread: a
+  // restarted process re-resolves the project's row at session creation, so the
+  // sender's row has to be re-applied even where the model is already decided.
+  it('re-applies the sender memory settings on a restarted session whose model is persisted', async () => {
+    const deps = makeStartDeps({
+      personalMemoryRecord: { observerModelId: 'openai/gpt-5.4-mini', reflectionThreshold: 333 },
+    });
+    const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
+    // Still no model re-resolution: the two halves of the hook are independent.
+    expect(deps.modelPacks.getActive).not.toHaveBeenCalled();
+    expect(deps.projects.getById).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
+  });
+
+  // Reaching a storage domain can fail on its own (uninitialized table, a
+  // transient read error). The sender's settings are a preference, not a
+  // prerequisite for answering their message.
+  it("falls back to the project's memory settings when the sender's row cannot be read", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeStartDeps({
+      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
+      personalMemoryLookupError: new Error('memory settings unavailable'),
+    });
+    const session = makeSession();
+
+    await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
   });
 
   // The durable record of a deliberate choice: either an earlier start or the
