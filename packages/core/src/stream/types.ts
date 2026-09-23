@@ -814,6 +814,8 @@ interface ToolCallApprovalPayload {
   toolName: string;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
+  updatedAt?: number;
 }
 
 interface ToolCallSuspendedPayload {

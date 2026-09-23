@@ -132,6 +132,7 @@ export class MessageMerger {
                 ...part.toolInvocation.args,
               },
             };
+            existingCallPart.updatedAt = part.updatedAt ?? Date.now();
             // Preserve providerMetadata from the result part (e.g. toModelOutput stored at mastra.modelOutput)
             if (part.providerMetadata) {
               existingCallPart.providerMetadata = {
@@ -170,6 +171,7 @@ export class MessageMerger {
                 ...part.toolInvocation.args,
               },
             };
+            existingCallPart.updatedAt = part.updatedAt ?? Date.now();
 
             if (part.providerMetadata) {
               existingCallPart.providerMetadata = {
