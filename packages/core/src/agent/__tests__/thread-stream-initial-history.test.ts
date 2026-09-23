@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list/types';
+import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { createHarness, nextTicks, setupRuntime } from './thread-stream-test-utils';
 
 const harness = createHarness('history');
@@ -41,8 +42,11 @@ function setup(stored: () => MastraDBMessage[]) {
     registered: () => ctx.emit({ type: 'run-registered', runId: id, streamId: stream, streamSeq: 1 }),
     completed: () => ctx.emit({ type: 'run-completed', runId: id, streamId: stream, persisted: true }),
   });
-  const subscribe = async (withInitialHistory: boolean | { perPage?: number } = true) => {
-    const subscription = await ctx.runtime.subscribeToThread(
+  const subscribe = async (
+    withInitialHistory: boolean | { perPage?: number } = true,
+    runtime: AgentThreadStreamRuntime = ctx.runtime,
+  ) => {
+    const subscription = await runtime.subscribeToThread(
       agent,
       { threadId, resourceId, withInitialHistory },
       ctx.pubsub,
@@ -169,6 +173,73 @@ describe('subscribeToThread withInitialHistory', () => {
     expect(withHistory.collected.map(p => p.type)).toEqual(['thread-history', 'start']);
     expect(topic).toContain(threadId);
     for (const s of [withHistory, plain]) {
+      s.subscription.unsubscribe();
+      await s.consumed;
+    }
+  });
+
+  it('reconnect gap: a new subscription gets parts published while disconnected, once', async () => {
+    let stored: MastraDBMessage[] = [];
+    const { emitRun, subscribe, pubsub } = setup(() => stored);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    await run.part({ type: 'start', payload: { messageId: 'm1' } });
+
+    const first = await subscribe();
+    await run.part({ type: 'text-delta', payload: { text: 'a' } });
+    await nextTicks(10);
+    first.subscription.unsubscribe();
+    await first.consumed;
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    stored = [assistantMessage('m1', new Date())];
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await run.part({ type: 'text-delta', payload: { text: 'b' } });
+
+    const second = await subscribe();
+    await run.part({ type: 'text-delta', payload: { text: 'c' } });
+    await run.part({ type: 'finish', payload: {} });
+    await run.completed();
+    await nextTicks(10);
+
+    const texts = second.collected.filter(p => p.type === 'text-delta').map(p => p.payload.text);
+    expect(second.collected[0].type).toBe('thread-history');
+    expect(texts).toEqual(['b', 'c']);
+    expect(second.collected.filter(p => p.type === 'finish')).toHaveLength(1);
+    second.subscription.unsubscribe();
+    await second.consumed;
+  });
+
+  it('multi-instance: runtimes sharing one retained pubsub see the same history-filtered stream', async () => {
+    let stored: MastraDBMessage[] = [];
+    const { emitRun, subscribe, pubsub } = setup(() => stored);
+    pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+    const done = emitRun('run-done', 'stream-done');
+    await done.registered();
+    await done.part({ type: 'start', payload: { messageId: 'm0' } });
+    await done.part({ type: 'text-delta', payload: { text: 'old' } });
+    await done.part({ type: 'finish', payload: {} });
+    await done.completed();
+    stored = [assistantMessage('m0', new Date())];
+
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    await run.part({ type: 'start', payload: { messageId: 'm1' } });
+    const a = await subscribe(true);
+    const b = await subscribe(true, new AgentThreadStreamRuntime());
+    await run.part({ type: 'text-delta', payload: { text: 'live' } });
+    await run.part({ type: 'finish', payload: {} });
+    await run.completed();
+    await nextTicks(10);
+
+    for (const { collected } of [a, b]) {
+      expect(collected[0].type).toBe('thread-history');
+      expect(collected.filter(p => p.type === 'text-delta').map(p => p.payload.text)).toEqual(['live']);
+      expect(collected.filter(p => p.type === 'finish')).toHaveLength(1);
+    }
+    expect(a.collected.map(p => p.type)).toEqual(b.collected.map(p => p.type));
+    for (const s of [a, b]) {
       s.subscription.unsubscribe();
       await s.consumed;
     }
