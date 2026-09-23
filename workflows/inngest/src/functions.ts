@@ -10,9 +10,15 @@ export function collectInngestFunctions({
   mastra: Mastra;
   functions?: InngestFunction.Like[];
 }) {
+  /**
+   * Inngest agents share the same logical durable workflow IDs and resolve the
+   * concrete agent from the workflow input, so only the first registered
+   * agent's workflow needs to be served.
+   */
+  const durableAgent = Object.values(mastra.listAgents()).find(agent => isInngestAgent(agent));
   const workflows = [
     ...Object.values(mastra.listWorkflows()),
-    ...Object.values(mastra.listAgents()).flatMap(agent => (isInngestAgent(agent) ? agent.getDurableWorkflows() : [])),
+    ...(durableAgent?.getDurableWorkflows() ?? []),
   ];
   const workflowFunctions = new Map<string, InngestFunction.Like>();
 

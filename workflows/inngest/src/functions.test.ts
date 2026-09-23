@@ -40,7 +40,7 @@ describe('collectInngestFunctions()', () => {
     expect(workflow.__getPubsubFactory()).toBeTypeOf('function');
   });
 
-  it('deduplicates agent workflow functions by their logical Inngest function ID', () => {
+  it('collects the shared durable workflow from only the first Inngest agent', () => {
     const inngest = new Inngest({ id: 'test-app' });
     const firstAgent = createInngestAgent({ agent: createAgent('first-agent'), inngest });
     const secondAgent = createInngestAgent({ agent: createAgent('second-agent'), inngest });
@@ -49,9 +49,13 @@ describe('collectInngestFunctions()', () => {
       storage: new MockStore(),
       agents: { firstAgent, secondAgent },
     });
+    const firstWorkflows = vi.spyOn(firstAgent, 'getDurableWorkflows');
+    const secondWorkflows = vi.spyOn(secondAgent, 'getDurableWorkflows');
 
     const functions = collectInngestFunctions({ mastra });
 
     expect(functions).toEqual(firstFunctions);
+    expect(firstWorkflows).toHaveBeenCalledOnce();
+    expect(secondWorkflows).not.toHaveBeenCalled();
   });
 });
