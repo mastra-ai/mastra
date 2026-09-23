@@ -57,7 +57,7 @@ function isNonRetryableStepFailure(error: unknown): boolean {
 
 const retryCountStorage = new AsyncLocalStorage<number>();
 
-const BUILTIN_ERROR_TYPES = [TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError];
+const BUILTIN_ERROR_TYPES = [TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError, AggregateError];
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];

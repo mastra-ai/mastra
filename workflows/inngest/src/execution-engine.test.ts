@@ -437,6 +437,16 @@ describe('InngestExecutionEngine.wrapDurableOperation', () => {
     expect(serializedCause.stack).toContain('readsThreadIdOfUndefined');
   });
 
+  it('keeps the AggregateError type', async () => {
+    const err = await captureWrapped(async () => {
+      throw new AggregateError([new Error('a'), new Error('b')], 'all failed');
+    });
+
+    expect(err).toBeInstanceOf(AggregateError);
+    expect(err.name).toBe('AggregateError');
+    expect(err.message).toBe('all failed');
+  });
+
   it('keeps custom error properties in the cause', async () => {
     const err = await captureWrapped(async () => {
       throw Object.assign(new Error('rate limited'), { statusCode: 429 });
