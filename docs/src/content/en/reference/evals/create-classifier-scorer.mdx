@@ -117,9 +117,9 @@ export const policyScorer = createClassifierScorer({
   type: 'agent',
   state: ({ run }) => ({
     policy:
-      run.requestContext instanceof RequestContext
+      (run.requestContext instanceof RequestContext
         ? run.requestContext.get('policy')
-        : run.requestContext?.policy,
+        : run.requestContext?.policy) ?? null,
     output: getAssistantMessageFromRunOutput(run.output) ?? '',
   }),
 })

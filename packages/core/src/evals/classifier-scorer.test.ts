@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Classifier } from '../classifier';
 import { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
 import { ScorerRunError } from './base';
 import { createClassifierScorer } from './classifier-scorer';
 
@@ -270,5 +271,40 @@ describe('createClassifierScorer', () => {
     expect(doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({ state: { output: ['Paris is the capital of France.'] } }),
     );
+  });
+
+  it.each([
+    ['a plain policy record', { policy: 'cite sources' }, 'cite sources'],
+    ['a RequestContext with a policy', new RequestContext([['policy', 'cite sources']]), 'cite sources'],
+    ['a RequestContext without a policy', new RequestContext(), null],
+    ['no request context', undefined, null],
+  ])('scores the documented policy state with %s', async (_label, requestContext, policy) => {
+    const doEvaluate = vi.fn(async () => ({
+      answers: { factual: { type: 'boolean' as const, probability: 0.9 } },
+      usage: { inputTokens: 4, outputTokens: 2 },
+      warnings: [],
+    }));
+    const classifier = new Classifier({
+      id: 'policy-judge',
+      model: { ...createModel(), doEvaluate },
+      questions: { factual: questions.factual },
+    });
+    const scorer = createClassifierScorer({
+      id: 'policy-factual-state',
+      classifier,
+      question: 'factual',
+      state: ({ run }) => ({
+        policy:
+          (run.requestContext instanceof RequestContext
+            ? run.requestContext.get('policy')
+            : run.requestContext?.policy) ?? null,
+        output: run.output,
+      }),
+    });
+
+    const result = await scorer.run({ output: 'answer', requestContext });
+
+    expect(result.score).toBe(0.9);
+    expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { policy, output: 'answer' } }));
   });
 });
