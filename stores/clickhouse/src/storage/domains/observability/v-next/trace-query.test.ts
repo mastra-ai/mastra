@@ -4,11 +4,13 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
   planTraceQueryObservedFields,
+  planTraceQueryValues,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -20,6 +22,7 @@ import {
   compileClickHouseThreadQuery,
   compileClickHouseTraceQuery,
   compileClickHouseTraceQueryObservedFields,
+  compileClickHouseTraceQueryValues,
   queryThreads,
   queryTraces,
   runWithClickHouseTraceQueryTimeout,
@@ -544,6 +547,42 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     expect(compiled.query).toMatch(/ifNull\(r\.threadId != \{trace_query_3:String\}, 1\)/);
+  });
+
+  it('compiles tag predicates against the non-nullable root array', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'alpha' },
+            { op: 'notIncludes', path: 'tags', value: 'beta' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).toContain('has(r.tags, {trace_query_3:String})');
+    expect(compiled.query).toContain('notEmpty(r.tags) AND NOT has(r.tags, {trace_query_4:String})');
+    expect(compiled.query).toContain('(notEmpty(r.tags))');
+    expect(compiled.query).toContain('(empty(r.tags))');
+    expect(compiled.query).not.toMatch(/is(Not)?Null\(r\.tags\)/);
+    expect(compiled.query_params).toMatchObject({ trace_query_3: 'alpha', trace_query_4: 'beta' });
+  });
+
+  it('discovers tag values one row per distinct tag per root', () => {
+    const compiled = compileClickHouseTraceQueryValues(
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', search: 'al' }),
+      ),
+    );
+
+    expect(compiled.query).toContain('SELECT toString(arrayJoin(arrayDistinct(r.tags))) AS value FROM root_scope r');
+    expect(compiled.query).toContain('positionCaseInsensitiveUTF8(value, {trace_query_3:String}) > 0');
+    expect(compiled.query).toContain('ORDER BY count DESC, value ASC');
+    expect(compiled.query_params).toMatchObject({ trace_query_3: 'al' });
   });
 
   it('matches the requested keyset order and always ties on traceId ascending', () => {

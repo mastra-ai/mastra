@@ -1,5 +1,30 @@
 # @mastra/mcp-docs-server
 
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- The docs server now runs on `@mastra/mcp` 2.x and serves the MCP `2026-07-28` revision over stdio. Editors that still open with the pre-2026 `initialize` handshake (Cursor, Codex CLI, VS Code and Claude Code at the time of writing) keep working: the server reads the first request on stdin and, when it is an `initialize`, serves the connection with the published `@mastra/mcp` 1.x implementation instead. The same tools and prompts are registered either way, so `npx -y @mastra/mcp-docs-server@latest` needs no configuration change. ([#24707](https://github.com/mastra-ai/mastra/pull/24707))
+
+  ```json
+  {
+    "mcpServers": {
+      "mastra": {
+        "command": "npx",
+        "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      }
+    }
+  }
+  ```
+
+  The startup log line on stderr now reports which protocol was selected, for example `{"level":"info","message":"Started Mastra Docs MCP Server","data":{"protocol":"legacy"}}`. Server-level `notifications/message` logging is gone with the 2.x protocol; the server's own log output goes to stderr, filtered by `--log-level`, and error logs are still written to `~/.cache/mastra/mcp-docs-server-logs`. The migration prompts no longer carry the removed `version` field, and the package's `server` export is replaced by `createDocsServer(era)`.
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+  - @mastra/mcp@2.1.0-alpha.0
+
 ## 1.2.28
 
 ### Patch Changes

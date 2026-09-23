@@ -1,5 +1,22 @@
 # @mastra/react
 
+## 1.6.2-alpha.0
+
+### Patch Changes
+
+- Fixed `useStreamWorkflow` crashing with `Cannot read properties of undefined (reading 'id')` when a workflow step emits a custom event through `writer.custom()`. Running, observing, resuming and time-travelling such workflows now keep updating step results, and custom events are skipped. Fixes [#17111](https://github.com/mastra-ai/mastra/issues/17111). ([#24807](https://github.com/mastra-ai/mastra/pull/24807))
+
+- Expose the optional tool `title` on the tool endpoints and in `GetToolResponse`, and copy it from `tool-call` and `tool-call-input-streaming-start` chunks onto the tool-invocation message part in the `useChat` accumulator. Part of #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  ```ts
+  const tool = await client.getTool('get_weather_by_coordinates').details();
+  tool.title; // 'Weather Lookup'
+  ```
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+  - @mastra/client-js@1.48.1-alpha.0
+
 ## 1.6.1
 
 ### Patch Changes

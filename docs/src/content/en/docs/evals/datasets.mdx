@@ -126,6 +126,20 @@ await dataset.addItems({
 })
 ```
 
+### Stored field values
+
+In-memory, LibSQL, PostgreSQL, MySQL, MongoDB, and Spanner dataset storage preserve JSON `null` in `input`, `groundTruth`, and `expectedTrajectory`, along with empty strings, arrays, and objects. Omitted optional JSON fields remain absent when serialized. Dataset schemas still determine which values an item accepts.
+
+Snapshot validation doesn't override database restrictions. MongoDB rejects object property names containing NUL (`\u0000`), even in valid JSON. A batch insert containing such keys fails without storing any items or advancing the dataset version.
+
+For configuration updates, `null` clears schemas, tags, target type, target IDs, or scorer IDs. These adapters return cleared settings as `undefined`, while preserving empty arrays and objects. An item update with `scorerIds: null` removes its scorer override, whereas `scorerIds: []` disables scoring for that item. Omitted update fields leave existing values unchanged.
+
+Retries with the same `externalId` retain the original item's representation. For backward compatibility, insert operations treat omitted and `null` payload fields as equivalent when comparing a retry with an existing item. For example, inserting an item without `groundTruth` and retrying with `groundTruth: null` returns the original item with no ground truth. Use an item update to store an explicit `null` instead.
+
+Unset configuration now reads as `undefined` where some adapters previously returned `null`, so serialized responses omit those properties. Use nullish checks such as `value ?? fallback` rather than relying on an explicit `null` property. LibSQL also returns an omitted dataset description as `undefined`, matching its declared type.
+
+Older LibSQL, PostgreSQL, MySQL, and Spanner writes stored optional JSON `null` values as SQL `NULL`, so those values remain indistinguishable from omitted fields. Older MongoDB writes stored omitted optional payload fields as BSON `null`. The storage fixes preserve new writes but don't reconstruct previously lost distinctions.
+
 ## Validate snapshot artifacts
 
 Use `createDatasetSnapshot()` and `parseDatasetSnapshot()` from `@mastra/core/datasets` to create and validate a versioned JSON artifact. These are pure format utilities: they don't export from storage, import a dataset, allocate portable identities, or change Studio's JSON importer.
@@ -161,7 +175,7 @@ The artifact includes configuration, complete authored item payloads, portable U
 
 Each item requires `createdAt` and `updatedAt` as UTC ISO 8601 strings with millisecond precision, matching `Date.toISOString()` for four-digit years. Both timestamps are included in the integrity digest. They represent the item's actual dates, not transfer provenance: an importer must preserve them as the destination item's `createdAt` and `updatedAt`, rather than replacing them with import time. An importer records transfer time in a separate receipt, while later edits in the destination update `updatedAt` normally. Implementing storage import remains outside the scope of these format helpers.
 
-This preservation applies to the supplied artifact content. Storage adapters may already have normalized values before capture. Format validation neither recovers those distinctions nor guarantees that ordinary dataset CRUD operations can restore them.
+This preservation applies to the supplied artifact content. Storage adapters may already have normalized values before capture. Format validation neither recovers those distinctions nor guarantees that ordinary dataset CRUD operations can restore them. PostgreSQL JSONB, for example, rejects strings containing the NUL character (`\u0000`) even though they're valid in an artifact. Validate destination storage restrictions before writing artifact contents.
 
 Both helpers throw a Zod validation error for invalid content or size options. `datasetSnapshotContentSchema.safeParse()` validates unsigned content and identity uniqueness, while `datasetSnapshotSchema.safeParse()` additionally checks the digest. These schemas don't enforce a byte limit. Use `parseDatasetSnapshot()` for untrusted text to enforce a size budget before parsing and reject duplicate JSON property names.
 

@@ -37,7 +37,9 @@ import {
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
   traceQueryPaginatedTraceResponseSchema,
+  traceQueryPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryScalarPredicateSchema,
   traceQueryResponseSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
@@ -1054,6 +1056,80 @@ describe('planTraceQuery', () => {
       );
       expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
     }
+  });
+
+  it('plans tag collection predicates and rejects scalar operators on tags', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: '${tags}', value: 'manual-review' },
+            { op: 'notIncludes', path: 'tags', value: 'archived' },
+            { op: 'exists', path: 'tags' },
+            { op: 'not', arg: { op: 'notExists', path: 'tags' } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'collection', field: 'tags', operator: 'includes', value: 'manual-review' },
+        { type: 'collection', field: 'tags', operator: 'notIncludes', value: 'archived' },
+        { type: 'collection', field: 'tags', operator: 'notEmpty' },
+        { type: 'not', arg: { type: 'collection', field: 'tags', operator: 'empty' } },
+      ],
+    });
+
+    const scalarOnTags = validationError(() =>
+      planTraceQuery(
+        parsed({ ...baseRequest, where: { op: 'eq', left: { path: 'tags' }, right: { literal: 'manual-review' } } }),
+      ),
+    );
+    expect(scalarOnTags.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+    );
+
+    const membershipOnTags = validationError(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'in', value: { path: 'tags' }, set: ['manual-review'] } })),
+    );
+    expect(membershipOnTags.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+    );
+
+    const includesOnScalar = validationError(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'includes', path: 'environment', value: 'production' } })),
+    );
+    expect(includesOnScalar.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+    );
+
+    for (const op of ['includes', 'notIncludes'] as const) {
+      for (const value of ['', '   ']) {
+        expect(traceQueryPredicateSchema.safeParse({ op, path: 'tags', value }).success).toBe(false);
+        expect(traceQueryScalarPredicateSchema.safeParse({ op, path: 'environment', value }).success).toBe(false);
+        const blankTag = validationError(() => parsed({ ...baseRequest, where: { op, path: 'tags', value } }));
+        expect(blankTag.issues[0]).toMatchObject({ code: 'invalid_request', path: ['where', 'value'] });
+      }
+    }
+    expect(traceQueryPredicateSchema.parse({ op: 'includes', path: 'tags', value: ' alpha ' })).toMatchObject({
+      value: ' alpha ',
+    });
+
+    const spanScope = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { spans: { some: { op: 'includes', path: 'tags', value: 'manual-review' } } },
+        }),
+      ),
+    );
+    expect(spanScope.issues).toContainEqual(
+      expect.objectContaining({ code: 'field_not_allowed', path: ['where', 'spans', 'some', 'path'] }),
+    );
   });
 
   it('rejects grouped orderBy and fixes grouped ordering', () => {

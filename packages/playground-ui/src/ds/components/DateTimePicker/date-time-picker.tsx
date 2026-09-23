@@ -11,6 +11,7 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
+import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
@@ -277,7 +278,12 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         ref={ref}
         variant={variant}
         size={size}
-        className={cn('justify-start', controlTriggerOpenStateFor(variant), className)}
+        className={cn(
+          'justify-start',
+          variant === 'default' && fieldTriggerStyle,
+          controlTriggerOpenStateFor(variant),
+          className,
+        )}
         icon={<CalendarIcon />}
         {...props}
       >

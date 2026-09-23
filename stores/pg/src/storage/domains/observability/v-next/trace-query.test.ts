@@ -3,10 +3,12 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryValues,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -14,7 +16,13 @@ import type { TraceQueryResponse, TrustedThreadQueryPlan, TrustedTraceQueryPlan 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
-import { compilePostgresThreadQuery, compilePostgresTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compilePostgresThreadQuery,
+  compilePostgresTraceQuery,
+  compilePostgresTraceQueryValues,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 import { ObservabilityStoragePostgresVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -205,6 +213,39 @@ describe('Postgres advanced trace query', () => {
       'parentMessageId',
       101,
     ]);
+  });
+
+  it('compiles tag collection predicates against the text[] column and discovers tags per trace', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'alpha' },
+            { op: 'notIncludes', path: 'tags', value: 'beta' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).toContain(`(r."tags" @> ARRAY[$3]::text[])`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0 AND NOT (r."tags" @> ARRAY[$4]::text[]))`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0)`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") = 0)`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'alpha', 'beta', 101]);
+
+    const values = compilePostgresTraceQueryValues(
+      'public',
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', limit: 10 }),
+      ),
+    );
+    expect(values.text).toContain(`SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r`);
+    expect(values.text).toContain('GROUP BY value');
+    expect(values.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 11]);
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {

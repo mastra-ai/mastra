@@ -59,7 +59,13 @@ export function PageLayout({
         {variant === 'narrow' ? (
           // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
           // eslint-disable-next-line tailwindcss/enforces-shorthand
-          <div data-slot="page-layout-container" className="mx-auto w-full max-w-5xl px-4 py-4">
+          <div
+            data-slot="page-layout-container"
+            className={cn(
+              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-[minmax(0,1fr)] p-4',
+              header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+            )}
+          >
             {headerSlot}
             {children}
           </div>
