@@ -58,6 +58,12 @@ describe('isOmModelExecutionFailure', () => {
   it('rejects aborts, unclassified failures, and cyclic wrappers', () => {
     expect(isOmModelExecutionFailure(new DOMException('cancelled', 'AbortError'))).toBe(false);
     expect(isOmModelExecutionFailure(new Error('schema validation failed'))).toBe(false);
+    expect(
+      isOmModelExecutionFailure(Object.assign(new Error('Tool execution failed'), { name: 'ToolExecutionError' })),
+    ).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('Observer output failed validation', { cause: { issues: [] } }))).toBe(
+      false,
+    );
 
     const cyclic: { cause?: unknown } = {};
     cyclic.cause = cyclic;
