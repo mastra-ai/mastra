@@ -38,6 +38,7 @@
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
 import {
+  AGENT_STREAM_TOPIC,
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
@@ -658,6 +659,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     return _cachingPubsub;
   }
 
+  async function getPubsubOffset(runId: string): Promise<number> {
+    const pubsub = getPubsub() as PubSub & {
+      getHistory?: (topic: string) => Promise<unknown[]>;
+    };
+    if (typeof pubsub.getHistory !== 'function') return 0;
+    try {
+      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+      return Array.isArray(history) ? history.length : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   // Route workflow event publishes through a CachingPubSub backed by the same cache
   // as the agent's pubsub. Each InngestWorkflow function (including nested ones)
   // passes its own workflow-local InngestPubSub as `defaultPubsub`, which we wrap.
@@ -1003,6 +1017,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      const existingRegistryEntry = globalRunRegistry.get(runId);
+      const priorExecution = existingRegistryEntry?.workflowExecution;
+
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
       // co-located) can react. The previous run's controller is no longer
@@ -1025,7 +1042,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // entry is in memory — without this, the abort controller would be
       // silently dropped and the durable LLM step (when co-located) would
       // have nothing to react to.
-      let existingEntry = globalRunRegistry.get(runId);
+      let existingEntry = existingRegistryEntry;
       if (!existingEntry) {
         existingEntry = {
           // Minimal placeholder fields. The durable LLM step recreates tools
@@ -1051,6 +1068,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         globalRunRegistry.delete(runId);
       };
 
+      // Settle the prior segment before taking its event offset. Otherwise a late
+      // suspension event can be replayed into the new segment and close it early.
+      await priorExecution?.catch(() => {
+        /* errors already handled by the prior segment */
+      });
+      const resumeOffset = await getPubsubOffset(runId);
+
       // Re-subscribe to the stream
       const {
         output,
@@ -1059,6 +1083,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
+        offset: resumeOffset,
         messageId: crypto.randomUUID(),
         model: {
           modelId: undefined,
