@@ -126,7 +126,7 @@ await observability!.listFeedback({
 
 ## Delete feedback
 
-Use `deleteFeedback()` to delete feedback records by id. This is useful when a comment contains sensitive data. Each request accepts at most 1,000 `feedbackIds`, and deletion is idempotent. The optional `organizationId` field filters by organization, and the optional `resourceId` field filters by resource. You can supply either filter independently or use both together. In Studio, each comment on a trace or span **Feedback** tab has a delete action. Deleting a trace with `deleteTraces()` also deletes the feedback anchored to it. See [Deleting traces](/reference/client-js/observability#deleting-traces).
+Use `deleteFeedback()` to delete feedback records by id. This is useful when a comment contains sensitive data. Each request accepts at most 1,000 `feedbackIds`, and deletion is idempotent. The optional `organizationId` field filters by organization, and the optional `resourceId` field filters by resource. You can supply either filter independently or use both together. In Studio, each comment on a trace or span **Feedback** tab has a delete action. Deleting a trace with `deleteTraces()` also deletes the feedback linked to it. See [Deleting traces](/reference/client-js/observability#deleting-traces).
 
 ```typescript
 await observability!.deleteFeedback({

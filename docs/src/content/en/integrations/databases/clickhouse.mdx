@@ -285,7 +285,7 @@ Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `Shar
 
 ### Observability domain options
 
-`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`). `ObservabilityStorageClickhouseVNext` also accepts `retention`, the per-signal TTL in days described in [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl), and `traceQuery`, the execution limits for advanced trace queries.
+`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`). `ObservabilityStorageClickhouseVNext` also accepts `retention`, the per-signal TTL in days described in [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl), and `traceQuery`, the execution limits for [advanced trace queries](/reference/observability/tracing/trace-query).
 
 ## Hosting options
 

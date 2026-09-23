@@ -288,7 +288,7 @@ You can also cancel a long-running prune with an `AbortSignal`: the loop stops b
 
 ClickHouse observability storage uses native table TTLs instead of `prune()`. Configure retention as days per signal. `init()` applies the TTLs to new and existing tables and skips `ALTER TABLE` statements when the configured TTL is already present.
 
-Signals with no value, or a value of zero or less, get no TTL. When you remove a signal from `retention`, the next `init()` or `applyRetention()` removes that table's TTL.
+Omitted signals, and signals set to zero or less, get no TTL. When you remove a signal from `retention`, the next `init()` or `applyRetention()` removes that table's TTL.
 
 For deployments that need to update TTL configuration without running the full initialization path, call `applyRetention()` on the vNext observability store:
 

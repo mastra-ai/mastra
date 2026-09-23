@@ -400,7 +400,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Delete an experiment
 
-Both delete routes remove the experiment and its result records when deletion succeeds. When storage supports observability and trace deletion, Mastra first removes the traces produced by the experiment, together with their spans and trace-linked signals, and then removes the experiment.
+Both delete routes remove the experiment and its result records. When storage supports observability and trace deletion, Mastra deletes the traces produced by the experiment, with their spans and trace-linked signals, before it removes the experiment.
 
 Use the dataset-scoped route when you know the owning dataset:
 
@@ -422,7 +422,7 @@ A successful deletion returns `{ "success": true }`. The top-level route returns
 
 ### Purge a dataset item
 
-`DELETE /api/datasets/:datasetId/items/:itemId/purge` permanently scrubs the item's stored content from every historical row, deletion tombstone, and linked experiment result. It doesn't create a new dataset version and can't be undone. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete purge behavior.
+`DELETE /api/datasets/:datasetId/items/:itemId/purge` permanently scrubs the item's stored content from every historical version, deletion tombstone, and linked experiment result. It doesn't create a new dataset version and can't be undone. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete purge behavior.
 
 ```bash
 curl -X DELETE http://localhost:4111/api/datasets/dataset-id/items/item-id/purge

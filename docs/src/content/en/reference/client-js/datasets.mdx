@@ -279,7 +279,7 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## deleteDatasetExperiment()
 
-Deletes an experiment through its dataset. The server deletes the experiment's observability traces, including their spans and trace-linked signals, and then deletes the experiment and its result records. Unsupported storage leaves the traces in place and causes the server to log a warning. If trace deletion fails for any other reason, the promise rejects and the experiment and result records are preserved, although some traces may already have been removed.
+Deletes an experiment through its dataset. The server deletes the experiment's observability traces, including their spans and trace-linked signals, and then deletes the experiment and its result records. Unsupported storage leaves the traces in place, and the server logs a warning. If trace deletion fails for any other reason, the promise rejects and Mastra keeps the experiment and its result records, although some traces may already have been removed.
 
 ```typescript
 await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
@@ -319,7 +319,7 @@ Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment ass
 
 ## deleteExperiment()
 
-Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's observability traces and then deletes the experiment and its result records. Unsupported storage leaves the traces in place and causes the server to log a warning. If trace deletion fails for any other reason, the promise rejects and the experiment and result records are preserved, although some traces may already have been removed.
+Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's observability traces and then deletes the experiment and its result records. Unsupported storage leaves the traces in place, and the server logs a warning. If trace deletion fails for any other reason, the promise rejects and Mastra keeps the experiment and its result records, although some traces may already have been removed.
 
 ```typescript
 await client.deleteExperiment('experiment-id', {
