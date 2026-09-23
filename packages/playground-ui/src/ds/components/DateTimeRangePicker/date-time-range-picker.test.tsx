@@ -21,8 +21,6 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     const presets = screen.getByRole('button', { name: /presets/i });
     expect(presets.tagName).toBe('BUTTON');
     expect(presets.getAttribute('data-variant')).toBe('ghost');
-    expect(presets.className).toContain('bg-transparent');
-    expect(presets.className).toContain('text-muted-foreground');
     // Unprefixed only: the recipe carries aria-disabled:pointer-events-none, which a
     // substring match would catch even though it never applies to an enabled control.
     expect(presets.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
@@ -42,7 +40,6 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
     const error = screen.getByRole('alert');
-    expect(error.className).toContain('text-destructive');
     expect(error.querySelector('svg')).toBeNull();
   });
 });

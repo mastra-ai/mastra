@@ -4,14 +4,16 @@ import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/t
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import {
   emptyTraceQueryFields,
   traceQueryFieldsWithRegion,
+  traceQueryFieldsWithNestedTenant,
   traceQueryPage,
   traceQueryRegionValues,
   traceQuerySpanModelValues,
+  traceQueryPageWithThreadAndEnvironment,
 } from './fixtures/trace-query';
 import {
   branchList,
@@ -117,7 +119,7 @@ beforeEach(() => {
   });
   window.localStorage.setItem(
     TRACE_COLUMN_STORAGE_KEY,
-    serializeTraceColumnPreferences({ visibleColumns: ['inputTokens'], metadataKeys: [] }),
+    serializeTraceColumnPreferences({ visibleColumns: ['inputTokens'], customColumns: [], metadataKeys: [] }),
   );
   onBreakdownRequest.mockClear();
 });
@@ -178,7 +180,7 @@ describe('Traces page usage columns', () => {
     it('does not request or show usage in the side panel when usage columns are hidden', async () => {
       window.localStorage.setItem(
         TRACE_COLUMN_STORAGE_KEY,
-        serializeTraceColumnPreferences({ visibleColumns: [], metadataKeys: [] }),
+        serializeTraceColumnPreferences({ visibleColumns: [], customColumns: [], metadataKeys: [] }),
       );
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
@@ -512,6 +514,153 @@ describe('Traces side panel Scores view', () => {
   });
 });
 
+describe('Traces page columns menu', () => {
+  // jsdom has no layout, so the list virtualizer sees a zero-height scroll container and
+  // renders no rows. Report a fixed viewport so rows (and their cells) materialize, and
+  // stub the Web Animations API that Base UI menus call on close.
+  let layoutStubs: { rect: ReturnType<typeof vi.spyOn>; resizeObserver: typeof ResizeObserver };
+  beforeEach(() => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class LayoutResizeObserver {
+      callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+      observe(target: Element) {
+        this.callback(
+          [
+            {
+              target,
+              contentRect: new DOMRect(0, 0, 800, 600),
+              borderBoxSize: [{ inlineSize: 800, blockSize: 600 }],
+              contentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
+              devicePixelContentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
+            },
+          ],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = LayoutResizeObserver as unknown as typeof ResizeObserver;
+    layoutStubs = {
+      rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+      resizeObserver: originalResizeObserver,
+    };
+    Element.prototype.getAnimations ??= () => [];
+  });
+  afterEach(() => {
+    layoutStubs.rect.mockRestore();
+    globalThis.ResizeObserver = layoutStubs.resizeObserver;
+  });
+
+  describe('when the columns menu enables Environment', () => {
+    it('shows the header with each trace environment and keeps it after a reload', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
+          HttpResponse.json(traceQueryPageWithThreadAndEnvironment),
+        ),
+      );
+
+      const first = renderPage();
+      await waitFor(() => expect(first.queryClient.isFetching()).toBe(0));
+      expect(screen.queryByText('Environment')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Environment' }));
+
+      await waitFor(() => expect(screen.getByText('production')).toBeTruthy());
+      first.unmount();
+
+      const second = renderPage();
+      await waitFor(() => expect(second.queryClient.isFetching()).toBe(0));
+      expect(screen.getByText('Environment')).toBeTruthy();
+      expect(screen.getByText('production')).toBeTruthy();
+    });
+  });
+
+  describe('when a Thread ID custom column offers to filter by a listed value', () => {
+    it('adds a Thread ID chip and sends the thread predicate in the next query', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      const requestBodies: unknown[] = [];
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          requestBodies.push(await request.json());
+          return HttpResponse.json(traceQueryPageWithThreadAndEnvironment);
+        }),
+      );
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Thread ID' }));
+      await waitFor(() => expect(screen.getByText('thread-42')).toBeTruthy());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Thread ID' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'thread-42' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterThreadId=thread-42'));
+      const chips = [...getFilterChips()];
+      expect(
+        chips.some(chip => chip.textContent?.includes('Thread ID') && chip.textContent.includes('thread-42')),
+      ).toBe(true);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(JSON.stringify(requestBodies.at(-1))).toContain(
+        JSON.stringify({ op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-42' } }),
+      );
+    });
+  });
+
+  describe('when the fields endpoint reports a region metadata key', () => {
+    it('offers region in the metadata column picker and adds it as a column', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithRegion),
+        ),
+      );
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Metadata key' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'region' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+
+      await waitFor(() => expect(screen.getByText('region')).toBeTruthy());
+      const stored = localStorage.getItem(TRACE_COLUMN_STORAGE_KEY);
+      expect(stored).not.toBeNull();
+      expect(JSON.parse(stored ?? '{}').metadataKeys).toEqual(['region']);
+    });
+  });
+
+  describe('when the fields endpoint reports nested metadata paths', () => {
+    it('collapses them to a single top-level key option', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithNestedTenant),
+        ),
+      );
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Metadata key' }));
+
+      expect(await screen.findAllByRole('option', { name: 'tenant' })).toHaveLength(1);
+      expect(screen.queryByRole('option', { name: 'tenant.id' })).toBeNull();
+    });
+  });
+});
+
 describe('Traces page filter bar', () => {
   describe('when the page loads without any filter', () => {
     it('renders a non-removable Time chip defaulting to Last 7 days', async () => {
@@ -719,6 +868,70 @@ describe('Traces page filter bar', () => {
           ],
         }),
       );
+    });
+  });
+
+  describe('when the URL carries an advanced filterGroup', () => {
+    const group = {
+      id: 'g1',
+      logic: 'or',
+      nodes: [
+        { id: 'n1', fieldId: 'status', value: 'error' },
+        { id: 'n2', fieldId: 'spans.model', value: 'gpt-4o' },
+      ],
+    };
+    const entry = `/traces?filterTraceId=trace-a&filterGroup=${encodeURIComponent(JSON.stringify(group))}`;
+    const expectedOr = {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+        { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-4o' } } } },
+      ],
+    };
+
+    it('renders the flat chip and one "Advanced filter" chip', async () => {
+      await renderCapturingQuery(entry);
+
+      expect(getFilterChips()[1]?.textContent).toContain('trace-a');
+      expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+    });
+
+    it('sends the group as an or predicate next to the flat filter', async () => {
+      const onQuery = await renderCapturingQuery(entry);
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(JSON.stringify(expectedOr));
+      expect(body).toContain(JSON.stringify({ op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } }));
+    });
+
+    it('drops filterGroup from the URL when the advanced chip is removed', async () => {
+      await renderCapturingQuery(entry);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove advanced filter' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterGroup'));
+      expect(screen.getByTestId('location').textContent).toContain('filterTraceId=trace-a');
+    });
+
+    it('keeps the agent scope alongside the group on the agent traces page', async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry.replace('/traces', '/agents/agent-a/traces'), {
+        scopedEntityId: 'agent-a',
+        scopedEntityType: EntityType.AGENT,
+      });
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(JSON.stringify(expectedOr));
+      expect(body).toContain('"literal":"agent-a"');
+      expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
     });
   });
 
@@ -1002,14 +1215,14 @@ describe('Traces page sorting', () => {
     );
   };
 
-  describe('when traces are sorted from the Created column', () => {
+  describe('when traces are sorted from the Start column', () => {
     it('asks the server for newest-first by default', async () => {
       captureTraceQueries();
       const { queryClient } = renderPage();
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'desc' }]);
-      expect(screen.getByRole('button', { name: 'Created, sorted descending, sort ascending' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).not.toBeNull();
     });
 
     it('asks the server for oldest-first when toggled and writes it to the URL', async () => {
@@ -1017,7 +1230,7 @@ describe('Traces page sorting', () => {
       const { queryClient } = renderPage();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByRole('button', { name: 'Created, sorted descending, sort ascending' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' }));
 
       await waitFor(() => expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]));
       expect(screen.getByTestId('location').textContent).toContain('sort=startedAt');

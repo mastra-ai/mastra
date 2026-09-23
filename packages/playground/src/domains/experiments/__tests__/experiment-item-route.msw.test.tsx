@@ -149,7 +149,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute();
 
       expect(await screen.findByText('Tokens')).toBeDefined();
-      expect(await screen.findByText('12.4K')).toBeDefined();
+      expect(await screen.findByText('12.4k')).toBeDefined();
       expect(screen.getByText('Latency (avg)')).toBeDefined();
       expect(await screen.findByText('1.9s')).toBeDefined();
 
@@ -186,8 +186,8 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByText('item-2'));
       await findResultDialog('res-2');
 
-      // 'item-2' also appears inside the open panel; the first match is the list row.
-      fireEvent.click(screen.getAllByText('item-2')[0]);
+      // The id also appears in the breadcrumb, the sr-only page heading and the open panel; target the list row.
+      fireEvent.click(screen.getAllByText('item-2').find(el => !el.closest('nav, h1, [role="dialog"]'))!);
 
       await waitFor(() => {
         expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}`);

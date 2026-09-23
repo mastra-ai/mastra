@@ -11,7 +11,7 @@ const stateClasses = {
   line: cn(
     'group-hover/separator:opacity-100',
     "group-data-[separator='hover']/separator:opacity-100",
-    "group-data-[separator='active']/separator:via-neutral6/45 group-data-[separator='active']/separator:opacity-100",
+    "group-data-[separator='active']/separator:via-foreground/45 group-data-[separator='active']/separator:opacity-100",
     'group-focus-visible/separator:via-accent1 group-focus-visible/separator:opacity-100',
   ),
   pill: cn(

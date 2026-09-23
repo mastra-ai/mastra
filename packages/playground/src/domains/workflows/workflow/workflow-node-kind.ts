@@ -7,6 +7,8 @@ export function getWorkflowCardKind(step: ResolvedWorkflowStep): WorkflowStepCar
       return 'agent';
     case 'tool-step':
       return 'tool';
+    case 'classifier-step':
+      return 'classifier';
     case 'map-step':
       return 'map';
     case 'sleep-step':

@@ -14,8 +14,7 @@ import {
 } from './dialog';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
-import { Input } from '@/ds/components/Input';
-import { Label } from '@/ds/components/Label';
+import { TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 
 function ConfirmationExample({
@@ -64,7 +63,7 @@ function ConfirmationExample({
 
   return (
     <div className="flex max-w-sm flex-col gap-4">
-      <p className="text-ui-sm text-muted-foreground">Factory confirmation preview. No data is deleted.</p>
+      <p className="text-caption text-muted-foreground">Factory confirmation preview. No data is deleted.</p>
       <Dialog variant="new" intent={intent} pending={pending} open={open} onOpenChange={setOpen}>
         <DialogTrigger render={<Button>Open dialog</Button>} />
         <DialogContent>
@@ -97,7 +96,7 @@ function ConfirmationExample({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <p role="status" className="text-ui-sm text-muted-foreground">
+      <p role="status" className="text-caption text-muted-foreground">
         {confirmed ? 'Confirmed. Preview complete.' : 'Waiting for confirmation.'}
       </p>
     </div>
@@ -118,7 +117,7 @@ const meta = {
   },
   argTypes: {
     holdSeconds: { control: { type: 'number', min: 0.1, step: 0.1 } },
-    buttonSize: { control: 'inline-radio', options: ['xs', 'sm', 'md', 'lg'] },
+    buttonSize: { control: 'inline-radio', options: ['sm', 'md', 'lg'] },
     intent: { control: 'inline-radio', options: ['default', 'destructive'] },
     confirmation: { control: 'inline-radio', options: ['click', 'hold'] },
   },
@@ -203,14 +202,18 @@ function FactoryForm() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('Design engineering');
   const [saved, setSaved] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const missingName = submitted && !name.trim();
   return (
     <div className="flex flex-col gap-4">
       <Dialog variant="new" open={open} onOpenChange={setOpen}>
         <DialogTrigger render={<Button>Rename Factory</Button>} />
         <DialogContent>
           <form
+            noValidate
             onSubmit={event => {
               event.preventDefault();
+              setSubmitted(true);
               if (name.trim()) {
                 setSaved(name.trim());
                 setOpen(false);
@@ -222,26 +225,25 @@ function FactoryForm() {
               <DialogDescription>Choose a name your team will recognize.</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="dialog-new-factory-name">Factory name</Label>
-                <Input
-                  id="dialog-new-factory-name"
-                  value={name}
-                  onChange={event => setName(event.target.value)}
-                  required
-                />
-              </div>
+              <TextFieldBlock
+                name="dialog-new-factory-name"
+                label="Factory name"
+                required
+                value={name}
+                onChange={event => setName(event.target.value)}
+                errorMsg={missingName ? 'Enter a Factory name' : undefined}
+              />
             </DialogBody>
             <DialogFooter>
               <DialogCancel>Cancel</DialogCancel>
-              <Button size="md" type="submit" variant="primary" disabled={!name.trim()}>
+              <Button size="md" type="submit" variant="primary">
                 Save name
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-      <p role="status" className="text-ui-sm text-muted-foreground">
+      <p role="status" className="text-caption text-muted-foreground">
         {saved ? `Factory renamed to ${saved}.` : 'No changes saved.'}
       </p>
     </div>

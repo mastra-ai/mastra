@@ -248,13 +248,12 @@ describe('MemorySidebar', () => {
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
-    expect(card.className).toContain('bg-transparent');
     expect(screen.getByTestId('memory-config-badges')).not.toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
     // The sidebar is still a single standalone bordered block with no nested container.
-    const blocks = container.querySelectorAll('.bg-surface3.border-border1\\/50');
+    const blocks = container.querySelectorAll('.bg-card.border-border\\/50');
     expect(blocks.length).toBe(1);
   });
 

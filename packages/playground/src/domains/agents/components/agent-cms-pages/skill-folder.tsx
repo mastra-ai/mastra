@@ -78,7 +78,7 @@ export function SkillFolder({
 
   return (
     <div className="grid h-full grid-cols-[300px_1fr]">
-      <div className="border-border1 h-full overflow-y-auto border-r p-4">
+      <div className="h-full overflow-y-auto border-r border-border p-4">
         {workspaceOptions.length > 0 && (
           <div className="flex flex-col gap-1.5 pb-4">
             <FieldBlock.Label name="skill-workspace">Workspace</FieldBlock.Label>
@@ -107,11 +107,11 @@ export function SkillFolder({
         {isFileSelected ? (
           <>
             {isImage ? (
-              <div className="bg-surface2 flex flex-1 items-center justify-center p-4">
+              <div className="flex flex-1 items-center justify-center bg-background p-4">
                 <img
                   src={selectedFileContent}
                   alt={selectedFileName}
-                  className="max-h-dropdown-max-height max-w-full rounded-md object-contain"
+                  className="max-h-dropdown max-w-full rounded-md object-contain"
                 />
               </div>
             ) : (
@@ -127,7 +127,7 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="text-muted-foreground text-ui-sm flex h-full items-center justify-center">
+          <div className="flex h-full items-center justify-center text-caption text-muted-foreground">
             Select a file to edit its content
           </div>
         )}

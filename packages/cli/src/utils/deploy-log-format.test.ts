@@ -36,6 +36,34 @@ function fakeStream(overrides: { isTTY?: boolean; columns?: number } = {}) {
   };
 }
 
+describe('deploy log window interruptions', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each([true, false])('preserves notices between continuing logs (TTY: %s)', isTTY => {
+    vi.useFakeTimers();
+    const { stream, chunks } = fakeStream({ isTTY });
+    const collect = createLogCollector();
+    const writer = createDeployLogWriter({ stream, maxLines: 2, collect });
+    writer.write('first', 'second');
+    writer.flush({ resetWindow: true });
+    stream.write('Unable to check deployment status. Retrying…\n');
+    const noticeIndex = chunks.length;
+    writer.write('third', 'fourth');
+    writer.flush();
+    expect(chunks.slice(noticeIndex).join('')).not.toContain('\x1b[');
+    writer.write('fifth');
+    writer.flush({ resetWindow: true });
+    if (isTTY) expect(chunks.at(-1)).toContain('\x1b[2A');
+    stream.write('Deployment status checks resumed.\n');
+    writer.write('sixth');
+    writer.flush();
+    expect(chunks.at(-1)).not.toContain('\x1b[');
+    expect(chunks.join('')).toContain('Retrying…\n');
+    expect(collect.entries()).toEqual(['first', 'second', 'third', 'fourth', 'fifth', 'sixth']);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe('parseDeployLogLine', () => {
   it('extracts the platform ISO timestamp prefix', () => {
     const parsed = parseDeployLogLine(`[${ISO}] Downloading artifact...`);

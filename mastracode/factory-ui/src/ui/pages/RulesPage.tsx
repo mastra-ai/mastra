@@ -23,7 +23,9 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { TIMESTAMP } from '../domains/factory/components/panel';
@@ -60,7 +62,15 @@ const STATUS_STYLE: Record<
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
-  return <FactoryPageShell>{project => <RulesContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout variant="fit" {...slots}>
+      <div className="flex min-h-0 flex-col p-4">
+        <RulesContent factoryProjectId={factory.id} />
+      </div>
+    </PageLayout>
+  );
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
@@ -88,7 +98,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="rule-decisions-heading">
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <Txt as="h2" variant="ui-sm" className="text-icon6 m-0" id="rule-decisions-heading">
+        <Txt as="h2" variant="column" className="text-foreground m-0" id="rule-decisions-heading">
           Rule decisions
         </Txt>
         <div className="w-full lg:hidden">
@@ -96,7 +106,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             value={decisionGroup}
             onValueChange={group => setSearchParams(group === 'all' ? {} : { group }, { replace: true })}
           >
-            <SelectTrigger variant="outline" size="sm" aria-label="Rule decision filter" className="w-full">
+            <SelectTrigger size="sm" aria-label="Rule decision filter" className="w-full">
               {decisionFilter?.label ?? 'All effects'}
             </SelectTrigger>
             <SelectContent>
@@ -108,14 +118,13 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             </SelectContent>
           </Select>
         </div>
-        <ButtonsGroup className="hidden lg:flex" spacing="close" role="group" aria-label="Rule decision filter">
+        <ButtonsGroup size="sm" className="hidden lg:flex" role="group" aria-label="Rule decision filter">
           {DECISION_GROUPS.map(entry => {
             const Icon = entry.icon;
             return (
               <Button
                 key={entry.key}
-                variant={decisionGroup === entry.key ? 'primary' : 'outline'}
-                size="sm"
+                variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
@@ -139,7 +148,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter className="text-icon3 size-5" aria-hidden />}
+          iconSlot={<ListFilter aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -148,7 +157,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
           actionSlot={
             hasDecisionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
+              <Button size="sm" onClick={() => setSearchParams({}, { replace: true })}>
                 Show all effects
               </Button>
             ) : undefined
@@ -225,7 +234,7 @@ function DecisionRow({
 
   return (
     <div className={cn('flex min-h-7 min-w-0 items-center gap-2 py-0.5', RAIL_ROW_BODY)}>
-      <Txt as="span" variant="ui-sm" className="text-icon6 shrink-0 truncate font-medium">
+      <Txt as="span" variant="column" className="text-foreground shrink-0 truncate">
         {decision.type}
       </Txt>
       <Badge size="xs" variant={tone} emphasis="muted" {...(live ? { indicator: 'pulse' as const } : {})}>
@@ -237,7 +246,12 @@ function DecisionRow({
         </Badge>
       ) : null}
       {decision.lastError ? (
-        <Txt as="span" variant="ui-xs" className="text-icon3 min-w-0 flex-1 truncate" title={decision.lastError}>
+        <Txt
+          as="span"
+          variant="meta"
+          className="text-muted-foreground min-w-0 flex-1 truncate"
+          title={decision.lastError}
+        >
           {decision.lastError}
         </Txt>
       ) : null}
@@ -245,7 +259,7 @@ function DecisionRow({
         {decision.status === 'failed' ? (
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             tooltip="Ask supervisor"
             aria-label={`Ask supervisor about failed ${decision.type} decision`}
             onClick={() =>
@@ -262,15 +276,15 @@ function DecisionRow({
         ) : null}
         {decision.status === 'proposed' ? (
           <>
-            <Button variant="ghost" size="xs" disabled={approving || dismissing} onClick={onDismiss}>
+            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
               {dismissing ? 'Dismissing…' : 'Dismiss'}
             </Button>
-            <Button size="xs" disabled={approving || dismissing} onClick={onApprove}>
+            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
               {approving ? 'Starting…' : 'Run'}
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button variant="outline" size="xs" disabled={retrying} onClick={onRetry}>
+          <Button size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         ) : null}

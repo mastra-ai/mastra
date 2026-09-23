@@ -47,7 +47,7 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
-import { createThreadOwnershipManager } from './agent-connections/ownership.js';
+import { createSessionThreadAdvertisement } from './agent-connections/session-advertisement.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
@@ -373,13 +373,20 @@ export function createAuthStorage() {
 
 /**
  * Resolve cloud observability credentials for the MastraPlatformExporter.
- * Priority: per-resource settings > environment variables > disabled.
+ * Priority: per-resource settings > MASTRACODE_* environment variables > undefined (no exporter).
+ *
+ * The env vars are deliberately namespaced `MASTRACODE_*`, not `MASTRA_*`: the
+ * cwd `.env` is loaded into `process.env`, so reading `MASTRA_PROJECT_ID` /
+ * `MASTRA_CLOUD_ACCESS_TOKEN` would export Mastra Code's own traces into
+ * whatever Mastra project the user happens to be working in (and crash on
+ * project ids the exporter rejects).
  */
-function resolveCloudObservabilityConfig(
+export function resolveCloudObservabilityConfig(
   settings: ReturnType<typeof loadSettings>,
   authStorage: AuthStorage,
   resourceId: string,
-): { accessToken?: string; projectId?: string } {
+  env: NodeJS.ProcessEnv = process.env,
+): { accessToken: string; projectId?: string } | undefined {
   const resourceConfig = settings.observability.resources[resourceId];
   if (resourceConfig) {
     const token = authStorage.getStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`);
@@ -387,11 +394,9 @@ function resolveCloudObservabilityConfig(
       return { accessToken: token, projectId: resourceConfig.projectId };
     }
   }
-  // Fall back to environment variables for backwards compatibility
-  return {
-    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
-    projectId: process.env.MASTRA_PROJECT_ID,
-  };
+  const accessToken = env.MASTRACODE_CLOUD_ACCESS_TOKEN?.trim();
+  if (!accessToken) return undefined;
+  return { accessToken, projectId: env.MASTRACODE_PROJECT_ID?.trim() || undefined };
 }
 
 /**
@@ -531,6 +536,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     project.resourceIdOverride = true;
   }
 
+  const cloudObservabilityConfig = resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId);
+
   // Stable session id unique to this project/resource, and a machine-bound owner
   // id. resourceId encodes root path + git identity and honors overrides, so it
   // is the right input for scoping the session to the cwd/project.
@@ -652,7 +659,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // exporter falls through to the default libsql backend and silently
           // fills the main database with gigabytes of span data.
           ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' })] : []),
-          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+          // Credentials are always passed explicitly; `resolveFromEnv: false`
+          // stops the exporter from picking up the cwd project's MASTRA_* vars.
+          new MastraPlatformExporter({ ...cloudObservabilityConfig, resolveFromEnv: false }),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -1348,68 +1357,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();
   // Thread ownership advertisement is part of experimental cross-agent
-  // communication: without it, sessions never claim or advertise their active
-  // thread to peers.
+  // communication: without it, sessions never claim or advertise their thread to
+  // peers. Every thread a session has loaded stays claimed (see
+  // `createSessionThreadAdvertisement`) so peers that saved it stay connected
+  // after the user moves to another thread.
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
-        const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
-        const threadOwnership = createThreadOwnershipManager(async threadId => {
-          const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
-          const thread = await session.thread.getById({ threadId });
-          const agent = controller.getCurrentAgent(session);
-          const claim = await agent.claimThreadOwnership({
-            threadId,
-            resourceId: session.identity.getResourceId(),
-            streamOptions: () => session.machinery.buildStreamOptions({}),
-            peer: {
-              label: project.name,
-              ...(thread?.title ? { title: thread.title } : {}),
-            },
-          });
-          const observedTitle = latestObservedTitles.get(threadId);
-          if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
-            agent.updateThreadPeerAdvertisement({
-              resourceId: session.identity.getResourceId(),
-              threadId,
-              peer: { title: observedTitle.title },
-            });
-          }
-          return claim;
+        const advertisement = createSessionThreadAdvertisement({
+          session,
+          controller,
+          projectName: project.name,
         });
-
-        const claimThreadOwnership = async (threadId: string) => {
-          try {
-            await threadOwnership.claim(threadId);
-          } catch (error) {
-            console.error(`Failed to claim cross-agent thread ownership for ${threadId}`, error);
-          }
-        };
-        const unsubscribeSession = session.subscribe(event => {
-          if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
-          else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
-          else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
-            const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
-            const revision = (latestObservedTitles.get(event.threadId)?.revision ?? 0) + 1;
-            latestObservedTitles.set(event.threadId, { revision, title });
-            controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
-              resourceId: session.identity.getResourceId(),
-              threadId: event.threadId,
-              peer: { title },
-            });
-          }
-        });
-        sessionPeerCleanup.set(session, () => {
-          unsubscribeSession();
-          threadOwnership.close();
-        });
+        sessionPeerCleanup.set(session, () => advertisement.close());
         const initialThreadId = session.thread.getId();
         if (initialThreadId) {
           // This listener blocks session creation, so bound the initial claim:
           // an unsettled PubSub subscription must not hang createSession().
           // The claim keeps settling in the background either way.
           await Promise.race([
-            claimThreadOwnership(initialThreadId),
+            advertisement.claim(initialThreadId),
             new Promise<void>(resolve => {
               const timer = setTimeout(resolve, 5_000);
               timer.unref?.();

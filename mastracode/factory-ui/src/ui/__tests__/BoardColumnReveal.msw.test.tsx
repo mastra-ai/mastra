@@ -1,5 +1,5 @@
 // A lane can hold hundreds of cards, and each one mounts a run spec, an activity read and a status pass on every poll.
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -103,7 +103,9 @@ function stubBoardEndpoints(items: object[] = workItems) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
   );
 }
 
@@ -153,8 +155,7 @@ describe('Board column reveal', () => {
     renderBoard();
     await screen.findByLabelText(`Task ${ITEM_COUNT - 1}`);
 
-    const filters = within(screen.getByLabelText('Board filters'));
-    await userEvent.setup().type(filters.getByRole('textbox', { name: 'Search cards' }), OLDEST_TITLE);
+    await userEvent.setup().type(screen.getByRole('combobox', { name: 'Add filter' }), `${OLDEST_TITLE}{Enter}`);
 
     expect(await screen.findByLabelText(OLDEST_TITLE)).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));

@@ -334,6 +334,13 @@ describe('TraceDataPanelView — the header', () => {
     expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
   });
 
+  it('shows the trace summary under the heading on the trace page too', () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} placement="trace-page" />);
+
+    expect(screen.getByLabelText('Trace status')).toBeTruthy();
+    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
+  });
+
   it('opens as a wide drawer by default and honours a caller-provided size', () => {
     render(<TraceDataPanelView {...baseProps} />);
     expect(screen.getByRole('dialog', { name: 'Trace trace-1' }).className).toContain('w-4/5');
@@ -432,17 +439,6 @@ describe('TraceDataPanelView — the body', () => {
     render(<TraceDataPanelView {...baseProps} spans={undefined} />);
 
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
-  });
-
-  it('shows the trace summary in the side panel but not on the trace page', () => {
-    const sidePanel = render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
-    expect(sidePanel.container).toBeTruthy();
-
-    cleanup();
-
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" />);
-    expect(screen.queryByLabelText(/^Started at /)).toBeNull();
   });
 });
 
@@ -615,15 +611,9 @@ describe('TraceDataPanelView — downloading the trace', () => {
 });
 
 describe('TraceDataPanelView — what the timeline shows as selected', () => {
-  /** The timeline tints the selected span's own row; nothing else carries it. */
-  const isMarked = (name: string) => {
-    let node: HTMLElement | null = screen.getByText(name);
-    while (node) {
-      if (node.classList.contains('bg-surface4')) return true;
-      node = node.parentElement;
-    }
-    return false;
-  };
+  /** The timeline marks the selected span's own row; nothing else carries it. */
+  const isMarked = (name: string) =>
+    screen.getByLabelText(`View details for span ${name}`).getAttribute('aria-selected') === 'true';
 
   it('marks the span the URL asked for', () => {
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
@@ -755,14 +745,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
 });
 
 describe('TraceDataPanelView — following the URL to another span', () => {
-  const isMarked = (name: string) => {
-    let node: HTMLElement | null = screen.getByText(name);
-    while (node) {
-      if (node.classList.contains('bg-surface4')) return true;
-      node = node.parentElement;
-    }
-    return false;
-  };
+  const isMarked = (name: string) =>
+    screen.getByLabelText(`View details for span ${name}`).getAttribute('aria-selected') === 'true';
 
   it('moves the mark when the URL names a different span', () => {
     const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="root" />);
@@ -917,7 +901,7 @@ describe('TraceDataPanelView — timeline view', () => {
     expect(onSpanSelect).toHaveBeenLastCalledWith('child');
 
     fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
-    expect(screen.getByLabelText('View details for span weather tool').className).toContain('bg-surface4');
+    expect(screen.getByLabelText('View details for span weather tool').getAttribute('aria-selected')).toBe('true');
   });
 });
 

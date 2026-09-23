@@ -154,7 +154,7 @@ export class ProcessorState<OUTPUT = undefined> {
       entityId: processor?.id,
       entityName: options.processorName,
       attributes: {
-        ...(processor ? resolveProcessorSpanAttributes(processor, 'output') : {}),
+        ...resolveProcessorSpanAttributes(processor, 'outputStream'),
         processorExecutor: 'legacy',
         processorIndex: options.processorIndex ?? 0,
       },
@@ -772,7 +772,7 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
-          ...resolveProcessorSpanAttributes(processor, 'output'),
+          ...resolveProcessorSpanAttributes(processor, 'outputResult'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },

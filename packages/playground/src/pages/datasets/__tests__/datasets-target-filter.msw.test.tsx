@@ -7,8 +7,6 @@ import DatasetsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { agents } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -58,13 +56,10 @@ const renderPage = (initialEntry: string) =>
   renderWithProviders(
     <TooltipProvider>
       <TestLinkProvider>
-        <RouteHeaderActionsProvider>
-          <RouteHeaderActionsSlot />
-          <Routes>
-            <Route path="/datasets" element={<DatasetsPage />} />
-          </Routes>
-          <LocationProbe />
-        </RouteHeaderActionsProvider>
+        <Routes>
+          <Route path="/datasets" element={<DatasetsPage />} />
+        </Routes>
+        <LocationProbe />
       </TestLinkProvider>
     </TooltipProvider>,
     { router: { initialEntries: [initialEntry] } },

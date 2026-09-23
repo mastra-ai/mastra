@@ -4,6 +4,8 @@ import {
   compareTraceQueryStrings,
   createTraceQueryObservedFieldDescriptor,
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
   getTraceQueryCanonicalFieldDescriptors,
   getTraceQueryFieldsArgsSchema,
   getTraceQueryFieldsResponseSchema,
@@ -36,6 +38,7 @@ import {
   traceQueryGroupResponseSchema,
   traceQueryPaginatedTraceResponseSchema,
   traceQueryRequestSchema,
+  traceQueryResponseSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
@@ -56,6 +59,80 @@ function parsed(request: unknown = baseRequest) {
 }
 
 const baseThreadRequest = { traces: baseRequest };
+
+describe('trace delta contract', () => {
+  it.each([
+    { mode: 'delta', page: {} },
+    { mode: 'delta', pagination: {} },
+    { mode: 'delta', group: { by: ['threadId'] } },
+    { mode: 'delta', orderBy: [{ field: 'startedAt', direction: 'desc' }] },
+    { after: 'cursor' },
+    { limit: 10 },
+    { mode: 'delta', limit: 0 },
+    { mode: 'delta', limit: 101 },
+  ])('rejects invalid pagination combinations: %j', fields => {
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, ...fields }).success).toBe(false);
+  });
+
+  it('shares the numbered-page binding with delta while permitting different batch sizes', () => {
+    const page = planTraceQuery(
+      parsed({ ...baseRequest, pagination: {}, orderBy: [{ field: 'endedAt', direction: 'asc' }] }),
+    );
+    if (page.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(page, 'pg', '42:3');
+    const delta = planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }));
+    expect(delta).toMatchObject({
+      paginationMode: 'delta',
+      limit: 10,
+      deltaCursor: { adapter: 'pg', watermark: '42:3' },
+    });
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta');
+    expect(getTraceQueryDeltaWatermark(delta, 'pg')).toBe('42:3');
+    expect(() => getTraceQueryDeltaWatermark(delta, 'duckdb')).toThrow(TraceQueryCursorError);
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after, limit: 100 }))).toMatchObject({ limit: 100 });
+  });
+
+  it('rejects malformed, keyset, predicate, time-range and authorization mismatches', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { authorizationBinding: 'tenant-a' });
+    if (plan.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(plan, 'pg', '42:3');
+    for (const fields of [
+      { after: 'garbage' },
+      { after, where: { op: 'exists', path: 'threadId' } },
+      { after, timeRange: { ...baseRequest.timeRange, to: '2026-08-31T00:00:00Z' } },
+    ]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', ...fields }), { authorizationBinding: 'tenant-a' }),
+      ).toThrow(TraceQueryCursorError);
+    }
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }), { authorizationBinding: 'tenant-b' }),
+    ).toThrow(TraceQueryCursorError);
+    const keyset = planTraceQuery(parsed());
+    if (keyset.result !== 'traces' || keyset.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    const keysetCursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      traceId: 'trace-a',
+      sortValue: '2026-08-01T00:00:00Z',
+    });
+    expect(() => planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: keysetCursor }))).toThrow(
+      TraceQueryCursorError,
+    );
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after } }))).toThrow(TraceQueryCursorError);
+  });
+
+  it('requires exactly one metadata shape and rejects thread delta', () => {
+    const delta = { traces: [], delta: { limit: 10, hasMore: false }, deltaCursor: 'cursor' };
+    expect(traceQueryResponseSchema.safeParse(delta).success).toBe(true);
+    expect(traceQueryResponseSchema.safeParse({ ...delta, page: { next: null } }).success).toBe(false);
+    expect(
+      traceQueryResponseSchema.safeParse({ ...delta, pagination: { total: 0, page: 0, perPage: 10, hasMore: false } })
+        .success,
+    ).toBe(false);
+    expect(traceQueryResponseSchema.safeParse({ traces: [], delta: delta.delta }).success).toBe(false);
+    expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, mode: 'delta' }).success).toBe(false);
+  });
+});
 
 function parsedThreads(request: unknown = baseThreadRequest) {
   return parseQueryThreadsInput(request);
@@ -853,6 +930,83 @@ describe('planTraceQuery', () => {
         ]);
         expect(JSON.stringify(error.issues)).not.toContain(field);
       }
+    }
+  });
+
+  it('carries a normalized trusted tenant scope on every plan and binds it into cursors', () => {
+    const scope = { organizationId: 'org-a', resourceId: undefined };
+    const keyset = planTraceQuery(parsed(), { scope });
+    expect(keyset.scope).toEqual({ organizationId: 'org-a' });
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 0, perPage: 10 } }), { scope }).scope).toEqual({
+      organizationId: 'org-a',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }), { scope }).scope).toEqual({
+      organizationId: 'org-a',
+    });
+    expect(planTraceQuery(parsed(), { scope: { organizationId: 'org-a', resourceId: 'project-1' } }).scope).toEqual({
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    });
+    expect(planTraceQuery(parsed()).scope).toBeUndefined();
+
+    const unscoped = planTraceQuery(parsed());
+    const project = planTraceQuery(parsed(), { scope: { organizationId: 'org-a', resourceId: 'project-1' } });
+    const orgB = planTraceQuery(parsed(), { scope: { organizationId: 'org-b' } });
+    expect(new Set([unscoped.binding, keyset.binding, project.binding, orgB.binding]).size).toBe(4);
+
+    const cursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, page: { after: cursor } }), { scope }).cursor).toEqual({
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    for (const other of [
+      undefined,
+      { organizationId: 'org-b' },
+      { organizationId: 'org-a', resourceId: 'project-1' },
+    ]) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: cursor } }), { scope: other })).toThrow(
+        expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
+
+    const numbered = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { scope });
+    if (numbered.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const deltaAfter = encodeTraceQueryDeltaCursor(numbered, 'pg', '42:3');
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: deltaAfter }), { scope })).toMatchObject({
+      paginationMode: 'delta',
+      scope: { organizationId: 'org-a' },
+    });
+    for (const other of [undefined, { organizationId: 'org-b' }]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: deltaAfter }), { scope: other }),
+      ).toThrow(TraceQueryCursorError);
+    }
+  });
+
+  it('rejects tenant scope fields as predicates in every predicate context', () => {
+    const contexts: Array<(field: string) => TraceQueryPredicate> = [
+      field => ({ op: 'eq', left: { path: field }, right: { literal: 'org-1' } }),
+      field => ({ spans: { some: { op: 'exists', path: field } } }),
+      field => ({ scores: { some: { op: 'exists', path: field } } }),
+      field => ({ feedback: { some: { op: 'exists', path: field } } }),
+    ];
+    for (const field of ['organizationId', 'projectId']) {
+      for (const where of contexts) {
+        const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where: where(field) })));
+        expect(error.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
+      }
+      const threads = validationError(() =>
+        planThreadQuery(
+          parsedThreads({
+            traces: { timeRange: baseRequest.timeRange, where: contexts[0]!(field) },
+          }),
+        ),
+      );
+      expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
     }
   });
 

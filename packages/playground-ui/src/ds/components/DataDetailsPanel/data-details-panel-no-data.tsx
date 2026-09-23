@@ -3,5 +3,5 @@ export interface DataDetailsPanelNoDataProps {
 }
 
 export function DataDetailsPanelNoData({ children }: DataDetailsPanelNoDataProps) {
-  return <p className="text-ui-sm text-placeholder px-4 py-6">{children ?? 'No data found.'}</p>;
+  return <p className="px-4 py-6 text-caption text-placeholder">{children ?? 'No data found.'}</p>;
 }

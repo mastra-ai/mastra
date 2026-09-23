@@ -31,6 +31,14 @@ export {
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { type LastMessageOnlyOption } from './message-selection';
 export { type ModelErrorStrategy } from './model-error-strategy';
+export {
+  ClassifierProcessor,
+  type ClassifierOnResult,
+  type ClassifierProcessorInstanceOptions,
+  type ClassifierProcessorOptions,
+  type ClassifierProcessorRegisteredOptions,
+  type ClassifierResultContext,
+} from './classifier';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,

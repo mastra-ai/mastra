@@ -743,6 +743,7 @@ describe('UnixSocketPubSub', () => {
         await expect(pubsub.subscribe('topic-a', vi.fn())).rejects.toThrow('broker connection closed');
         await waitFor(() => expect(serverSockets[0]?.destroyed).toBe(true));
       } finally {
+        for (const socket of serverSockets) socket.destroy();
         await new Promise<void>(resolve => server.close(() => resolve()));
       }
     });

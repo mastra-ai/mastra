@@ -114,7 +114,7 @@ export function ScorersPage() {
             <SubSectionHeader title="Available Scorers" icon={<JudgeIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>
@@ -134,7 +134,7 @@ export function ScorersPage() {
 
                 return (
                   <div key={scorer.value} className="flex flex-col">
-                    <Entity className="bg-surface2">
+                    <Entity className="bg-background">
                       <EntityContent>
                         <EntityName>{scorer.label}</EntityName>
                         <EntityDescription>
@@ -142,8 +142,8 @@ export function ScorersPage() {
                             type="text"
                             disabled={isDisabled}
                             className={cn(
-                              'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                              !isDisabled && 'border-border1 border-dashed ',
+                              'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                              !isDisabled && 'border-dashed border-border',
                             )}
                             value={
                               isSelected
@@ -229,13 +229,13 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-foreground cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="cursor-pointer text-foreground">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-foreground cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="cursor-pointer text-foreground">
               Ratio (percentage)
             </Label>
           </div>
