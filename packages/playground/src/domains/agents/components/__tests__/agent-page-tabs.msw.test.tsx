@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -96,14 +96,14 @@ afterEach(() => {
 
 describe('AgentLayout tool tabs', () => {
   describe('when the editor is unavailable', () => {
-    it('keeps the Editor tab visible but disabled', async () => {
+    it('replaces the Editor tab with a disabled icon button', async () => {
       server.use(...commonHandlers());
       const { queryClient } = renderLayout();
-      const editor = await screen.findByRole('tab', { name: 'Editor' });
 
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Editor']);
-      expect(editor.getAttribute('aria-disabled')).toBe('true');
+      const editor = screen.getByRole('button', { name: 'Editor' });
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat']);
+      expect(editor.hasAttribute('disabled')).toBe(true);
       fireEvent.click(editor);
       expect(navigateSpy).not.toHaveBeenCalled();
     });
@@ -111,10 +111,23 @@ describe('AgentLayout tool tabs', () => {
     it('explains how to enable the Editor when focused', async () => {
       server.use(...commonHandlers());
       renderLayout();
-      const editor = await screen.findByRole('tab', { name: 'Editor' });
+      const editor = await screen.findByRole('button', { name: 'Editor' });
       if (editor.parentElement) fireEvent.focus(editor.parentElement);
 
-      expect((await screen.findByRole('tooltip')).textContent).toContain('Add @mastra/editor');
+      const tooltip = await screen.findByRole('tooltip');
+      expect(within(tooltip).getByText('Editor')).not.toBeNull();
+      expect(tooltip.textContent).toContain('Add @mastra/editor');
+    });
+  });
+
+  describe('when the editor is configured but observability is not', () => {
+    it('shows Editor as a tab and Traces as a disabled button', async () => {
+      server.use(...commonHandlers({ ...enabledPackages, observabilityEnabled: false }));
+      const { queryClient } = renderLayout();
+
+      await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Editor']);
+      expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
     });
   });
 
@@ -134,10 +147,7 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout();
 
-      const editor = await screen.findByRole('tab', { name: 'Editor' });
-      await waitFor(() =>
-        expect(screen.getByRole('tab', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
-      );
+      await screen.findByRole('tab', { name: 'Editor' });
       fireEvent.click(screen.getByRole('tab', { name: 'Editor' }));
 
       expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/editor');
@@ -164,7 +174,7 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Traces')).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Traces' })).not.toBeNull();
     expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
     // Overview is now a side panel toggled from the header, not a tab.
     expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
@@ -182,7 +192,7 @@ describe('AgentLayout tool tabs', () => {
 
     const chatTab = await screen.findByRole('tab', { name: 'Chat' });
     expect(chatTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {

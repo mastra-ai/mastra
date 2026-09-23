@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -78,13 +78,16 @@ afterEach(() => {
 
 describe('WorkflowPageTabs', () => {
   describe('when the layout renders on the traces route', () => {
-    it('renders Graph, Traces and Schedules tabs with Traces selected', async () => {
+    it('keeps Graph and Traces as tabs when Schedules is unavailable', async () => {
       server.use(...commonHandlers());
-      renderLayout(`/workflows/${WORKFLOW_ID}/traces`);
+      const { queryClient } = renderLayout(`/workflows/${WORKFLOW_ID}/traces`);
 
       const traces = await screen.findByRole('tab', { name: 'Traces' });
-
-      expect(tabNames()).toEqual(['Graph', 'Traces', 'Schedules']);
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
+      );
+      expect(tabNames()).toEqual(['Graph', 'Traces']);
+      expect(screen.getByRole('button', { name: 'Schedules' }).hasAttribute('disabled')).toBe(true);
       expect(traces.getAttribute('aria-selected')).toBe('true');
       expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('false');
     });
@@ -92,7 +95,7 @@ describe('WorkflowPageTabs', () => {
 
   describe('when the layout renders on the schedules route', () => {
     it('selects the Schedules tab', async () => {
-      server.use(...commonHandlers());
+      server.use(...commonHandlers({ schedules: twoSchedules }));
       renderLayout(`/workflows/${WORKFLOW_ID}/schedules`);
 
       const schedules = await screen.findByRole('tab', { name: 'Schedules' });
@@ -112,7 +115,7 @@ describe('WorkflowPageTabs', () => {
   });
 
   describe('when the workflow has no schedules', () => {
-    it('keeps the Schedules tab visible but disabled', async () => {
+    it('replaces the Schedules tab with a disabled icon button', async () => {
       server.use(...commonHandlers());
       const { queryClient } = renderLayout();
 
@@ -120,8 +123,9 @@ describe('WorkflowPageTabs', () => {
       await waitFor(() =>
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
-      const disabledSchedules = screen.getByRole('tab', { name: 'Schedules' });
-      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      const disabledSchedules = screen.getByRole('button', { name: 'Schedules' });
+      expect(screen.queryByRole('tab', { name: 'Schedules' })).toBeNull();
+      expect(disabledSchedules.hasAttribute('disabled')).toBe(true);
       fireEvent.click(disabledSchedules);
       expect(navigateSpy).not.toHaveBeenCalled();
     });
@@ -134,10 +138,12 @@ describe('WorkflowPageTabs', () => {
       await waitFor(() =>
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
-      const disabledSchedules = screen.getByRole('tab', { name: 'Schedules' });
-      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      const disabledSchedules = screen.getByRole('button', { name: 'Schedules' });
+      expect(disabledSchedules.hasAttribute('disabled')).toBe(true);
       if (disabledSchedules.parentElement) fireEvent.focus(disabledSchedules.parentElement);
-      expect((await screen.findByRole('tooltip')).textContent).toContain('Configure a schedule');
+      const tooltip = await screen.findByRole('tooltip');
+      expect(within(tooltip).getByText('Schedules')).not.toBeNull();
+      expect(tooltip.textContent).toContain('Configure a schedule');
     });
   });
 
@@ -176,15 +182,22 @@ describe('WorkflowPageTabs', () => {
   });
 
   describe('when observability is not installed', () => {
-    it('disables the Traces tab', async () => {
+    it('shows a disabled Traces icon button instead of a tab', async () => {
       server.use(...commonHandlers({ packages: packagesWithoutObservability }));
       renderLayout(`/workflows/${WORKFLOW_ID}/schedules`);
 
-      const traces = await screen.findByRole('tab', { name: 'Traces' });
+      const traces = await screen.findByRole('button', { name: 'Traces' });
+      expect(traces.hasAttribute('disabled')).toBe(true);
+      expect(screen.queryByRole('tab', { name: 'Traces' })).toBeNull();
+    });
 
-      await waitFor(() =>
-        expect(traces.hasAttribute('disabled') || traces.getAttribute('aria-disabled') === 'true').toBe(true),
-      );
+    it('keeps Schedules in the tab list when Traces is unavailable', async () => {
+      server.use(...commonHandlers({ packages: packagesWithoutObservability, schedules: twoSchedules }));
+      renderLayout();
+
+      await screen.findByRole('tab', { name: 'Schedules (2)' });
+      expect(tabNames()).toEqual(['Graph', 'Schedules (2)']);
+      expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
     });
   });
 
