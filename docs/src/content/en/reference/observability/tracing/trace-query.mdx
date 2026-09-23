@@ -487,7 +487,7 @@ const manualReview = {
 | `exists` | The trace has at least one tag |
 | `notExists` | The trace has no tags |
 
-Tags compare exactly and case-sensitively as whole strings. `value` must be one non-empty string. Combine several `includes` predicates with `and` or `or` to require or allow multiple tags. A trace with no recorded tags and a trace with an empty tag list behave the same: both satisfy `notExists`, neither satisfies `includes`, `notIncludes`, or `exists`. Use `{ op: 'not', arg: { op: 'includes', ... } }` when untagged traces should also match.
+Tags compare exactly and case-sensitively as whole strings. `value` must be one string with at least one non-whitespace character. Combine several `includes` predicates with `and` or `or` to require or allow multiple tags. A trace with no recorded tags and a trace with an empty tag list behave the same: both satisfy `notExists`, neither satisfies `includes`, `notIncludes`, or `exists`. Use `{ op: 'not', arg: { op: 'includes', ... } }` when untagged traces should also match.
 
 `tags` is available in trace predicates only, including those inside `traces.some` or `traces.none`. `in`, `notIn`, and the comparison operators are rejected for `tags`. Value discovery for `tags` returns each observed tag with the number of qualifying traces that carry it.
 

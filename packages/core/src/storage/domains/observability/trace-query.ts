@@ -39,6 +39,10 @@ const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(v
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
+const collectionMemberSchema = literalStringSchema.refine(
+  value => value.trim().length > 0,
+  'Collection predicates require a non-empty string value',
+);
 const timestampLiteralSchema = z.string().datetime({ offset: true });
 const predicatePathSchema = z
   .string()
@@ -67,7 +71,7 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
     z
-      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: literalStringSchema })
+      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
     z
       .object({
@@ -97,7 +101,7 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
     z
-      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: literalStringSchema })
+      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
     z
       .object({
@@ -513,7 +517,6 @@ const arrayField = (): FieldRule => ({
   valueKind: 'array',
   operators: TRACE_QUERY_ARRAY_OPERATORS,
   valueSuggestions: true,
-  nonEmpty: true,
 });
 
 export const TRACE_QUERY_FIELD_REGISTRY = {
@@ -1409,16 +1412,12 @@ function planPredicate(
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
-    const value = normalizeLiteral(predicate.value, rule);
-    if (typeof value !== 'string') {
-      state.issues.push({
-        code: 'invalid_literal',
-        path: [...path, 'value'],
-        message: 'Collection predicates require a non-empty string value',
-      });
-      return undefined;
-    }
-    return { type: 'collection', field: field as TraceQueryPredicateField, operator: predicate.op, value };
+    return {
+      type: 'collection',
+      field: field as TraceQueryPredicateField,
+      operator: predicate.op,
+      value: predicate.value,
+    };
   }
 
   if (predicate.op === 'in' || predicate.op === 'notIn') {

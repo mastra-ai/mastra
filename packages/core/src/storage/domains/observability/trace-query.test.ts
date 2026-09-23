@@ -37,7 +37,9 @@ import {
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
   traceQueryPaginatedTraceResponseSchema,
+  traceQueryPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryScalarPredicateSchema,
   traceQueryResponseSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
@@ -1059,12 +1061,17 @@ describe('planTraceQuery', () => {
       expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
     );
 
-    const blankTag = validationError(() =>
-      planTraceQuery(parsed({ ...baseRequest, where: { op: 'includes', path: 'tags', value: '   ' } })),
-    );
-    expect(blankTag.issues).toContainEqual(
-      expect.objectContaining({ code: 'invalid_literal', path: ['where', 'value'] }),
-    );
+    for (const op of ['includes', 'notIncludes'] as const) {
+      for (const value of ['', '   ']) {
+        expect(traceQueryPredicateSchema.safeParse({ op, path: 'tags', value }).success).toBe(false);
+        expect(traceQueryScalarPredicateSchema.safeParse({ op, path: 'environment', value }).success).toBe(false);
+        const blankTag = validationError(() => parsed({ ...baseRequest, where: { op, path: 'tags', value } }));
+        expect(blankTag.issues[0]).toMatchObject({ code: 'invalid_request', path: ['where', 'value'] });
+      }
+    }
+    expect(traceQueryPredicateSchema.parse({ op: 'includes', path: 'tags', value: ' alpha ' })).toMatchObject({
+      value: ' alpha ',
+    });
 
     const spanScope = validationError(() =>
       planTraceQuery(
