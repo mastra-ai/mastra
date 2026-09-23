@@ -75,7 +75,6 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
           <div className="flex justify-end pt-2">
             <Button
               type="button"
-              variant="outline"
               className="min-h-11"
               aria-label={`Done editing item ${index + 1}`}
               onClick={() => {

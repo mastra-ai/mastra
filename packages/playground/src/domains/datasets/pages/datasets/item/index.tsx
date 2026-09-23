@@ -2,7 +2,6 @@
 
 import type { DatasetItem } from '@mastra/client-js';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
@@ -42,7 +41,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         </TextAndIcon>
       </div>
 
-      <Sections>
+      <div className="grid gap-6">
         <KeyValueList
           data={[
             {
@@ -83,7 +82,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         />
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-      </Sections>
+      </div>
     </>
   );
 }

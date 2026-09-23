@@ -11,6 +11,7 @@ import type {
   TraceQueryScoreField,
   TraceQuerySpanField,
   TraceQueryStructuredRoot,
+  TraceQueryTenantScope,
   TrustedThreadPredicate,
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -363,7 +364,25 @@ export interface CompiledDuckDBTraceQuery {
   values: unknown[];
 }
 
-function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): string[] {
+function compileDuckDBTraceScope(
+  relatedCollections: Set<RelatedCollection>,
+  scope: TraceQueryTenantScope | undefined,
+): { ctes: string[]; values: unknown[] } {
+  // Rows with a NULL organizationId never match a scope: `NULL = ?` is not true.
+  const tenantConditions = (alias: string): string[] =>
+    scope
+      ? [`${alias}.organizationId = ?`, ...(scope.resourceId === undefined ? [] : [`${alias}.resourceId = ?`])]
+      : [];
+  const tenantValues = scope
+    ? scope.resourceId === undefined
+      ? [scope.organizationId]
+      : [scope.organizationId, scope.resourceId]
+    : [];
+  const tenantWhere = (alias: string): string => {
+    const conditions = tenantConditions(alias);
+    return conditions.length ? `\n      WHERE ${conditions.join(' AND ')}` : '';
+  };
+  const values: unknown[] = [...tenantValues];
   const ctes = [
     `root_events AS (
       SELECT
@@ -386,9 +405,12 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
     `root_scope AS (
       SELECT *
       FROM current_roots r
-      WHERE r.endedAt IS NOT NULL
-        AND r.startedAt >= CAST(? AS TIMESTAMP)
-        AND r.startedAt < CAST(? AS TIMESTAMP)
+      WHERE ${[
+        'r.endedAt IS NOT NULL',
+        'r.startedAt >= CAST(? AS TIMESTAMP)',
+        'r.startedAt < CAST(? AS TIMESTAMP)',
+        ...tenantConditions('r'),
+      ].join('\n        AND ')}
     )`,
   ];
 
@@ -405,7 +427,7 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
           ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
         ) AS currentRank
       FROM span_events e
-      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+      INNER JOIN root_scope roots ON roots.traceId = e.traceId${tenantWhere('e')}
     ),
     current_spans AS (
       SELECT
@@ -432,29 +454,34 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
       FROM current_span_rows
       WHERE currentRank = 1
     )`);
+    values.push(...tenantValues);
   }
 
   if (relatedCollections.has('scores')) {
     ctes.push(`current_scores AS (
       SELECT s.*
       FROM score_events s
-      INNER JOIN root_scope roots ON roots.traceId = s.traceId
+      INNER JOIN root_scope roots ON roots.traceId = s.traceId${tenantWhere('s')}
     )`);
+    values.push(...tenantValues);
   }
 
   if (relatedCollections.has('feedback')) {
     ctes.push(`current_feedback AS (
       SELECT f.*
       FROM feedback_events f
-      INNER JOIN root_scope roots ON roots.traceId = f.traceId
+      INNER JOIN root_scope roots ON roots.traceId = f.traceId${tenantWhere('f')}
     )`);
+    values.push(...tenantValues);
   }
 
-  return ctes;
+  return { ctes, values };
 }
 
 export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const relatedCollections = collectRelatedCollections(plan.where);
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   const conditions = [
     `r.endedAt IS NOT NULL`,
     `r.startedAt >= CAST(? AS TIMESTAMP)`,
@@ -466,9 +493,6 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
     conditions.push(`(${predicate.sql})`);
     values.push(...predicate.values);
   }
-
-  const relatedCollections = collectRelatedCollections(plan.where);
-  const ctes = compileDuckDBTraceScope(relatedCollections);
 
   ctes.push(`candidates AS (
     SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
@@ -561,10 +585,10 @@ LIMIT ?`,
 }
 
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to];
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
-  const ctes = compileDuckDBTraceScope(relatedCollections);
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
+  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to, ...scopeValues];
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -661,7 +685,8 @@ export function compileDuckDBTraceQueryObservedFields(
 ): CompiledDuckDBTraceQuery {
   const roots = structuredDiscoveryRoots(plan);
   if (roots.length === 0) throw new Error('Unsupported structured discovery scope');
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   const search = plan.search ? `AND strpos(lower(array_to_string(segments, '.')), lower(?)) > 0` : '';
@@ -672,7 +697,7 @@ export function compileDuckDBTraceQueryObservedFields(
     )
     .join('\n  UNION ALL\n  ');
   return {
-    sql: `WITH RECURSIVE ${compileDuckDBTraceScope(discoveryCollections(plan.predicateScope)).join(',\n  ')}, structured_tree AS (
+    sql: `WITH RECURSIVE ${ctes.join(',\n  ')}, structured_tree AS (
   ${seeds}
   UNION ALL
   SELECT list_append(segments, entry.key), entry.value, requires_exact OR strpos(entry.key, '.') > 0
@@ -709,8 +734,8 @@ LIMIT ?`,
 }
 
 export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
-  const ctes = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope));
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   let fieldSql: string;
   let source = discoverySource(plan.predicateScope);
   if (Array.isArray(plan.path)) {

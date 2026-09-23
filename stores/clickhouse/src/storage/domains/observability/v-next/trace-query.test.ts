@@ -429,6 +429,40 @@ describe('ClickHouse advanced trace query', () => {
     });
   });
 
+  it('scopes root_scope and related CTEs to the tenant with named parameters', () => {
+    const request = parseTraceQueryRequest({
+      timeRange: TIME_RANGE,
+      where: { scores: { some: { op: 'exists', path: 'score' } } },
+    });
+    const compiled = compileClickHouseTraceQuery(
+      planTraceQuery(request, { scope: { organizationId: 'org-1', resourceId: 'res-1' } }),
+    );
+
+    // The related-scores CTE wraps a FINAL subquery, so check the tenant condition once for
+    // root_scope and once for current_scores by position rather than by CTE boundary.
+    const rootStart = compiled.query.indexOf('root_scope AS (');
+    const scoresStart = compiled.query.indexOf('current_scores AS (');
+    expect(rootStart).toBeGreaterThan(-1);
+    expect(scoresStart).toBeGreaterThan(rootStart);
+    const rootScope = compiled.query.slice(rootStart, scoresStart);
+    const scores = compiled.query.slice(scoresStart);
+    for (const cte of [rootScope, scores]) {
+      expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
+      expect(cte).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
+    }
+    expect(compiled.query).not.toContain('org-1');
+    expect(Object.values(compiled.query_params)).toEqual(expect.arrayContaining(['org-1', 'res-1']));
+  });
+
+  it('emits no tenant conditions for an unscoped plan', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { scores: { some: { op: 'exists', path: 'score' } } } }),
+    );
+
+    expect(compiled.query).not.toContain('organizationId =');
+    expect(compiled.query).not.toContain('resourceId =');
+  });
+
   it('deduplicates completed span deliveries without relying on background merges', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({

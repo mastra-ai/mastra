@@ -8,6 +8,7 @@ import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -105,12 +106,11 @@ SelectValue.displayName = 'SelectValue';
 /**
  * A select is a form field, so it reuses the Button's size/shape recipe with
  * these looks: `default` (the Input's overlay surface — the default here too,
- * so a select sits next to an Input as the same kind of thing), `outline`
- * (bordered, transparent) and `ghost` (borderless, for dense toolbars/inline
- * pickers). The high-emphasis `primary` look is the only one intentionally NOT
+ * so a select sits next to an Input as the same kind of thing) and `ghost`
+ * (borderless, for dense toolbars/inline pickers). The high-emphasis `primary` look is the only one intentionally NOT
  * offered (a field is not a call-to-action).
  */
-export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
+export type SelectTriggerVariant = 'default' | 'ghost';
 type SelectTriggerLegacyVariant = 'primary';
 
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
@@ -138,6 +138,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         // focus, disabled) and layer only the select-specific extras.
         className={cn(
           buttonVariants({ variant: visualVariant, size }),
+          visualVariant === 'default' && fieldTriggerStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
           'justify-between text-body-sm',

@@ -1,5 +1,388 @@
 # @mastra/core
 
+## 1.70.0-alpha.0
+
+### Minor Changes
+
+- Added typed descriptions for processor span payloads and pipeline attributes. Processor spans now record their exact pipeline phase, so consumers can narrow supported payloads without guessing their shape. ([#24672](https://github.com/mastra-ai/mastra/pull/24672))
+
+  ```ts
+  import { describeSpanOutput } from '@mastra/core/observability';
+
+  const output = describeSpanOutput(span);
+  if (output?.type === 'processor' && output.value.phase === 'outputStream') {
+    output.value.data.totalChunks; // number
+  }
+  ```
+
+  Added `describeProcessorPipeline` for executor, pipeline position, hook duration, mutations, and tripwire details. Unknown attributes remain separate from the known fields, so no value is rendered twice. Spans recorded before the phase existed keep their untyped shape and fall back to JSON.
+
+  Fixed missing message-list mutation logs in workflow processor executions.
+
+- Add an optional `title` to `createTool()` so a tool call can carry a human-readable display name. Closes #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  The title is never sent to the model. It is stamped on the `tool-call-input-streaming-start` and `tool-call` stream chunks and persisted on the stored tool-invocation part, so a chat UI can label the call after a reload without a client-side name catalog.
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'get_weather_by_coordinates',
+    title: 'Weather Lookup',
+    description: 'Fetches the current weather for a latitude/longitude pair',
+    inputSchema: z.object({ lat: z.number(), lon: z.number() }),
+    execute: async ({ lat, lon }) => fetchWeather(lat, lon),
+  });
+  ```
+
+- Added a trusted tenant scope to advanced trace queries. Hosts pass `{ organizationId, resourceId? }` to `planTraceQuery`, `planThreadQuery`, and the discovery planners; the scope is carried on the trusted plan, ANDed into every root and related-signal scan by stores, and bound into keyset cursors so a cursor reused under another scope fails with `TRACE_QUERY_CURSOR_CONFLICT` before storage runs. Callers still can't name `organizationId` or `projectId` in predicates. No scope means no filter, so self-hosted behavior is unchanged. ([#24566](https://github.com/mastra-ai/mastra/pull/24566))
+
+  **Example**
+
+  ```ts
+  const plan = planTraceQuery(parseTraceQueryRequest(request), {
+    scope: { organizationId: 'org_123', resourceId: 'project_456' },
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab))
+
+- Durable agent turns now use far fewer Inngest steps, including when observability is not configured. A 20-step agent turn previously used 133–158 Inngest steps. ([#24782](https://github.com/mastra-ai/mastra/pull/24782))
+
+## 1.69.0
+
+### Minor Changes
+
+- Added classifier registration on `Mastra`. ([#24738](https://github.com/mastra-ai/mastra/pull/24738))
+
+  Classifiers can now be passed to `new Mastra({ classifiers })` and accessed with `getClassifier`, `getClassifierById`, `listClassifiers`, `addClassifier`, and `removeClassifier`. Registered classifiers evaluated without an active trace start a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
+
+  ```ts
+  const mastra = new Mastra({ classifiers: { router } });
+  const classifier = mastra.getClassifier('router');
+  ```
+
+- Added configured classifiers as typed workflow steps with fluent and dynamic graph support. Classifier steps expose complete typed answers and token usage for existing branch and conditional control flow. ([#24747](https://github.com/mastra-ai/mastra/pull/24747))
+
+  ```ts
+  workflow
+    .map({ message: { initData: true, path: 'message' } })
+    .classifier(router)
+    .branch([
+      [async ({ inputData }) => inputData.answers.route.choice === 'billing', billingStep],
+      [async ({ inputData }) => inputData.answers.route.choice === 'support', supportStep],
+    ]);
+  ```
+
+- Deprecated the `group` option on the trace-query request contract. Grouping remains functional until the next major release; use the `queryThreads` thread-query contract for new code (exposed as `queryTraceThreads()` in `@mastra/client-js`). ([#23790](https://github.com/mastra-ai/mastra/pull/23790))
+
+  **Before:**
+
+  ```ts
+  import type { TraceQueryRequest } from '@mastra/core/storage';
+
+  const request: TraceQueryRequest = { timeRange, group: { by: ['threadId'] } };
+  ```
+
+  **After:**
+
+  ```ts
+  import type { QueryThreadsInput } from '@mastra/core/storage';
+
+  const input: QueryThreadsInput = { traces: { timeRange } };
+  ```
+
+- Added `context.background.adopt()` so tools can return an acknowledgement while native background tasks track their existing operation through completion and cancellation. ([#24418](https://github.com/mastra-ai/mastra/pull/24418))
+
+  Previously, background tools had to keep `execute()` pending:
+
+  ```ts
+  execute: async (input, context) => {
+    const operation = startResearch(input, context.abortSignal);
+    return await operation.finished;
+  };
+  ```
+
+  Tools can now adopt their operation during native background execution:
+
+  ```ts
+  execute: async (input, context) => {
+    const operation = startResearch(input, context.abortSignal);
+    if (context.background) {
+      context.background.adopt({
+        completion: operation.finished,
+        cancel: reason => operation.cancel(reason),
+      });
+      return { answer: 'Research started' };
+    }
+    return await operation.finished;
+  };
+  ```
+
+  `startResearch` represents the tool's operation API. Its `finished` promise must resolve with the final tool result after cleanup, or reject on failure. Adopt once, before `execute()` returns. The handle stays in memory and cannot resume after a process restart.
+
+- Added `rootSpanName` to `tracingOptions` so each agent or workflow run can set its own root span name. Runs of the same workflow no longer all show up as `workflow run: 'my-workflow'` in trace lists. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  await run.start({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  The name applies to the root span only. Child spans keep their default names, and entity filters still match on the workflow or agent id. Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Added `ClassifierProcessor` for applying typed classifier policies to agent input, output, and streaming content. ([#24768](https://github.com/mastra-ai/mastra/pull/24768))
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { Classifier } from '@mastra/core/classifier';
+  import { ClassifierProcessor } from '@mastra/core/processors';
+
+  const safety = new Classifier({
+    id: 'safety',
+    model,
+    questions: {
+      unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+    },
+  });
+
+  const agent = new Agent({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Answer support questions.',
+    model: 'openai/gpt-5-mini',
+    inputProcessors: [
+      new ClassifierProcessor({
+        classifier: safety,
+        onResult: (answers, { abort }) => {
+          if (answers.unsafe.probability > 0.8) abort('Rejected by safety policy');
+        },
+      }),
+    ],
+  });
+  ```
+
+- Added a typed Classifier primitive for fixed-option evaluation with AI SDK evaluation models. ([#24458](https://github.com/mastra-ai/mastra/pull/24458))
+
+  ```ts
+  import { Classifier } from '@mastra/core/classifier';
+
+  const classifier = new Classifier({ id: 'router', model });
+  const result = await classifier.evaluate({
+    state: request,
+    questions: {
+      route: {
+        type: 'choice',
+        criteria: { support: 'Support request', sales: 'Sales request' },
+      },
+    },
+  });
+  ```
+
+- Added `validateSkillContent()` and exported `validateSkillMetadata()` from `@mastra/core/skills`, so apps can validate a `SKILL.md` before saving it using the same rules applied at load time. ([#24766](https://github.com/mastra-ai/mastra/pull/24766))
+
+  ```typescript
+  import { validateSkillContent } from '@mastra/core/skills';
+
+  const result = validateSkillContent({ content: skillMarkdown, directoryName: 'my-skill' });
+  if (!result.valid) console.error(result.errors);
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf))
+
+- Fixed deferred aborts for paused tool calls and tool approvals. They no longer stop a new run started after switching threads or running `/new`. ([#24743](https://github.com/mastra-ai/mastra/pull/24743))
+
+- `ClassifierProcessor` now fails closed by default. When the classifier call fails, the request is aborted instead of letting unchecked content through. Pass `errorStrategy: 'warn'` to keep the previous fail-open behavior: ([#24793](https://github.com/mastra-ai/mastra/pull/24793))
+
+  ```ts
+  new ClassifierProcessor({ classifier, onResult, errorStrategy: 'warn' });
+  ```
+
+- Honor `tracingOptions.rootSpanName` when creating a root span. The caller-supplied name replaces the default `agent run: '<id>'` or `workflow run: '<id>'` name on the root span only. Works for the default and Inngest workflow engines because the name is applied when the span starts, before any durable snapshot is taken. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const span = observability.startSpan({
+    type: SpanType.WORKFLOW_RUN,
+    name: "workflow run: 'skill-analyze'",
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+
+  span.name; // "skill-analyze: typescript"
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Tool calls whose approval policy is a function now run in parallel when that policy returns `false` for the actual call. This applies to the default `toolCallConcurrency` strategy and to `strategy: 'called'`. Previously, any function policy forced sequential execution. This included the policy that `MCPClient` attaches when `requireToolApproval` is a function. Each call's policy is evaluated once, and that verdict is reused when the tool runs. ([#24763](https://github.com/mastra-ai/mastra/pull/24763))
+
+- Fixed a crash where a background process started with the `execute_command` workspace tool could terminate the host process. If the exit callback threw or the process could not be observed after the PID was returned, the failure escaped as an unhandled promise rejection. These failures are now caught and logged instead. ([#24638](https://github.com/mastra-ai/mastra/pull/24638))
+
+- Fixed internal spans being exported after they are rebuilt with `rebuildSpan()` when `includeInternalSpans` is disabled. Spans created with `tracingPolicy.internal` now keep their internal status through `exportSpan()` and `rebuildSpan()`, so they stay out of exporters by default and remain included when `includeInternalSpans` is enabled. ([#24742](https://github.com/mastra-ai/mastra/pull/24742))
+
+- Fixed `JSON.stringify(requestContext)` throwing `TypeError: Do not know how to serialize a BigInt` when a BigInt was stored directly in `RequestContext`. Such values are now left out of `toJSON()` output, matching how nested BigInts were already handled. BigInts are still included when `BigInt.prototype.toJSON` returns a JSON-serializable value, and `requestContext.get()` still returns the original value. ([#24751](https://github.com/mastra-ai/mastra/pull/24751))
+
+- Fixed `runEvals` saving `mastra__authToken` and values that cannot be stored in score rows. Saved scores keep string, number and boolean request context values, and nested object values use dotted keys. ([#24753](https://github.com/mastra-ai/mastra/pull/24753))
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Fixed chat channel messages (Slack, Discord, etc.) silently disappearing when the agent failed during setup. If workspace, instructions, tools, or model resolution throws before the run starts, the error is now posted back to the chat thread instead of being dropped with no reply. ([#24300](https://github.com/mastra-ai/mastra/pull/24300))
+
+- Fix an event-loop hang when a run starts immediately after a persisted idle signal. The synthetic run that rebroadcasts the signal resolved its completion promise before its deferred cleanup ran, so a same-thread run waiting on it re-awaited an already-resolved promise in an unbounded microtask loop — pinning a CPU core and stopping timers and HTTP process-wide. The waiter now yields to the timer queue when the same run is still active after its completion promise settles. ([#24613](https://github.com/mastra-ai/mastra/pull/24613))
+
+- Accept `rootSpanName` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```http
+  POST /api/workflows/skillAnalyze/start-async
+  {
+    "inputData": { "skillId": "typescript" },
+    "tracingOptions": { "rootSpanName": "skill-analyze: typescript" }
+  }
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+## 1.69.0-alpha.4
+
+### Minor Changes
+
+- Added configured classifiers as typed workflow steps with fluent and dynamic graph support. Classifier steps expose complete typed answers and token usage for existing branch and conditional control flow. ([#24747](https://github.com/mastra-ai/mastra/pull/24747))
+
+  ```ts
+  workflow
+    .map({ message: { initData: true, path: 'message' } })
+    .classifier(router)
+    .branch([
+      [async ({ inputData }) => inputData.answers.route.choice === 'billing', billingStep],
+      [async ({ inputData }) => inputData.answers.route.choice === 'support', supportStep],
+    ]);
+  ```
+
+- Deprecated the `group` option on the trace-query request contract. Grouping remains functional until the next major release; use the `queryThreads` thread-query contract for new code (exposed as `queryTraceThreads()` in `@mastra/client-js`). ([#23790](https://github.com/mastra-ai/mastra/pull/23790))
+
+  **Before:**
+
+  ```ts
+  import type { TraceQueryRequest } from '@mastra/core/storage';
+
+  const request: TraceQueryRequest = { timeRange, group: { by: ['threadId'] } };
+  ```
+
+  **After:**
+
+  ```ts
+  import type { QueryThreadsInput } from '@mastra/core/storage';
+
+  const input: QueryThreadsInput = { traces: { timeRange } };
+  ```
+
+- Added `rootSpanName` to `tracingOptions` so each agent or workflow run can set its own root span name. Runs of the same workflow no longer all show up as `workflow run: 'my-workflow'` in trace lists. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  await run.start({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  The name applies to the root span only. Child spans keep their default names, and entity filters still match on the workflow or agent id. Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Added `ClassifierProcessor` for applying typed classifier policies to agent input, output, and streaming content. ([#24768](https://github.com/mastra-ai/mastra/pull/24768))
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { Classifier } from '@mastra/core/classifier';
+  import { ClassifierProcessor } from '@mastra/core/processors';
+
+  const safety = new Classifier({
+    id: 'safety',
+    model,
+    questions: {
+      unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+    },
+  });
+
+  const agent = new Agent({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Answer support questions.',
+    model: 'openai/gpt-5-mini',
+    inputProcessors: [
+      new ClassifierProcessor({
+        classifier: safety,
+        onResult: (answers, { abort }) => {
+          if (answers.unsafe.probability > 0.8) abort('Rejected by safety policy');
+        },
+      }),
+    ],
+  });
+  ```
+
+### Patch Changes
+
+- `ClassifierProcessor` now fails closed by default. When the classifier call fails, the request is aborted instead of letting unchecked content through. Pass `errorStrategy: 'warn'` to keep the previous fail-open behavior: ([#24793](https://github.com/mastra-ai/mastra/pull/24793))
+
+  ```ts
+  new ClassifierProcessor({ classifier, onResult, errorStrategy: 'warn' });
+  ```
+
+- Honor `tracingOptions.rootSpanName` when creating a root span. The caller-supplied name replaces the default `agent run: '<id>'` or `workflow run: '<id>'` name on the root span only. Works for the default and Inngest workflow engines because the name is applied when the span starts, before any durable snapshot is taken. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const span = observability.startSpan({
+    type: SpanType.WORKFLOW_RUN,
+    name: "workflow run: 'skill-analyze'",
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+
+  span.name; // "skill-analyze: typescript"
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Tool calls whose approval policy is a function now run in parallel when that policy returns `false` for the actual call. This applies to the default `toolCallConcurrency` strategy and to `strategy: 'called'`. Previously, any function policy forced sequential execution. This included the policy that `MCPClient` attaches when `requireToolApproval` is a function. Each call's policy is evaluated once, and that verdict is reused when the tool runs. ([#24763](https://github.com/mastra-ai/mastra/pull/24763))
+
+- Fixed internal spans being exported after they are rebuilt with `rebuildSpan()` when `includeInternalSpans` is disabled. Spans created with `tracingPolicy.internal` now keep their internal status through `exportSpan()` and `rebuildSpan()`, so they stay out of exporters by default and remain included when `includeInternalSpans` is enabled. ([#24742](https://github.com/mastra-ai/mastra/pull/24742))
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Fix an event-loop hang when a run starts immediately after a persisted idle signal. The synthetic run that rebroadcasts the signal resolved its completion promise before its deferred cleanup ran, so a same-thread run waiting on it re-awaited an already-resolved promise in an unbounded microtask loop — pinning a CPU core and stopping timers and HTTP process-wide. The waiter now yields to the timer queue when the same run is still active after its completion promise settles. ([#24613](https://github.com/mastra-ai/mastra/pull/24613))
+
+- Accept `rootSpanName` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```http
+  POST /api/workflows/skillAnalyze/start-async
+  {
+    "inputData": { "skillId": "typescript" },
+    "tracingOptions": { "rootSpanName": "skill-analyze: typescript" }
+  }
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
 ## 1.69.0-alpha.3
 
 ### Minor Changes

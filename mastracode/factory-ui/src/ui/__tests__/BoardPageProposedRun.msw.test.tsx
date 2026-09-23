@@ -350,7 +350,7 @@ describe('Board card with a proposed run', () => {
     expect(await within(card).findByText('Suggested: Build')).toBeVisible();
     const release = within(card).getByRole('button', { name: 'Start suggested run: Build' });
     expect(release).toHaveAttribute('data-variant', 'primary');
-    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'outline');
+    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
 
     await user.click(release);
 

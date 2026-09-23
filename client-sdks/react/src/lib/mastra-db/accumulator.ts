@@ -337,11 +337,15 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
+  // writer.custom events carry `data` and no payload: nothing to fold into a step.
+  const stepId = chunk.payload?.id;
+  if (stepId === undefined) return previous;
+
+  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload;
   const newSteps = {
     ...previous.steps,
-    [chunk.payload.id]: {
-      ...previous.steps[chunk.payload.id],
+    [stepId]: {
+      ...previous.steps[stepId],
       ...newPayload,
     },
   };
@@ -376,8 +380,8 @@ export const mapWorkflowStreamChunkToWatchResult = (
       ...previous,
       steps: {
         ...previous.steps,
-        [chunk.payload.id]: {
-          ...previous.steps[chunk.payload.id],
+        [stepId]: {
+          ...previous.steps[stepId],
           foreachProgress: {
             completedCount: chunk.payload.completedCount,
             totalCount: chunk.payload.totalCount,
@@ -949,6 +953,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       };
       const newPart: MastraToolInvocationPart = {
         ...makeToolInvocationPart(invocation),
+        title: chunk.payload.title,
         providerMetadata: chunk.payload.providerMetadata,
       };
 
@@ -974,9 +979,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 toolName: chunk.payload.toolName,
                 toolCallId: chunk.payload.toolCallId,
                 args: chunk.payload.args,
-              } as MastraToolInvocation,
+              },
+              title: chunk.payload.title ?? prev.title,
               providerMetadata: chunk.payload.providerMetadata ?? prev.providerMetadata,
-            } as MastraMessagePart;
+            };
             return replaceAt(result, messageIndex, withParts(targetMessage, parts));
           }
         }
@@ -1003,6 +1009,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       };
       const newPart: MastraToolInvocationPart & { argsText?: string } = {
         ...makeToolInvocationPart(invocation),
+        title: chunk.payload.title,
         argsText: '',
       };
 

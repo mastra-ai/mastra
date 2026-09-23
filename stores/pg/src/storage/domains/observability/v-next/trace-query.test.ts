@@ -287,6 +287,53 @@ describe('Postgres advanced trace query', () => {
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
   });
 
+  it('ANDs the tenant scope into root_scope and every related scan with parameters numbered before predicates', () => {
+    const scopedPlan = planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange: TIME_RANGE,
+        where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+      }),
+      { scope: { organizationId: 'org-1', resourceId: 'res-1' } },
+    );
+    const compiled = compilePostgresTraceQuery('public', scopedPlan);
+
+    expect(compiled.values.slice(0, 4)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-1', 'res-1']);
+    expect(compiled.values[4]).toBe('factuality');
+    const rootScope = compiled.text.slice(
+      compiled.text.indexOf('root_scope AS'),
+      compiled.text.indexOf('current_scores AS'),
+    );
+    expect(rootScope).toContain('AND r."organizationId" = $3');
+    expect(rootScope).toContain('AND r."resourceId" = $4');
+    const scores = compiled.text.slice(
+      compiled.text.indexOf('current_scores AS'),
+      compiled.text.indexOf('candidates AS'),
+    );
+    expect(scores).toContain('AND s."organizationId" = $3');
+    expect(scores).toContain('AND s."resourceId" = $4');
+    expect(compiled.text).toContain('s."scorerId" IS NOT DISTINCT FROM $5');
+
+    const orgOnly = compilePostgresTraceQuery(
+      'public',
+      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE }), { scope: { organizationId: 'org-1' } }),
+    );
+    expect(orgOnly.values.slice(0, 3)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-1']);
+    expect(orgOnly.text).toContain('AND r."organizationId" = $3');
+    expect(orgOnly.text).not.toContain('"resourceId" = $4');
+  });
+
+  it('emits no tenant conditions for an unscoped plan', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } } }),
+    );
+
+    expect(compiled.values.slice(0, 2)).toEqual([TIME_RANGE.from, TIME_RANGE.to]);
+    expect(compiled.text).not.toContain('"organizationId" =');
+    expect(compiled.text).not.toContain('"resourceId" =');
+    expect(compiled.text).toContain('s."spanType" IS NOT DISTINCT FROM $3');
+  });
+
   it('filters null-ended roots before projection and pagination', () => {
     const compiled = compilePostgresTraceQuery('public', plan());
 

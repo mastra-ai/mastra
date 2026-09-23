@@ -255,7 +255,7 @@ export function MCPClientFormSidebar({
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
+                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
                       Add variable
                     </Button>
                   )}
@@ -279,13 +279,7 @@ export function MCPClientFormSidebar({
                     : undefined;
 
               return tooltipContent ? (
-                <Button
-                  variant="outline"
-                  onClick={onTryConnect}
-                  disabled={isDisabled}
-                  className="w-full"
-                  tooltip={tooltipContent}
-                >
+                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full" tooltip={tooltipContent}>
                   {isTryingConnect ? (
                     <>
                       <Spinner className="h-4 w-4" />
@@ -296,7 +290,7 @@ export function MCPClientFormSidebar({
                   )}
                 </Button>
               ) : (
-                <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
+                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full">
                   {isTryingConnect ? (
                     <>
                       <Spinner className="h-4 w-4" />

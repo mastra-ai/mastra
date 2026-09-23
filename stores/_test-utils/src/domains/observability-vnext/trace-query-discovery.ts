@@ -26,6 +26,7 @@ const BASE_SPAN: Omit<RawTraceQuerySpan, 'cursorId' | 'traceId' | 'spanId'> = {
   parentEntityVersionId: null,
   rootEntityVersionId: 'agent-v1',
   environment: 'production',
+  organizationId: null,
 };
 
 const span = (
@@ -81,6 +82,11 @@ const feedback = (
 export const TRACE_QUERY_DISCOVERY_TIME_RANGE = {
   from: '2026-08-01T00:00:00.000Z',
   to: '2026-09-01T00:00:00.000Z',
+};
+/** Window holding only the tenant-scoped discovery roots. */
+export const TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE = {
+  from: '2026-09-01T00:00:00.000Z',
+  to: '2026-09-08T00:00:00.000Z',
 };
 
 export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
@@ -186,6 +192,22 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
     span(50, 'trace-outside', 'root-outside', {
       startedAt: '2026-07-01T10:00:00.000Z',
       metadata: { outsideOnly: 'excluded' },
+    }),
+    span(60, 'trace-scoped-a', 'root-scoped-a', {
+      startedAt: '2026-09-02T10:00:00.000Z',
+      endedAt: '2026-09-02T10:00:01.000Z',
+      environment: 'scoped-a-env',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+      metadata: { tenantA: 'a' },
+    }),
+    span(61, 'trace-scoped-b', 'root-scoped-b', {
+      startedAt: '2026-09-03T10:00:00.000Z',
+      endedAt: '2026-09-03T10:00:01.000Z',
+      environment: 'scoped-b-env',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+      metadata: { tenantB: 'b' },
     }),
   ],
   scores: [

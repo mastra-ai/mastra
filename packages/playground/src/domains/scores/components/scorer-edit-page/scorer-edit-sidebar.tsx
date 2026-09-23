@@ -190,7 +190,7 @@ export function ScorerEditSidebar({
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
+            <Button onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />

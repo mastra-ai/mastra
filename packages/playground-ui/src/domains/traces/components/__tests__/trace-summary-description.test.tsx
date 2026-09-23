@@ -33,6 +33,16 @@ describe('TraceSummaryDescription', () => {
     expect((await screen.findByRole('tooltip')).textContent).toBe('Agent');
   });
 
+  it.each([
+    ['Success', rootSpan],
+    ['Running', { ...rootSpan, endedAt: null }],
+    ['Error', { ...rootSpan, error: { message: 'boom' } }],
+  ])('shows the trace as %s', (label, span) => {
+    render(<TraceSummaryDescription rootSpan={span} />);
+
+    expect(screen.getByLabelText('Trace status').textContent).toBe(label);
+  });
+
   it('links the entity name when a href is provided', () => {
     render(
       <TraceSummaryDescription
