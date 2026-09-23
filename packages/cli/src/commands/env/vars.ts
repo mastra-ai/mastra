@@ -11,6 +11,7 @@ import type { Environment } from './platform-api.js';
 import { fetchEnvironmentList } from './platform-api.js';
 import { resolveProject } from './resolve-project.js';
 
+/** Register the `mastra env vars ...` subcommands on the given `env` command. */
 export function registerEnvVarsCommands(env: Command): void {
   const vars = env.command('vars').description("Manage an environment's variables");
 
@@ -24,10 +25,16 @@ export function registerEnvVarsCommands(env: Command): void {
     .action(wrapAction(envVarsPullAction));
 }
 
+/** True when a filesystem error means the target path already exists (`EEXIST`). */
 function isAlreadyExistsError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST';
 }
 
+/**
+ * Resolve the environment to pull by id, name, or slug. When no argument is
+ * given the project must have exactly one environment; otherwise the error
+ * lists the available slugs.
+ */
 function pickEnvironment(environments: Environment[], envArg: string | undefined): Environment {
   if (environments.length === 0) {
     throw new Error('No environments found for this project. Deploy first with `mastra deploy`.');

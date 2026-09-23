@@ -2,6 +2,6 @@
 '@mastra/cli': patch
 ---
 
-Fixed `mastra env vars pull <env>` writing the production environment's values when pulling a non-production environment. For projects on the environments pipeline, the platform answers the legacy project-scope env endpoint with the production environment's vars, and pull merged those on top of the selected environment with project values winning. Every key shared between the two environments therefore came back with production's value even though the file header named the requested environment.
+Fixed `mastra env vars pull <env>` writing the production environment's values when you pull a different environment. Pulling `qa` now gives you QA's values for every variable, including the ones production also defines.
 
-Pull now reads the store the platform reports as authoritative (`envVarsAuthority` on the environments list): the selected environment's own vars for adopted projects, or the project-level vars for un-adopted legacy projects. Nothing is merged across environments.
+Projects still on the legacy deploy pipeline keep pulling their project-level variables, which is what their deploys run with.

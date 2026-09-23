@@ -108,6 +108,12 @@ export interface EnvironmentList {
   envVarsAuthority?: EnvVarsAuthority;
 }
 
+/**
+ * List a project's environments together with the platform's report of
+ * which store the deployed runtime reads env vars from. Use this when the
+ * caller needs to make a decision based on that authority; use
+ * `fetchEnvironments` when only the rows are needed.
+ */
 export async function fetchEnvironmentList(token: string, orgId: string, projectId: string): Promise<EnvironmentList> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {
@@ -125,6 +131,7 @@ export async function fetchEnvironmentList(token: string, orgId: string, project
   return { environments: data.environments, envVarsAuthority: data.envVarsAuthority };
 }
 
+/** List a project's environments. Thin wrapper over `fetchEnvironmentList`. */
 export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
   const { environments } = await fetchEnvironmentList(token, orgId, projectId);
   return environments;
