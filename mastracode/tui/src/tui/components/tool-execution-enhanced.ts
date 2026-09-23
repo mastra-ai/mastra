@@ -480,11 +480,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
-        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth);
-        const visibleLines =
-          this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND ? wrapped : wrapped.slice(-this.quietPreviewLineLimit);
+        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
+          -this.quietPreviewLineLimit,
+        );
 
-        lines = visibleLines.map(line => {
+        lines = wrapped.map(line => {
           const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
           return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
         });
@@ -2461,10 +2461,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private formatAgentSignalSendPreview(): string {
     const message = sanitizeAnsiForRendering(this.getFirstStringArg('message'));
+    if (message) return message;
+
     const outcome = sanitizeAnsiForRendering(this.getFormattedOutput());
-    if (!outcome) return message;
-    if (!message) return `Outcome: ${outcome}`;
-    return `${message}\nOutcome: ${outcome}`;
+    return outcome ? `Outcome: ${outcome}` : '';
   }
 
   private renderAgentSignalSendEnhanced(): void {
