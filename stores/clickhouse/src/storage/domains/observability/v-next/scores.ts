@@ -350,6 +350,17 @@ type ScoreDeltaRow = Record<string, any> & {
   scoreId: string;
 };
 
+/**
+ * Delta reads join the delta stream to the current-state table by scoreId, so
+ * a poll or replay always returns the latest write of a score (a rewrite may
+ * change traceId or timestamp, which the delta row does not track).
+ *
+ * A score's first delta row is its only cursor: rows after `afterCursor` are
+ * dropped when the same scoreId already has a row at or before it, and
+ * `LIMIT 1 BY` keeps the lowest cursor within the page. Duplicate delta rows
+ * (a concurrent-insert race past the MV check) therefore never surface, in
+ * this poll or a later one.
+ */
 async function queryScoresAfterCursor(
   client: ClickHouseClient,
   whereClause: string,
@@ -367,12 +378,16 @@ async function queryScoresAfterCursor(
         s.scoreId AS scoreId,
         toString(d.cursorId) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ON s.scoreId = d.scoreId
+      ${whereClause ? `${whereClause} AND` : 'WHERE'} d.cursorId > {afterCursor:UInt64}
+        AND d.scoreId NOT IN (
+          SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+          WHERE cursorId <= {afterCursor:UInt64}
+            AND scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})
+        )
       ORDER BY d.cursorId ASC
+      LIMIT 1 BY s.scoreId
       LIMIT {fetchLimit:UInt32}
     `,
     { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
@@ -389,10 +404,8 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
+      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ON s.scoreId = d.scoreId
       ${whereClause}
     `,
     params,

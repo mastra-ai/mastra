@@ -15,7 +15,7 @@ const meta: Meta<typeof Combobox> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['default', 'outline', 'ghost'],
+      options: ['default', 'ghost'],
     },
   },
 };
@@ -175,7 +175,7 @@ export const ManyOptions: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['default', 'outline', 'ghost'] as const).map(variant => (
+      {(['default', 'ghost'] as const).map(variant => (
         <Fragment key={variant}>
           <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-50" />
         </Fragment>

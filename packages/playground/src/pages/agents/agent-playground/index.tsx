@@ -1,7 +1,7 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -134,7 +134,7 @@ function AgentPlayground() {
   }
 
   if (error) {
-    return <ErrorState title="Failed to load agent" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load agent" descriptionSlot={error.message} />;
   }
 
   if (!codeAgent) {

@@ -102,7 +102,7 @@ function TokenRow({
               {configured ? 'Update token' : 'Add token'}
             </Button>
             {configured && (
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
+              <Button size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
                 {removeMutation.isPending ? 'Removing…' : 'Remove'}
               </Button>
             )}

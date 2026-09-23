@@ -247,6 +247,7 @@ type InputShared_Type_1 = {
 };
 
 type InputShared_Type_2 = {
+  rootSpanName?: string | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -2141,6 +2142,7 @@ type InputShared_Type_111 = {
 
 type Shared_Type_0 = {
   id: string;
+  title?: string | undefined;
   description?: string | undefined;
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;
@@ -3081,6 +3083,7 @@ type Shared_Type_46 = {
     | 'step'
     | 'agent'
     | 'tool'
+    | 'classifier'
     | 'mapping'
     | 'sleep'
     | 'sleepUntil'

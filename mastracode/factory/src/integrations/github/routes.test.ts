@@ -836,6 +836,10 @@ describe('webhook route', () => {
       pullRequestNumber: 34,
       sessionId: 'session-1',
       ownerId: 'owner-1',
+      // Delivery builds the run's request context from the subscription, which
+      // needs the subscribing user: a webhook carries no signed-in identity, and
+      // tenant credential resolution fails closed without one.
+      subscribedByUserId: 'owner-1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
       sessionScope: '/worktrees/a',
@@ -864,6 +868,9 @@ describe('webhook route', () => {
         priority: 'high',
         dedupeKey: 'delivery-1:session-1:thread-1',
       }),
+      // Delivery hands the run a primed request context. A webhook carries no
+      // signed-in user, so the subscription's own identity is what lets the
+      // session resolve credentials instead of failing closed.
       expect.objectContaining({ requestContext: expect.anything() }),
     );
     const runContext = sendNotificationSignal.mock.calls[0]![1].requestContext;

@@ -16,8 +16,7 @@ import { cn } from '@/lib/utils';
 /**
  * A combobox is a form field, so it reuses the Button's size/shape recipe,
  * mirroring `SelectTrigger`: `default` (the Input's overlay surface — the
- * default here too), `outline` (bordered, transparent) and `ghost`
- * (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
+ * default here too) and `ghost` (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
  * look is intentionally NOT offered (a field is not a call-to-action).
  */
 export type ComboboxVisualVariant = ControlTriggerVisualVariant;

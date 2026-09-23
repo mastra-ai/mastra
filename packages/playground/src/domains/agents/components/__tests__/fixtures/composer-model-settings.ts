@@ -16,6 +16,8 @@ export const v2Agent: GetAgentResponse = {
   defaultStreamOptionsLegacy: {},
 };
 
+export const agentsResponse: Record<string, GetAgentResponse> = { 'agent-1': v2Agent };
+
 export const memoryDisabled: GetMemoryStatusResponse = {
   result: false,
 };
