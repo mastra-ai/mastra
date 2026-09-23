@@ -25,7 +25,7 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
-import { sanitizeJsonForPg } from '../../db/sanitize-json';
+import { sanitizeJsonForPg, toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 
 export { sanitizeJsonForPg };
@@ -370,7 +370,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
-        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+        const sanitizedSnapshot = toPgJson(snapshot);
         await t.none(
           `INSERT INTO ${tableName}
            (workflow_name, run_id, snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
@@ -442,7 +442,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         const updatedSnapshot = { ...snapshot, ...state };
 
         // Update the snapshot within the same transaction
-        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        const sanitizedSnapshot = toPgJson(updatedSnapshot);
         const now = new Date();
         await t.none(
           `UPDATE ${tableName}
@@ -489,7 +489,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
-      const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+      const sanitizedSnapshot = toPgJson(snapshot);
       await this.#db.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")

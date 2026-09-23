@@ -103,6 +103,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
@@ -654,7 +655,7 @@ export class MemoryPG extends MemoryStorage {
           // Use JSONB containment operator - no key interpolation needed
           whereClauses.push(`metadata::jsonb @> $${paramIndex}::jsonb`);
           // Build a small JSON object for each key-value pair
-          queryParams.push(JSON.stringify({ [key]: value }));
+          queryParams.push(toPgJson({ [key]: value }));
           paramIndex++;
         }
       }
@@ -753,7 +754,7 @@ export class MemoryPG extends MemoryStorage {
           thread.id,
           thread.resourceId,
           thread.title,
-          thread.metadata ? JSON.stringify(thread.metadata) : null,
+          thread.metadata ? toPgJson(thread.metadata) : null,
           createdAt,
           createdAt,
           updatedAt,
@@ -1664,7 +1665,7 @@ export class MemoryPG extends MemoryStorage {
               values.push(
                 message.id,
                 message.threadId,
-                typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+                typeof message.content === 'string' ? message.content : toPgJson(message.content),
                 createdAt,
                 createdAt,
                 message.role,
@@ -1934,7 +1935,7 @@ export class MemoryPG extends MemoryStorage {
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: JSON.stringify(resource.metadata),
+        metadata: toPgJson(resource.metadata),
         createdAt,
         updatedAt,
       },
@@ -1989,7 +1990,7 @@ export class MemoryPG extends MemoryStorage {
 
     if (metadata) {
       updates.push(`metadata = $${paramIndex}`);
-      values.push(JSON.stringify(updatedResource.metadata));
+      values.push(toPgJson(updatedResource.metadata));
       paramIndex++;
     }
 
@@ -2122,7 +2123,7 @@ export class MemoryPG extends MemoryStorage {
             newThread.id,
             newThread.resourceId,
             newThread.title,
-            newThread.metadata ? JSON.stringify(newThread.metadata) : null,
+            newThread.metadata ? toPgJson(newThread.metadata) : null,
             nowStr,
             nowStr,
             nowStr,
@@ -2364,7 +2365,7 @@ export class MemoryPG extends MemoryStorage {
           '',
           null,
           'initial',
-          JSON.stringify(input.config),
+          toPgJson(input.config),
           0,
           null, // lastObservedAt
           null, // lastObservedAtZ
@@ -2432,7 +2433,7 @@ export class MemoryPG extends MemoryStorage {
           record.activeObservations || '',
           null,
           record.originType || 'initial',
-          record.config ? JSON.stringify(record.config) : null,
+          record.config ? toPgJson(record.config) : null,
           record.generationCount || 0,
           lastObservedAtStr,
           lastObservedAtStr,
@@ -2441,8 +2442,8 @@ export class MemoryPG extends MemoryStorage {
           record.pendingMessageTokens || 0,
           record.totalTokensObserved || 0,
           record.observationTokenCount || 0,
-          record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
-          record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
+          record.observedMessageIds ? toPgJson(record.observedMessageIds) : null,
+          record.bufferedObservationChunks ? toPgJson(record.bufferedObservationChunks) : null,
           record.bufferedReflection || null,
           record.bufferedReflectionTokens ?? null,
           record.bufferedReflectionInputTokens ?? null,
@@ -2454,7 +2455,7 @@ export class MemoryPG extends MemoryStorage {
           record.lastBufferedAtTokens || 0,
           lastBufferedAtTimeStr,
           record.observedTimezone || null,
-          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.metadata ? toPgJson(record.metadata) : null,
           record.createdAt.toISOString(),
           record.createdAt.toISOString(),
           record.updatedAt.toISOString(),
@@ -2484,7 +2485,7 @@ export class MemoryPG extends MemoryStorage {
 
       const lastObservedAtStr = input.lastObservedAt.toISOString();
       const nowStr = now.toISOString();
-      const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
+      const observedMessageIdsJson = input.observedMessageIds ? toPgJson(input.observedMessageIds) : null;
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET
           "activeObservations" = $1,
@@ -2590,7 +2591,7 @@ export class MemoryPG extends MemoryStorage {
           input.reflection,
           null,
           'reflection',
-          JSON.stringify(record.config),
+          toPgJson(record.config),
           input.currentRecord.generationCount + 1,
           lastObservedAtStr, // lastObservedAt
           lastObservedAtStr, // lastObservedAtZ
@@ -2606,7 +2607,7 @@ export class MemoryPG extends MemoryStorage {
           0, // lastBufferedAtTokens
           null, // lastBufferedAtTime
           record.observedTimezone || null,
-          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.metadata ? toPgJson(record.metadata) : null,
           nowStr, // createdAt
           nowStr, // createdAtZ
           nowStr, // updatedAt
@@ -2878,7 +2879,7 @@ export class MemoryPG extends MemoryStorage {
 
       await this.#db.client.query(
         `UPDATE ${tableName} SET config = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
-        [JSON.stringify(merged), nowStr, nowStr, input.id],
+        [toPgJson(merged), nowStr, nowStr, input.id],
       );
     } catch (error) {
       if (error instanceof MastraError) {
@@ -2941,7 +2942,7 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $4,
           "updatedAtZ" = $5
         WHERE id = $6`,
-        [JSON.stringify([newChunk]), input.chunk.cycleId, lastBufferedAtTime, nowStr, nowStr, input.id],
+        [toPgJson([newChunk]), input.chunk.cycleId, lastBufferedAtTime, nowStr, nowStr, input.id],
       );
 
       if (result.rowCount === 0) {
@@ -3126,7 +3127,7 @@ export class MemoryPG extends MemoryStorage {
           activatedContent,
           activatedTokens,
           activatedMessageTokens,
-          remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
+          remainingChunks.length > 0 ? toPgJson(remainingChunks) : null,
           lastObservedAtStr,
           lastObservedAtStr,
           nowStr,

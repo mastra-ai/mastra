@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -194,7 +195,7 @@ export class WorkspacesPG extends WorkspacesStorage {
           'draft',
           null,
           workspace.authorId ?? null,
-          workspace.metadata ? JSON.stringify(workspace.metadata) : null,
+          workspace.metadata ? toPgJson(workspace.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
@@ -351,7 +352,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -449,7 +450,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -533,15 +534,15 @@ export class WorkspacesPG extends WorkspacesStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          input.filesystem ? JSON.stringify(input.filesystem) : null,
-          input.sandbox ? JSON.stringify(input.sandbox) : null,
-          input.mounts ? JSON.stringify(input.mounts) : null,
-          input.search ? JSON.stringify(input.search) : null,
-          input.skills ? JSON.stringify(input.skills) : null,
-          input.tools ? JSON.stringify(input.tools) : null,
+          input.filesystem ? toPgJson(input.filesystem) : null,
+          input.sandbox ? toPgJson(input.sandbox) : null,
+          input.mounts ? toPgJson(input.mounts) : null,
+          input.search ? toPgJson(input.search) : null,
+          input.skills ? toPgJson(input.skills) : null,
+          input.tools ? toPgJson(input.tools) : null,
           input.autoSync ?? false,
           input.operationTimeout ?? null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

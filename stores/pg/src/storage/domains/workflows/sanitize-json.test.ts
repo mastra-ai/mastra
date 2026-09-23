@@ -1,67 +1,48 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeJsonForPg } from './index';
+import { sanitizeJsonForPg, toPgJson } from '../../db/sanitize-json';
 
-describe('sanitizeJsonForPg', () => {
-  it('removes bare null character escapes', () => {
-    expect(sanitizeJsonForPg('"prefix\\u0000suffix"')).toBe('"prefixsuffix"');
+describe('PostgreSQL JSON serialization', () => {
+  it('removes NUL characters from values and keys', () => {
+    expect(JSON.parse(toPgJson({ 'a\0b': 'before\0after' }))).toEqual({ ab: 'beforeafter' });
   });
 
-  it('removes bare unpaired surrogate escapes (high and low, mixed case)', () => {
-    expect(sanitizeJsonForPg('"a\\uD800b"')).toBe('"ab"');
-    expect(sanitizeJsonForPg('"a\\udfffb"')).toBe('"ab"');
-    expect(sanitizeJsonForPg('"a\\uDABCb"')).toBe('"ab"');
+  it('replaces unpaired surrogates without changing valid emoji', () => {
+    expect(JSON.parse(toPgJson({ text: 'a\uD800b\uDFFF', emoji: '😀' }))).toEqual({ text: 'a�b�', emoji: '😀' });
   });
 
-  it('escapes invalid JSON escape sequences (\\v, \\k)', () => {
-    expect(sanitizeJsonForPg('"Omschr\\vijving"')).toBe('"Omschr\\\\vijving"');
-    expect(sanitizeJsonForPg('"Toepassel\\k"')).toBe('"Toepassel\\\\k"');
+  it('preserves literal Unicode escape text and real backslashes preceding invalid characters', () => {
+    const value = {
+      literalNull: String.raw`literal\u0000`,
+      literalSurrogate: String.raw`literal\uD800`,
+      path: 'C:\\path\\\uD800-end',
+      nullPath: 'C:\\path\\\0-end',
+      regex: String.raw`[^\ud800-\udfff]`,
+    };
+    expect(JSON.parse(toPgJson(value))).toEqual({
+      ...value,
+      path: 'C:\\path\\�-end',
+      nullPath: 'C:\\path\\-end',
+    });
   });
 
-  it('preserves valid JSON escapes (\\n, \\t, \\", \\\\)', () => {
-    expect(sanitizeJsonForPg('"line1\\nline2"')).toBe('"line1\\nline2"');
-    expect(sanitizeJsonForPg('"a\\tb"')).toBe('"a\\tb"');
-    expect(sanitizeJsonForPg('"quote\\""')).toBe('"quote\\""');
-    expect(sanitizeJsonForPg('"back\\\\slash"')).toBe('"back\\\\slash"');
+  it('normalizes nested arrays and keys without changing JSON.stringify handling of Dates', () => {
+    const value = { nested: [{ 'x\uD800': 'y\0z' }], date: new Date('2020-01-01T00:00:00.000Z') };
+    expect(JSON.parse(toPgJson(value))).toEqual({ nested: [{ 'x�': 'yz' }], date: value.date.toISOString() });
   });
 
-  // Regression for #15920: escaped-backslash + surrogate (e.g. JSON-encoded JS regex
-  // literals like [^\ud800-\udfff]). The old surrogate regex stripped only the \uXXXX
-  // and left the preceding \\ orphaned, which then merged with the next char to form a
-  // new invalid escape (\-), causing PostgreSQL error 22P02.
-  describe('escaped-backslash surrogate sequences (regression #15920)', () => {
-    it('removes \\\\uD800 fully, including the preceding escaped backslash', () => {
-      expect(sanitizeJsonForPg('"prefix\\\\uD800suffix"')).toBe('"prefixsuffix"');
-    });
+  it('preserves JSON.stringify behavior for shared references and circular objects', () => {
+    const shared = { 'a\0b': 'value' };
+    expect(toPgJson({ first: shared, second: shared })).toBe('{"first":{"ab":"value"},"second":{"ab":"value"}}');
 
-    it('handles a JS-style surrogate range without producing invalid \\- escapes', () => {
-      // Input is the JSON-encoded form of: a = "[^\ud800-\udfff]"
-      const input = '"a = \\"[^\\\\ud800-\\\\udfff]\\""';
-      const sanitized = sanitizeJsonForPg(input);
+    const circular: Record<string, unknown> = { 'a\0b': 'value' };
+    circular.self = circular;
+    expect(() => toPgJson(circular)).toThrow(TypeError);
+  });
 
-      // No dangling backslashes should remain before the hyphen.
-      expect(sanitized).not.toContain('\\\\-');
-      expect(sanitized).not.toContain('\\-');
-
-      // Result must be parseable as JSON (the original failure mode was
-      // PostgreSQL rejecting the value with "invalid input syntax for type json").
-      expect(() => JSON.parse(sanitized)).not.toThrow();
-      expect(JSON.parse(sanitized)).toBe('a = "[^-]"');
-    });
-
-    it('removes escaped-backslash null chars (\\\\u0000) cleanly', () => {
-      expect(sanitizeJsonForPg('"prefix\\\\u0000suffix"')).toBe('"prefixsuffix"');
-    });
-
-    it('output of mixed surrogate + invalid-escape inputs is always valid JSON', () => {
-      // Mix: invalid \v escape, JS-style surrogate range, null char, unpaired surrogate.
-      const input = JSON.stringify({
-        invalidEscape: 'Omschr\\vijving',
-        regex: '[^\\ud800-\\udfff]',
-        nullChar: 'a\u0000b',
-        surrogate: 'x\uD800y',
-      });
-      const sanitized = sanitizeJsonForPg(input);
-      expect(() => JSON.parse(sanitized)).not.toThrow();
-    });
+  it('still accepts already serialized JSON', () => {
+    expect(sanitizeJsonForPg('"before\\u0000after"')).toBe('"beforeafter"');
+    expect(JSON.parse(sanitizeJsonForPg('"before\\uD800after"'))).toBe('before�after');
+    expect(JSON.parse(sanitizeJsonForPg('"literal\\\\uD800"'))).toBe(String.raw`literal\uD800`);
+    expect(JSON.parse(sanitizeJsonForPg('"invalid\\v escape"'))).toBe(String.raw`invalid\v escape`);
   });
 });

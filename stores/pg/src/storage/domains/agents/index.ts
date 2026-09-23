@@ -26,6 +26,7 @@ import type {
 } from '@mastra/core/storage/domains/agents';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 export class AgentsPG extends AgentsStorage {
@@ -183,7 +184,7 @@ export class AgentsPG extends AgentsStorage {
           'published',
           versionId,
           row.ownerId ?? row.authorId ?? null,
-          row.metadata ? JSON.stringify(row.metadata) : null,
+          row.metadata ? toPgJson(row.metadata) : null,
           row.createdAt ?? now,
           row.updatedAt ?? now,
         ],
@@ -203,17 +204,17 @@ export class AgentsPG extends AgentsStorage {
           row.name ?? agentId,
           row.description ?? null,
           this.serializeInstructions(row.instructions ?? ''),
-          row.model ? JSON.stringify(row.model) : '{}',
-          row.tools ? JSON.stringify(row.tools) : null,
-          row.defaultOptions ? JSON.stringify(row.defaultOptions) : null,
-          row.workflows ? JSON.stringify(row.workflows) : null,
-          row.agents ? JSON.stringify(row.agents) : null,
-          row.integrationTools ? JSON.stringify(row.integrationTools) : null,
-          row.toolProviders ? JSON.stringify(row.toolProviders) : null,
-          row.inputProcessors ? JSON.stringify(row.inputProcessors) : null,
-          row.outputProcessors ? JSON.stringify(row.outputProcessors) : null,
-          row.memory ? JSON.stringify(row.memory) : null,
-          row.scorers ? JSON.stringify(row.scorers) : null,
+          row.model ? toPgJson(row.model) : '{}',
+          row.tools ? toPgJson(row.tools) : null,
+          row.defaultOptions ? toPgJson(row.defaultOptions) : null,
+          row.workflows ? toPgJson(row.workflows) : null,
+          row.agents ? toPgJson(row.agents) : null,
+          row.integrationTools ? toPgJson(row.integrationTools) : null,
+          row.toolProviders ? toPgJson(row.toolProviders) : null,
+          row.inputProcessors ? toPgJson(row.inputProcessors) : null,
+          row.outputProcessors ? toPgJson(row.outputProcessors) : null,
+          row.memory ? toPgJson(row.memory) : null,
+          row.scorers ? toPgJson(row.scorers) : null,
           null,
           'Migrated from legacy schema',
           row.createdAt ?? now,
@@ -292,7 +293,7 @@ export class AgentsPG extends AgentsStorage {
           `UPDATE ${fullVersionsTableName} 
            SET tools = $1::jsonb 
            WHERE id = $2`,
-          [JSON.stringify(toolsObject), record.id],
+          [toPgJson(toolsObject), record.id],
         );
       }
 
@@ -425,7 +426,7 @@ export class AgentsPG extends AgentsStorage {
           'draft',
           agent.authorId ?? null,
           visibility,
-          agent.metadata ? JSON.stringify(agent.metadata) : null,
+          agent.metadata ? toPgJson(agent.metadata) : null,
           0,
           null, // activeVersionId starts as null
           nowIso,
@@ -534,7 +535,7 @@ export class AgentsPG extends AgentsStorage {
       if (metadata !== undefined) {
         // REPLACE metadata (not merge) - this is standard DB behavior
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(metadata));
+        values.push(toPgJson(metadata));
       }
 
       // Always update the updatedAt timestamp
@@ -677,7 +678,7 @@ export class AgentsPG extends AgentsStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`a.metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       if (entityIds && entityIds.length > 0) {
@@ -792,25 +793,25 @@ export class AgentsPG extends AgentsStorage {
           input.name,
           input.description ?? null,
           this.serializeInstructions(input.instructions),
-          JSON.stringify(input.model),
-          input.tools ? JSON.stringify(input.tools) : null,
-          input.defaultOptions ? JSON.stringify(input.defaultOptions) : null,
-          input.workflows ? JSON.stringify(input.workflows) : null,
-          input.agents ? JSON.stringify(input.agents) : null,
-          input.integrationTools ? JSON.stringify(input.integrationTools) : null,
-          input.toolProviders ? JSON.stringify(input.toolProviders) : null,
-          input.inputProcessors ? JSON.stringify(input.inputProcessors) : null,
-          input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
-          input.memory ? JSON.stringify(input.memory) : null,
-          input.scorers ? JSON.stringify(input.scorers) : null,
-          input.mcpClients ? JSON.stringify(input.mcpClients) : null,
-          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
-          input.workspace ? JSON.stringify(input.workspace) : null,
-          input.skills ? JSON.stringify(input.skills) : null,
+          toPgJson(input.model),
+          input.tools ? toPgJson(input.tools) : null,
+          input.defaultOptions ? toPgJson(input.defaultOptions) : null,
+          input.workflows ? toPgJson(input.workflows) : null,
+          input.agents ? toPgJson(input.agents) : null,
+          input.integrationTools ? toPgJson(input.integrationTools) : null,
+          input.toolProviders ? toPgJson(input.toolProviders) : null,
+          input.inputProcessors ? toPgJson(input.inputProcessors) : null,
+          input.outputProcessors ? toPgJson(input.outputProcessors) : null,
+          input.memory ? toPgJson(input.memory) : null,
+          input.scorers ? toPgJson(input.scorers) : null,
+          input.mcpClients ? toPgJson(input.mcpClients) : null,
+          input.requestContextSchema ? toPgJson(input.requestContextSchema) : null,
+          input.workspace ? toPgJson(input.workspace) : null,
+          input.skills ? toPgJson(input.skills) : null,
           input.skillsFormat ?? null,
-          input.durable !== undefined ? JSON.stringify(input.durable) : null,
-          input.browser ? JSON.stringify(input.browser) : null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.durable !== undefined ? toPgJson(input.durable) : null,
+          input.browser ? toPgJson(input.browser) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

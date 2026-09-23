@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
@@ -183,7 +184,7 @@ export class MCPClientsPG extends MCPClientsStorage {
           'draft',
           null,
           mcpClient.authorId ?? null,
-          mcpClient.metadata ? JSON.stringify(mcpClient.metadata) : null,
+          mcpClient.metadata ? toPgJson(mcpClient.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
@@ -281,7 +282,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingClient.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -377,7 +378,7 @@ export class MCPClientsPG extends MCPClientsStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -460,8 +461,8 @@ export class MCPClientsPG extends MCPClientsStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          JSON.stringify(input.servers),
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          toPgJson(input.servers),
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

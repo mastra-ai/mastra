@@ -51,6 +51,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 
 // #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
 // installed core fails feature-detection instead of breaking module load.
@@ -454,7 +455,7 @@ export class KnowledgePG extends KnowledgeStorage {
           node.kind,
           node.content ?? null,
           node.description ?? null,
-          JSON.stringify(scope),
+          toPgJson(scope),
           knowledgeScopeKey(scope),
           node.version,
           now.toISOString(),
@@ -532,7 +533,7 @@ export class KnowledgePG extends KnowledgeStorage {
           input.kind ?? existing.kind,
           content ?? null,
           description ?? null,
-          JSON.stringify(scope),
+          toPgJson(scope),
           knowledgeScopeKey(scope),
           now.toISOString(),
           input.id,
@@ -680,13 +681,13 @@ export class KnowledgePG extends KnowledgeStorage {
           record.id,
           record.node,
           record.text,
-          JSON.stringify(scope),
+          toPgJson(scope),
           knowledgeScopeKey(scope),
           record.sourceThreadId,
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
-          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.metadata ? toPgJson(record.metadata) : null,
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
@@ -772,7 +773,7 @@ export class KnowledgePG extends KnowledgeStorage {
       assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
-        args: [JSON.stringify(scope), knowledgeScopeKey(scope), input.id],
+        args: [toPgJson(scope), knowledgeScopeKey(scope), input.id],
       });
       await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
       if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
@@ -1077,7 +1078,7 @@ export class KnowledgePG extends KnowledgeStorage {
               node.name,
               canonicalName(node.name),
               node.kind,
-              JSON.stringify(defaultScope),
+              toPgJson(defaultScope),
               knowledgeScopeKey(defaultScope),
               1,
               now.toISOString(),
@@ -1111,7 +1112,7 @@ export class KnowledgePG extends KnowledgeStorage {
         action,
         recordType,
         recordId,
-        JSON.stringify(scope),
+        toPgJson(scope),
         knowledgeScopeKey(scope),
         sourceThreadId ?? null,
         now.toISOString(),
@@ -1137,7 +1138,7 @@ export class KnowledgePG extends KnowledgeStorage {
         documentId,
         documentType,
         operation,
-        JSON.stringify(scope),
+        toPgJson(scope),
         knowledgeScopeKey(scope),
         now.toISOString(),
         now.toISOString(),
