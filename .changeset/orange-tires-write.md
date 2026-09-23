@@ -21,5 +21,5 @@ isTraceAggregateDimension('traceId'); // false — identity fields are not dimen
 parseTraceAggregateMeasure('duration.p95'); // { type: 'canonical', measure: 'duration.p95', rule: { approximate: true, ... } }
 parseTraceAggregateMeasure('countDistinct.traceId'); // { type: 'countDistinct', field: 'traceId' }
 
-const dimensions = getTraceAggregateDimensionDescriptors(); // all groupable trace fields
+const dimensions = getTraceAggregateDimensionDescriptors(); // canonical trace-field descriptors (metadata.<key> is checked via isTraceAggregateDimension)
 ```
