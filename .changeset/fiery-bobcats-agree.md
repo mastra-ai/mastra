@@ -2,4 +2,4 @@
 '@mastra/pg': minor
 ---
 
-Added nullable usage columns to PostgreSQL v-next span events with an additive migration; existing rows stay null.
+Added support for saving and returning span usage (`inputTokens`, `outputTokens`, `totalTokens`, `reasoningTokens`, `cachedTokens`, `estimatedCost`, `costUnit`) in PostgreSQL observability storage. Existing databases are upgraded automatically on `init()`, and previously stored spans return `null` for these fields.

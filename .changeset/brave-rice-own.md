@@ -2,4 +2,4 @@
 '@mastra/clickhouse': minor
 ---
 
-Added nullable usage columns to ClickHouse v-next span events and trace materialized-view targets with an additive migration; existing rows stay null.
+Added support for saving and returning span usage (`inputTokens`, `outputTokens`, `totalTokens`, `reasoningTokens`, `cachedTokens`, `estimatedCost`, `costUnit`) in ClickHouse observability storage. Existing databases are upgraded automatically on `init()`, and previously stored spans return `null` for these fields.
