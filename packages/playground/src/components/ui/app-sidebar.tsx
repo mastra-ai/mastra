@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
@@ -6,7 +5,6 @@ import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import type { SidebarNewLink } from '@mastra/playground-ui/new/sidebar';
 import { Ellipsis, Search, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -17,8 +15,6 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
-import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
-import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
 import { useNavigationCommand } from '@/lib/command';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
@@ -43,10 +39,9 @@ interface SidebarNavItemProps {
   /** Items in the same list, used for section-aware active matching. */
   siblings: NavItem[];
   onClick?: () => void;
-  children?: ReactNode;
 }
 
-function SidebarNavItem({ item, siblings, onClick, children }: SidebarNavItemProps) {
+function SidebarNavItem({ item, siblings, onClick }: SidebarNavItemProps) {
   const { state } = useSidebarNew();
   const { pathname } = useLocation();
 
@@ -56,9 +51,7 @@ function SidebarNavItem({ item, siblings, onClick, children }: SidebarNavItemPro
       link={toSidebarLink(item)}
       isActive={getIsLinkActive(item, pathname, siblings)}
       onClick={onClick}
-    >
-      {children}
-    </SidebarNew.NavLink>
+    />
   );
 }
 
@@ -140,12 +133,6 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
-  const canReadInbox =
-    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
-  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
-  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
-  const hasInboxItems =
-    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -231,17 +218,7 @@ export function AppSidebar() {
                 {filtered
                   .filter(item => !item.foldable)
                   .map(item => (
-                    <SidebarNavItem key={item.name} item={item} siblings={filtered}>
-                      {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
-                        <Badge
-                          variant="yellow"
-                          size="sm"
-                          indicator="dot"
-                          className="ml-auto"
-                          aria-label="Items need review"
-                        />
-                      ) : null}
-                    </SidebarNavItem>
+                    <SidebarNavItem key={item.name} item={item} siblings={filtered} />
                   ))}
                 {filtered.some(item => item.foldable) && (
                   <FoldableNavTail items={filtered.filter(item => item.foldable)} siblings={filtered} />
