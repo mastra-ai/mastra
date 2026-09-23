@@ -1,5 +1,5 @@
 ---
-'@mastra/cli': patch
+'mastra': patch
 ---
 
 Fixed `mastra env vars pull <env>` writing the production environment's values when you pull a different environment. Pulling `qa` now gives you QA's values for every variable, including the ones production also defines.
