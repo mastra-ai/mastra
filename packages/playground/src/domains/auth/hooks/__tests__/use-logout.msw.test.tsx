@@ -35,7 +35,7 @@ afterEach(async () => {
 
 describe('Studio sign-out', () => {
   describe('when the user has a saved draft', () => {
-    it('starts scoped cleanup while ending the session and allowing an external redirect', async () => {
+    it('clears the draft only after the session has ended and still allows an external redirect', async () => {
       const { result } = mount();
       const { baseUrl, apiPrefix } = result.current.client.options;
       const key = JSON.stringify([baseUrl, apiPrefix, 'user', 'agent', 'new']);
@@ -51,8 +51,31 @@ describe('Studio sign-out', () => {
       await act(async () => {
         response = await result.current.logout.mutateAsync({ userId: 'user' });
       });
-      expect(observedDrafts).toEqual(['']);
+      expect(observedDrafts).toEqual(['Private draft']);
+      expect((await readThreadDraft(key)).text).toBe('');
       expect(response).toEqual(logoutResponse);
+    });
+  });
+
+  describe('when the server fails to end the session', () => {
+    it('keeps the saved draft and lets the open composer keep editing it', async () => {
+      const { result } = mount();
+      const { baseUrl, apiPrefix } = result.current.client.options;
+      const key = JSON.stringify([baseUrl, apiPrefix, 'user', 'agent', 'new']);
+      await writeThreadDraft(key, { text: 'Private draft', attachments: [] });
+      const draft = createThreadDraftState(key);
+      const unsubscribe = draft.subscribe(() => {});
+      await waitFor(() => expect(draft.getSnapshot().status.restoring).toBe(false));
+      server.use(http.post(`${BASE_URL}/api/auth/logout`, () => new HttpResponse(null, { status: 500 })));
+      await act(async () => {
+        await expect(result.current.logout.mutateAsync({ userId: 'user' })).rejects.toThrow('Failed to logout: 500');
+      });
+      expect(draft.getSnapshot().draft.text).toBe('Private draft');
+      draft.updateDraft(previous => ({ ...previous, text: 'Still editing' }));
+      expect(draft.getSnapshot().draft.text).toBe('Still editing');
+      unsubscribe();
+      await readThreadDraft('__drain__');
+      expect((await readThreadDraft(key)).text).toBe('Still editing');
     });
   });
 

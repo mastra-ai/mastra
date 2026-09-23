@@ -109,11 +109,13 @@ export function useLogout() {
   const queryClient = useQueryClient();
 
   return useMutation<LogoutResponse, Error, { userId: string }>({
-    mutationFn: ({ userId }) => {
+    mutationFn: async ({ userId }) => {
+      const response = await makeLogoutRequest(client);
+      // Clear only once the session has ended, so a failed sign-out keeps the user's drafts.
+      // Cleanup is best-effort and must not turn a completed sign-out into an error.
       const scope = JSON.stringify([client.options.baseUrl, client.options.apiPrefix, userId]);
-      // Local cleanup is best-effort and must not delay authentication logout.
-      void clearDraftsOnLogout(scope).catch(() => {});
-      return makeLogoutRequest(client);
+      await clearDraftsOnLogout(scope).catch(() => {});
+      return response;
     },
     onSuccess: () => {
       // Invalidate all auth-related queries
