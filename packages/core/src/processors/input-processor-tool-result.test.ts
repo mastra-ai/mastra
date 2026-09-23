@@ -1,4 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { estimateTokenCount } from 'tokenx';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -564,11 +565,51 @@ describe('TokenLimiter maxToolResultTokens', () => {
     expect(captured).toBeUndefined();
   });
 
+  // Exempting the shape from capping is only half the job. Input trimming has to estimate
+  // that media rather than tokenize its base64, or the message looks enormous and gets
+  // trimmed away — losing the result and sending the model back to re-call the tool.
+  it('estimates MCP media results during input trimming instead of counting base64 as text', async () => {
+    const mediaResult = {
+      content: [
+        { type: 'text', text: 'here is the chart' },
+        { type: 'image', data: 'A'.repeat(40_000), mimeType: 'image/png' },
+      ],
+    };
+
+    const message = {
+      id: 'm-media',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'call-media',
+              toolName: 'renderChart',
+              args: {},
+              result: mediaResult,
+            },
+          },
+        ],
+      },
+    };
+
+    const limiter = new TokenLimiterProcessor({ limit: 100_000 });
+    const counted = await (limiter as any).countInputMessageTokens(message);
+
+    // Tokenizing the 40k-char base64 would cost thousands of tokens; the flat image
+    // estimate (765) keeps the message small enough to survive trimming.
+    expect(counted).toBeLessThan(1000);
+  });
+
   // A non-media object result is still capped as usual — the guard must not become a
   // blanket exemption for every object.
   it('still caps an oversized object result that carries no media', async () => {
     let captured: unknown;
-    const limiter = new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 10 });
+    const limiter = new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 60 });
     await limiter.processToolResult({
       result: { content: [{ type: 'text', text: bigResult }] },
       setResult: (value: unknown) => {
@@ -577,7 +618,43 @@ describe('TokenLimiter maxToolResultTokens', () => {
     } as any);
 
     expect(typeof captured).toBe('string');
-    expect(captured as string).toMatch(/\[truncated: showing 10 of \d+ tokens\]$/);
+    expect(captured as string).toMatch(/\[truncated: showing \d+ of \d+ tokens]$/);
+    expect(estimateTokenCount(captured as string)).toBeLessThanOrEqual(60);
+  });
+
+  // The marker costs tokens too. Slicing to the full cap and then appending it lands
+  // over budget, and that overshoot is exactly what lets trimming evict the result.
+  it('keeps the capped result, marker included, within the configured cap', async () => {
+    for (const limit of [10, 25, 50, 200]) {
+      let captured: unknown;
+      const limiter = new TokenLimiterProcessor({ limit: 100_000, maxToolResultTokens: limit });
+      await limiter.processToolResult({
+        result: bigResult,
+        setResult: (value: unknown) => {
+          captured = value;
+        },
+      } as any);
+
+      expect(typeof captured).toBe('string');
+      expect(estimateTokenCount(captured as string)).toBeLessThanOrEqual(limit);
+    }
+  });
+
+  // A cap smaller than the marker itself has no room for content. The result still has
+  // to come back bounded rather than overshooting to fit the marker.
+  it('stays bounded when the cap cannot fit the marker', async () => {
+    let captured: unknown;
+    const limiter = new TokenLimiterProcessor({ limit: 100_000, maxToolResultTokens: 2 });
+    await limiter.processToolResult({
+      result: bigResult,
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    expect(typeof captured).toBe('string');
+    expect(captured as string).not.toContain('rule number');
+    expect(estimateTokenCount(captured as string)).toBeLessThan(estimateTokenCount(bigResult));
   });
 
   // modelOutput is derived from the tool result, so a processor that replaces the result
@@ -619,7 +696,7 @@ describe('TokenLimiter maxToolResultTokens', () => {
     // The last mapping sees the truncated value, so the metadata describes what the
     // model actually received rather than the evicted raw result.
     const last = seenByToModelOutput[seenByToModelOutput.length - 1];
-    expect(String(last)).toMatch(/\[truncated: showing 50 of \d+ tokens\]$/);
+    expect(String(last)).toMatch(/\[truncated: showing \d+ of \d+ tokens]$/);
   });
 
   it('truncates an oversized tool result with a visible marker', async () => {
@@ -648,7 +725,7 @@ describe('TokenLimiter maxToolResultTokens', () => {
     }
 
     expect(typeof toolResultChunkValue).toBe('string');
-    expect(toolResultChunkValue as string).toMatch(/\[truncated: showing 50 of \d+ tokens\]$/);
+    expect(toolResultChunkValue as string).toMatch(/\[truncated: showing \d+ of \d+ tokens]$/);
     expect((toolResultChunkValue as string).length).toBeLessThan(bigResult.length);
 
     // The model still gets the (bounded) result and answers from it in one more
@@ -658,7 +735,7 @@ describe('TokenLimiter maxToolResultTokens', () => {
     expect(text).toBe('You have 200 rules.');
 
     const secondPrompt = JSON.stringify(prompts[1]);
-    expect(secondPrompt).toContain('[truncated: showing 50 of');
+    expect(secondPrompt).toMatch(/\[truncated: showing \d+ of /);
     expect(secondPrompt.length).toBeLessThan(JSON.stringify(bigResult).length);
   });
 
@@ -687,10 +764,10 @@ describe('TokenLimiter maxToolResultTokens', () => {
     }
 
     expect(typeof toolResultChunkValue).toBe('string');
-    expect(toolResultChunkValue as string).toMatch(/\[truncated: showing 50 of \d+ tokens\]$/);
+    expect(toolResultChunkValue as string).toMatch(/\[truncated: showing \d+ of \d+ tokens]$/);
 
     expect(executions).toBe(1);
-    expect(JSON.stringify(prompts[1])).toContain('[truncated: showing 50 of');
+    expect(JSON.stringify(prompts[1])).toMatch(/\[truncated: showing \d+ of /);
   });
 
   /**

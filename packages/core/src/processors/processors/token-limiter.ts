@@ -83,6 +83,8 @@ const BYTES_PER_TOKEN = 4;
 
 type MediaPayload = { data: string; mediaType?: string; mimeType?: string };
 
+type McpMediaPart = { type: 'image' | 'audio'; data: string; mediaType?: string; mimeType?: string };
+
 /**
  * Detects the `{ data, mediaType | mimeType }` shape that tools return for images
  * and file attachments, so the payload is estimated rather than tokenized as text.
@@ -126,15 +128,28 @@ function estimateMediaTokens(data: unknown, mediaType?: string): number {
  * and truncating one would turn a picture into a truncated JSON string. Mirrors the
  * shape check in `convertMcpContentToolResultOutput`.
  */
+/** Used when the cap is too small to hold the counted marker plus any content. */
+const SHORT_TRUNCATION_MARKER = '[truncated]';
+
+/**
+ * The visible marker appended to a capped tool result. `shown` is the number of content
+ * tokens retained, which excludes the marker's own cost.
+ */
+function buildTruncationMarker(shown: number, total: number): string {
+  return `\n\n[truncated: showing ${shown} of ${total} tokens]`;
+}
+
+function isMcpMediaPart(part: unknown): part is McpMediaPart {
+  if (!part || typeof part !== 'object') return false;
+  const typedPart = part as Record<string, unknown>;
+  return (typedPart.type === 'image' || typedPart.type === 'audio') && typeof typedPart.data === 'string';
+}
+
 function isMcpMediaToolResult(result: unknown): boolean {
   if (!result || typeof result !== 'object') return false;
   const content = (result as Record<string, unknown>).content;
   if (!Array.isArray(content)) return false;
-  return content.some(part => {
-    if (!part || typeof part !== 'object') return false;
-    const typedPart = part as Record<string, unknown>;
-    return (typedPart.type === 'image' || typedPart.type === 'audio') && typeof typedPart.data === 'string';
-  });
+  return content.some(isMcpMediaPart);
 }
 
 /**
@@ -439,6 +454,23 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
                     tokenString += JSON.stringify(rest);
                   }
                   overhead -= 12;
+                } else if (isMcpMediaToolResult(invocation.result)) {
+                  // `processToolResult` exempts this shape from capping so the output
+                  // converter can still build native media parts. Counting it as text
+                  // here would tokenize the base64 payload and inflate the estimate by
+                  // orders of magnitude, so the result would be trimmed away instead —
+                  // dropping the tool result and reintroducing the tool-call loop.
+                  const { content } = invocation.result as { content: unknown[] };
+                  for (const entry of content) {
+                    if (isMcpMediaPart(entry)) {
+                      const { data, ...rest } = entry;
+                      mediaTokens += estimateMediaTokens(data, entry.mediaType ?? entry.mimeType);
+                      tokenString += JSON.stringify(rest);
+                    } else {
+                      tokenString += JSON.stringify(entry);
+                    }
+                  }
+                  overhead -= 12;
                 } else {
                   tokenString += JSON.stringify(invocation.result);
                   overhead -= 12;
@@ -559,7 +591,31 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     // Truncation is visible rather than silent so the model (and anyone reading
     // the persisted thread) can tell the result was cut rather than empty.
-    const truncated = `${sliceByTokensSafe(text, 0, limit)}\n\n[truncated: showing ${limit} of ${tokens} tokens]`;
+    //
+    // The marker costs tokens too, so slicing to the full cap and then appending it
+    // would land over budget. That overshoot is what the cap exists to prevent: near
+    // the context boundary it is enough for trimming to evict the result and send the
+    // model back to re-call the tool. Reserve the marker first and slice into what is
+    // left. If the cap is too small to hold the marker plus any content, keep the
+    // marker alone — it stays bounded and still reports what happened.
+    // Sizing the marker is circular — its own text contains the retained count. Size it
+    // against `limit` first, which has at least as many digits as any budget derived from
+    // it, so the real marker can only be cheaper and the total can only come in under cap.
+    const markerTokens = this.countTokens(buildTruncationMarker(limit, tokens));
+    const contentBudget = limit - markerTokens;
+
+    let truncated: string;
+    if (contentBudget > 0) {
+      truncated = `${sliceByTokensSafe(text, 0, contentBudget)}${buildTruncationMarker(contentBudget, tokens)}`;
+    } else {
+      // The cap is too small for the counted marker, so fall back to a fixed short one.
+      // Sliced if even that does not fit, because staying under the cap matters more than
+      // staying readable — an overshoot here is what evicts the result.
+      truncated =
+        this.countTokens(SHORT_TRUNCATION_MARKER) <= limit
+          ? SHORT_TRUNCATION_MARKER
+          : sliceByTokensSafe(SHORT_TRUNCATION_MARKER, 0, limit);
+    }
 
     // setResult, not messageList: for a provider that emits the call and the result in
     // one stream there is no tool-invocation part to update yet, because history is
