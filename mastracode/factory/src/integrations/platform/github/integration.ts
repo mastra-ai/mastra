@@ -67,7 +67,6 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
-import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -77,6 +76,7 @@ import {
 } from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
+import { buildPlatformGithubIdentity } from './identity.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 
@@ -219,10 +219,15 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
   /**
-   * Identity capability — source (a) from persisted comment authors on
-   * `platform === 'github'`. Source (b) deferred.
+   * Identity capability — walks each org's stored installations and fetches
+   * the org-members roster from platform's `/v1/server/github-app/installations/:id/members`
+   * endpoint. Empty when an installation targets a user account.
    */
-  readonly identity = buildCommentAuthorsIdentity('github');
+  readonly identity = buildPlatformGithubIdentity({
+    client: () => this.#client,
+    storage: () => this.storage,
+    apiPrefix: API_PREFIX,
+  });
   readonly #rules: GithubEventRules;
 
   get rules(): GithubEventRules {

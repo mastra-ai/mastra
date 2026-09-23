@@ -3,111 +3,74 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  listAllIdentityCandidates,
-  listIdentityCandidates,
-  listIdentityIntegrations,
-  listMyIdentityClaims,
-  removeIdentityClaim,
-  upsertIdentityClaim,
-} from '../ui/domains/settings/services/identityClaims';
-import type {
-  IdentityCandidate,
-  IdentityCandidateAcrossIntegrations,
-  IdentityClaim,
-  IdentityIntegrationDescriptor,
-} from '../ui/domains/settings/services/identityClaims';
-
-/** Every integration that surfaces the identity capability. Populates the settings selector. */
-export function useIdentityIntegrationsQuery() {
-  const { baseUrl } = useApiConfig();
-  return useQuery<IdentityIntegrationDescriptor[]>({
-    queryKey: queryKeys.identityIntegrations(),
-    queryFn: () => listIdentityIntegrations(baseUrl),
-  });
-}
-
-/** The acting user's claimed accounts, across every integration. */
-export function useIdentityClaimsQuery() {
-  const { baseUrl } = useApiConfig();
-  return useQuery<IdentityClaim[]>({
-    queryKey: queryKeys.identityClaims(),
-    queryFn: () => listMyIdentityClaims(baseUrl),
-  });
-}
+import { claimIdentity, listIdentity, unclaimIdentity } from '../ui/domains/settings/services/identityClaims';
+import type { IdentityIndex } from '../ui/domains/settings/services/identityClaims';
 
 /**
- * Candidate accounts for one integration; disabled when no integration is
- * selected. React Query keys the cache on the `query` filter, so switching
- * filter values doesn't clobber the previous view during load.
+ * The consolidated identity index: every integration that exposes the identity
+ * capability plus every identity across those integrations, each annotated
+ * with whether the acting user has claimed it. Backs both the settings
+ * multi-select and the `useResolvedMe` hook consumed by `@me` filters.
  */
-export function useIdentityCandidatesQuery(integrationId: string | undefined, query?: string) {
+export function useIdentityQuery() {
   const { baseUrl } = useApiConfig();
-  return useQuery<IdentityCandidate[]>({
-    queryKey: queryKeys.identityCandidates(integrationId, query),
-    queryFn: () => listIdentityCandidates(baseUrl, integrationId!, query),
-    enabled: Boolean(integrationId),
+  return useQuery<IdentityIndex>({
+    queryKey: queryKeys.identity(),
+    queryFn: () => listIdentity(baseUrl),
   });
 }
 
-/** Candidate accounts across every identity-capable integration, merged into one feed. */
-export function useAllIdentityCandidatesQuery(query?: string) {
-  const { baseUrl } = useApiConfig();
-  return useQuery<IdentityCandidateAcrossIntegrations[]>({
-    queryKey: queryKeys.identityAllCandidates(query),
-    queryFn: () => listAllIdentityCandidates(baseUrl, query),
-  });
-}
-
-/** Persist a claim; refreshes the list and the resolved-me cache on success. */
-export function useUpsertIdentityClaimMutation() {
+/** Claim an identity; refreshes the identity cache on success. */
+export function useClaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { integrationId: string; externalUserId: string; label: string; email?: string }) =>
-      upsertIdentityClaim(baseUrl, input),
+      claimIdentity(baseUrl, input),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.identityClaims() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.identity() });
     },
   });
 }
 
-/** Remove a claim; refreshes the list and the resolved-me cache on success. */
-export function useRemoveIdentityClaimMutation() {
+/** Unclaim an identity; refreshes the identity cache on success. */
+export function useUnclaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (key: { integrationId: string; externalUserId: string }) => removeIdentityClaim(baseUrl, key),
+    mutationFn: (key: { integrationId: string; externalUserId: string }) => unclaimIdentity(baseUrl, key),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.identityClaims() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.identity() });
     },
   });
 }
 
 /**
- * Resolved `@me` set derived from the claim list — a `Map<integrationId,
- * Set<externalUserId>>` matching `ResolvedMe` on the server. Board filters
- * and Cmd+K search consume it to expand `@me` into a match against any of
- * the user's claimed external identities. Memoized so that filter chips and
- * search predicates can safely refer to the map identity in dep arrays.
+ * Resolved `@me` set derived from the identity index — a
+ * `Map<integrationId, Set<externalUserId>>` matching `ResolvedMe` on the
+ * server. Board filters and Cmd+K search consume it to expand `@me` into a
+ * match against any of the user's claimed external identities. Memoized so
+ * that filter chips and search predicates can safely refer to the map
+ * identity in dep arrays.
  */
 export function useResolvedMe(): {
   data: Map<string, Set<string>>;
   isLoading: boolean;
   isError: boolean;
 } {
-  const claimsQuery = useIdentityClaimsQuery();
+  const query = useIdentityQuery();
   const data = useMemo(() => {
     const resolved = new Map<string, Set<string>>();
-    for (const claim of claimsQuery.data ?? []) {
-      let set = resolved.get(claim.integrationId);
+    for (const row of query.data?.identities ?? []) {
+      if (!row.claimed) continue;
+      let set = resolved.get(row.integrationId);
       if (!set) {
         set = new Set();
-        resolved.set(claim.integrationId, set);
+        resolved.set(row.integrationId, set);
       }
-      set.add(claim.externalUserId);
+      set.add(row.externalUserId);
     }
     return resolved;
-  }, [claimsQuery.data]);
-  return { data, isLoading: claimsQuery.isLoading, isError: claimsQuery.isError };
+  }, [query.data]);
+  return { data, isLoading: query.isLoading, isError: query.isError };
 }

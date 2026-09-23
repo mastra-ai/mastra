@@ -1,6 +1,6 @@
 /**
  * E2E stand-in for the Phase 5 Playwright scenario: claiming an account
- * in the settings section should flow through the shared claim query and
+ * in the settings section should flow through the shared identity query and
  * update `useResolvedMe`. Any board or Cmd+K surface reading
  * `useResolvedMe` sees the newly claimed id without a page reload.
  *
@@ -20,10 +20,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import { useResolvedMe } from '../../../../../hooks/useIdentityClaims';
 import { boardRelevanceOptions, workItemMatchesMe } from '../../../factory/boardRelevance';
 import type { WorkItem } from '../../../factory/services/workItems';
-import type {
-  IdentityCandidateAcrossIntegrations,
-  IdentityClaim,
-} from '../../services/identityClaims';
+import type { IdentityIndex, IdentityRow } from '../../services/identityClaims';
 import { IdentityClaimsSection } from '../IdentityClaimsSection';
 
 beforeAll(() => {
@@ -33,38 +30,42 @@ beforeAll(() => {
 });
 
 interface Backend {
-  claims: IdentityClaim[];
-  candidates: IdentityCandidateAcrossIntegrations[];
+  index: IdentityIndex;
+}
+
+function setClaimed(
+  index: IdentityIndex,
+  integrationId: string,
+  externalUserId: string,
+  claimed: boolean,
+): IdentityIndex {
+  return {
+    ...index,
+    identities: index.identities.map(row =>
+      row.integrationId === integrationId && row.externalUserId === externalUserId ? { ...row, claimed } : row,
+    ),
+  };
 }
 
 function stub(backend: Backend) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/identity/claims`, () => HttpResponse.json({ claims: backend.claims })),
-    http.get(`${TEST_BASE_URL}/web/identity/candidates`, () =>
-      HttpResponse.json({ candidates: backend.candidates }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/identity/claims`, async ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/identity`, () => HttpResponse.json(backend.index)),
+    http.post(`${TEST_BASE_URL}/web/identity`, async ({ request }) => {
       const body = (await request.json()) as {
         integrationId: string;
         externalUserId: string;
         label: string;
         email?: string;
       };
-      const claim: IdentityClaim = {
-        integrationId: body.integrationId,
-        externalUserId: body.externalUserId,
-        label: body.label,
-        email: body.email,
-        claimedAt: new Date().toISOString(),
-      };
-      backend.claims = [
-        ...backend.claims.filter(
-          existing =>
-            !(existing.integrationId === body.integrationId && existing.externalUserId === body.externalUserId),
-        ),
-        claim,
-      ];
-      return HttpResponse.json({ claim }, { status: 201 });
+      backend.index = setClaimed(backend.index, body.integrationId, body.externalUserId, true);
+      return new HttpResponse(null, { status: 201 });
+    }),
+    http.delete(`${TEST_BASE_URL}/web/identity`, ({ request }) => {
+      const url = new URL(request.url);
+      const integrationId = String(url.searchParams.get('integrationId') ?? '');
+      const externalUserId = String(url.searchParams.get('externalUserId') ?? '');
+      backend.index = setClaimed(backend.index, integrationId, externalUserId, false);
+      return new HttpResponse(null, { status: 204 });
     }),
   );
 }
@@ -115,12 +116,20 @@ const githubPr: WorkItem = {
   updatedAt: '2026-08-05T09:00:00.000Z',
 };
 
-const octocatCandidate: IdentityCandidateAcrossIntegrations = {
+const octocatRow: IdentityRow = {
   integrationId: 'github',
   externalUserId: 'octocat',
   label: 'The Octocat',
-  sources: ['observed'],
+  claimed: false,
 };
+
+function baseIndex(rows: IdentityRow[]): IdentityIndex {
+  const integrationIds = Array.from(new Set(rows.map(r => r.integrationId))).sort();
+  return {
+    integrations: integrationIds.map(id => ({ id })),
+    identities: rows,
+  };
+}
 
 async function selectOctocat() {
   const trigger = await screen.findByRole('combobox', { name: /Your external accounts/i });
@@ -131,7 +140,7 @@ async function selectOctocat() {
 
 describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
   it('given a fresh claim on the settings section, when picked, then useResolvedMe re-renders with the new id', async () => {
-    stub({ claims: [], candidates: [octocatCandidate] });
+    stub({ index: baseIndex([octocatRow]) });
 
     renderWithProviders(
       <div>
@@ -149,7 +158,7 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
   });
 
   it('given a board `@me` predicate composed with useResolvedMe, when a claim is picked on settings, then the predicate flips from no-match to match', async () => {
-    stub({ claims: [], candidates: [octocatCandidate] });
+    stub({ index: baseIndex([octocatRow]) });
 
     renderWithProviders(
       <div>

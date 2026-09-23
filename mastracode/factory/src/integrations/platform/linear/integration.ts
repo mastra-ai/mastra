@@ -26,7 +26,6 @@ import {
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
-import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -36,6 +35,7 @@ import {
 } from '../api-client.js';
 import { PlatformLinearEventWorker } from './event-worker.js';
 import type { PlatformLinearEventStorage } from './event-worker.js';
+import { buildPlatformLinearIdentity } from './identity.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -114,10 +114,14 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
   /**
-   * Identity capability — source (a) from persisted comment authors on
-   * `platform === 'linear'`. Source (b) deferred.
+   * Identity capability — paginates the platform Linear users endpoint per
+   * connected workspace, tagging each user with the workspace url key.
    */
-  readonly identity = buildCommentAuthorsIdentity('linear');
+  readonly identity = buildPlatformLinearIdentity({
+    client: () => this.#client,
+    listWorkspaces: () => this.listWorkspaces(),
+    apiPrefix: API_PREFIX,
+  });
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;

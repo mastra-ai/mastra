@@ -39,8 +39,8 @@ import {
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import { attachIncidentioRules } from '../../incidentio/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
-import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
+import { buildPlatformIncidentioIdentity } from './identity.js';
 
 export interface PlatformIncidentioIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
@@ -154,10 +154,23 @@ interface IncidentioConnectionContext {
 export class PlatformIncidentioIntegration implements FactoryIntegration {
   readonly id = 'incidentio';
   /**
-   * Identity capability — source (a) from persisted comment authors on
-   * `platform === 'incidentio'`. Source (b) deferred.
+   * Identity capability — paginates `GET /v2/users` through the platform
+   * connection proxy for every active incident.io connection this org has.
    */
-  readonly identity = buildCommentAuthorsIdentity('incidentio');
+  readonly identity = buildPlatformIncidentioIdentity({
+    activeContexts: async () => {
+      const connections = await this.#activeConnections();
+      return connections.map(connection => ({
+        api: new IncidentioApiClient({
+          baseUrl: `${this.#clientConfig.baseUrl.replace(/\/+$/, '')}/v2/connections/${encodeURIComponent(connection.id)}/proxy`,
+          accessToken: this.#clientConfig.accessToken,
+          ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
+        }),
+        connectionId: connection.id,
+        label: connection.accountLabel ?? null,
+      }));
+    },
+  });
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;

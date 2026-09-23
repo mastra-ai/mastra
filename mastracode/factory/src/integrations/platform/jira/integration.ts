@@ -30,7 +30,6 @@ import { resolveJiraRules } from '../../jira/default-rules.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import { attachJiraRules } from '../../jira/rules.js';
-import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import {
   logPlatformInfo,
   PlatformApiClient,
@@ -38,6 +37,7 @@ import {
   type PlatformApiClientConfig,
 } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
+import { buildPlatformJiraIdentity } from './identity.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
 interface PlatformIntegrationConnection {
@@ -108,10 +108,17 @@ export interface PlatformJiraIntegrationConfig {
 export class PlatformJiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
   /**
-   * Identity capability — source (a) from persisted comment authors on
-   * `platform === 'jira'`. Source (b) deferred.
+   * Identity capability — paginates `GET /rest/api/3/users/search` through
+   * the platform connection proxy for every active Jira connection this
+   * org has. See `./identity.ts` for the walk semantics.
    */
-  readonly identity = buildCommentAuthorsIdentity('jira');
+  readonly identity = buildPlatformJiraIdentity({
+    activeContexts: async () => {
+      const connections = await this.#activeConnections();
+      const contexts = await Promise.all(connections.map(connection => this.#connectionContext(connection)));
+      return contexts.map(ctx => ({ api: ctx.api, siteUrl: ctx.siteUrl }));
+    },
+  });
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;

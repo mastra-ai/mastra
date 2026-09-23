@@ -1,9 +1,10 @@
 /**
  * BDD coverage for the settings Identity section. The section is a single
- * multi-select combobox over every candidate account across every identity-
- * capable integration. Drives the real `useAllIdentityCandidatesQuery` /
- * `useIdentityClaimsQuery` stack through MSW so a toggle issues the expected
- * POST/DELETE calls and the section re-renders from the invalidated claim list.
+ * multi-select combobox over every identity across every identity-capable
+ * integration. Drives the real `useIdentityQuery` stack through MSW so a
+ * toggle issues the expected POST/DELETE calls on the consolidated
+ * `/web/identity` endpoint and the section re-renders from the invalidated
+ * identity index.
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,10 +13,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type {
-  IdentityCandidateAcrossIntegrations,
-  IdentityClaim,
-} from '../../services/identityClaims';
+import type { IdentityIndex, IdentityRow } from '../../services/identityClaims';
 import { IdentityClaimsSection } from '../IdentityClaimsSection';
 
 // Base UI's Combobox synthesizes a PointerEvent on click, which jsdom does not
@@ -28,8 +26,7 @@ beforeAll(() => {
 });
 
 interface Backend {
-  claims: IdentityClaim[];
-  candidates: IdentityCandidateAcrossIntegrations[];
+  index: IdentityIndex;
 }
 
 interface Calls {
@@ -37,23 +34,20 @@ interface Calls {
   deletes: Array<{ integrationId: string; externalUserId: string }>;
 }
 
+function setClaimed(index: IdentityIndex, integrationId: string, externalUserId: string, claimed: boolean): IdentityIndex {
+  return {
+    ...index,
+    identities: index.identities.map(row =>
+      row.integrationId === integrationId && row.externalUserId === externalUserId ? { ...row, claimed } : row,
+    ),
+  };
+}
+
 function stub(backend: Backend): Calls {
   const calls: Calls = { posts: [], deletes: [] };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/identity/claims`, () => HttpResponse.json({ claims: backend.claims })),
-    http.get(`${TEST_BASE_URL}/web/identity/candidates`, ({ request }) => {
-      const url = new URL(request.url);
-      const query = url.searchParams.get('query')?.toLowerCase() ?? '';
-      const filtered = query
-        ? backend.candidates.filter(
-            candidate =>
-              candidate.label.toLowerCase().includes(query) ||
-              (candidate.email?.toLowerCase().includes(query) ?? false),
-          )
-        : backend.candidates;
-      return HttpResponse.json({ candidates: filtered });
-    }),
-    http.post(`${TEST_BASE_URL}/web/identity/claims`, async ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/identity`, () => HttpResponse.json(backend.index)),
+    http.post(`${TEST_BASE_URL}/web/identity`, async ({ request }) => {
       const body = (await request.json()) as {
         integrationId: string;
         externalUserId: string;
@@ -61,49 +55,43 @@ function stub(backend: Backend): Calls {
         email?: string;
       };
       calls.posts.push(body);
-      const claim: IdentityClaim = {
-        integrationId: body.integrationId,
-        externalUserId: body.externalUserId,
-        label: body.label,
-        email: body.email,
-        claimedAt: new Date().toISOString(),
-      };
-      backend.claims = [
-        ...backend.claims.filter(
-          existing =>
-            !(existing.integrationId === body.integrationId && existing.externalUserId === body.externalUserId),
-        ),
-        claim,
-      ];
-      return HttpResponse.json({ claim }, { status: 201 });
+      backend.index = setClaimed(backend.index, body.integrationId, body.externalUserId, true);
+      return new HttpResponse(null, { status: 201 });
     }),
-    http.delete(`${TEST_BASE_URL}/web/identity/claims/:integrationId/:externalUserId`, ({ params }) => {
-      const integrationId = String(params.integrationId);
-      const externalUserId = String(params.externalUserId);
+    http.delete(`${TEST_BASE_URL}/web/identity`, ({ request }) => {
+      const url = new URL(request.url);
+      const integrationId = String(url.searchParams.get('integrationId') ?? '');
+      const externalUserId = String(url.searchParams.get('externalUserId') ?? '');
       calls.deletes.push({ integrationId, externalUserId });
-      backend.claims = backend.claims.filter(
-        claim => !(claim.integrationId === integrationId && claim.externalUserId === externalUserId),
-      );
+      backend.index = setClaimed(backend.index, integrationId, externalUserId, false);
       return new HttpResponse(null, { status: 204 });
     }),
   );
   return calls;
 }
 
-const octocat: IdentityCandidateAcrossIntegrations = {
+const octocat: IdentityRow = {
   integrationId: 'github',
   externalUserId: 'octocat',
   label: 'The Octocat',
   email: 'octocat@example.com',
-  sources: ['observed'],
+  claimed: false,
 };
 
-const alice: IdentityCandidateAcrossIntegrations = {
+const alice: IdentityRow = {
   integrationId: 'linear',
   externalUserId: 'alice',
   label: 'Alice Linear',
-  sources: ['observed'],
+  claimed: false,
 };
+
+function baseIndex(rows: IdentityRow[]): IdentityIndex {
+  const integrationIds = Array.from(new Set(rows.map(r => r.integrationId))).sort();
+  return {
+    integrations: integrationIds.map(id => ({ id })),
+    identities: rows,
+  };
+}
 
 async function openCombobox() {
   const trigger = await screen.findByRole('combobox', { name: /Your external accounts/i });
@@ -112,8 +100,8 @@ async function openCombobox() {
 }
 
 describe('IdentityClaimsSection', () => {
-  it('given candidates across integrations, when the user picks one, then it POSTs a claim', async () => {
-    const calls = stub({ claims: [], candidates: [octocat, alice] });
+  it('given identities across integrations, when the user picks one, then it POSTs a claim', async () => {
+    const calls = stub({ index: baseIndex([octocat, alice]) });
 
     renderWithProviders(<IdentityClaimsSection />);
     await openCombobox();
@@ -133,16 +121,7 @@ describe('IdentityClaimsSection', () => {
 
   it('given an existing claim, when the user unchecks it, then it DELETEs the claim', async () => {
     const calls = stub({
-      claims: [
-        {
-          integrationId: 'github',
-          externalUserId: 'octocat',
-          label: 'The Octocat',
-          email: 'octocat@example.com',
-          claimedAt: '2026-01-01T00:00:00.000Z',
-        },
-      ],
-      candidates: [octocat],
+      index: baseIndex([{ ...octocat, claimed: true }]),
     });
 
     renderWithProviders(<IdentityClaimsSection />);
@@ -159,7 +138,7 @@ describe('IdentityClaimsSection', () => {
   });
 
   it('given a typed search, when the query filters the merged feed, then only matching accounts render', async () => {
-    stub({ claims: [], candidates: [octocat, alice] });
+    stub({ index: baseIndex([octocat, alice]) });
 
     renderWithProviders(<IdentityClaimsSection />);
     await openCombobox();
@@ -178,7 +157,7 @@ describe('IdentityClaimsSection', () => {
   });
 
   it('given a candidate on Linear, when the user picks it, then the claim is tagged with the Linear integration id', async () => {
-    const calls = stub({ claims: [], candidates: [octocat, alice] });
+    const calls = stub({ index: baseIndex([octocat, alice]) });
 
     renderWithProviders(<IdentityClaimsSection />);
     await openCombobox();

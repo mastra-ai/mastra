@@ -1,5 +1,5 @@
 /**
- * Single searchable multi-select over every candidate account across every
+ * Single searchable multi-select over every identity across every
  * identity-capable integration. Checking a row POSTs a claim, unchecking
  * DELETEs one. The board `@me` chip and the Cmd+K `@me` token read the same
  * claim set via `useResolvedMe`, so a change here refreshes both immediately.
@@ -13,15 +13,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo } from 'react';
 
 import {
-  useAllIdentityCandidatesQuery,
-  useIdentityClaimsQuery,
-  useRemoveIdentityClaimMutation,
-  useUpsertIdentityClaimMutation,
+  useClaimIdentityMutation,
+  useIdentityQuery,
+  useUnclaimIdentityMutation,
 } from '../../../../hooks/useIdentityClaims';
-import type {
-  IdentityCandidateAcrossIntegrations,
-  IdentityClaim,
-} from '../services/identityClaims';
+import type { IdentityRow } from '../services/identityClaims';
 
 /** Human-visible integration name and badge color, keyed by `FactoryIntegration.id`. */
 const INTEGRATION_META: Record<string, { label: string; tone: BadgeVariant }> = {
@@ -29,11 +25,13 @@ const INTEGRATION_META: Record<string, { label: string; tone: BadgeVariant }> = 
   linear: { label: 'Linear', tone: 'blue' },
   jira: { label: 'Jira', tone: 'blue' },
   incidentio: { label: 'incident.io', tone: 'red' },
+  gitlab: { label: 'GitLab', tone: 'orange' },
   slack: { label: 'Slack', tone: 'yellow' },
   'platform-github': { label: 'GitHub', tone: 'purple' },
   'platform-linear': { label: 'Linear', tone: 'blue' },
   'platform-jira': { label: 'Jira', tone: 'blue' },
   'platform-incidentio': { label: 'incident.io', tone: 'red' },
+  'platform-gitlab': { label: 'GitLab', tone: 'orange' },
 };
 
 function integrationMeta(id: string): { label: string; tone: BadgeVariant } {
@@ -52,67 +50,33 @@ function parseKey(key: string): { integrationId: string; externalUserId: string 
 }
 
 export function IdentityClaimsSection() {
-  // BaseCombobox filters options client-side against the label/description,
-  // so no `?query=` round-trip is needed — the merged feed is small enough
-  // to hold entirely in memory.
-  const candidatesQuery = useAllIdentityCandidatesQuery();
-  const claimsQuery = useIdentityClaimsQuery();
-  const upsert = useUpsertIdentityClaimMutation();
-  const remove = useRemoveIdentityClaimMutation();
+  const identityQuery = useIdentityQuery();
+  const claim = useClaimIdentityMutation();
+  const unclaim = useUnclaimIdentityMutation();
 
-  const claims: IdentityClaim[] = claimsQuery.data ?? [];
-  const candidates: IdentityCandidateAcrossIntegrations[] = candidatesQuery.data ?? [];
+  const identities: IdentityRow[] = identityQuery.data?.identities ?? [];
 
-  // Merge server candidates with the acting user's existing claims so a claim
-  // for an account no longer surfaced as a candidate (persisted from an
-  // earlier session, or on an integration whose observed feed is now empty)
-  // still appears — checked — in the dropdown. Group by integration so the
-  // list reads as "everything GitHub, then everything Linear, …".
+  const rowByKey = useMemo(() => {
+    const map = new Map<string, IdentityRow>();
+    for (const row of identities) map.set(keyOf(row.integrationId, row.externalUserId), row);
+    return map;
+  }, [identities]);
+
+  // Group by integration so the list reads as "everything GitHub, then
+  // everything Linear, …". BaseCombobox filters options client-side against
+  // the label + description, so the raw external id remains searchable.
   const options: ComboboxOption[] = useMemo(() => {
-    interface Row {
-      integrationId: string;
-      externalUserId: string;
-      label: string;
-      email?: string;
-    }
-    const byKey = new Map<string, Row>();
-    for (const candidate of candidates) {
-      const key = keyOf(candidate.integrationId, candidate.externalUserId);
-      if (!byKey.has(key)) {
-        byKey.set(key, {
-          integrationId: candidate.integrationId,
-          externalUserId: candidate.externalUserId,
-          label: candidate.label,
-          email: candidate.email,
-        });
-      }
-    }
-    for (const claim of claims) {
-      const key = keyOf(claim.integrationId, claim.externalUserId);
-      if (!byKey.has(key)) {
-        byKey.set(key, {
-          integrationId: claim.integrationId,
-          externalUserId: claim.externalUserId,
-          label: claim.label,
-          email: claim.email,
-        });
-      }
-    }
-    const rows = Array.from(byKey.values()).sort((a, b) => {
+    const sorted = [...identities].sort((a, b) => {
       const providerA = integrationMeta(a.integrationId).label;
       const providerB = integrationMeta(b.integrationId).label;
       const cmp = providerA.localeCompare(providerB);
       if (cmp !== 0) return cmp;
       return a.label.localeCompare(b.label);
     });
-    return rows.map(row => {
+    return sorted.map(row => {
       const meta = integrationMeta(row.integrationId);
       return {
         value: keyOf(row.integrationId, row.externalUserId),
-        // Label reads as `"<display> · <externalUserId>"` when the display
-        // and the raw id disagree; otherwise just the id. Base UI's
-        // client-side filter matches against both label and description,
-        // so the raw id remains searchable.
         label: row.label && row.label !== row.externalUserId ? `${row.label} · ${row.externalUserId}` : row.externalUserId,
         description: row.email ?? undefined,
         start: (
@@ -122,58 +86,53 @@ export function IdentityClaimsSection() {
         ),
       };
     });
-  }, [candidates, claims]);
+  }, [identities]);
 
-  const claimByKey = useMemo(() => {
-    const map = new Map<string, IdentityClaim>();
-    for (const claim of claims) map.set(keyOf(claim.integrationId, claim.externalUserId), claim);
-    return map;
-  }, [claims]);
-
-  const candidateByKey = useMemo(() => {
-    const map = new Map<string, IdentityCandidateAcrossIntegrations>();
-    for (const candidate of candidates) map.set(keyOf(candidate.integrationId, candidate.externalUserId), candidate);
-    return map;
-  }, [candidates]);
-
-  const selected = useMemo(() => Array.from(claimByKey.keys()), [claimByKey]);
+  const selected = useMemo(
+    () => identities.filter(row => row.claimed).map(row => keyOf(row.integrationId, row.externalUserId)),
+    [identities],
+  );
 
   const onValueChange = (nextKeys: string[]) => {
     const next = new Set(nextKeys);
+    const prev = new Set(selected);
     for (const key of nextKeys) {
-      if (claimByKey.has(key)) continue;
+      if (prev.has(key)) continue;
       const parsed = parseKey(key);
       if (!parsed) continue;
-      const source = candidateByKey.get(key);
-      upsert.mutate({
+      const row = rowByKey.get(key);
+      claim.mutate({
         integrationId: parsed.integrationId,
         externalUserId: parsed.externalUserId,
-        label: source?.label ?? parsed.externalUserId,
-        email: source?.email,
+        label: row?.label ?? parsed.externalUserId,
+        email: row?.email,
       });
     }
-    for (const [key, claim] of claimByKey) {
+    for (const key of prev) {
       if (next.has(key)) continue;
-      remove.mutate({ integrationId: claim.integrationId, externalUserId: claim.externalUserId });
+      const parsed = parseKey(key);
+      if (!parsed) continue;
+      unclaim.mutate({ integrationId: parsed.integrationId, externalUserId: parsed.externalUserId });
     }
   };
 
   const claimedGroups = useMemo(() => {
-    const byIntegration = new Map<string, IdentityClaim[]>();
-    for (const claim of claims) {
-      const existing = byIntegration.get(claim.integrationId);
-      if (existing) existing.push(claim);
-      else byIntegration.set(claim.integrationId, [claim]);
+    const byIntegration = new Map<string, IdentityRow[]>();
+    for (const row of identities) {
+      if (!row.claimed) continue;
+      const existing = byIntegration.get(row.integrationId);
+      if (existing) existing.push(row);
+      else byIntegration.set(row.integrationId, [row]);
     }
     return Array.from(byIntegration.entries()).sort((a, b) =>
       integrationMeta(a[0]).label.localeCompare(integrationMeta(b[0]).label),
     );
-  }, [claims]);
+  }, [identities]);
 
-  if (claimsQuery.isError) {
+  if (identityQuery.isError) {
     return (
       <Notice variant="destructive">
-        {claimsQuery.error instanceof Error ? claimsQuery.error.message : 'Failed to load your identity claims'}
+        {identityQuery.error instanceof Error ? identityQuery.error.message : 'Failed to load your identities'}
       </Notice>
     );
   }
@@ -185,34 +144,30 @@ export function IdentityClaimsSection() {
         options={options}
         value={selected}
         onValueChange={onValueChange}
-        placeholder={
-          candidatesQuery.isPending ? 'Loading accounts…' : 'Add your accounts across integrations…'
-        }
+        placeholder={identityQuery.isPending ? 'Loading accounts…' : 'Add your accounts across integrations…'}
         searchPlaceholder="Search by name, id, or email…"
         emptyText={
-          candidatesQuery.isError
-            ? 'Could not load accounts. Refresh the page to retry.'
-            : candidatesQuery.isPending
-              ? 'Loading accounts…'
-              : 'No accounts found. Type to search across every integration.'
+          identityQuery.isPending
+            ? 'Loading accounts…'
+            : 'No accounts found. Type to search across every integration.'
         }
         aria-label="Your external accounts"
         clearLabel="Clear all"
         size="md"
       />
 
-      {claims.length > 0 && (
+      {claimedGroups.length > 0 && (
         <div className="flex flex-col gap-1.5" aria-label="Claimed accounts">
           <Txt as="p" variant="caption" className="text-muted-foreground">
             Claimed accounts
           </Txt>
           <ul className="flex flex-wrap gap-1.5">
             {claimedGroups.flatMap(([integrationId, group]) =>
-              group.map(claim => {
+              group.map(row => {
                 const meta = integrationMeta(integrationId);
-                const display = claim.label && claim.label !== claim.externalUserId ? claim.label : claim.externalUserId;
+                const display = row.label && row.label !== row.externalUserId ? row.label : row.externalUserId;
                 return (
-                  <li key={`${integrationId}:${claim.externalUserId}`}>
+                  <li key={`${integrationId}:${row.externalUserId}`}>
                     <Badge variant={meta.tone} emphasis="muted" size="sm">
                       {`${meta.label} · ${display}`}
                     </Badge>
