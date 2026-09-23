@@ -106,7 +106,7 @@ export function AddApiKeyDialog({
                 ).map(option => (
                   <Button
                     key={option.value}
-                    variant={scope === option.value ? 'primary' : 'outline'}
+                    variant={scope === option.value ? 'primary' : 'default'}
                     aria-pressed={scope === option.value}
                     disabled={saveKeyMutation.isPending || (option.value === 'org' && !canWriteOrgKey)}
                     title={

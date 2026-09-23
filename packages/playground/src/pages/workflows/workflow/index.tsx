@@ -1,6 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';

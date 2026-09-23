@@ -1,5 +1,38 @@
 # @mastra/server
 
+## 1.70.0-alpha.0
+
+### Minor Changes
+
+- Trace query, thread query, and trace-query discovery routes now resolve a trusted tenant scope from the reserved `organizationId` request-context key and pass it to the planner. Requests from hosts that set that key server-side only see their own organization's traces, related spans, scores, feedback, and discovery values, and cursors are bound to that scope. Without the key the routes behave as before. Scoped requests are rejected with `501` when the installed `@mastra/core` or observability store predates tenant scope, so a scope can never be silently dropped. ([#24566](https://github.com/mastra-ai/mastra/pull/24566))
+
+  Set the key from server-side authentication, for example in server middleware:
+
+  ```typescript
+  const mastra = new Mastra({
+    server: {
+      middleware: [
+        async (c, next) => {
+          c.get('requestContext').set('organizationId', getSession(c).organizationId);
+          await next();
+        },
+      ],
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Expose the optional tool `title` on the tool endpoints and in `GetToolResponse`, and copy it from `tool-call` and `tool-call-input-streaming-start` chunks onto the tool-invocation message part in the `useChat` accumulator. Part of #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  ```ts
+  const tool = await client.getTool('get_weather_by_coordinates').details();
+  tool.title; // 'Weather Lookup'
+  ```
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+
 ## 1.69.0
 
 ### Minor Changes

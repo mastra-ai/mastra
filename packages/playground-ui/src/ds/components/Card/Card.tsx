@@ -6,7 +6,7 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  cn(raisedSurfaceStyle, 'rounded-lg transition-all duration-normal ease-out-custom motion-reduce:transition-none'),
+  cn(raisedSurfaceStyle, 'rounded-xl transition-all duration-normal ease-out-custom motion-reduce:transition-none'),
   {
     variants: {
       elevation: {
@@ -63,7 +63,7 @@ export function CardLink({ className, elevation, LinkComponent: Link = 'a', ...p
 export type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex flex-col space-y-1.5 p-3 pb-0', className)} {...props} />
+  <div ref={ref} className={cn('flex flex-col space-y-1.5 px-3 py-1', className)} {...props} />
 ));
 CardHeader.displayName = 'CardHeader';
 

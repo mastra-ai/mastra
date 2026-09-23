@@ -429,3 +429,24 @@ describe('Combobox', () => {
     }).not.toThrow();
   });
 });
+
+describe('Combobox icon-only value', () => {
+  it('renders the selected start adornment centered without a chevron', () => {
+    render(
+      <Combobox
+        options={[{ label: 'OpenAI', value: 'openai', start: <span data-testid="logo" />, displayLabel: 'Hidden' }]}
+        value="openai"
+        showChevron={false}
+        iconOnlyValue
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    const value = getFirstHTMLElement(trigger);
+    expect(value.className).toContain('justify-center');
+    expect(value.className).not.toContain('gap-2');
+    expect(screen.getByTestId('logo')).toBeTruthy();
+    expect(trigger.textContent).toBe('Hidden');
+    expect(trigger.querySelector('svg')).toBeNull();
+  });
+});

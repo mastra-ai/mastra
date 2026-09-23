@@ -20,7 +20,7 @@ export const Default: Story = {
   render: () => (
     <Collapsible className="w-[350px]">
       <CollapsibleTrigger asChild>
-        <Button variant="outline" className="w-full justify-between">
+        <Button className="w-full justify-between">
           Click to expand
           <ChevronDown className="size-4" />
         </Button>
@@ -36,7 +36,7 @@ export const DefaultOpen: Story = {
   render: () => (
     <Collapsible defaultOpen className="w-[350px]">
       <CollapsibleTrigger asChild>
-        <Button variant="outline" className="w-full justify-between">
+        <Button className="w-full justify-between">
           Section Title
           <ChevronDown className="size-4" />
         </Button>

@@ -157,7 +157,7 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
         </Select>
       )}
 
-      <Button size="sm" variant="outline" onClick={handleImport} disabled={!canImport()} icon={<Download />}>
+      <Button size="sm" onClick={handleImport} disabled={!canImport()} icon={<Download />}>
         Import
       </Button>
 

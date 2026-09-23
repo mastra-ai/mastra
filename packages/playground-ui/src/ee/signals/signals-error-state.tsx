@@ -18,7 +18,7 @@ export function SignalsErrorState({
           <h1 className="text-subheading text-foreground">{message}</h1>
           <p className="mt-1 text-caption text-muted-foreground">Check the connection and try again.</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button icon={<RotateCcw />} onClick={onRetry} size="sm" type="button" variant="outline">
+            <Button icon={<RotateCcw />} onClick={onRetry} size="sm" type="button">
               Retry
             </Button>
             {onClear ? (

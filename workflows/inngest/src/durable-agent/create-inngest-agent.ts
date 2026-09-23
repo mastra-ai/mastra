@@ -38,6 +38,7 @@
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
 import {
+  AGENT_STREAM_TOPIC,
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
@@ -625,7 +626,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Set up pubsub with lazy CachingPubSub creation
   // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
   let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
-  let _cachingPubsub: PubSub | null = null;
+  let _cachingPubsub: CachingPubSub | null = null;
 
   // Resolve the cache that backs CachingPubSub history.
   //
@@ -649,7 +650,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   //
   // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
   // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
-  function getPubsub(): PubSub {
+  function getPubsub(): CachingPubSub {
     if (!_cachingPubsub) {
       if (innerPubsub instanceof CachingPubSub) {
         _cachingPubsub = innerPubsub;
@@ -659,6 +660,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
     }
     return _cachingPubsub;
+  }
+
+  async function getPubsubOffset(runId: string): Promise<number> {
+    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
+    return history.length;
   }
 
   // Route workflow event publishes through a CachingPubSub backed by the same cache
@@ -1006,6 +1012,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      const existingRegistryEntry = globalRunRegistry.get(runId);
+      const priorExecution = existingRegistryEntry?.workflowExecution;
+
+      // Settle the prior segment before taking its event offset. Otherwise a late
+      // suspension event can be replayed into the new segment and close it early.
+      await priorExecution?.catch(() => {
+        /* errors already handled by the prior segment */
+      });
+      const resumeOffset = await getPubsubOffset(runId);
+
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
       // co-located) can react. The previous run's controller is no longer
@@ -1028,7 +1044,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // entry is in memory — without this, the abort controller would be
       // silently dropped and the durable LLM step (when co-located) would
       // have nothing to react to.
-      let existingEntry = globalRunRegistry.get(runId);
+      let existingEntry = existingRegistryEntry;
       if (!existingEntry) {
         existingEntry = {
           // Minimal placeholder fields. The durable LLM step recreates tools
@@ -1062,6 +1078,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
+        offset: resumeOffset,
         messageId: crypto.randomUUID(),
         model: {
           modelId: undefined,

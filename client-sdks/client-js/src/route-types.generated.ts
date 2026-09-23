@@ -51,6 +51,11 @@ type InputShared_Auxiliary_203 =
       path: string;
     }
   | {
+      op: 'includes' | 'notIncludes';
+      path: string;
+      value: string;
+    }
+  | {
       op: 'and' | 'or';
       args: InputShared_Auxiliary_203[];
     }
@@ -61,32 +66,32 @@ type InputShared_Auxiliary_203 =
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_221;
+            some: InputShared_Auxiliary_222;
           }
         | {
-            none: InputShared_Auxiliary_221;
+            none: InputShared_Auxiliary_222;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_221;
+            some: InputShared_Auxiliary_222;
           }
         | {
-            none: InputShared_Auxiliary_221;
+            none: InputShared_Auxiliary_222;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_221;
+            some: InputShared_Auxiliary_222;
           }
         | {
-            none: InputShared_Auxiliary_221;
+            none: InputShared_Auxiliary_222;
           };
     };
 
-type InputShared_Auxiliary_221 =
+type InputShared_Auxiliary_222 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -120,22 +125,27 @@ type InputShared_Auxiliary_221 =
       path: string;
     }
   | {
+      op: 'includes' | 'notIncludes';
+      path: string;
+      value: string;
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_221[];
+      args: InputShared_Auxiliary_222[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_221;
+      arg: InputShared_Auxiliary_222;
     };
 
-type InputShared_Auxiliary_248 =
+type InputShared_Auxiliary_250 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_248[];
+      args: InputShared_Auxiliary_250[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_248;
+      arg: InputShared_Auxiliary_250;
     }
   | {
       traces:
@@ -147,7 +157,7 @@ type InputShared_Auxiliary_248 =
           };
     };
 
-type InputShared_Auxiliary_664 =
+type InputShared_Auxiliary_666 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +202,19 @@ type InputShared_Auxiliary_664 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_664[];
+      args: InputShared_Auxiliary_666[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_664;
+      arg: InputShared_Auxiliary_666;
     };
 
-type InputShared_Auxiliary_738 = {
+type InputShared_Auxiliary_740 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_738[] | undefined;
+  children?: InputShared_Auxiliary_740[] | undefined;
 };
 
 type Shared_Auxiliary_747 = {
@@ -1733,7 +1743,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_664[];
+  predicates: InputShared_Auxiliary_666[];
 };
 
 type InputShared_Type_87 = {
@@ -1747,7 +1757,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_664;
+  predicate: InputShared_Auxiliary_666;
 };
 
 type InputShared_Type_88 =
@@ -10201,7 +10211,7 @@ export type PostObservabilityThreadsQuery_Body = {
     };
     where?: InputShared_Auxiliary_203 | undefined;
   };
-  where?: InputShared_Auxiliary_248 | undefined;
+  where?: InputShared_Auxiliary_250 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10252,8 +10262,21 @@ export type PostObservabilityTracesQueryFields_Body = {
 export type PostObservabilityTracesQueryFields_Response = {
   canonicalFields: {
     path: string;
-    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
-    operators: ('eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'notIn' | 'exists' | 'notExists')[];
+    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence' | 'array';
+    operators: (
+      | 'eq'
+      | 'ne'
+      | 'lt'
+      | 'lte'
+      | 'gt'
+      | 'gte'
+      | 'in'
+      | 'notIn'
+      | 'exists'
+      | 'notExists'
+      | 'includes'
+      | 'notIncludes'
+    )[];
     valueSuggestions: boolean;
   }[];
   observedFields: {
@@ -18024,7 +18047,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_738[] | undefined;
+  files?: InputShared_Auxiliary_740[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18082,7 +18105,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_738[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_740[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
