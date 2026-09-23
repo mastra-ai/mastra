@@ -768,14 +768,19 @@ export class SessionRunEngine {
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
         const policy = this.#session.resolveToolApproval(toolName);
+        const approvalIdentity = {
+          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
+          threadId: state.threadId,
+          resourceId: this.#session.identity.getResourceId(),
+        };
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext, ...approvalIdentity });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext, ...approvalIdentity });
           break;
         }
 
@@ -803,11 +808,13 @@ export class SessionRunEngine {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,
