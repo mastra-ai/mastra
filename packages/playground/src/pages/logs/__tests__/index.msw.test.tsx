@@ -1,7 +1,7 @@
 import type { ListLogsResponse } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import LogsPage from '..';
 import {
   emptyEntityNames,
@@ -13,19 +13,10 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // The logs list dispatches a synthetic scroll event once logs load, which
-// starts the real virtualizer's 150ms "is scrolling" debounce. If the file's
-// last test finishes first, that timer fires after jsdom is torn down and
-// React throws "window is not defined". jsdom has no layout anyway, so render
-// every row with a timer-free virtualizer.
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * 36, end: (index + 1) * 36 })),
-    getTotalSize: () => count * 36,
-    measureElement: () => {},
-    scrollToIndex: () => {},
-  }),
-}));
+// starts the virtualizer's 150ms "is scrolling" debounce. Let it fire while
+// jsdom is still alive so it doesn't throw "window is not defined" after
+// teardown.
+afterAll(() => new Promise(resolve => setTimeout(resolve, 200)));
 
 const oneLog: ListLogsResponse = {
   logs: [
