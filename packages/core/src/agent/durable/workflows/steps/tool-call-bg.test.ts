@@ -588,21 +588,91 @@ describe('durable tool-call background task dispatch', () => {
     expect(saveQueueManager.flushMessages).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {
-      name: 'a different background task',
-      taskId: 'task-other',
+  it('skips a transcript part from a different background task and applies the reconciled result', async () => {
+    // Providers reuse tool-call ids ("call_0", "call_1", ...) on every turn,
+    // so a memory-backed transcript legitimately contains parts with the same
+    // toolCallId but a different taskId — earlier dispatches, not conflicts.
+    // The identity scan must key on (toolCallId, taskId) and skip foreign
+    // parts instead of failing closed.
+    const pubsub = mockPubsub();
+    const { messageList } = setupRegistry();
+    const initData = makeInitData();
+    const authoritativeResult = { summary: 'persisted result' };
+    const terminalTask = {
+      id: 'task-terminal',
       status: 'completed',
-      expectedError:
-        'Background task identity conflict for tool call "call-1": expected "task-terminal", found "task-other"',
-    },
-    {
-      name: 'a conflicting terminal status',
-      taskId: 'task-terminal',
-      status: 'failed',
-      expectedError: 'Background task status conflict for task "task-terminal": expected "completed", found "failed"',
-    },
-  ])('fails closed when the persisted transcript contains $name', async testCase => {
+      toolName: TOOL_NAME,
+      toolCallId: TOOL_CALL_ID,
+      args: { topic: 'quantum' },
+      agentId: AGENT_ID,
+      runId: RUN_ID,
+      result: authoritativeResult,
+      createdAt: new Date('2026-09-21T12:00:00.000Z'),
+      startedAt: new Date('2026-09-21T12:00:01.000Z'),
+      completedAt: new Date('2026-09-21T12:00:02.000Z'),
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 30_000,
+    } as any;
+    messageList.get.all.db.mockReturnValue([
+      {
+        role: 'assistant',
+        content: {
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: TOOL_CALL_ID,
+                toolName: TOOL_NAME,
+                args: { topic: 'quantum' },
+                result: { summary: 'different result' },
+              },
+              providerMetadata: {
+                mastra: { backgroundTask: { taskId: 'task-other', status: 'completed' } },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const dispatch = vi.fn();
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      checkIfExisting: vi.fn().mockResolvedValue(terminalTask),
+      checkIfRunning: vi.fn(),
+      restart: vi.fn(),
+      task: terminalTask,
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn().mockResolvedValue(terminalTask),
+    } as any);
+
+    const result = await executeStep(pubsub, initData);
+
+    // The reconciled result is returned and written as this dispatch's own
+    // record; the foreign part is left untouched and nothing re-dispatches.
+    expect(result.result).toEqual(authoritativeResult);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(messageList.updateToolInvocation).toHaveBeenCalledTimes(1);
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ toolCallId: TOOL_CALL_ID, result: authoritativeResult }),
+      }),
+      expect.objectContaining({
+        backgroundTasks: { [TOOL_CALL_ID]: expect.objectContaining({ taskId: 'task-terminal' }) },
+      }),
+    );
+  });
+
+  it('fails closed when the persisted transcript contains a conflicting terminal status', async () => {
     const pubsub = mockPubsub();
     const { messageList } = setupRegistry();
     const initData = makeInitData();
@@ -637,7 +707,7 @@ describe('durable tool-call background task dispatch', () => {
                 result: { summary: 'different result' },
               },
               providerMetadata: {
-                mastra: { backgroundTask: { taskId: testCase.taskId, status: testCase.status } },
+                mastra: { backgroundTask: { taskId: 'task-terminal', status: 'failed' } },
               },
             },
           ],
@@ -663,7 +733,9 @@ describe('durable tool-call background task dispatch', () => {
       waitForCompletion: vi.fn().mockResolvedValue(terminalTask),
     } as any);
 
-    await expect(executeStep(pubsub, initData)).rejects.toThrow(testCase.expectedError);
+    await expect(executeStep(pubsub, initData)).rejects.toThrow(
+      'Background task status conflict for task "task-terminal": expected "completed", found "failed"',
+    );
     expect(dispatch).not.toHaveBeenCalled();
     expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
   });

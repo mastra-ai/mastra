@@ -44,6 +44,12 @@ export interface BackgroundToolResultParams {
  *   rebuilt after a process restart. The run-level policy carries a closure
  *   and does not survive a restart on durable — only tool-level transforms
  *   do, via registry re-resolution.
+ * - Idempotency/conflict scan: keyed by (toolCallId, taskId), not toolCallId
+ *   alone. The scan set is the full db message list, which includes
+ *   memory-loaded history on both engines, and providers reuse tool-call ids
+ *   across turns — so a same-toolCallId part with a different taskId is an
+ *   earlier dispatch's record and is skipped. Status conflicts only throw for
+ *   the part this dispatch owns (matching taskId).
  */
 export async function applyBackgroundToolResult(deps: {
   params: BackgroundToolResultParams;
@@ -84,11 +90,17 @@ export async function applyBackgroundToolResult(deps: {
         | { taskId?: string; status?: string }
         | undefined;
       if (!backgroundTask) continue;
-      if (backgroundTask.taskId !== params.taskId) {
-        throw new Error(
-          `Background task identity conflict for tool call "${params.toolCallId}": expected "${params.taskId}", found "${backgroundTask.taskId}"`,
-        );
-      }
+      // A part whose taskId differs belongs to a DIFFERENT dispatch — typically
+      // an earlier turn's invocation loaded from memory, because providers
+      // reuse tool-call ids (e.g. `call_0`) across turns and this scan covers
+      // the whole thread history on both engines. Skip it; it is not a
+      // conflict. Treating it as one made `onResult` throw before the result
+      // landed, hanging `streamUntilIdle` on the second turn of any
+      // memory-backed run whose provider reuses ids. Our own dispatch's part
+      // carries our taskId and is still found (and status-checked) below;
+      // `updateToolInvocation` walks newest-first, so the write below also
+      // targets the current turn's placeholder, never a historical part.
+      if (backgroundTask.taskId !== params.taskId) continue;
       if (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') {
         if (backgroundTask.status !== terminalStatus) {
           throw new Error(
