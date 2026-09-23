@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it } from 'vitest';
-import { parseClientRequestContext, base64RequestContext, toQueryParams } from './index';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseClientRequestContext, base64RequestContext, toQueryParams, mergeAbortSignals } from './index';
 
 describe('Request Context Utils', () => {
   describe('parseClientRequestContext', () => {
@@ -270,6 +270,64 @@ describe('toQueryParams', () => {
     it('should handle object with only undefined values', () => {
       const result = toQueryParams({ a: undefined, b: undefined });
       expect(result).toBe('');
+    });
+  });
+});
+
+describe('mergeAbortSignals', () => {
+  const originalAny = AbortSignal.any;
+
+  afterEach(() => {
+    AbortSignal.any = originalAny;
+    vi.restoreAllMocks();
+  });
+
+  it('returns undefined with no signals and the same signal with one', () => {
+    const signal = new AbortController().signal;
+    expect(mergeAbortSignals()).toBeUndefined();
+    expect(mergeAbortSignals(undefined, undefined)).toBeUndefined();
+    expect(mergeAbortSignals(signal, undefined)).toBe(signal);
+  });
+
+  it('aborts the merged signal when either source aborts', () => {
+    const a = new AbortController();
+    const b = new AbortController();
+    const merged = mergeAbortSignals(a.signal, b.signal)!;
+    expect(merged.aborted).toBe(false);
+    b.abort(new Error('boom'));
+    expect(merged.aborted).toBe(true);
+    expect(merged.reason).toBeInstanceOf(Error);
+  });
+
+  describe('fallback (no AbortSignal.any)', () => {
+    it('removes listeners from every source on the first abort', () => {
+      (AbortSignal as any).any = undefined;
+
+      const a = new AbortController();
+      const b = new AbortController();
+      const removeA = vi.spyOn(a.signal, 'removeEventListener');
+      const removeB = vi.spyOn(b.signal, 'removeEventListener');
+
+      const merged = mergeAbortSignals(a.signal, b.signal)!;
+      a.abort('first');
+
+      expect(merged.aborted).toBe(true);
+      expect(merged.reason).toBe('first');
+      expect(removeA).toHaveBeenCalledWith('abort', expect.any(Function));
+      expect(removeB).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+
+    it('returns an already-aborted signal without attaching listeners', () => {
+      (AbortSignal as any).any = undefined;
+      const a = new AbortController();
+      a.abort('pre');
+      const b = new AbortController();
+      const addB = vi.spyOn(b.signal, 'addEventListener');
+
+      const merged = mergeAbortSignals(a.signal, b.signal)!;
+      expect(merged.aborted).toBe(true);
+      expect(merged.reason).toBe('pre');
+      expect(addB).not.toHaveBeenCalled();
     });
   });
 });

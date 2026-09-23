@@ -85,7 +85,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
         searchPlaceholder="Search or create tag..."
         emptyText="Type to create a tag"
         variant="ghost"
-        size="xs"
+        size="sm"
         className="w-auto min-w-0"
         disabled={updateDataset.isPending}
       />

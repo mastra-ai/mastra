@@ -6,6 +6,7 @@ import {
   listIntegrations,
   listProjectConnections,
   proxyRequest,
+  proxyRequestWithResponse,
   resolveClient,
 } from '../client.js';
 import { MastraConnectError } from '../errors.js';
@@ -433,12 +434,24 @@ describe('proxyRequest', () => {
     }
   });
 
-  it('returns parsed JSON on 2xx and null on empty bodies', async () => {
+  it('returns parsed JSON with the relayed status on 2xx and null data on empty bodies', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: 1 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'x' })).resolves.toEqual({ data: 1 });
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'GET', path: 'x' })).resolves.toMatchObject({
+      data: { data: 1 },
+      status: 200,
+    });
+
+    fetchMock.mockResolvedValue(Response.json({ statementHandle: 'h-1' }, { status: 202 }));
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'POST', path: 'x' })).resolves.toMatchObject({
+      data: { statementHandle: 'h-1' },
+      status: 202,
+    });
 
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-    await expect(proxyRequest(client, 'c_1', { method: 'DELETE', path: 'x' })).resolves.toBeNull();
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'DELETE', path: 'x' })).resolves.toMatchObject({
+      data: null,
+      status: 204,
+    });
   });
 });

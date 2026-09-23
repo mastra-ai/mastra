@@ -66,6 +66,42 @@ const linearWorkItem = {
   metadata: { identifier: 'ENG-42', linearIssueId: 'linear-issue-1' },
 };
 
+const gitlabWorkItem = {
+  ...issueWorkItem,
+  id: 'gitlab-item-1',
+  externalSource: {
+    integrationId: 'gitlab',
+    type: 'issue',
+    externalId: 'gitlab-issue:encoded-issue-1',
+    url: 'https://gitlab.com/acme/app/-/work_items/1',
+  },
+  title: 'GitLab issue added to board',
+  stages: ['intake'],
+  metadata: {
+    gitlabIssueId: '1',
+    identifier: 'acme/app#1',
+    sourceId: 'gitlab-source-1',
+  },
+};
+
+const gitlabCandidateIssue = {
+  id: '2',
+  externalId: 'gitlab-issue:encoded-issue-2',
+  identifier: 'acme/app#2',
+  title: 'GitLab candidate issue',
+  url: 'https://gitlab.com/acme/app/-/work_items/2',
+  state: 'opened',
+  stateType: 'unstarted',
+  priority: null,
+  assignee: null,
+  author: 'grace',
+  source: 'acme/app',
+  sourceId: 'gitlab-source-1',
+  labels: [],
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-09-01T00:00:00Z',
+};
+
 interface TransitionRequest {
   itemId: string;
   body: Record<string, unknown>;
@@ -115,6 +151,10 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
         },
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
+      HttpResponse.json({ categories: {}, tools: {} }),
+    ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
@@ -153,7 +193,9 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       created.push(body);
@@ -353,6 +395,63 @@ describe('Board card buttons move the card', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
     await screen.findByRole('menuitem', { name: 'Build' });
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval' })).not.toBeInTheDocument();
+  });
+
+  it('shows GitLab descriptions before and after an issue is added to the board', async () => {
+    stubBoardEndpoints({ workItems: [gitlabWorkItem] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            gitlab: { enabled: true, sourceIds: ['gitlab-source-1'] },
+            linear: { enabled: false, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            {
+              integrationId: 'gitlab',
+              sourceId: 'gitlab-source-1',
+              factoryProjectId: FACTORY_ID,
+              board: 'work',
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
+        HttpResponse.json({ issues: [gitlabCandidateIssue], nextCursor: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues/:issueId`, ({ params, request }) => {
+        expect(new URL(request.url).searchParams.get('factoryProjectId')).toBe(FACTORY_ID);
+        const description =
+          params.issueId === 'gitlab-issue:encoded-issue-1'
+            ? 'Persisted GitLab description.'
+            : 'Candidate GitLab description.';
+        return HttpResponse.json({ description, comments: [] });
+      }),
+    );
+
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    const persisted = await screen.findByRole('button', { name: 'Details for GitLab issue added to board' });
+    await screen.findByRole('button', { name: 'Details for GitLab candidate issue' });
+    await user.click(persisted);
+
+    const persistedDialog = await screen.findByRole('dialog', { name: 'GitLab issue added to board' });
+    expect(await within(persistedDialog).findByText('Persisted GitLab description.')).toBeInTheDocument();
+    await user.click(within(persistedDialog).getByRole('button', { name: 'Collapse GitLab issue added to board' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Details for GitLab candidate issue' }));
+    const candidateDialog = await screen.findByRole('dialog', { name: 'GitLab candidate issue' });
+    expect(await within(candidateDialog).findByText('Candidate GitLab description.')).toBeInTheDocument();
   });
 
   it("shows a Linear card's own description in its details", async () => {

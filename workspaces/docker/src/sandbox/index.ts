@@ -18,6 +18,7 @@ import type {
   MastraSandboxOptions,
   SandboxCloneOptions,
   SandboxFileInput,
+  SandboxStartOptions,
   WriteFilesOptions,
 } from '@mastra/core/workspace';
 import {
@@ -30,9 +31,22 @@ import {
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
+import { normalizeAbortError, throwIfAborted } from '../abort';
+import type { DockerRepoTemplateResolveOptions } from '../template/repo-template';
+import type { DockerTemplate } from '../template/template';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
+
+export interface DockerSandboxStartOptions extends SandboxStartOptions {
+  /** Cancel repository-template resolution or a lazy template build. */
+  abortSignal?: AbortSignal;
+}
+
+/** A prepared template, or a resolver producing one (see `DockerSandboxOptions.template`). */
+export type DockerTemplateSpec =
+  | DockerTemplate
+  | ((options?: DockerRepoTemplateResolveOptions) => DockerTemplate | Promise<DockerTemplate>);
 
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
@@ -133,6 +147,17 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
    * @default 'node:22-slim'
    */
   image?: string;
+  /**
+   * Prepared baseline to boot from, as an alternative to `image`. The
+   * template is built (or its cached image reused) lazily on `start()`, and
+   * the container boots from the resulting image. A function form is resolved
+   * once per `start()` that creates a container, so head-pinned repo
+   * templates can re-resolve on each new sandbox.
+   *
+   * When `workingDirectory` is not set, the template's last `setWorkdir`
+   * becomes the sandbox working directory. Mutually exclusive with `image`.
+   */
+  template?: DockerTemplateSpec;
   /** Container entrypoint command. Must keep the container alive.
    * @default ['sleep', 'infinity']
    */
@@ -264,7 +289,10 @@ export class DockerSandbox extends MastraSandbox {
 
   /** Configuration */
   private readonly _containerName: string;
-  private readonly _image: string;
+  /** Image the container boots from; rewritten by a template resolution on `start()`. */
+  private _image: string;
+  private readonly _templateSpec?: DockerTemplateSpec;
+  private readonly _workingDirectoryWasSet: boolean;
   private readonly _command: string[];
   private readonly _env: Record<string, string>;
   private readonly _volumes: Record<string, string>;
@@ -311,7 +339,12 @@ export class DockerSandbox extends MastraSandbox {
 
     this.id = options.id ?? this._generateId();
     this._containerName = sanitizeContainerName(options.name ?? this.id);
+    if (options.image !== undefined && options.template !== undefined) {
+      throw new TypeError('DockerSandbox: `image` and `template` are mutually exclusive');
+    }
+    this._templateSpec = options.template;
     this._image = options.image ?? 'node:22-slim';
+    this._workingDirectoryWasSet = options.workingDirectory !== undefined || options.workingDir !== undefined;
     this._command = options.command ?? ['sleep', 'infinity'];
     this._env = options.env ?? {};
     this._volumes = options.volumes ?? {};
@@ -382,7 +415,9 @@ export class DockerSandbox extends MastraSandbox {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  async start(): Promise<void> {
+  async start(options: DockerSandboxStartOptions = {}): Promise<void> {
+    const { abortSignal } = options;
+    throwIfAborted(abortSignal, 'start Docker sandbox');
     this.logger.debug(`${LOG_PREFIX} Starting sandbox ${this.id}...`);
 
     // Try to reconnect to existing container
@@ -404,6 +439,14 @@ export class DockerSandbox extends MastraSandbox {
         await this._container.start();
       }
 
+      // The container was created with a working directory (possibly derived
+      // from a template); keep resolving relative paths against it rather than
+      // this instance's default.
+      const reconnectedWorkingDir = info.Config?.WorkingDir;
+      if (!this._workingDirectoryWasSet && reconnectedWorkingDir) {
+        this.setWorkingDirectory(reconnectedWorkingDir);
+      }
+
       // Provide container reference to process manager
       this.processes.setContainer(this._container);
 
@@ -412,6 +455,8 @@ export class DockerSandbox extends MastraSandbox {
     }
 
     this._warnOnPrivilegedHardeningConflict(this._privileged);
+
+    await this._resolveTemplate(abortSignal);
 
     // Pull image if not available locally
     await this._ensureImage();
@@ -760,6 +805,37 @@ export class DockerSandbox extends MastraSandbox {
         `${LOG_PREFIX} Failed to list containers: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Resolve the `template` option (if any) into the image to boot from,
+   * building it when no cached image exists. Runs on every `start()` that
+   * creates a container, so a resolver-form template re-resolves each time.
+   * Adopts the template's workdir unless the sandbox was given one explicitly.
+   */
+  private async _resolveTemplate(abortSignal?: AbortSignal): Promise<void> {
+    if (!this._templateSpec) return;
+    throwIfAborted(abortSignal, 'start Docker sandbox');
+    let template: DockerTemplate;
+    try {
+      template =
+        typeof this._templateSpec === 'function' ? await this._templateSpec({ abortSignal }) : this._templateSpec;
+    } catch (error) {
+      throw normalizeAbortError(error, 'start Docker sandbox');
+    }
+    throwIfAborted(abortSignal, 'start Docker sandbox');
+    // Build on this sandbox's daemon, which may differ from the template's default.
+    const result = await template.build({ docker: this._docker, abortSignal });
+    if (result.status !== 'ready') {
+      throw new SandboxError(`Docker template build failed: ${result.error ?? 'unknown error'}`, 'START_FAILED', {
+        templateId: result.templateId,
+        reason: 'template_build_failed',
+      });
+    }
+    this._image = result.templateId;
+    if (!this._workingDirectoryWasSet && template.workdir !== undefined) {
+      this.setWorkingDirectory(template.workdir);
     }
   }
 

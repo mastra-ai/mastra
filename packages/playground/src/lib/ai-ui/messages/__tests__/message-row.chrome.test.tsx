@@ -60,14 +60,13 @@ const Providers = ({ children, datasetEnabled }: { children: ReactNode; datasetE
   );
 };
 
-const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
-  ({
-    id: 'msg-1',
-    role: 'assistant',
-    createdAt: new Date(),
-    content: { format: 2, parts: [] },
-    ...over,
-  }) as MastraDBMessage;
+const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage => ({
+  id: 'msg-1',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: { format: 2, parts: [] },
+  ...over,
+});
 
 describe('MessageRow chrome', () => {
   describe('when a user message contains multiple text parts', () => {
@@ -92,7 +91,7 @@ describe('MessageRow chrome', () => {
         { wrapper: Providers },
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Copy', exact: true }));
+      fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('First paragraph\nSecond paragraph'));
       expect(screen.getByRole('button', { name: 'Existing action' })).toBeTruthy();
     });
@@ -120,7 +119,7 @@ describe('MessageRow chrome', () => {
         { wrapper: Providers },
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Copy', exact: true }));
+      fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith('Please review this file.\nKeep the formatting.'));
     });
   });
@@ -142,7 +141,7 @@ describe('MessageRow chrome', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Highlight spans' }));
       expect(onHighlight).toHaveBeenCalledOnce();
-      expect(screen.getByRole('button', { name: 'Copy', exact: true })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Copy message' })).toBeTruthy();
     });
   });
 
@@ -158,7 +157,7 @@ describe('MessageRow chrome', () => {
         { wrapper: Providers },
       );
 
-      expect(screen.queryByRole('button', { name: 'Copy', exact: true })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
     });
   });
 
@@ -177,7 +176,33 @@ describe('MessageRow chrome', () => {
         { wrapper: Providers },
       );
 
-      expect(screen.queryByRole('button', { name: 'Copy', exact: true })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
+    });
+  });
+
+  describe('when an assistant message has model metadata and a trace action', () => {
+    it('keeps model details and the trace action beside the copy control', () => {
+      const onHighlight = vi.fn();
+      render(
+        <MessageRow
+          message={baseMessage({
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'A completed reply' }],
+              metadata: { custom: { modelMetadata: { modelProvider: 'openai', modelId: 'gpt-5-mini' } } },
+            },
+          })}
+          hasModelList
+          readOnly
+          footer={<button onClick={onHighlight}>Highlight spans</button>}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(screen.getByText('openai/gpt-5-mini')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Highlight spans' }));
+      expect(onHighlight).toHaveBeenCalledOnce();
+      expect(screen.getByRole('button', { name: 'Copy message' })).toBeTruthy();
     });
   });
 
@@ -198,10 +223,7 @@ describe('MessageRow chrome', () => {
     const copyButton = screen.getByRole('button', { name: /copy/i });
     fireEvent.click(copyButton);
     expect(writeText).toHaveBeenCalledWith('copy me please');
-    // The button swaps its copy icon for a check icon once the async clipboard
-    // write resolves. Wait for that transition so the state update lands inside
-    // act instead of leaking after the test body.
-    await waitFor(() => expect(copyButton.querySelector('.lucide-check')).not.toBeNull());
+    await screen.findByRole('button', { name: 'Copied!' });
   });
 
   it('falls back when the browser blocks async clipboard writes', async () => {
@@ -280,7 +302,7 @@ describe('MessageRow chrome', () => {
               {
                 type: 'tool-invocation',
                 toolInvocation: { toolName: 'genericTool', toolCallId: 'c1', state: 'result', args: {}, result: {} },
-              } as never,
+              },
             ],
           },
         })}
@@ -343,7 +365,7 @@ describe('MessageRow chrome', () => {
           role: 'user',
           content: {
             format: 2,
-            parts: [{ type: 'file', mimeType: 'image/png', data: 'https://example.com/cat.png' } as never],
+            parts: [{ type: 'file', mimeType: 'image/png', data: 'https://example.com/cat.png' }],
           },
         })}
       />,
@@ -354,13 +376,14 @@ describe('MessageRow chrome', () => {
   });
 
   it('marks the user message as pending when a part carries pending status', () => {
+    const pendingPart = { type: 'text' as const, text: 'optimistic', metadata: { status: 'pending' } };
     const { container } = render(
       <MessageRow
         message={baseMessage({
           role: 'user',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'optimistic', metadata: { status: 'pending' } } as never],
+            parts: [pendingPart],
           },
         })}
       />,

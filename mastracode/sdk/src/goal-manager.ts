@@ -277,29 +277,29 @@ export class GoalManager {
    * Load the objective from ThreadState (called on thread switch). Falls back to
    * the legacy thread-metadata goal for threads created before this migration.
    */
-  async loadFromThread(state: GoalManagerState): Promise<void> {
-    this.persistGoalOnNextThreadCreate = false;
-
+  async loadFromThread(state: GoalManagerState, isCurrent: () => boolean = () => true): Promise<void> {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
-    this.threadId = threadId ?? undefined;
-    this.agentId = agent?.id;
+    let nextRecord: typeof this.record = null;
     if (agent && threadId) {
       try {
         const record = await agent.getObjective({ threadId });
         if (record) {
-          this.record = {
+          nextRecord = {
             ...record,
             id: record.id ?? randomUUID(),
             activeDurationMs: normalizeActiveDurationMs(record.activeDurationMs),
           };
-          return;
         }
       } catch {
         // fall through to legacy metadata
       }
     }
-    this.record = null;
+    if (!isCurrent()) return;
+    this.persistGoalOnNextThreadCreate = false;
+    this.threadId = threadId ?? undefined;
+    this.agentId = agent?.id;
+    this.record = nextRecord;
   }
 
   /**

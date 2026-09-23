@@ -12,7 +12,8 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-import type { FactoryTriageType } from '../../../rules/types.js';
+import { externalSourceForWorkItem } from '../../../rules/types.js';
+import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
@@ -35,6 +36,17 @@ function stableJson(value: unknown): string {
 
 export function factoryDecisionHash(decision: Record<string, unknown>): string {
   return createHash('sha256').update(stableJson(decision)).digest('hex');
+}
+
+function isWorkItemSource(value: unknown): value is WorkItemSource {
+  return (
+    value === 'github-issue' ||
+    value === 'github-pr' ||
+    value === 'linear-issue' ||
+    value === 'jira-issue' ||
+    value === 'incidentio-follow-up' ||
+    value === 'manual'
+  );
 }
 
 export interface ExternalWorkItemSource {
@@ -157,6 +169,8 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
+  'run_terminal_event_missing',
+  'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
   'repository_egress_blocked',
@@ -1861,16 +1875,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               !decision ||
               typeof decision !== 'object' ||
               (decision as Record<string, unknown>).type !== 'upsertLinkedWorkItem' ||
+              !isWorkItemSource((decision as Record<string, unknown>).source) ||
               typeof (decision as Record<string, unknown>).sourceKey !== 'string' ||
               typeof (decision as Record<string, unknown>).idempotencyKey !== 'string'
             ) {
               continue;
             }
-            const materialization = decision as Record<string, unknown> & { sourceKey: string; idempotencyKey: string };
+            const materialization = decision as Record<string, unknown> & {
+              source: WorkItemSource;
+              sourceKey: string;
+              idempotencyKey: string;
+            };
             const item = await ops.findOne<WorkItemDbRow>('work_items', {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
-              source_key: materialization.sourceKey,
+              source_key: externalSourceKey(
+                externalSourceForWorkItem(materialization.source, materialization.sourceKey),
+              ),
             });
             if (item) continue;
             await ops.updateAtomic<GovernanceDbRow>(
@@ -2886,13 +2907,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             }));
-          if (!bindingRow || !itemRow) throw new Error('Factory start replay references missing state.');
-          return {
-            item: toRow(itemRow),
-            binding: toBinding(bindingRow),
-            pendingStart: toPendingStart(prior),
-            replayed: true,
-          };
+          // Replay only a still-live binding. A prior pending row whose binding
+          // was revoked (abort → stage re-entry) or whose state is gone is a
+          // dead-run artifact: discard it and mint a fresh binding below. The
+          // unique kickoff_key index requires removing the stale row before
+          // re-inserting.
+          if (bindingRow && itemRow && bindingRow.status === 'active') {
+            return {
+              item: toRow(itemRow),
+              binding: toBinding(bindingRow),
+              pendingStart: toPendingStart(prior),
+              replayed: true,
+            };
+          }
+          await ops.deleteMany('factory_pending_starts', {
+            id: prior.id,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
         }
         const now = new Date();
         const create = input.workItem.input;
@@ -3266,12 +3298,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   async #purgeRuleState(
     ops: FactoryStorageOps,
-    { orgId, factoryProjectId, sourceKey }: { orgId: string; factoryProjectId: string; sourceKey: string },
+    { orgId, factoryProjectId, sourceKeys }: { orgId: string; factoryProjectId: string; sourceKeys: string[] },
   ): Promise<void> {
+    const keys = [...new Set(sourceKeys)];
     const decisions = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: sourceKey,
+      source_key: { in: keys },
     });
     if (decisions.length === 0) return;
 
@@ -3295,7 +3328,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await ops.deleteMany('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: sourceKey,
+      source_key: { in: keys },
     });
     for (const evaluationId of evaluationIds) {
       await ops.deleteMany('factory_rule_evaluations', { id: evaluationId });
@@ -3344,7 +3377,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await ops.deleteMany('work_item_activity', where);
   }
 
-  async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
+  async delete({
+    orgId,
+    id,
+    purgeRuleState = true,
+  }: {
+    orgId: string;
+    id: string;
+    purgeRuleState?: boolean;
+  }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
 
@@ -3354,11 +3395,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
-      if (existing.source_key) {
+      if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,
           factoryProjectId: existing.factory_project_id,
-          sourceKey: existing.source_key,
+          sourceKeys: [existing.external_source.externalId],
         });
       }
       await ops.updateMany(

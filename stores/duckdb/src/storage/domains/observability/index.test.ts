@@ -20,6 +20,7 @@ createObservabilityVNextTests({
     label: 'DuckDB',
     preferredStrategy: 'event-sourced',
     traceQuery: true,
+    traceQueryDiscovery: true,
     threadQuery: true,
     traceQueryStrictFeedbackValueTypes: true,
   },
@@ -110,11 +111,26 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query']);
+      expect(storage.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'delta-polling',
+        'trace-query',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+      ]);
 
       coreFeatures.delete('observability-delta-polling');
 
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
+      expect(storage.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'trace-query',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+      ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
       );
@@ -137,11 +153,20 @@ describe('ObservabilityStorageDuckDB', () => {
         'logs',
         'delta-polling',
         'trace-query',
+        'trace-query-discovery',
         'thread-query',
+        'trace-query-tenant-scope',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
+      expect(lazyStore.observability.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'trace-query',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+      ]);
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {

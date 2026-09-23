@@ -23,6 +23,23 @@ import { evaluateRuleGroup } from './rule-evaluator';
 
 const PASSTHROUGH_STEP_PREFIX = 'passthrough-';
 
+/**
+ * Override a hydrated workflow step's ID so it derives from the unique
+ * `ProcessorGraphStep.id` of the graph node (`processor:<graphStepId>`) rather
+ * than from the resolved processor's stable `id`. Without this, two distinct
+ * graph nodes whose provider returns processors with the same `id` collapse to a
+ * single workflow step (steps are keyed by `step.id`), overwriting configured
+ * nodes and making parallel/branch outputs ambiguous.
+ *
+ * Uses a shallow spread (not core's `cloneStep`) so that every property is
+ * preserved — notably `providesSkillDiscovery` and the bound
+ * `getLoadedToolsForRequestContext`, which `cloneStep` drops — and so the
+ * provider-created processor is never mutated.
+ */
+function withGraphStepId<T extends { id: string }>(step: T, graphStepId: string): T {
+  return { ...step, id: `processor:${graphStepId}` };
+}
+
 interface HydrationContext {
   providers: Record<string, ProcessorProvider>;
   mastra?: Mastra;
@@ -156,7 +173,7 @@ function buildWorkflow(
     if (entry.type === 'step') {
       const processor = resolveStep(entry.step, ctx);
       if (!processor) continue;
-      const step = createStep(processor as Parameters<typeof createStep>[0]);
+      const step = withGraphStepId(createStep(processor as Parameters<typeof createStep>[0]), entry.step.id);
       workflow = workflow.then(step);
       hasSteps = true;
     } else if (entry.type === 'parallel') {
@@ -168,7 +185,7 @@ function buildWorkflow(
           if (branchEntries.length === 1 && branchEntries[0]!.type === 'step') {
             const proc = resolveStep(branchEntries[0]!.step, ctx);
             if (!proc) return undefined;
-            return createStep(proc as Parameters<typeof createStep>[0]);
+            return withGraphStepId(createStep(proc as Parameters<typeof createStep>[0]), branchEntries[0]!.step.id);
           }
           // Multi-step branch: build a sub-workflow
           const subWorkflow = buildWorkflow(branchEntries, `${workflowId}-parallel-branch-${branchIdx}`, ctx);
@@ -188,13 +205,26 @@ function buildWorkflow(
       // branch() takes Array<[ConditionFunction, Step]> tuples
       const branchTuples: Array<[any, any]> = [];
 
+      // Shared fallback gating: a no-rule user default runs only when no explicit rule
+      // matched the current input, and the internal pass-through runs only when no
+      // explicit rule matched AND no user default exists. These arrays/flags are
+      // populated as branches resolve and are read at execution time by the predicates
+      // below, so their evaluation reflects only branches that were actually added.
+      const explicitRuleGroups: NonNullable<(typeof entry.conditions)[number]['rules']>[] = [];
+      let hasUserDefault = false;
+      const anyExplicitMatch = (inputData: Record<string, unknown>) =>
+        explicitRuleGroups.some(rules => evaluateRuleGroup(rules, inputData));
+
       for (const [i, condition] of entry.conditions.entries()) {
         // Each condition branch is an array of entries
         let branchStep: any;
         if (condition.steps.length === 1 && condition.steps[0]!.type === 'step') {
           const proc = resolveStep(condition.steps[0]!.step, ctx);
           if (!proc) continue;
-          branchStep = createStep(proc as Parameters<typeof createStep>[0]);
+          branchStep = withGraphStepId(
+            createStep(proc as Parameters<typeof createStep>[0]),
+            condition.steps[0]!.step.id,
+          );
         } else {
           branchStep = buildWorkflow(condition.steps, `${workflowId}-cond-branch-${i}`, ctx);
           if (!branchStep) continue;
@@ -203,13 +233,18 @@ function buildWorkflow(
         if (condition.rules) {
           // Conditional branch with RuleGroup evaluated against the previous step's output
           const rules = condition.rules;
+          explicitRuleGroups.push(rules);
           const conditionFn = async ({ inputData }: { inputData: Record<string, unknown> }) => {
             return evaluateRuleGroup(rules, inputData);
           };
           branchTuples.push([conditionFn, branchStep]);
         } else {
-          // Default branch (no rules = always matches, acts as fallback)
-          branchTuples.push([async () => true, branchStep]);
+          // Default branch (no rules): fallback that runs only when no explicit rule matched.
+          hasUserDefault = true;
+          branchTuples.push([
+            async ({ inputData }: { inputData: Record<string, unknown> }) => !anyExplicitMatch(inputData),
+            branchStep,
+          ]);
         }
       }
 
@@ -223,7 +258,13 @@ function buildWorkflow(
           outputSchema: ProcessorStepSchema,
           execute: async ({ inputData }) => inputData,
         });
-        branchTuples.push([async () => true, passthroughStep]);
+        // Internal pass-through runs only when no explicit rule matched and there is
+        // no user-defined default branch to handle the unmatched case.
+        branchTuples.push([
+          async ({ inputData }: { inputData: Record<string, unknown> }) =>
+            !anyExplicitMatch(inputData) && !hasUserDefault,
+          passthroughStep,
+        ]);
 
         workflow = (workflow as any).branch(branchTuples);
         // After branch, outputs are keyed by step ID: { [stepId]: ProcessorStepOutput }

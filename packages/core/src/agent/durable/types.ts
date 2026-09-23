@@ -13,8 +13,7 @@ import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
-import type { ProviderOptions } from '../../llm/model/provider-options';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
@@ -79,7 +78,7 @@ export interface SerializableModelConfig {
     [key: string]: unknown;
   };
   /** Provider-specific options for the model call */
-  providerOptions?: ProviderOptions;
+  providerOptions?: SharedProviderOptions;
 }
 
 /**
@@ -144,6 +143,8 @@ export interface SerializableStructuredOutput {
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
   jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
+  /** Caller-supplied instructions (see `StructuredOutputOptionsBase.instructions`) */
+  instructions?: string;
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
@@ -198,7 +199,7 @@ export interface SerializableDurableOptions {
   /** Whether error processors are configured (flag only, instances are non-serializable) */
   hasErrorProcessors?: boolean;
   /** Provider-specific options passed to the language model */
-  providerOptions?: ProviderOptions;
+  providerOptions?: SharedProviderOptions;
   /** Structured output configuration */
   structuredOutput?: SerializableStructuredOutput;
   /** When true, the background task check step skips its in-loop wait (external driver handles continuation) */

@@ -418,7 +418,7 @@ describe('DurableAgent abort signal', () => {
     const resourceId = 'abort-thread-stream-resource';
 
     let abortPayload: { steps: { finishReason?: string }[] } | undefined;
-    const { output, cleanup } = await durableAgent.stream('Go', {
+    const { output, runId, cleanup } = await durableAgent.stream('Go', {
       memory: { thread: threadId, resource: resourceId },
       onAbort: data => {
         abortPayload = data;
@@ -426,7 +426,8 @@ describe('DurableAgent abort signal', () => {
     });
 
     await modelCalled;
-    expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
+    expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: 'completed-run' })).toBe(false);
+    expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: runId })).toBe(true);
 
     // Awaited without a catch: the run has to end through the abort path,
     // rather than by surfacing some unrelated stream failure.

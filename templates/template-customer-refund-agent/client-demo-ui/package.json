@@ -1,0 +1,25 @@
+{
+  "name": "client-demo-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build && node --env-file-if-exists=../.env dist/server.js",
+    "seed": "npm run build && node --env-file-if-exists=../.env dist/seed.js",
+    "local:seed": "npm run build && node --env-file-if-exists=../.env dist/local-seed.js",
+    "setup": "npm run build && node --env-file-if-exists=../.env dist/setup.js",
+    "format:check": "oxfmt --check -c ../.oxfmtrc.json .",
+    "lint": "oxlint --deny-warnings src test",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "npm run build && playwright test -c playwright.config.ts",
+    "e2e:serve": "node dist/e2e-seed.js && node dist/server.js",
+    "build": "tsc -p tsconfig.build.json && cp src/styles.css dist/styles.css"
+  },
+  "dependencies": {
+    "@hono/node-server": "1.19.17",
+    "@libsql/client": "0.17.4",
+    "hono": "4.13.7"
+  }
+}

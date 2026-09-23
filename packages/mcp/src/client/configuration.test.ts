@@ -376,11 +376,7 @@ describe('MCPClient tool discovery retries', () => {
   });
 
   it('forwards per-server capabilities into InternalMastraMCPClient', async () => {
-    const customCapabilities = {
-      elicitation: {
-        supportedContentTypes: ['text/uri-list', 'application/vnd.mastra.form+json'],
-      },
-    } as any;
+    const customCapabilities = { elicitation: { form: {}, url: {} } };
 
     const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
 
@@ -388,8 +384,9 @@ describe('MCPClient tool discovery retries', () => {
       id: `configuration-test-${++clientId}`,
       servers: {
         weather: {
-          url: new URL('http://localhost:1234/sse'),
+          url: new URL('http://localhost:1234/mcp'),
           capabilities: customCapabilities,
+          inputRequests: async () => ({ action: 'decline' }),
         },
       },
     });
@@ -403,27 +400,45 @@ describe('MCPClient tool discovery retries', () => {
     expect(capabilities).toMatchObject(customCapabilities);
   });
 
-  it('registers elicitation handlers before connecting the server', async () => {
+  it('advertises form elicitation when an inputRequests handler is configured', async () => {
     const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
 
     const client = new MCPClient({
       id: `configuration-test-${++clientId}`,
       servers: {
         weather: {
-          url: new URL('http://localhost:1234/sse'),
+          url: new URL('http://localhost:1234/mcp'),
+          inputRequests: async () => ({ action: 'decline' }),
+        },
+        silent: {
+          url: new URL('http://localhost:5678/mcp'),
         },
       },
     });
 
     clients.push(client);
 
-    await client.elicitation.onRequest('weather', async () => ({ action: 'decline' }));
+    const withHandler = (await (client as any).getConnectedClientForServer('weather')).client._capabilities;
+    const withoutHandler = (await (client as any).getConnectedClientForServer('silent')).client._capabilities;
 
-    const internalClient = (client as any).mcpClientsById.get('weather');
-    const capabilities = internalClient.client._capabilities;
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+    expect(withHandler.elicitation).toEqual({ form: {} });
+    expect(withoutHandler.elicitation).toBeUndefined();
+  });
 
-    expect(connectSpy).not.toHaveBeenCalled();
-    expect(capabilities.elicitation).toMatchObject({ form: {} });
+  it('rejects an elicitation capability without an inputRequests handler', async () => {
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/mcp'),
+          capabilities: { elicitation: { form: {} } },
+        },
+      },
+    });
+    clients.push(client);
+
+    await expect((client as any).getConnectedClientForServer('weather')).rejects.toThrow(/inputRequests/);
   });
 
   it('returns cached server instructions for configured servers', async () => {

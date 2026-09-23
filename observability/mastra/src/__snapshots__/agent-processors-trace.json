@@ -58,7 +58,8 @@
             "entityId": "validator",
             "attributes": {
               "processorExecutor": "workflow",
-              "processorIndex": 0
+              "processorIndex": 0,
+              "processorPhase": "input"
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -253,7 +254,9 @@
                               "model": "mock-model-id",
                               "provider": "mock-provider",
                               "streaming": true,
-                              "parameters": {},
+                              "parameters": {
+                                "maxRetries": 0
+                              },
                               "availableTools": [],
                               "toolChoice": "auto",
                               "usage": {
@@ -448,7 +451,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": [],
                       "toolChoice": "auto",
                       "usage": {
@@ -520,7 +525,8 @@
             "entityId": "summarizer",
             "attributes": {
               "processorExecutor": "workflow",
-              "processorIndex": 0
+              "processorIndex": 0,
+              "processorPhase": "outputResult"
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -719,7 +725,9 @@
                               "model": "mock-model-id",
                               "provider": "mock-provider",
                               "streaming": true,
-                              "parameters": {},
+                              "parameters": {
+                                "maxRetries": 0
+                              },
                               "availableTools": [],
                               "toolChoice": "auto",
                               "usage": {

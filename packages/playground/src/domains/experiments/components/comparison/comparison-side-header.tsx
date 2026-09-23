@@ -58,9 +58,9 @@ export function ComparisonSideHeader({
         </Badge>
         {experiment && (
           <Button
-            as={Link}
-            size="xs"
-            href={`/experiments/${experiment.id}`}
+            render={<Link href={`/experiments/${experiment.id}`} />}
+            size="sm"
+
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>
@@ -69,7 +69,7 @@ export function ComparisonSideHeader({
       </div>
 
       {experiment && (
-        <div className="text-ui-sm text-neutral3 flex flex-wrap gap-x-4 gap-y-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
           {experiment.name && (
             <TextAndIcon>
               <HashIcon /> {shortId}

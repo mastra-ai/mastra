@@ -30,6 +30,11 @@ export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
+function configurePluginTool(tool: ToolLike, backgroundToolsEnabled: boolean): ToolLike {
+  if (backgroundToolsEnabled || !tool.background) return tool;
+  return { ...tool, background: { ...tool.background, enabled: false } };
+}
+
 export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
     super();
@@ -124,6 +129,7 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
+  backgroundToolsEnabled = false,
 ) {
   return function getDynamicTools({
     requestContext,
@@ -186,7 +192,7 @@ export function createDynamicTools(
       if (pluginTools) {
         for (const [name, tool] of Object.entries(pluginTools)) {
           if (!(name in tools)) {
-            tools[name] = tool;
+            tools[name] = configurePluginTool(tool, backgroundToolsEnabled);
           }
         }
       }

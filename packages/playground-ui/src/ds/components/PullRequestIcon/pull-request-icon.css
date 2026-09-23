@@ -1,0 +1,7 @@
+.pull-request-icon-merged {
+  color: oklch(0.714 0.203 305.5) !important;
+}
+
+html.light .pull-request-icon-merged {
+  color: oklch(0.496 0.265 302) !important;
+}

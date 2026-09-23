@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BotIcon } from 'lucide-react';
 
 import { PageHeader } from './page-header';
-import type { PageHeaderTitleSize } from './page-header';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 
@@ -20,7 +19,6 @@ type PageHeaderStoryProps = {
   showMeta: boolean;
   showTitle: boolean;
   title: string;
-  titleSize: PageHeaderTitleSize;
 };
 
 function PageHeaderStory({
@@ -33,7 +31,6 @@ function PageHeaderStory({
   showMeta,
   showTitle,
   title,
-  titleSize,
 }: PageHeaderStoryProps) {
   return (
     <StoryFrame>
@@ -43,15 +40,11 @@ function PageHeaderStory({
             <BotIcon strokeWidth={2.5} />
           </PageHeader.Icon>
         )}
-        {showTitle && (
-          <PageHeader.Title size={titleSize} isLoading={isLoading}>
-            {title}
-          </PageHeader.Title>
-        )}
+        {showTitle && <PageHeader.Title isLoading={isLoading}>{title}</PageHeader.Title>}
         {showMeta && (
           <PageHeader.Meta beside={metaBeside}>
             <Badge variant="green">Active</Badge>
-            {!metaBeside && <span className="text-ui-xs text-neutral2 font-mono">agent_8f3a91b2</span>}
+            {!metaBeside && <span className="font-mono text-meta text-placeholder">agent_8f3a91b2</span>}
           </PageHeader.Meta>
         )}
         {showDescription && <PageHeader.Description isLoading={isLoading}>{description}</PageHeader.Description>}
@@ -79,11 +72,9 @@ const meta = {
     showMeta: false,
     showTitle: true,
     title: 'Research agent',
-    titleSize: 'md',
   },
   argTypes: {
     title: { control: 'text' },
-    titleSize: { control: 'inline-radio', options: ['sm', 'md', 'lg', 'xl'] },
     description: { control: 'text' },
     metaBeside: { control: 'boolean' },
     isLoading: { control: 'boolean' },
@@ -133,7 +124,7 @@ export const MetaBoth: Story = {
           <Badge variant="green">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Meta>
-          <span className="text-ui-xs text-neutral2 font-mono">env_01j9</span>
+          <span className="font-mono text-meta text-placeholder">env_01j9</span>
         </PageHeader.Meta>
         <PageHeader.Action>
           <Button size="sm">Settings</Button>
@@ -199,23 +190,20 @@ export const ActionOnly: Story = {
   ),
 };
 
-export const TitleSizes: Story = {
+export const TallAction: Story = {
   render: () => (
     <div className="grid w-[min(42rem,calc(100vw-7rem))] gap-6 py-10">
       <PageHeader>
-        <PageHeader.Title size="sm">Small title</PageHeader.Title>
+        <PageHeader.Title>Environment variables</PageHeader.Title>
       </PageHeader>
       <PageHeader>
-        <PageHeader.Title>Medium title</PageHeader.Title>
-      </PageHeader>
-      <PageHeader>
-        <PageHeader.Title size="lg">Large title</PageHeader.Title>
-      </PageHeader>
-      <PageHeader>
-        <PageHeader.Title size="xl">Extra large title</PageHeader.Title>
-      </PageHeader>
-      <PageHeader>
-        <PageHeader.Title size="smaller">Legacy smaller title</PageHeader.Title>
+        <PageHeader.Title>Environments</PageHeader.Title>
+        <PageHeader.Action>
+          <div className="flex flex-col gap-2">
+            <Button size="sm">Create environment</Button>
+            <Button size="sm">Import</Button>
+          </div>
+        </PageHeader.Action>
       </PageHeader>
     </div>
   ),

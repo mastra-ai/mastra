@@ -1,29 +1,26 @@
-import type { GetWorkflowResponse } from '@mastra/client-js';
+import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { WorkflowGraphCanvas } from '@mastra/playground-ui/components/Workflow';
-import { useNodesState, useEdgesState } from '@xyflow/react';
+import { useMemo } from 'react';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
+import { useWorkflowGraphNodes } from './use-workflow-graph-nodes';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
-import { useSuspendedStepKey, useWaitingStepKey } from './use-workflow-trigger';
-import { constructNodesAndEdges, findFocusNode } from './utils';
-import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
+import { findFocusNode } from './utils';
+import { getWorkflowGraphGroups } from './workflow-graph-groups';
 
 export interface WorkflowGraphInnerProps {
-  workflow: Pick<GetWorkflowResponse, 'stepGraph'>;
+  stepGraph: SerializedStepFlowEntry[];
 }
 
-export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
-  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
-  const [nodes, , onNodesChange] = useNodesState<WorkflowGraphNode>(initialNodes);
-  const [edges] = useEdgesState<WorkflowGraphEdge>(initialEdges);
+export function WorkflowGraphInner({ stepGraph }: WorkflowGraphInnerProps) {
+  const { nodes, edges, onNodesChange } = useWorkflowGraphNodes(stepGraph);
   const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges });
   const { selectedStepId } = useWorkflowSelectedStep();
-  const waitingStepKey = useWaitingStepKey();
-  const suspendedStepKey = useSuspendedStepKey();
-  const focusStepId = selectedStepId ?? waitingStepKey ?? suspendedStepKey;
-  const focusNodeId = focusStepId ? findFocusNode(nodes, focusStepId)?.id : undefined;
+  const focusNodeId = selectedStepId ? findFocusNode(nodes, selectedStepId)?.id : undefined;
+  const groups = useMemo(() => getWorkflowGraphGroups(nodes), [nodes]);
 
   return (
     <WorkflowGraphCanvas
+      groups={groups}
       nodes={nodes}
       edges={styledEdges}
       nodeTypes={nodeTypes}

@@ -654,8 +654,9 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
 
         expect(result.object).toBeUndefined();
         expect(result.tripwire?.reason).toBe(
-          '[StructuredOutputProcessor] Structured output processing failed: [StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+          '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
         );
+        expect(result.tripwire?.retry).toBe(true);
       });
 
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
@@ -963,7 +964,9 @@ describe('separate-model structured output logging', () => {
           expect(result.tripwire).toBeDefined();
           expect(object).toBeUndefined();
           expect(logger.error).toHaveBeenCalled();
-          expect(logger.warn).not.toHaveBeenCalled();
+          expect(logger.warn).toHaveBeenCalledWith(
+            'Processor requested retry but maxProcessorRetries is not set. Treating as abort.',
+          );
         } else {
           expect(result.tripwire).toBeUndefined();
           expect(object).toEqual(errorStrategy === 'fallback' ? fallbackValue : undefined);

@@ -4,8 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import debug from 'debug';
+import { BUNDLE } from './bundle';
 
 const execFile = util.promisify(child_process.execFile);
+const availableCodemods = new Set(BUNDLE);
 
 interface TransformOptions {
   dry?: boolean;
@@ -28,8 +30,9 @@ function getJscodeshiftBin(): string {
 }
 
 function buildArgs(codemodPath: string, targetPath: string, options: TransformOptions): string[] {
-  // Ignoring everything under `.*/` covers `.mastra/` along with any other
-  // framework build related or otherwise intended-to-be-hidden directories.
+  // Ignore hidden directories inside the target without matching hidden
+  // directories that contain the target itself.
+  const hiddenDirectoryPattern = path.join(targetPath, '**/.*/**');
   const args = [
     '-t',
     codemodPath,
@@ -37,7 +40,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
     '--parser',
     'tsx',
     '--ignore-pattern=**/node_modules/**',
-    '--ignore-pattern=**/.*/**',
+    `--ignore-pattern=${hiddenDirectoryPattern}`,
     '--ignore-pattern=**/dist/**',
     '--ignore-pattern=**/build/**',
     '--ignore-pattern=**/*.min.js',
@@ -53,7 +56,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
   }
 
   if (options.verbose) {
-    args.push('--verbose');
+    args.push('--verbose=2');
   }
 
   if (options.jscodeshift) {
@@ -71,17 +74,13 @@ export type TransformErrors = {
 
 function parseErrors(transform: string, output: string): TransformErrors {
   const errors: TransformErrors = [];
-  const errorRegex = /ERR (.+) Transformation error/g;
-  const syntaxErrorRegex = /SyntaxError: .+/g;
+  // jscodeshift prints one line per failure: `ERR <file> Transformation error (<message>)`,
+  // with newlines in the message already replaced, so filename and message come from the same line.
+  const errorRegex = /^\s*ERR (.+?) Transformation error \((.*)\)\s*$/gm;
 
   let match;
   while ((match = errorRegex.exec(output)) !== null) {
-    const filename = match[1]!;
-    const syntaxErrorMatch = syntaxErrorRegex.exec(output);
-    if (syntaxErrorMatch) {
-      const summary = syntaxErrorMatch[0];
-      errors.push({ transform, filename, summary });
-    }
+    errors.push({ transform, filename: match[1]!, summary: match[2]!.trim() });
   }
 
   return errors;
@@ -107,6 +106,10 @@ export async function transform(
   transformOptions: TransformOptions,
   options: { logStatus: boolean } = { logStatus: true },
 ): Promise<{ errors: TransformErrors; notImplementedErrors: TransformErrors }> {
+  if (!availableCodemods.has(codemod)) {
+    throw new Error(`Unknown codemod "${codemod}". Available codemods: ${BUNDLE.join(', ')}`);
+  }
+
   if (options.logStatus) {
     log(`Applying codemod '${codemod}': ${source}`);
   }
@@ -118,6 +121,11 @@ export async function transform(
   const { stdout } = await execFile(process.execPath, [getJscodeshiftBin(), ...args], { encoding: 'utf8' });
   const errors = parseErrors(codemod, stdout);
   const notImplementedErrors = parseNotImplementedErrors(codemod, stdout);
+  // Keep routine v1 bundle runs quiet while its spinner is active, but always
+  // show explicitly requested previews and individual codemod results.
+  if (stdout && (options.logStatus || transformOptions.dry || transformOptions.print || transformOptions.verbose)) {
+    process.stdout.write(stdout);
+  }
   if (options.logStatus) {
     if (errors.length > 0) {
       errors.forEach(({ transform, filename, summary }) => {

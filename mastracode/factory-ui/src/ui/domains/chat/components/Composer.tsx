@@ -6,12 +6,12 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
+  type ComposerInputProps,
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
 } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
 import { useRef } from 'react';
@@ -32,34 +32,18 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
+import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { getModeColorClass } from './mode-colors';
+import { getComposerTone } from './composer-tone';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
-import { useComposerSpotlight } from './useComposerSpotlight';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
-type ComposerVariant = 'inline' | 'textarea';
-
-const composerVariantClass: Record<ComposerVariant, string> = {
-  inline: 'min-h-10',
-  textarea: 'min-h-28',
-};
-
-const composerInputTextClass = 'text-ui-md leading-ui-md font-[450] text-neutral4 placeholder:text-neutral2';
-
-const composerVariantMaxHeight: Record<ComposerVariant, string> = {
-  inline: '13rem',
-  textarea: '16rem',
-};
-
-type ComposerProps = {
-  variant?: ComposerVariant;
-};
+type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
@@ -81,7 +65,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     setComposerDraft,
     runComposerCommand,
   } = useChatCommands();
-  const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -106,7 +89,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     onUserDraft,
     disabled: chatPreparing || planFeedback.pending,
   });
-  const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
@@ -154,12 +136,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
+      clearPendingHandoff(resourceId);
       seedThreadMessageCache(threadId, text, files);
       void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);
     await sendMutation.mutateAsync({ text, files: outgoing });
+    clearPendingHandoff(resourceId);
   };
 
   const steer = async (text: string) => {
@@ -168,6 +152,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
+      clearPendingHandoff(resourceId);
     } catch (error) {
       failLocalUser(localId);
       throw error;
@@ -277,12 +262,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
-        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight isolate border-0', modeColorClass)}>
-          <div
-            aria-hidden="true"
-            className="composer-spotlight-surface pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit] bg-(--composer-surface)"
-          />
+      <ComposerRing busy={busy || chatPreparing} tone={getComposerTone(activeModeId ?? modes[0]?.id)}>
+        <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
@@ -292,8 +273,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={textareaDisabled}
-            maxHeight={composerVariantMaxHeight[variant]}
-            className={cn(composerInputTextClass, composerVariantClass[variant])}
+            variant={variant}
             aria-label="Message"
             aria-keyshortcuts="Shift+Tab"
           />
@@ -306,12 +286,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             className="hidden"
             aria-label="Attach images"
           />
-          <ComposerActions className="static w-full flex-wrap items-end justify-between px-3 pb-3">
+          <ComposerActions>
             <StatusLine />
-            <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
+            <ButtonsGroup size="sm" className="ml-auto" aria-label="Composer actions">
               <Button
                 type="button"
-                variant="outline"
                 size="icon-sm"
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
@@ -322,7 +301,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               {liveRun && (
                 <Button
                   type="button"
-                  variant="outline"
                   size="icon-sm"
                   onClick={() => void abortMutation.mutateAsync()}
                   aria-label="Abort"
@@ -332,7 +310,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               )}
               <Button
                 type="submit"
-                variant="outline"
                 size="icon-sm"
                 disabled={
                   sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())

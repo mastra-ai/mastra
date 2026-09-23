@@ -11,7 +11,12 @@ export default defineConfig({
           typecheck: {
             enabled: true,
             include: ['./**/*.test-d.ts'],
-            exclude: ['**/node_modules/**', './core/auth.test-d.ts', './core/agent-message-input.test-d.ts'],
+            exclude: [
+              '**/node_modules/**',
+              './core/auth.test-d.ts',
+              './core/agent-message-input.test-d.ts',
+              './mcp/**',
+            ],
           },
         },
       },

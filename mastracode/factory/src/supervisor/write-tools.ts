@@ -17,7 +17,12 @@ interface SupervisorWriteDependencies {
   audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
-  signalSession?: (input: { sessionId: string; message: string; userId: string }) => Promise<unknown>;
+  messageSession?: (input: {
+    sessionId: string;
+    message: string;
+    userId: string;
+    delivery: 'send' | 'queue';
+  }) => Promise<unknown>;
   now?: () => Date;
 }
 
@@ -188,24 +193,30 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
     }),
     factory_signal_session: createTool({
       id: 'factory_signal_session',
-      description: 'Send bounded guidance to a worker session after the person confirms the exact message.',
-      inputSchema: z.object({ sessionId: z.string().min(1), message: z.string().trim().min(1).max(2000) }),
+      description:
+        'Send bounded guidance to a worker session after the person confirms the exact message. Use queue only when the guidance should wait for the current run to finish.',
+      inputSchema: z.object({
+        sessionId: z.string().min(1),
+        message: z.string().trim().min(1).max(2000),
+        delivery: z.enum(['send', 'queue']).default('send'),
+      }),
       requireApproval: true,
-      execute: async ({ sessionId, message }) => {
-        if (!deps.signalSession) throw new Error('Worker session signaling is unavailable.');
+      execute: async ({ sessionId, message, delivery }) => {
+        if (!deps.messageSession) throw new Error('Worker session messaging is unavailable.');
         const bindings = await deps.workItems.listRunBindings(deps.scope.orgId, deps.scope.factoryProjectId);
         const binding = bindings.find(row => row.sessionId === sessionId);
         if (!binding) throw new Error('The session does not belong to this factory.');
-        await deps.signalSession({ sessionId, message, userId: deps.userId });
+        await deps.messageSession({ sessionId, message, userId: deps.userId, delivery });
         await audit(
           'factory.agent.signaled',
           { type: 'factory_session', id: sessionId },
           {
             workItemId: binding.workItemId,
             role: binding.role,
+            delivery,
           },
         );
-        return { sessionId, delivered: true, workItemId: binding.workItemId, role: binding.role };
+        return { sessionId, delivered: true, delivery, workItemId: binding.workItemId, role: binding.role };
       },
     }),
   };

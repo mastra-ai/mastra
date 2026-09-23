@@ -1,25 +1,26 @@
 import { coreFeatures } from '@mastra/core/features';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
 import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
-import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
-import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { GenerationProvider } from '@/domains/datasets/context/generation-context';
 import { cleanProviderId } from '@/domains/llm/utils';
+import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
+
+const crumbs = [navCrumb('/agents'), agentCrumb];
 
 /** Shadows the global "go to" sequences with agent-scoped targets while an agent page is mounted. */
 const AgentShortcuts = ({ agentId }: { agentId: string }) => {
@@ -47,34 +48,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
     ? 'chat'
     : location.pathname.includes('/editor')
       ? 'versions'
-      : location.pathname.includes('/evaluate')
-        ? 'evaluate'
-        : location.pathname.includes('/traces')
-          ? 'traces'
-          : 'none';
-
-  const content = (
-    <KeyboardScope>
-      <AgentShortcuts agentId={agentId!} />
-      <OverviewPanelShortcuts />
-      <AgentDetailHeaderActions agentId={agentId!} />
-      <RouteSidePanel owner="agent-detail">
-        <ActivatedSkillsProvider key={agentId}>
-          <AgentOverviewPanel agentId={agentId!} />
-        </ActivatedSkillsProvider>
-      </RouteSidePanel>
-      <MainContentLayout>
-        <AgentPageTabs
-          agentId={agentId!}
-          activeTab={activeTab}
-          showPlayground={showPlayground}
-          showObservability={showObservability}
-          rightSlot={activeTab === 'chat' ? <ThreadTracesToggle /> : undefined}
-        />
-        {children}
-      </MainContentLayout>
-    </KeyboardScope>
-  );
+      : location.pathname.includes('/traces')
+        ? 'traces'
+        : 'none';
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
@@ -84,9 +60,33 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           defaultProvider={defaultProvider}
           defaultModel={defaultModel}
         >
-          <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
-          </GenerationProvider>
+          <KeyboardScope>
+            <AgentShortcuts agentId={agentId!} />
+            <OverviewPanelShortcuts />
+
+            <PageLayout
+              variant="fit"
+              breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+              headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+            >
+              <h1 className="sr-only">{agentId}</h1>
+              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+                <AgentPageTabs
+                  agentId={agentId!}
+                  activeTab={activeTab}
+                  showPlayground={showPlayground}
+                  showObservability={showObservability}
+                />
+                {children}
+              </div>
+            </PageLayout>
+
+            <RouteSidePanel owner="agent-detail">
+              <ActivatedSkillsProvider key={agentId}>
+                <AgentOverviewPanel agentId={agentId!} />
+              </ActivatedSkillsProvider>
+            </RouteSidePanel>
+          </KeyboardScope>
         </PlaygroundModelProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>

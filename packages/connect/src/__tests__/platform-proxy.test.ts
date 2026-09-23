@@ -45,6 +45,33 @@ describe('createPlatformProxy request context binding', () => {
     expect(logSpy).not.toHaveBeenCalled();
   });
 
+  it('validates template inputs through zodValidateInput and returns the parsed data', async () => {
+    const { z } = await import('zod');
+    const proxy = createPlatformProxy({ connectionId: 'conn-1' });
+    const schema = z.object({ project_id: z.number(), name: z.string().optional() });
+
+    await expect(proxy.zodValidateInput({ zodSchema: schema, input: { project_id: 42 } })).resolves.toEqual({
+      data: { project_id: 42 },
+    });
+    await expect(proxy.zodValidateInput({ zodSchema: schema, input: { project_id: 'nope' } })).rejects.toMatchObject({
+      name: 'ToolActionError',
+      payload: { type: 'invalid_input' },
+    });
+  });
+
+  it('relays the provider status so templates can branch on async responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ statementHandle: 'h-1' }, { status: 202 }));
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    const response = await proxy.post({ endpoint: '/api/v2/statements' });
+
+    expect(response.status).toBe(202);
+    expect(response.data).toEqual({ statementHandle: 'h-1' });
+  });
+
   it('forwards template baseUrlOverride values to the platform proxy request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const proxy = createPlatformProxy({
@@ -56,6 +83,28 @@ describe('createPlatformProxy request context binding', () => {
 
     expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/conn-1/proxy/items');
     expect(fetchMock.mock.calls[0]![1].headers['base-url-override']).toBe('https://caller-controlled.example');
+  });
+
+  it('exposes credentials only through getConnectionWithCredentials, mapped to the template wire shape', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((url: string) =>
+        url.endsWith('/credentials')
+          ? Promise.resolve(Response.json({ type: 'oauth2', accessToken: 'tok-1', expiresAt: null }))
+          : Promise.resolve(Response.json({ connection_config: {}, metadata: null })),
+      );
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    }).withRequestContext(new RequestContext());
+
+    await expect(proxy.getConnection()).resolves.not.toHaveProperty('credentials');
+    await expect(proxy.getConnectionWithCredentials()).resolves.toMatchObject({
+      credentials: { type: 'OAUTH2', access_token: 'tok-1' },
+    });
+    // The plain getConnection call never hit the credential endpoint.
+    const urls = fetchMock.mock.calls.map(call => call[0] as string);
+    expect(urls.filter(url => url.endsWith('/credentials'))).toHaveLength(1);
   });
 
   it('fetches connection context once per bound execution and returns metadata', async () => {
@@ -76,6 +125,49 @@ describe('createPlatformProxy request context binding', () => {
     });
     await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1' });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('merges updateMetadata writes into an overlay shared across bound copies', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(Response.json({ connection_config: {}, metadata: null })));
+    const base = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    const firstCall = base.withRequestContext(new RequestContext());
+    await expect(firstCall.getMetadata()).resolves.toEqual({});
+    await firstCall.updateMetadata({ cloudId: 'cloud-1', baseUrl: 'https://site.atlassian.net' });
+    await expect(firstCall.getMetadata()).resolves.toEqual({
+      cloudId: 'cloud-1',
+      baseUrl: 'https://site.atlassian.net',
+    });
+
+    // A later request-bound copy of the same toolset proxy sees the cache.
+    const secondCall = base.withRequestContext(new RequestContext());
+    await expect(secondCall.getMetadata()).resolves.toEqual({
+      cloudId: 'cloud-1',
+      baseUrl: 'https://site.atlassian.net',
+    });
+    // The overlay never writes back to the platform: only connection-context
+    // GETs went over the wire.
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1]?.method ?? 'GET').toBe('GET');
+    }
+  });
+
+  it('layers overlay values over platform metadata without dropping existing keys', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ connection_config: {}, metadata: { region: 'us-east-1' } }));
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    }).withRequestContext(new RequestContext());
+
+    await proxy.updateMetadata({ cloudId: 'cloud-1' });
+    await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1', cloudId: 'cloud-1' });
   });
 });
 

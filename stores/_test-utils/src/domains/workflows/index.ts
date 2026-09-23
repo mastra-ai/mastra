@@ -2,7 +2,7 @@ import type { MastraStorage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
-import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
+import { checkWorkflowSnapshot, createSampleSuspendedSnapshotWithThread, createSampleWorkflowSnapshot } from './data';
 
 export interface WorkflowsTestOptions {
   storage: MastraStorage;
@@ -349,6 +349,78 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       });
       expect(Array.isArray(runs)).toBe(true);
       expect(runs.length).toBe(0);
+    });
+  });
+
+  /**
+   * The threadId filter is best-effort: adapters MAY ignore it and return a
+   * superset (the agent re-verifies in-process), but MUST NOT exclude runs
+   * whose snapshot carries the requested thread id. These tests only assert
+   * inclusion, so both implementing and non-implementing adapters pass.
+   */
+  describe('listWorkflowRuns with threadId (best-effort filter)', () => {
+    const workflowName = 'workflow-thread-test';
+    let agenticRunIdA: string;
+    let durableRunIdA: string;
+
+    beforeEach(async () => {
+      await workflowsStorage.dangerouslyClearAll();
+
+      const agenticA = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-a',
+        resourceId: 'resource-1',
+        layout: 'agentic-loop',
+      });
+      agenticRunIdA = agenticA.runId;
+      const durableA = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-a',
+        resourceId: 'resource-1',
+        layout: 'durable',
+      });
+      durableRunIdA = durableA.runId;
+      const agenticB = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-b',
+        resourceId: 'resource-1',
+        layout: 'agentic-loop',
+      });
+      const durableB = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-b',
+        resourceId: 'resource-1',
+        layout: 'durable',
+      });
+
+      for (const { snapshot, runId } of [agenticA, durableA, agenticB, durableB]) {
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          resourceId: 'resource-1',
+          snapshot,
+        });
+      }
+    });
+
+    it('includes runs whose agentic-loop layout snapshot matches the threadId', async () => {
+      const { runs } = await workflowsStorage.listWorkflowRuns({
+        workflowName,
+        threadId: 'thread-a',
+      });
+      expect(runs.map(run => run.runId)).toContain(agenticRunIdA);
+    });
+
+    it('includes runs whose durable-layout snapshot matches the threadId', async () => {
+      const { runs } = await workflowsStorage.listWorkflowRuns({
+        workflowName,
+        threadId: 'thread-a',
+      });
+      expect(runs.map(run => run.runId)).toContain(durableRunIdA);
+    });
+
+    it('does not error when filtering by an unknown threadId', async () => {
+      const { runs } = await workflowsStorage.listWorkflowRuns({
+        workflowName,
+        threadId: 'thread-that-does-not-exist',
+      });
+      expect(Array.isArray(runs)).toBe(true);
     });
   });
 

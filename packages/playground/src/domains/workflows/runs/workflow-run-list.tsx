@@ -1,4 +1,7 @@
+import type { MastraClient } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import {
@@ -7,11 +10,13 @@ import {
   ThreadListItem,
   ThreadListItems,
 } from '@mastra/playground-ui/components/ThreadList';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { formatDate } from 'date-fns';
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
+import { getRunResourceId, getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -21,22 +26,30 @@ export interface WorkflowRecentRunsProps {
   runId?: string;
 }
 
-function formatRunInput(snapshot: unknown): string | null {
-  if (!snapshot || typeof snapshot !== 'object') {
-    return null;
-  }
+const runSnapshotSchema = z.object({
+  status: z.enum(['running', 'failed', 'canceled', 'pending', 'waiting', 'paused', 'suspended', 'success']),
+  timestamp: z.number().optional(),
+  context: z.object({ input: z.unknown() }),
+});
+const wrappedRunInputSchema = z.object({ output: z.unknown() });
+type RunSnapshot = z.infer<typeof runSnapshotSchema>;
+type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
+type WorkflowRunSnapshot = WorkflowRuns['runs'][number]['snapshot'];
 
-  const input = (snapshot as { context?: { input?: unknown } }).context?.input;
-  if (input === undefined || input === null) {
-    return null;
-  }
+function parseRunSnapshot(snapshot: WorkflowRunSnapshot): RunSnapshot | undefined {
+  const result = runSnapshotSchema.safeParse(snapshot);
+  return result.success ? result.data : undefined;
+}
 
-  if (typeof input === 'string') {
-    return input;
-  }
+function formatRunInput(snapshot: RunSnapshot | undefined): string | null {
+  if (!snapshot || snapshot.context.input == null) return null;
 
-  const inputValue =
-    typeof input === 'object' && input !== null && 'output' in input ? (input as { output: unknown }).output : input;
+  const input = snapshot.context.input;
+  const parsedString = z.string().safeParse(input);
+  if (parsedString.success) return parsedString.data;
+
+  const parsedWrappedInput = wrappedRunInputSchema.safeParse(input);
+  const inputValue = parsedWrappedInput.success ? parsedWrappedInput.data.output : input;
 
   try {
     return JSON.stringify(inputValue);
@@ -45,14 +58,41 @@ function formatRunInput(snapshot: unknown): string | null {
   }
 }
 
+function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resourceId?: string }) {
+  if (timestamp === undefined && !resourceId) return null;
+
+  return (
+    <span className="flex w-full min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
+      {timestamp !== undefined && (
+        <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
+          {formatDate(timestamp, 'MMM d, yyyy · h:mm a')}
+        </time>
+      )}
+      {resourceId && (
+        <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
+          {timestamp === undefined ? resourceId : `· ${resourceId}`}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProps) => {
+  const [isOpen, setIsOpen] = useState(true);
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
 
   const canDeleteRun = canDelete('workflows');
 
   const { Link, paths, navigate } = useLinkComponent();
-  const { isLoading, data: runs, setEndOfListElement, isFetchingNextPage } = useWorkflowRuns(workflowId);
+  const {
+    isLoading,
+    error,
+    data: runs,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useWorkflowRuns(workflowId);
   const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
 
   const handleDelete = async (runId: string) => {
@@ -65,81 +105,96 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
     }
   };
 
-  const actualRuns = runs || [];
+  const runList = runs || [];
 
   return (
     <>
-      {isLoading ? (
-        <div className="p-4">
-          <Skeleton className="h-32" />
-        </div>
-      ) : (
-        <div>
-          <div className="px-5 pt-3 pb-2 text-left">
-            <Txt as="h2" variant="ui-md" className="text-neutral3">
-              Recent runs
-            </Txt>
-          </div>
-          <ThreadList aria-label="Workflow runs" embedded>
-            {actualRuns.length === 0 ? (
-              <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
+        <CollapsibleTrigger className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground">
+          <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
+          <span>Recent runs</span>
+          {!isLoading && !error && (
+            <span className="text-meta text-muted-foreground">
+              {runList.length}
+              {hasNextPage ? '+' : ''}
+            </span>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
+          <ScrollArea className="min-h-0 w-full flex-1" mask={{ top: false }}>
+            {isLoading ? (
+              <div className="p-4">
+                <Skeleton className="h-32" />
+              </div>
             ) : (
-              <ThreadListItems>
-                {actualRuns.map(run => {
-                  const isActiveRun = run.runId === runId;
-                  const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
+              <ThreadList aria-label="Workflow runs" embedded>
+                {runList.length === 0 ? (
+                  <ThreadListEmpty>
+                    {error
+                      ? 'Unable to load workflow runs.'
+                      : 'Your run history will appear here once you run the workflow'}
+                  </ThreadListEmpty>
+                ) : (
+                  <ThreadListItems>
+                    {runList.map(run => {
+                      const isActiveRun = run.runId === runId;
+                      const snapshot = parseRunSnapshot(run.snapshot);
+                      const runInput = isActiveRun ? formatRunInput(snapshot) : null;
 
-                  return (
-                    <ThreadListItem
-                      key={`run-${run.runId}`}
-                      as={Link}
-                      to={paths.workflowRunLink(workflowId, run.runId)}
-                      isActive={isActiveRun}
-                      onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
-                      deleteLabel="delete run"
-                      className="h-auto min-h-0 items-stretch py-1"
-                    >
-                      <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
-                        {run?.snapshot && typeof run.snapshot === 'object' && (
-                          <span className="shrink-0">
-                            <WorkflowRunStatusIcon status={run.snapshot.status} />
-                          </span>
-                        )}
-                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                          <span className="text-ui-sm flex w-full min-w-0 items-center gap-2">
-                            <span className="text-neutral5 min-w-0 flex-1 truncate font-medium" title={run.runId}>
-                              {run.runId}
-                            </span>
-                            {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                              <span className="text-neutral3 shrink-0">
-                                {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
+                      return (
+                        <ThreadListItem
+                          key={`run-${run.runId}`}
+                          as={Link}
+                          to={paths.workflowRunLink(workflowId, run.runId)}
+                          isActive={isActiveRun}
+                          onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
+                          deleteLabel="delete run"
+                          className="h-auto min-h-0 items-stretch py-1"
+                        >
+                          <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
+                            {snapshot && (
+                              <span className="shrink-0">
+                                <WorkflowRunStatusIcon status={snapshot.status} />
                               </span>
                             )}
+                            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                              <span className="flex w-full min-w-0 items-center gap-2 text-caption">
+                                <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={run.runId}>
+                                  {run.runId}
+                                </span>
+                              </span>
+                              <WorkflowRunMeta
+                                timestamp={getRunTimestamp(snapshot?.timestamp)}
+                                resourceId={getRunResourceId(run)}
+                              />
+                              {runInput && (
+                                <span className="block w-full min-w-0 truncate text-caption text-muted-foreground">
+                                  {runInput}
+                                </span>
+                              )}
+                            </span>
                           </span>
-                          {runInput && (
-                            <span className="text-neutral3 text-ui-sm block w-full min-w-0 truncate">{runInput}</span>
-                          )}
-                        </span>
-                      </span>
-                    </ThreadListItem>
-                  );
-                })}
+                        </ThreadListItem>
+                      );
+                    })}
 
-                {isFetchingNextPage && (
-                  <li className="flex items-center justify-center py-2">
-                    <Icon>
-                      <Spinner />
-                    </Icon>
-                  </li>
+                    {isFetchingNextPage && (
+                      <li className="flex items-center justify-center py-2">
+                        <Icon>
+                          <Spinner />
+                        </Icon>
+                      </li>
+                    )}
+                    <li>
+                      <div ref={setEndOfListElement} />
+                    </li>
+                  </ThreadListItems>
                 )}
-                <li>
-                  <div ref={setEndOfListElement} />
-                </li>
-              </ThreadListItems>
+              </ThreadList>
             )}
-          </ThreadList>
-        </div>
-      )}
+          </ScrollArea>
+        </CollapsibleContent>
+      </Collapsible>
 
       <DeleteRunDialog
         open={!!deleteRunId}
@@ -156,7 +211,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
 
 interface DeleteRunDialogProps {
   open: boolean;
-  onOpenChange: (n: boolean) => void;
+  onOpenChange: (open: boolean) => void;
   onDelete: () => void;
 }
 const DeleteRunDialog = ({ open, onOpenChange, onDelete }: DeleteRunDialogProps) => {

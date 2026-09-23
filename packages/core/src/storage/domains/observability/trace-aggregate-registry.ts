@@ -1,8 +1,6 @@
+import { TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX } from './trace-aggregate';
 import { isTraceQueryMetadataPath } from './trace-query';
 import type { TraceQueryMetadataField } from './trace-query';
-
-export const TRACE_AGGREGATE_MAX_DIMENSIONS = 2;
-export const TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX = 'countDistinct.';
 
 export interface TraceAggregateDimensionRule {
   valueKind: 'string';
@@ -106,7 +104,6 @@ export const TRACE_AGGREGATE_MEASURE_REGISTRY = {
 
 export type TraceAggregateCanonicalMeasure = keyof typeof TRACE_AGGREGATE_MEASURE_REGISTRY;
 export type TraceAggregateCountDistinctMeasure = `countDistinct.${TraceAggregateCountDistinctField}`;
-export type TraceAggregateMeasure = TraceAggregateCanonicalMeasure | TraceAggregateCountDistinctMeasure;
 
 export type ParsedTraceAggregateMeasure =
   | { type: 'canonical'; measure: TraceAggregateCanonicalMeasure; rule: TraceAggregateMeasureRule }

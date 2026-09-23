@@ -1,10 +1,12 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { OnModuleInit } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 
 import { MASTRA, MASTRA_OPTIONS } from './constants';
 import { NestMastraServer } from './mastra-server.adapter';
 import type { MastraModuleOptions } from './mastra.module';
+import { RouteHandlerService } from './services/route-handler.service';
 import { ShutdownService } from './services/shutdown.service';
 
 /**
@@ -25,7 +27,7 @@ import { ShutdownService } from './services/shutdown.service';
  * ```
  */
 @Injectable()
-export class MastraService {
+export class MastraService implements OnModuleInit {
   private readonly logger = new Logger(MastraService.name);
   private serverAdapter?: NestMastraServer;
 
@@ -34,7 +36,20 @@ export class MastraService {
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
     @Inject(ShutdownService) private readonly shutdownService: ShutdownService,
     @Inject(HttpAdapterHost) private readonly httpAdapterHost: HttpAdapterHost,
+    @Inject(RouteHandlerService) private readonly routeHandler: RouteHandlerService,
   ) {
+    this.initializeServerAdapter();
+  }
+
+  onModuleInit(): void {
+    this.initializeServerAdapter();
+  }
+
+  private initializeServerAdapter(): void {
+    if (this.serverAdapter) {
+      return;
+    }
+
     const adapterType = this.httpAdapterHost?.httpAdapter?.getType?.();
     if (adapterType && adapterType !== 'express') {
       throw new Error(
@@ -43,14 +58,14 @@ export class MastraService {
       );
     }
 
-    // Register a real Mastra server adapter so getServerApp() works
     const app = this.httpAdapterHost?.httpAdapter?.getInstance?.();
-    if (app) {
-      this.serverAdapter = new NestMastraServer(app);
-      this.mastra.setMastraServer(this.serverAdapter);
-    } else {
+    if (!app) {
       this.logger.warn('Unable to register Mastra server adapter: HTTP adapter instance not available');
+      return;
     }
+
+    this.serverAdapter = new NestMastraServer(app, this.routeHandler);
+    this.mastra.setMastraServer(this.serverAdapter);
   }
 
   /**

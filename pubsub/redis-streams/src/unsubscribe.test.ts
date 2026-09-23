@@ -33,6 +33,7 @@ describe('unsubscribe acquired batches', () => {
     xGroupDestroy: ReturnType<typeof vi.fn>;
     xPendingRange: ReturnType<typeof vi.fn>;
     xClaim: ReturnType<typeof vi.fn>;
+    duplicate: ReturnType<typeof vi.fn>;
   };
   let reader: {
     on: ReturnType<typeof vi.fn>;
@@ -55,9 +56,11 @@ describe('unsubscribe acquired batches', () => {
         entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
       ),
       xClaim: vi.fn(() => claim.promise),
+      // Readers are created from the writer with duplicate().
+      duplicate: vi.fn(() => reader),
     };
     reader = { on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xReadGroup: vi.fn(() => read.promise) };
-    clients.create.mockReset().mockReturnValueOnce(writer).mockReturnValueOnce(reader);
+    clients.create.mockReset().mockReturnValueOnce(writer);
     ps = new RedisStreamsPubSub({ reclaimIntervalMs: 10 });
   });
   afterEach(async () => {

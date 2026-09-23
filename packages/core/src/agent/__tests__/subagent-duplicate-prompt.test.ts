@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
@@ -186,8 +185,8 @@ async function runDelegation({
     memory: supervisorMemory,
   });
 
-  const resourceId = randomUUID();
-  const threadId = randomUUID();
+  const resourceId = globalThis.crypto.randomUUID();
+  const threadId = globalThis.crypto.randomUUID();
   const options = {
     maxSteps: 3,
     memory: { resource: resourceId, thread: threadId },
@@ -303,7 +302,7 @@ describe('sub-agent delegation with own memory config (fallback input path)', ()
     let delegationThreadId: string | undefined;
     const result = await supervisor.generate(DELEGATION_PROMPT, {
       maxSteps: 3,
-      memory: { resource: randomUUID(), thread: randomUUID() },
+      memory: { resource: globalThis.crypto.randomUUID(), thread: globalThis.crypto.randomUUID() },
       delegation: {
         onDelegationComplete: ctx => {
           delegationThreadId = (ctx.result as { subAgentThreadId?: string } | undefined)?.subAgentThreadId;

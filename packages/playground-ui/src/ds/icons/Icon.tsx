@@ -1,21 +1,18 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import { iconSizeClasses, type IconSize } from './icon-size-classes';
 import { cn } from '@/lib/utils';
+
+export type { IconSize } from './icon-size-classes';
 
 export interface IconProps extends HTMLAttributes<HTMLSpanElement> {
   children: ReactNode;
   className?: string;
-  size?: 'default' | 'lg' | 'sm';
+  size?: IconSize;
 }
 
-const sizes = {
-  sm: '[&>svg]:h-icon-sm [&>svg]:w-icon-sm',
-  default: '[&>svg]:h-icon-default [&>svg]:w-icon-default',
-  lg: '[&>svg]:h-icon-lg [&>svg]:w-icon-lg',
-};
-
-export const Icon = ({ children, className, size = 'default', ...props }: IconProps) => {
+export const Icon = ({ children, className, size = 'md', ...props }: IconProps) => {
   return (
-    <span className={cn('block', sizes[size], className)} {...props}>
+    <span data-slot="icon" className={cn('block', iconSizeClasses[size], className)} {...props}>
       {children}
     </span>
   );
