@@ -97,9 +97,9 @@ inputProcessors: [
             name: 'errorStrategy',
             type: "'warn' | 'strict'",
             description:
-              "How to handle evaluation model failures. 'strict' is the default and is fail-closed: it aborts the request, including during streaming. 'warn' is an explicit fail-open opt-in: it logs the failure and lets the content through. Classifier configuration errors always throw.",
+              "How to handle evaluation model failures. 'warn' is fail-open: it logs the failure and lets the content through. 'strict' is fail-closed: it aborts the request, including during streaming. Classifier configuration errors always throw.",
             isOptional: true,
-            default: "'strict'",
+            default: "'warn'",
           },
           {
             name: 'lastMessageOnly',

@@ -43,8 +43,8 @@ interface ClassifierProcessorBaseOptions<Q extends ClassifierQuestions> extends 
   onResult: ClassifierOnResult<Q>;
   /**
    * What to do when the classifier call fails.
-   * - 'strict' (default): abort the request.
-   * - 'warn': log and let the content through. Opt in explicitly for fail-open behavior.
+   * - 'warn' (default): log and let the content through.
+   * - 'strict': abort the request.
    */
   errorStrategy?: ModelErrorStrategy;
   /**
@@ -102,7 +102,7 @@ export class ClassifierProcessor<
     this.id = options.id ?? 'classifier';
     this.classifierOrId = options.classifier;
     this.onResult = options.onResult;
-    this.errorStrategy = options.errorStrategy ?? 'strict';
+    this.errorStrategy = options.errorStrategy ?? 'warn';
     this.chunkWindow = options.chunkWindow ?? 0;
     this.maxInputLength = options.maxInputLength;
     this.providerOptions = options.providerOptions;
@@ -224,7 +224,7 @@ export class ClassifierProcessor<
 
   /**
    * Evaluate text and run `onResult`. Returns `true` when the content should be dropped.
-   * Aborts never return. Classifier failures return `false` only under the explicit 'warn' strategy.
+   * Aborts never return. Classifier failures return `false` under 'warn'.
    */
   private async classify(
     text: string,
