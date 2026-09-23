@@ -25,7 +25,7 @@ import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
+import type { WorkflowStepStatus, WorkflowStreamResult } from '../workflows/types';
 import type { OutputSchema } from './base/schema';
 
 export enum ChunkFrom {
@@ -954,7 +954,7 @@ export type WorkflowStreamEvent =
   | (BaseChunkType & {
       type: 'workflow-finish';
       payload: {
-        workflowStatus: WorkflowRunStatus;
+        workflowStatus: WorkflowStreamResult<any, any, any, any>['status'];
         finalWorkflowResult?: unknown;
         output: {
           usage: {
@@ -964,6 +964,7 @@ export type WorkflowStreamEvent =
           };
         };
         metadata: Record<string, any>;
+        tripwire?: StepTripwireData;
       };
     })
   | (BaseChunkType & {
@@ -998,6 +999,7 @@ export type WorkflowStreamEvent =
       type: 'workflow-step-suspended';
       payload: {
         id: string;
+        stepCallId?: string;
         status: WorkflowStepStatus;
         output?: Record<string, any>;
         payload?: Record<string, any>;
@@ -1044,7 +1046,8 @@ export type WorkflowStreamEvent =
         /** Tripwire data when step failed due to processor rejection */
         tripwire?: StepTripwireData;
       };
-    });
+    })
+  | (BaseChunkType & DataChunkType);
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 export type TypedChunkType<OUTPUT = undefined> =

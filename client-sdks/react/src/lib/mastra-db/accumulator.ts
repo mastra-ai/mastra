@@ -6,7 +6,7 @@ import type {
   MastraToolInvocation,
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
-import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { AgentChunkType, ChunkType, NetworkChunkType, WorkflowStreamEvent } from '@mastra/core/stream';
 import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
@@ -35,13 +35,6 @@ import type {
 // in this file is a deliberate storage-boundary cast for one of the above
 // extensions, not an accident. Downstream consumers (`toAISdkV5Messages`,
 // playground `to-assistant-ui-message`) read the V5 fields directly.
-
-type StreamChunk = {
-  type: string;
-  payload: any;
-  runId: string;
-  from: 'AGENT' | 'WORKFLOW';
-};
 
 function toolErrorText(error: unknown): string {
   if (error && typeof error === 'object') {
@@ -300,13 +293,18 @@ const mergeBgTaskMetadata = (
   return merged;
 };
 
+const foldStepState = <TPayload extends { id: string }>(
+  steps: WorkflowStreamResult<any, any, any, any>['steps'],
+  { stepCallId: _stepCallId, stepName: _stepName, ...state }: TPayload & { stepCallId?: string; stepName?: string },
+) => ({ ...steps, [state.id]: { ...steps[state.id], ...state } });
+
 /**
  * Workflow chunk accumulation. Mirrors
  * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
  */
 export const mapWorkflowStreamChunkToWatchResult = (
   prev: WorkflowStreamResult<any, any, any, any> | undefined,
-  chunk: StreamChunk,
+  chunk: WorkflowStreamEvent,
 ): WorkflowStreamResult<any, any, any, any> => {
   const previous = prev ?? { status: 'running', input: undefined, steps: {} };
   if (chunk.type === 'workflow-start') {
@@ -324,6 +322,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
   if (chunk.type === 'workflow-finish') {
     const finalStatus = chunk.payload.workflowStatus;
     const lastStep = Object.values(previous.steps).pop();
+    // The finish event names the final status but may lack the result, error or tripwire that status promises.
     return {
       ...previous,
       status: chunk.payload.workflowStatus,
@@ -334,25 +333,19 @@ export const mapWorkflowStreamChunkToWatchResult = (
           : finalStatus === 'tripwire' && chunk.payload.tripwire
             ? { tripwire: chunk.payload.tripwire }
             : {}),
-    };
+    } as WorkflowStreamResult<any, any, any, any>;
   }
 
-  // writer.custom events carry `data` and no payload: nothing to fold into a step.
-  const stepId = chunk.payload?.id;
-  if (stepId === undefined) return previous;
+  if (chunk.type === 'workflow-step-start' || chunk.type === 'workflow-step-result') {
+    return { ...previous, steps: foldStepState(previous.steps, chunk.payload) };
+  }
 
-  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload;
-  const newSteps = {
-    ...previous.steps,
-    [stepId]: {
-      ...previous.steps[stepId],
-      ...newPayload,
-    },
-  };
-
-  if (chunk.type === 'workflow-step-start') return { ...previous, steps: newSteps };
+  if (chunk.type === 'workflow-step-waiting') {
+    return { ...previous, status: 'waiting', steps: foldStepState(previous.steps, chunk.payload) };
+  }
 
   if (chunk.type === 'workflow-step-suspended') {
+    const newSteps = foldStepState(previous.steps, chunk.payload);
     const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
       ([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -373,28 +366,11 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  if (chunk.type === 'workflow-step-waiting') return { ...previous, status: 'waiting', steps: newSteps };
-
   if (chunk.type === 'workflow-step-progress') {
-    return {
-      ...previous,
-      steps: {
-        ...previous.steps,
-        [stepId]: {
-          ...previous.steps[stepId],
-          foreachProgress: {
-            completedCount: chunk.payload.completedCount,
-            totalCount: chunk.payload.totalCount,
-            currentIndex: chunk.payload.currentIndex,
-            iterationStatus: chunk.payload.iterationStatus,
-            iterationOutput: chunk.payload.iterationOutput,
-          },
-        },
-      },
-    };
+    const { id, completedCount, totalCount, currentIndex, iterationStatus, iterationOutput } = chunk.payload;
+    const foreachProgress = { completedCount, totalCount, currentIndex, iterationStatus, iterationOutput };
+    return { ...previous, steps: foldStepState(previous.steps, { id, foreachProgress }) };
   }
-
-  if (chunk.type === 'workflow-step-result') return { ...previous, steps: newSteps };
 
   return previous;
 };

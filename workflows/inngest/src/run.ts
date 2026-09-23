@@ -4,8 +4,13 @@ import { getErrorFromUnknown } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
-import { WorkflowRunOutput, ChunkFrom } from '@mastra/core/stream';
-import { createTimeTravelExecutionParams, Run, hydrateSerializedStepErrors } from '@mastra/core/workflows';
+import { WorkflowRunOutput } from '@mastra/core/stream';
+import {
+  createTimeTravelExecutionParams,
+  Run,
+  hydrateSerializedStepErrors,
+  toWorkflowStreamEvent,
+} from '@mastra/core/workflows';
 import type {
   ExecutionEngine,
   ExecutionGraph,
@@ -988,17 +993,8 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
-          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string })?.id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         self.closeStreamAction = async () => {
@@ -1093,17 +1089,8 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
-          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string })?.id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         self.closeStreamAction = async () => {

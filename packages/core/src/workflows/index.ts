@@ -13,6 +13,7 @@ export {
 } from './workflow';
 export type { AgentStepOptions, AnyWorkflow, ClassifierStepOptions, ClassifierStepOutput } from './workflow';
 export { getEntryId, getEntryWorkflow } from './step-entry';
+export { toWorkflowStreamEvent } from './stream-utils';
 export * from './execution-engine';
 export * from './default';
 export * from './step';

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { StreamVNextChunkType } from '@mastra/client-js';
+import { ChunkFrom } from '@mastra/core/stream';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -41,11 +42,11 @@ function RunSelection({ observed, initialRunId }: { observed: boolean; initialRu
 }
 
 const pausedReplay: StreamVNextChunkType[] = [
-  { type: 'workflow-start', runId: run.runId, from: 'WORKFLOW', payload: { workflowId: 'two-step-workflow' } },
+  { type: 'workflow-start', runId: run.runId, from: ChunkFrom.WORKFLOW, payload: { workflowId: 'two-step-workflow' } },
   {
     type: 'workflow-finish',
     runId: run.runId,
-    from: 'WORKFLOW',
+    from: ChunkFrom.WORKFLOW,
     payload: {
       workflowStatus: 'paused',
       output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },

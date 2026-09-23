@@ -411,6 +411,35 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should stream writer.custom events with their data
+  {
+    const reportProgress = createStep({
+      id: 'reportProgress',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ done: z.boolean() }),
+      execute: async ({ suspend, writer }) => {
+        await writer.custom({ type: 'data-progress', data: { phase: 'started' } });
+        await suspend({});
+        return { done: true };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'writer-custom-data-workflow',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ done: z.boolean() }),
+      steps: [reportProgress],
+    });
+
+    workflow.then(reportProgress).commit();
+
+    workflows['writer-custom-data-workflow'] = {
+      workflow,
+      mocks: {},
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   // Test: should preserve error details in streaming workflow
   {
     mockRegistry.register('error-preserve-workflow:failingStepAction', () =>
@@ -1010,6 +1039,23 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
         // Resume should complete successfully (custom event during resume is optional)
         expect(resumeResult.status).toBe('success');
+      });
+
+      it.skipIf(skipTests.streamingSuspendResume)('should stream writer.custom events with their data', async () => {
+        const { workflow } = registry!['writer-custom-data-workflow']!;
+        const { stream } = ctx;
+
+        if (!stream) {
+          return;
+        }
+
+        const { events, result } = await stream(workflow, { input: 'report' }, { closeOnSuspend: true }, 'stream');
+        expect(result.status).toBe('suspended');
+
+        const runId = events.find(e => e.runId)?.runId;
+        expect(events).toContainEqual(
+          expect.objectContaining({ type: 'data-progress', runId, from: 'WORKFLOW', data: { phase: 'started' } }),
+        );
       });
 
       it.skipIf(skipTests.streamingErrorPreservation)(

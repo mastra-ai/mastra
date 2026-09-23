@@ -12168,6 +12168,79 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
+    it('should stream writer.custom events with their data', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const reportProgress = createStep({
+        id: 'report-progress',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ writer }) => {
+          await writer.custom({ type: 'data-progress', data: { phase: 'started' } });
+          return {};
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'custom-event-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [reportProgress],
+      });
+      workflow.then(reportProgress).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'custom-event-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun({ runId: 'custom-event-run' });
+      const streamOutput = run.stream({ inputData: {} });
+
+      const events: StreamEvent[] = [];
+      for await (const event of streamOutput.fullStream) {
+        events.push(JSON.parse(JSON.stringify(event)));
+      }
+
+      srv.close();
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: 'data-progress',
+          runId: 'custom-event-run',
+          from: 'WORKFLOW',
+          data: { phase: 'started' },
+        }),
+      );
+    });
+
     it('should emit step-result and step-finish events when step fails', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
