@@ -356,7 +356,7 @@ export default function Workspace() {
           tone="error"
           variant="fill"
           titleSlot="Failed to load workspace"
-          descriptionSlot={(genericError as Error).message}
+          descriptionSlot={genericError.message}
         />
       </PageLayout>
     );
