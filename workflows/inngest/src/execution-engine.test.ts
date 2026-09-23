@@ -16,6 +16,54 @@ function createEngine() {
   return new InngestExecutionEngine(undefined as any, inngestStep as any, 0, {} as any);
 }
 
+describe('InngestExecutionEngine.wrapDurableOperation', () => {
+  it('keeps the original stack on the error thrown to Inngest', async () => {
+    const engine = createEngine();
+    function readsThreadIdOfUndefined(input: any) {
+      return input.state.threadId;
+    }
+
+    const thrown = await engine
+      .wrapDurableOperation('workflow.test.step.boom', async () => readsThreadIdOfUndefined({}))
+      .catch(e => e);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown.stack).toMatch(/^TypeError: Cannot read properties of undefined/);
+    expect(thrown.stack).toContain('readsThreadIdOfUndefined');
+    expect(thrown.cause).toMatchObject({ status: 'failed', error: expect.any(TypeError) });
+  });
+
+  it('keeps custom error properties in the cause', async () => {
+    const engine = createEngine();
+    const original = Object.assign(new Error('rate limited'), { statusCode: 429 });
+
+    const thrown = await engine
+      .wrapDurableOperation('workflow.test.step.api', async () => {
+        throw original;
+      })
+      .catch(e => e);
+
+    expect(thrown.stack).toBe(original.stack);
+    expect(JSON.parse(JSON.stringify(thrown.cause)).error).toMatchObject({ message: 'rate limited', statusCode: 429 });
+  });
+
+  it('keeps its own stack when the original stack is not a string', async () => {
+    const engine = createEngine();
+    const original = new Error('odd stack');
+    Object.defineProperty(original, 'stack', { value: { frames: [1] }, writable: true, configurable: true });
+
+    const thrown = await engine
+      .wrapDurableOperation('workflow.test.step.odd', async () => {
+        throw original;
+      })
+      .catch(e => e);
+
+    expect(typeof thrown.stack).toBe('string');
+    expect(thrown.stack).toMatch(/^Error: odd stack/);
+    expect(thrown.cause).toMatchObject({ status: 'failed', error: original });
+  });
+});
+
 describe('InngestExecutionEngine.executeStepWithRetry', () => {
   it('does not retry MastraNonRetryableError failures', async () => {
     const engine = createEngine();

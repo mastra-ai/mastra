@@ -215,6 +215,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * in the cause property, we ensure custom properties survive serialization.
    * The cause property is in serialize-error-cjs's allowlist, and when the cause
    * object is finally JSON.stringify'd, our error's toJSON() is called.
+   *
+   * The wrapper takes the original stack so Inngest reports the failing frame.
+   * The name is left as `Error`: Inngest decides retries by error name
+   * (NonRetriableError, RetryAfterError).
    */
   async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
     const result = await this.inngestStep.run(operationId, async () => {
@@ -227,7 +231,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           fallbackMessage: 'Unknown step execution error',
         });
         const isNonRetryable = isNonRetryableStepFailure(e);
-        throw new Error(errorInstance.message, {
+        const wrapped = new Error(errorInstance.message, {
           cause: {
             status: 'failed',
             error: errorInstance,
@@ -235,6 +239,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             ...(isNonRetryable && { nonRetryable: true as const }),
           },
         });
+        if (typeof errorInstance.stack === 'string') {
+          wrapped.stack = errorInstance.stack;
+        }
+        throw wrapped;
       }
     });
     return result as T;
