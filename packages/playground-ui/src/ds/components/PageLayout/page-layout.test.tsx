@@ -87,8 +87,7 @@ describe('PageLayout', () => {
       if (!container) return;
       expect(container.className).toContain('mx-auto');
       expect(container.className).toContain('max-w-5xl');
-      expect(container.className).toContain('px-4');
-      expect(container.className).toContain('py-4');
+      expect(container.className).toContain('p-4');
       expect(container.contains(screen.getByRole('heading', { name: 'Title' }))).toBe(true);
       expect(screen.getByRole('main').className).not.toContain('p-4');
     });

@@ -1,5 +1,22 @@
 # @mastra/inngest
 
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Fixed durable step failures in the Inngest dashboard and logs showing only an internal `@mastra/inngest` stack frame. The reported error now keeps the original stack, including the error type and the line that threw, while custom error properties are still preserved. Fixes [#24748](https://github.com/mastra-ai/mastra/issues/24748). ([#24771](https://github.com/mastra-ai/mastra/pull/24771))
+
+- Fixed a crash when resuming a durable agent run immediately after a tool suspends. `InngestAgent.resume()` now waits for the run to finish suspending before resuming it, instead of failing with `Cannot read properties of undefined (reading 'threadId')`. Fixes #24749. ([#24770](https://github.com/mastra-ai/mastra/pull/24770))
+
+- Durable agent turns now use far fewer Inngest steps, including when observability is not configured. A 20-step agent turn previously used 133–158 Inngest steps. ([#24782](https://github.com/mastra-ai/mastra/pull/24782))
+
+- Fixed resumed Inngest agents returning chunks from the original suspended run. ([#24813](https://github.com/mastra-ai/mastra/pull/24813))
+
+- Fixed serve and connect registration for Inngest durable agents and corrected the required @mastra/core version. ([#24812](https://github.com/mastra-ai/mastra/pull/24812))
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+
 ## 1.9.1
 
 ### Patch Changes
