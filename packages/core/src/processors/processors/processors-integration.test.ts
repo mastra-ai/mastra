@@ -170,7 +170,7 @@ describe('Processors Integration Tests', () => {
     // Create a new MessageList with the filtered messages for the token limiter
     const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
     for (const msg of messageList.get.all.db()) {
-      limiterMessageList.add(msg, 'input');
+      limiterMessageList.add(msg, 'memory');
     }
 
     await tokenLimiter.processInputStep({
@@ -316,7 +316,7 @@ describe('Processors Integration Tests', () => {
     const tokenLimiter = new TokenLimiterProcessor({ limit: 100 });
     const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
     for (const msg of messageList.get.all.db()) {
-      limiterMessageList.add(msg, 'input');
+      limiterMessageList.add(msg, 'memory');
     }
 
     await tokenLimiter.processInputStep({
@@ -494,7 +494,7 @@ describe('Processors Integration Tests', () => {
     // Create a separate MessageList for token limiting (processInputStep mutates in-place)
     const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
     for (const msg of messageList.get.all.db()) {
-      limiterMessageList.add(msg, 'input');
+      limiterMessageList.add(msg, 'memory');
     }
 
     await tokenLimiter.processInputStep({
@@ -522,7 +522,7 @@ describe('Processors Integration Tests', () => {
     // Then apply token limiter
     const finalMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
     for (const msg of messageList.get.all.db()) {
-      finalMessageList.add(msg, 'input');
+      finalMessageList.add(msg, 'memory');
     }
 
     await tokenLimiter.processInputStep({

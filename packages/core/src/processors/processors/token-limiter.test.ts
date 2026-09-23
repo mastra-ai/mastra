@@ -1164,7 +1164,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1190,7 +1190,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:02:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1317,7 +1317,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hello there', parts: [{ type: 'text', text: 'Hello there' }] },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1468,7 +1468,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
 
       try {
@@ -1614,7 +1614,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1627,7 +1627,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {

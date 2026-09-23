@@ -36,7 +36,7 @@ describe('TokenLimiterProcessor', () => {
     const mockAbort = vi.fn() as any;
     const messageList = new MessageList({ threadId: '1', resourceId: 'test-resource' });
     for (const msg of messagesV2) {
-      messageList.add(msg, 'input');
+      messageList.add(msg, 'memory');
     }
 
     await limiter.processInputStep({

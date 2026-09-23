@@ -266,19 +266,20 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Messages produced by the current run (tool calls/results, partial answers) are never trimmed:
-    // removing them mid-run hides tool data from the next step and makes the model loop.
-    const responseIds = messageList.makeMessageSourceChecker().output;
+    // Messages from the current run (the triggering prompt, tool calls/results, partial answers) are never
+    // trimmed: removing them mid-run hides the prompt or tool data from the next step and makes the model loop.
+    const sources = messageList.makeMessageSourceChecker();
+    const currentRunIds = new Set([...sources.input, ...sources.output]);
     let responseTokens = 0;
     for (const message of messages) {
-      if (!responseIds.has(message.id)) continue;
+      if (!currentRunIds.has(message.id)) continue;
       if (this.maxToolResultTokens !== undefined) this.capToolResults(message, this.maxToolResultTokens);
       responseTokens += await this.countInputMessageTokens(message);
     }
 
     if (responseTokens > remainingBudget) {
       throw new TripWire(
-        "TokenLimiterProcessor: The current run's messages (tool calls and results) exceed the remaining token budget and cannot be trimmed. Set `maxToolResultTokens` to cap oversized tool results or raise `limit`.",
+        "TokenLimiterProcessor: The current run's messages exceed the remaining token budget and cannot be trimmed. Set `maxToolResultTokens` to cap oversized tool results or raise `limit`.",
         {
           retry: false,
           metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
@@ -292,7 +293,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (!message || responseIds.has(message.id)) continue;
+      if (!message || currentRunIds.has(message.id)) continue;
 
       const messageTokens = await this.countInputMessageTokens(message);
 
@@ -316,7 +317,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     // Remove older messages that don't fit within the token budget
     const keepIds = new Set(messagesToKeep.map(m => m.id));
-    const idsToRemove = messages.filter(m => !responseIds.has(m.id) && !keepIds.has(m.id)).map(m => m.id);
+    const idsToRemove = messages.filter(m => !currentRunIds.has(m.id) && !keepIds.has(m.id)).map(m => m.id);
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
     }
