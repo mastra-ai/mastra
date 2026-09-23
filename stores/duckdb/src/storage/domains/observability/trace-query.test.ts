@@ -283,6 +283,46 @@ describe('DuckDB advanced trace query', () => {
     expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
+  it('binds the trusted tenant scope into root_scope and every related CTE in emission order', () => {
+    const scope = { organizationId: 'org-a', resourceId: 'res-a' };
+    const compiled = compileDuckDBTraceQuery(
+      planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: TIME_RANGE,
+          where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+          page: { limit: 2 },
+        }),
+        { scope },
+      ),
+    );
+
+    expect(compiled.sql).toMatch(/root_scope AS \([\s\S]*?r\.organizationId = \?\s+AND r\.resourceId = \?/);
+    expect(compiled.sql).toMatch(/current_scores AS \([\s\S]*?WHERE s\.organizationId = \? AND s\.resourceId = \?/);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'org-a',
+      'res-a',
+      'org-a',
+      'res-a',
+      'factuality',
+      3,
+    ]);
+  });
+
+  it('adds no tenant condition when the plan is unscoped', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+        page: { limit: 2 },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain('organizationId = ?');
+    expect(compiled.sql).not.toContain('resourceId = ?');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
+  });
+
   it('uses total null semantics for negative predicates', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
