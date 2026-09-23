@@ -420,6 +420,7 @@ describe('ToolCard dispatch', () => {
         toolCallId: 'failed-delegation',
         state: 'input-available',
         input: {},
+        output: { childMessages: [{ type: 'text', content: 'Looking it up.' }] },
       };
       const { rerender } = render(<ToolPartCard part={part} />, { wrapper: Providers });
       fireEvent.click(screen.getByRole('button', { name: 'head' }));
@@ -531,11 +532,29 @@ describe('ToolCard dispatch', () => {
     });
   });
 
+  describe('when a delegation has not produced anything yet', () => {
+    it('offers nothing to open, then opens on the first child message', () => {
+      const props = {
+        agentId: 'head',
+        toolCallId: 'waiting-call',
+        toolName: 'agent-head',
+        isNetwork: false,
+        toolApprovalMetadata: undefined,
+      };
+      const { rerender } = render(<AgentBadge {...props} messages={[]} />, { wrapper: Providers });
+      expect(screen.getByText('head')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'head' })).toBeNull();
+
+      rerender(<AgentBadge {...props} messages={[{ type: 'text', content: 'Checking the forecast.' }]} />);
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+    });
+  });
+
   describe('when a completed delegation is still revealing child messages', () => {
     it('stays expanded until the child messages finish', () => {
       const props = {
         agentId: 'head',
-        messages: [],
+        messages: [{ type: 'text' as const, content: 'Checking the forecast.' }],
         toolCallId: 'streaming-call',
         toolName: 'agent-head',
         isNetwork: false,
@@ -573,7 +592,7 @@ describe('ToolCard dispatch', () => {
       render(
         <AgentBadge
           agentId="head"
-          messages={[]}
+          messages={[{ type: 'text', content: 'Done.' }]}
           toolCallId="successful-delegation"
           toolName="agent-head"
           isNetwork={false}
@@ -601,7 +620,7 @@ describe('ToolCard dispatch', () => {
     it('reopens the collapsed badge and displays the error', () => {
       const props = {
         agentId: 'head',
-        messages: [],
+        messages: [{ type: 'text' as const, content: 'Looking it up.' }],
         toolCallId: 'failed-delegation',
         toolName: 'agent-head',
         isNetwork: false,

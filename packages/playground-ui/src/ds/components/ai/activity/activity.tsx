@@ -120,6 +120,16 @@ export const ActivityHeader = ({ className, children, ...props }: ComponentProps
   );
 };
 
+export const ActivityLeading = ({ className, children, ...props }: ComponentProps<'span'>) => {
+  if (!children) return null;
+
+  return (
+    <span className={cn('relative z-10 flex shrink-0', className)} {...props}>
+      {children}
+    </span>
+  );
+};
+
 export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) => {
   const { status } = useActivity();
 
@@ -223,7 +233,7 @@ export const ActivityHeadline = ({
 
   return (
     <ActivityHeader {...props}>
-      {leading && <span className="relative z-10 flex shrink-0">{leading}</span>}
+      <ActivityLeading>{leading}</ActivityLeading>
       <ActivityIcon>{icon}</ActivityIcon>
       <ActivityLabel>{label}</ActivityLabel>
       {badges}

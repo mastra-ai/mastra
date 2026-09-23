@@ -37,6 +37,27 @@ describe('Factory tool body', () => {
     });
   });
 
+  describe('when a tool takes no arguments and returns nothing', () => {
+    it('offers nothing to open', () => {
+      renderWithProviders(
+        <ToolCard
+          tool={{
+            toolCallId: 'list',
+            toolName: 'list_agents',
+            args: {},
+            argsText: '',
+            status: 'done',
+            output: '',
+            result: null,
+          }}
+        />,
+      );
+
+      expect(screen.getByRole('group', { name: 'Tool: list_agents' })).toBeVisible();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
+
   describe('when a result exceeds the preview limit', () => {
     it('copies the whole result', async () => {
       const user = userEvent.setup();

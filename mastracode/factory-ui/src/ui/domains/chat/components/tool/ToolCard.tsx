@@ -20,7 +20,7 @@ import type { ToolCall } from '../../services/transcript';
 import { ToolTime } from '../ToolTime';
 
 function toolResultText(tool: ToolCall): string | undefined {
-  if (tool.status === 'running' || tool.result === undefined) return undefined;
+  if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
   return stripSerializedAnsi(stringifyToolValue(tool.result));
 }
 

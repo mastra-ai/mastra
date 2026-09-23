@@ -27,6 +27,23 @@ const renderWithProviders = (node: ReactNode) =>
 afterEach(() => cleanup());
 
 describe('ToolBadge', () => {
+  it('offers nothing to open for a call whose only arguments are internal metadata', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="listAgents"
+        args={{ __mastraMetadata: { source: 'internal' } }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    expect(screen.getByText('ListAgents')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
   it('renders tool arguments as a static code block', () => {
     renderWithProviders(
       <ToolBadge

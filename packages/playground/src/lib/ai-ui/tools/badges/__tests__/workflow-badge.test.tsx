@@ -70,4 +70,26 @@ describe('WorkflowBadge', () => {
     await waitFor(() => expect(screen.getByTestId('workflow-badge')).toBeTruthy());
     await waitFor(() => expect(screen.getByTestId('workflow-graph-viewport')).toBeTruthy());
   });
+
+  it('offers nothing to open when its run cannot be found', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(badgeWorkflow)),
+      http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json({ runs: [], total: 0 })),
+    );
+
+    render(
+      <WorkflowBadge
+        workflowId={WORKFLOW_ID}
+        toolName={`workflow-${WORKFLOW_ID}`}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+        result={{ runId: RUN_ID, status: 'success' }}
+      />,
+      { wrapper: Providers },
+    );
+
+    await waitFor(() => expect(screen.getByText(badgeWorkflow.name)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: badgeWorkflow.name })).toBeNull();
+  });
 });

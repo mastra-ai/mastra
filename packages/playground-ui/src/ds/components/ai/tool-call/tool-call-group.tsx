@@ -9,6 +9,7 @@ import {
   ActivityHeader,
   ActivityIcon,
   ActivityLabel,
+  ActivityLeading,
   ActivitySpacer,
   ActivitySummary,
   ActivityTrailing,
@@ -43,7 +44,7 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
     <Activity status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
       <ActivityTrigger>
         <ActivityHeader>
-          {leading}
+          <ActivityLeading>{leading}</ActivityLeading>
           <ActivityIcon>
             <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
           </ActivityIcon>

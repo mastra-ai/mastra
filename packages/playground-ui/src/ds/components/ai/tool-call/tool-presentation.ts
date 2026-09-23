@@ -134,8 +134,12 @@ export interface ToolArgumentsInput {
   hideArguments?: boolean;
 }
 
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && Object.keys(value).length === 0;
+}
+
 export function visibleToolArgumentsText({ args, argsText, hideArguments }: ToolArgumentsInput): string | undefined {
-  if (hideArguments) return undefined;
+  if (hideArguments || isEmptyObject(args)) return undefined;
   return args === undefined ? argsText : stringifyToolValue(args);
 }
 

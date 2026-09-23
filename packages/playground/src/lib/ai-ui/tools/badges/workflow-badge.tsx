@@ -8,6 +8,7 @@ import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badg
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import { awaitsToolApproval } from '@mastra/playground-ui/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
@@ -80,6 +81,13 @@ export const WorkflowBadge = ({
 
   if (isWorkflowLoading || !workflow) return <LoadingBadge />;
 
+  const toolCalledOrFinished = toolCalled ?? !!status;
+  const showsRun = isStreaming || !isLoading;
+  const hasBody =
+    showsRun ||
+    Boolean(suspendPayload) ||
+    awaitsToolApproval({ toolApprovalMetadata, toolCalled: toolCalledOrFinished });
+
   return (
     <BadgeWrapper
       data-testid="workflow-badge"
@@ -97,29 +105,33 @@ export const WorkflowBadge = ({
         ) : null
       }
     >
-      {!isStreaming && !isLoading && (
-        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
-          <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
-        </WorkflowRunProvider>
+      {hasBody && (
+        <>
+          {!isStreaming && !isLoading && (
+            <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
+              <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
+            </WorkflowRunProvider>
+          )}
+
+          {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+
+          {suspendPayloadSlot !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Workflow suspend payload</SectionLabel>
+              {suspendPayloadSlot}
+            </div>
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalledOrFinished}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </>
       )}
-
-      {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
-
-      {suspendPayloadSlot !== undefined && suspendPayload && (
-        <div>
-          <SectionLabel>Workflow suspend payload</SectionLabel>
-          {suspendPayloadSlot}
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled ?? !!status}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
     </BadgeWrapper>
   );
 };

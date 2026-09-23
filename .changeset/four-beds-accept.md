@@ -66,7 +66,7 @@ import { NotificationActivity } from '@mastra/playground-ui/components/ai/activi
 
 A short single-line message fits in the preview, so opening a disclosure used to reveal a copy of the line above it. Such a line now has no disclosure and wraps its detail instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a line that folds shows a dimmed chevron at rest instead of only on hover.
 
-The same rule covers a composed `Activity`: pass `foldable={false}` when there is nothing to open, and the line drops its disclosure button and its empty body. A tool call with no arguments, no output and no result is one example. `hasToolArguments` tells you whether `ToolCallArguments` would render anything.
+The same rule covers a composed `Activity`: pass `foldable={false}` when there is nothing to open, and the line drops its disclosure button and its empty body. A tool call with no arguments, no output and no result is one example, and so is a call whose arguments are an empty object. `hasToolArguments` tells you whether `ToolCallArguments` would render anything, and `awaitsToolApproval` tells you whether `ToolApprovalButtons` would.
 
 ```tsx
 import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '@mastra/playground-ui/components/ai/activity';
@@ -85,6 +85,8 @@ const foldable = hasToolArguments({ toolName, args }) || output !== undefined;
 ```
 
 A line that gains a body as its arguments stream in keeps its headline mounted: its shimmer does not restart, its detail does not fade in again, and the chevron fades into a slot that was already reserved, so the text does not shift sideways.
+
+Because the disclosure button now lies over the whole line, put anything that needs its own hover, such as a timestamp with a `title`, in `ActivityLeading`. It sits above the button, so the tooltip still shows. `ActivityHeadline` and `ToolCallGroup` already wrap their `leading` content in it.
 
 **`ChatTimeGap` is replaced by `TranscriptDivider`**
 

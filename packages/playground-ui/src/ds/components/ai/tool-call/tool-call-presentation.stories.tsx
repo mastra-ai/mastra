@@ -135,12 +135,11 @@ export const ResultOnly: Story = {
 };
 
 export const EmptyArguments: Story = {
-  args: { args: undefined },
+  args: { toolName: 'list_agents', args: {} },
   parameters: {
     docs: {
       description: {
-        story:
-          'Nothing to show yet, so the line has no disclosure. Its chevron slot stays reserved, so the line does not shift when arguments stream in.',
+        story: 'A tool called without arguments has nothing to open, so the line has no disclosure.',
       },
     },
   },

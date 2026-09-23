@@ -13,6 +13,7 @@ import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import { awaitsToolApproval } from '@mastra/playground-ui/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
@@ -63,13 +64,12 @@ export const ToolBadge = ({
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
-  const awaitsApproval = Boolean(toolApprovalMetadata) && !toolCalled;
   const hasBody =
     hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
     Boolean(suspendPayload) ||
     Boolean(resultPretty) ||
     toolOutput.length > 0 ||
-    awaitsApproval;
+    awaitsToolApproval({ toolApprovalMetadata, toolCalled });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks

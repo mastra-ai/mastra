@@ -94,6 +94,10 @@ describe('hasToolArguments', () => {
     expect(hasToolArguments({ toolName: 'view', args: undefined, argsText: '' })).toBe(false);
   });
 
+  it('has nothing to show for a tool called without arguments', () => {
+    expect(hasToolArguments({ toolName: 'list_agents', args: {}, argsText: '{}' })).toBe(false);
+  });
+
   it('shows partial streamed input before it parses', () => {
     expect(hasToolArguments({ toolName: 'view', args: undefined, argsText: '{"path":"src' })).toBe(true);
   });
