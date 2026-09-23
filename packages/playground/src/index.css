@@ -133,6 +133,38 @@ th:has(header) {
   }
 
   /*
+   * One diagonal light sweep across the landing greeting, timed to land once the
+   * suggested prompts have finished staggering in (last chip ≈ 540ms + 420ms).
+   */
+  @keyframes starter-shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  .starter-shimmer {
+    position: relative;
+    display: inline-block;
+    overflow: hidden;
+  }
+  /* A band of the page background sweeps over the glyphs, so they briefly lighten while the band stays invisible on the surface. */
+  .starter-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(
+      115deg,
+      transparent 35%,
+      color-mix(in oklab, var(--color-background) 75%, transparent) 50%,
+      transparent 65%
+    );
+    animation: starter-shimmer 1100ms ease-in-out 1000ms both;
+  }
+
+  /*
    * Agent builder "Your agent is ready" panel — a polished, finite light pass.
    * A soft ambient aurora gently drifts behind the content, while a bright
    * specular highlight sweeps diagonally across the surface once on mount
@@ -213,6 +245,7 @@ th:has(header) {
     .starter-heading,
     .starter-prompt,
     .starter-chip,
+    .starter-shimmer::after,
     .ready-stage::before,
     .ready-stage-content {
       animation: none;
