@@ -233,6 +233,9 @@ jobs:
             file.startsWith('packages/core/src/mcp/') ||
             file.startsWith('packages/core/src/tools/') ||
             file.startsWith('packages/mcp/integration-tests/') ||
+            // e2e-softwarefactory: the template is generated from these.
+            file.startsWith('mastracode/mastra-factory/') ||
+            file.startsWith('mastracode/web/src/mastra/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );
