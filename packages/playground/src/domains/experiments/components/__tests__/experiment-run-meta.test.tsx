@@ -9,15 +9,16 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
 
-const scorer = (name: string): GetScorerResponse =>
-  ({
-    scorer: { config: { id: name, name, description: `${name} description` } },
-    source: 'code',
-    agentIds: [],
-    workflowIds: [],
-  }) as unknown as GetScorerResponse;
+const scorer = (name: string): GetScorerResponse => ({
+  scorer: { config: { id: name, name, description: `${name} description` } },
+  source: 'code',
+  agentIds: [],
+  agentNames: [],
+  workflowIds: [],
+  isRegistered: true,
+});
 
-const scorers: Record<string, GetScorerResponse> = {
+const scorers = {
   'answer-relevancy': scorer('answer-relevancy'),
   toxicity: scorer('toxicity'),
 };
@@ -41,7 +42,7 @@ const runningExperiment: DatasetExperiment = {
   ...experiments[0],
   id: 'running-experiment',
   status: 'running',
-  datasetId: null as unknown as string,
+  datasetId: '',
   scorerIds: undefined,
   completedAt: null,
 };
@@ -166,6 +167,8 @@ describe('ExperimentRunMeta', () => {
       const { queryClient } = renderBar(runningExperiment);
 
       expect(await screen.findByText('Running…')).toBeDefined();
+
+      await waitForMutationsIdle(queryClient);
     });
 
     it('qualifies the average as partial while items are still being scored', async () => {
@@ -187,7 +190,7 @@ describe('ExperimentRunMeta', () => {
         });
 
         expect(await screen.findByText('Tokens')).toBeDefined();
-        expect(screen.getByText('12.4K')).toBeDefined();
+        expect(screen.getByText('12.4k')).toBeDefined();
         expect(screen.getByText('· $0.01')).toBeDefined();
 
         await waitForMutationsIdle(queryClient);
@@ -225,7 +228,7 @@ describe('ExperimentRunMeta', () => {
       it('when the experiment is running, then Tokens shows the "· so far" suffix', async () => {
         const { queryClient } = renderBar(runningExperiment, { data: fullMetrics, isLoading: false, isEnabled: true });
 
-        expect(await screen.findByText('12.4K')).toBeDefined();
+        expect(await screen.findByText('12.4k')).toBeDefined();
         // Avg score shows one "· so far" as well; Tokens adds a second.
         await screen.findAllByText('· so far');
         expect(screen.getAllByText('· so far')).toHaveLength(2);

@@ -493,6 +493,7 @@ type InputShared_Type_13 = {
 type InputShared_Type_14 =
   | 'agent_run'
   | 'scorer_run'
+  | 'classifier_evaluation'
   | 'scorer_step'
   | 'generic'
   | 'model_generation'
@@ -3253,6 +3254,7 @@ type Shared_Type_56 = {
 type Shared_Type_57 =
   | 'agent_run'
   | 'scorer_run'
+  | 'classifier_evaluation'
   | 'scorer_step'
   | 'generic'
   | 'model_generation'
@@ -9978,6 +9980,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
+          | 'classifier_evaluation'
           | 'scorer_step'
           | 'generic'
           | 'model_generation'
@@ -13297,7 +13300,7 @@ export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_PathP
   workspaceId: string;
   /** Skill name identifier */
   skillName: string;
-  /** Reference file path (URL encoded) */
+  /** Reference file path */
   referencePath: string;
 };
 

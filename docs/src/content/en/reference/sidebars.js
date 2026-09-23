@@ -146,6 +146,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Classifier',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'classifier/classifier', label: 'Classifier' }],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [
@@ -215,6 +221,8 @@ const sidebars = {
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
+        { type: 'doc', id: 'core/getClassifier', label: '.getClassifier()' },
+        { type: 'doc', id: 'core/getClassifierById', label: '.getClassifierById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
         { type: 'doc', id: 'core/getEditor', label: '.getEditor()' },
         { type: 'doc', id: 'core/getGateway', label: '.getGateway()' },
@@ -233,6 +241,7 @@ const sidebars = {
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
         { type: 'doc', id: 'core/getWorkflow', label: '.getWorkflow()' },
         { type: 'doc', id: 'core/listAgents', label: '.listAgents()' },
+        { type: 'doc', id: 'core/listClassifiers', label: '.listClassifiers()' },
         { type: 'doc', id: 'core/listGateways', label: '.listGateways()' },
         { type: 'doc', id: 'core/listLogs', label: '.listLogs()' },
         { type: 'doc', id: 'core/listLogsByRunId', label: '.listLogsByRunId()' },

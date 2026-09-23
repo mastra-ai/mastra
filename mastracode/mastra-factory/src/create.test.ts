@@ -505,13 +505,16 @@ describe('create — .env safety before git commit', () => {
       // append fails and the git init step is aborted.
       fs.writeFileSync(path.join(templateDir, '.gitignore'), 'node_modules\n');
 
-      // Intercept the copy step: after the template lands in the project dir,
-      // lock its .gitignore before ensureEnvGitignored runs. We do this via a
-      // one-shot spy that fires when the create flow calls into runInherit for
-      // the first git command — but simpler: pre-chmod the template's file
-      // itself. The scaffolder copies it into the project dir, preserving the
-      // read-only bit, so the subsequent writeFileSync throws EACCES.
-      fs.chmodSync(path.join(templateDir, '.gitignore'), 0o444);
+      // Intercept the copy step and lock the scaffolded .gitignore directly.
+      // fs.cpSync does not preserve the source mode consistently across
+      // platforms, so chmodding the template makes this test environment-dependent.
+      tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+        if (command === 'npx' && args[0] === 'degit') {
+          fs.cpSync(templateDir, args[2]!, { recursive: true });
+          fs.chmodSync(path.join(args[2]!, '.gitignore'), 0o444);
+        }
+        return { stdout: '', stderr: '', exitCode: 0, killed: false };
+      });
 
       await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
