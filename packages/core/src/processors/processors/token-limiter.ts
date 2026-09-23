@@ -38,6 +38,12 @@ export interface TokenLimiterOptions {
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
   /** Persist a memory cursor after trimming. */
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
+  /**
+   * Cap each tool result produced in the current run to this many tokens before it reaches the model.
+   * The stored result is kept intact; the model receives a truncated copy ending in a
+   * `[truncated: showing N of M tokens]` marker. Unset by default (no capping).
+   */
+  maxToolResultTokens?: number;
 }
 
 /**
@@ -114,6 +120,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private atMaxRemoveTokens = 0;
   private tokenCounter?: TokenLimiterOptions['tokenCounter'];
   private onMemoryTrim?: TokenLimiterOptions['onMemoryTrim'];
+  private maxToolResultTokens?: number;
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -143,6 +150,13 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       this.atMaxRemoveTokens = options.atMaxRemoveTokens ?? this.maxTokens * 0.25;
       this.tokenCounter = options.tokenCounter;
       this.onMemoryTrim = options.onMemoryTrim;
+      this.maxToolResultTokens = options.maxToolResultTokens;
+      if (
+        this.maxToolResultTokens !== undefined &&
+        (!Number.isFinite(this.maxToolResultTokens) || this.maxToolResultTokens <= 0)
+      ) {
+        throw new Error('maxToolResultTokens must be a finite, positive number');
+      }
       if (
         this.trimMode === 'memory-only' &&
         (!Number.isFinite(this.maxTokens) ||
@@ -252,29 +266,45 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Process non-system messages in reverse order (newest first)
-    const messagesToKeep: MastraDBMessage[] = [];
-    let currentTokens = 0;
+    // Messages produced by the current run (tool calls/results, partial answers) are never trimmed:
+    // removing them mid-run hides tool data from the next step and makes the model loop.
+    const responseIds = messageList.makeMessageSourceChecker().output;
+    let responseTokens = 0;
+    for (const message of messages) {
+      if (!responseIds.has(message.id)) continue;
+      if (this.maxToolResultTokens !== undefined) this.capToolResults(message, this.maxToolResultTokens);
+      responseTokens += await this.countInputMessageTokens(message);
+    }
 
-    // Iterate through messages in reverse to prioritize recent messages
+    if (responseTokens > remainingBudget) {
+      throw new TripWire(
+        "TokenLimiterProcessor: The current run's messages (tool calls and results) exceed the remaining token budget and cannot be trimmed. Set `maxToolResultTokens` to cap oversized tool results or raise `limit`.",
+        {
+          retry: false,
+          metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
+        },
+      );
+    }
+
+    // Process older (non-current-run) messages newest first within what the current run leaves
+    const messagesToKeep: MastraDBMessage[] = [];
+    let currentTokens = responseTokens;
+
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (!message) continue;
+      if (!message || responseIds.has(message.id)) continue;
 
       const messageTokens = await this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        messagesToKeep.unshift(message);
+        messagesToKeep.push(message);
         currentTokens += messageTokens;
-      } else {
-        if (this.trimMode === 'contiguous') {
-          break;
-        }
-        // best-fit → continue (existing behavior)
+      } else if (this.trimMode === 'contiguous') {
+        break;
       }
     }
 
-    if (messagesToKeep.length === 0) {
+    if (messagesToKeep.length === 0 && responseTokens === 0) {
       throw new TripWire(
         'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
         {
@@ -284,11 +314,35 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       );
     }
 
-    // Remove messages that don't fit within the token budget
+    // Remove older messages that don't fit within the token budget
     const keepIds = new Set(messagesToKeep.map(m => m.id));
-    const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
+    const idsToRemove = messages.filter(m => !responseIds.has(m.id) && !keepIds.has(m.id)).map(m => m.id);
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
+    }
+  }
+
+  /**
+   * Give oversized tool results a truncated model-only copy (`providerMetadata.mastra.modelOutput`).
+   * The stored result stays intact; results already mapped by `toModelOutput` are left alone.
+   */
+  private capToolResults(message: MastraDBMessage, maxTokens: number): void {
+    if (typeof message.content !== 'object' || !Array.isArray(message.content.parts)) return;
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') continue;
+      const mastraMeta = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
+      if (mastraMeta?.modelOutput != null) continue;
+      const result = part.toolInvocation.result;
+      if (result === undefined || isMediaPayload(result)) continue;
+      const text = typeof result === 'string' ? result : JSON.stringify(result);
+      if (text === undefined) continue;
+      const total = this.countTokens(text);
+      if (total <= maxTokens) continue;
+      const value = `${sliceByTokensSafe(text, 0, maxTokens)}\n[truncated: showing ${maxTokens.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
+      part.providerMetadata = {
+        ...part.providerMetadata,
+        mastra: { ...mastraMeta, modelOutput: { type: 'text', value } },
+      };
     }
   }
 
@@ -361,7 +415,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else if (invocation.state === 'result') {
               // Tool result - this will become a separate CoreMessage
               toolResultCount++;
-              if (invocation.result !== undefined) {
+              const modelOutput = (part.providerMetadata?.mastra as Record<string, unknown> | undefined)?.modelOutput;
+              if (modelOutput != null) {
+                // The model receives the mapped/capped copy, not the stored result
+                const mapped = modelOutput as { type?: string; value?: unknown };
+                tokenString += typeof mapped.value === 'string' ? mapped.value : JSON.stringify(modelOutput);
+              } else if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
                 } else if (isMediaPayload(invocation.result)) {

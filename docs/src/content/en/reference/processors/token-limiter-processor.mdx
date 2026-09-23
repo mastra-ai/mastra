@@ -70,11 +70,18 @@ const processor = new TokenLimiterProcessor({
           },
           {
             name: 'trimMode',
-            type: "'best-fit' | 'contiguous'",
+            type: "'best-fit' | 'contiguous' | 'memory-only'",
             description:
-              "Controls how messages are trimmed when exceeding the token limit: 'best-fit' keeps as many messages as possible (may create gaps), 'contiguous' stops at the first message that does not fit, ensuring a continuous suffix of conversation history",
+              "Controls how older messages are trimmed when exceeding the token limit: 'best-fit' walks from newest to oldest and skips messages that don't fit (may create gaps), 'contiguous' stops at the first message that doesn't fit, ensuring a continuous suffix of conversation history, 'memory-only' only trims messages loaded from memory",
             isOptional: true,
             default: "'best-fit'",
+          },
+          {
+            name: 'maxToolResultTokens',
+            type: 'number',
+            description:
+              "Caps each tool result produced in the current run to this many tokens before it reaches the model. The stored result is kept intact; the model receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. Results already mapped by a tool's `toModelOutput` are left alone. Unset by default.",
+            isOptional: true,
           },
         ],
       },
@@ -110,7 +117,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly by removing oldest messages first while preserving system messages.',
+      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly by removing older messages while preserving system messages and every message produced by the current run (tool calls, tool results, partial answers).',
     isOptional: false,
   },
   {
@@ -153,12 +160,26 @@ for await (const part of stream.fullStream) {
 
 Images and file attachments are estimated instead of tokenized, including `file` message parts and tool results shaped like `{ data, mediaType }`. Images use a flat per-image estimate; other media uses decoded byte size, while remote URLs and provider file ids use a flat fallback because their size isn't known locally. Encoded payloads such as base64 data are never counted as text, avoiding an inflated count that could truncate history unnecessarily.
 
+## Current-run messages
+
+During `processInputStep`, messages produced by the current run (tool calls, tool results, and partial answers) are never trimmed. Removing them mid-run would hide tool data from the next step, so the model would call the same tool again until `maxSteps` runs out. Only older history (memory and earlier input) is trimmed to make room.
+
+If a single tool result is large, set `maxToolResultTokens` so the model sees a truncated copy instead of the full result:
+
+```typescript
+const processor = new TokenLimiterProcessor({
+  limit: 8000,
+  maxToolResultTokens: 2000,
+})
+```
+
 ## Error behavior
 
 When used as an input processor (both `processInput` and `processInputStep`), `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
 
 - **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
 - **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
+- **Current run exceeds limit**: If the current run's messages alone exceed the remaining budget, `processInputStep` throws a TripWire instead of dropping tool data. Set `maxToolResultTokens` or raise `limit`.
 
 ```typescript
 import { TripWire } from '@mastra/core/agent'

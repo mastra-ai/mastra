@@ -1177,7 +1177,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1203,7 +1203,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:03:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1268,7 +1268,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi there', parts: [{ type: 'text', text: 'Hi there' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1326,7 +1326,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'Hi how can I help', parts: [{ type: 'text', text: 'Hi how can I help' }] },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'response',
+        'memory',
       );
       messageList.add(
         {
@@ -1655,6 +1655,105 @@ describe('TokenLimiterProcessor', () => {
 
       // Newest message should be preserved
       expect(messagesAfter.some(m => m.id === 'user-2')).toBe(true);
+    });
+  });
+
+  describe('current-run immutability (#24110)', () => {
+    const mockModel = { modelId: 'test-model', specificationVersion: 'v2', provider: 'test' } as any;
+    const at = (n: number) => new Date(Date.UTC(2024, 0, 1, 0, 0, n));
+    const text = (id: string, role: 'user' | 'assistant', t: string, n: number): MastraDBMessage => ({
+      id,
+      role,
+      content: { format: 2, content: t, parts: [{ type: 'text', text: t }] },
+      createdAt: at(n),
+    });
+    const toolResult = (id: string, result: unknown, n: number): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      content: {
+        format: 2,
+        content: '',
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: `call-${id}`, toolName: 'lookup', args: {}, result },
+          },
+        ],
+      },
+      createdAt: at(n),
+    });
+    const run = (processor: TokenLimiterProcessor, messageList: MessageList) =>
+      processor.processInputStep({
+        messageList,
+        stepNumber: 1,
+        model: mockModel,
+        steps: [],
+        systemMessages: [],
+        state: {},
+        retryCount: 0,
+        abort: mockAbort,
+      });
+
+    it('keeps current-run tool results and trims older history instead', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 120 });
+      const messageList = new MessageList();
+      messageList.add(
+        [text('old-1', 'user', 'old question '.repeat(20), 1), text('old-2', 'assistant', 'old answer '.repeat(20), 2)],
+        'memory',
+      );
+      messageList.add(text('user-now', 'user', 'what is the weather?', 3), 'input');
+      messageList.add(toolResult('tool-now', { forecast: 'sunny', temp: 21 }, 4), 'response');
+
+      await run(processor, messageList);
+
+      const ids = messageList.get.all.db().map(m => m.id);
+      expect(ids).toContain('tool-now');
+      expect(ids).toContain('user-now');
+      expect(ids).not.toContain('old-1');
+    });
+
+    it('throws when the current run alone exceeds the budget', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 60 });
+      const messageList = new MessageList();
+      messageList.add(text('user-now', 'user', 'go', 1), 'input');
+      messageList.add(toolResult('tool-now', 'x '.repeat(500), 2), 'response');
+
+      await expect(run(processor, messageList)).rejects.toThrow(/current run's messages/);
+      expect(messageList.get.all.db().map(m => m.id)).toContain('tool-now');
+    });
+
+    it('caps oversized current-run tool results for the model and keeps the stored result', async () => {
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(text('user-now', 'user', 'go', 1), 'input');
+      messageList.add(toolResult('tool-now', big, 2), 'response');
+
+      await run(processor, messageList);
+
+      const stored = messageList.get.all.db().find(m => m.id === 'tool-now')!;
+      const part = stored.content.parts[0] as any;
+      expect(part.toolInvocation.result).toBe(big);
+      const modelOutput = part.providerMetadata?.mastra?.modelOutput;
+      expect(modelOutput.type).toBe('text');
+      expect(modelOutput.value).toMatch(/\[truncated: showing 50 of [\d,]+ tokens\]$/);
+      expect(modelOutput.value.length).toBeLessThan(big.length);
+    });
+
+    it('leaves results under maxToolResultTokens untouched', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(text('user-now', 'user', 'go', 1), 'input');
+      messageList.add(toolResult('tool-now', { ok: true }, 2), 'response');
+
+      await run(processor, messageList);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+    });
+
+    it('rejects a non-positive maxToolResultTokens', () => {
+      expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
   });
 });
