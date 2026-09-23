@@ -133,6 +133,24 @@ function waitForTermination(termination: Promise<boolean>): Promise<void> {
   });
 }
 
+/**
+ * Polls `exec.inspect()` until the exec reports it is no longer running, bounded
+ * by TERMINATION_CONFIRMATION_DEADLINE_MS. A stream can close without 'end'
+ * while the process is still alive, and settling from inspect then would publish
+ * an exit for a process that never exited — but waiting unbounded could leave
+ * wait() pending forever. Returns the last inspect result, which may still
+ * report Running: true if the bound was reached.
+ */
+async function waitForExecToStop(exec: Exec): Promise<ExecInspectInfo> {
+  const deadline = Date.now() + TERMINATION_CONFIRMATION_DEADLINE_MS;
+  let info = await exec.inspect();
+  while (info.Running && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+    info = await exec.inspect();
+  }
+  return info;
+}
+
 // =============================================================================
 // Docker Process Handle
 // =============================================================================
@@ -507,10 +525,13 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
 
         // Docker multiplexed streams normally emit 'end' before 'close' for natural
-        // exits, but a stream torn down by other means may close without one. Fall
-        // back to exec inspect so wait() cannot hang once the stream has closed.
+        // exits, but a stream torn down by other means may close without one. A
+        // closed stream does not mean the exec finished, though, so poll (bounded)
+        // while it is still running rather than publishing an exit for a live
+        // process; settle afterwards so wait() cannot hang once the bound elapses.
         try {
-          const info = await exec.inspect();
+          const info = await waitForExecToStop(exec);
+          if (settled) return;
           settle(info.ExitCode ?? 1);
         } catch {
           settle(1);

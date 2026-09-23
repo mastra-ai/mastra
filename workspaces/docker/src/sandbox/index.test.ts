@@ -1490,12 +1490,22 @@ describe('DockerSandbox', () => {
         mockContainer.exec.mockImplementationOnce(() => new Promise(() => {}));
         void handle.kill();
 
+        let settled = false;
+        void waitPromise.then(() => {
+          settled = true;
+        });
+
         const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
         const endPromise = endHandler();
 
-        // Comfortably past TERMINATION_CONFIRMATION_DEADLINE_MS.
-        await vi.advanceTimersByTimeAsync(60_000);
+        // Still inside TERMINATION_CONFIRMATION_DEADLINE_MS (10s) — not settled yet.
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(settled).toBe(false);
+
+        // One millisecond later the bound elapses and wait() settles.
+        await vi.advanceTimersByTimeAsync(1);
         await endPromise;
+        expect(settled).toBe(true);
 
         const result = await waitPromise;
 
@@ -1634,6 +1644,49 @@ describe('DockerSandbox', () => {
       expect(result.exitCode).toBe(0);
       expect(result.killed).toBeUndefined();
       expect(result.timedOut).toBeUndefined();
+    });
+
+    it('should not settle wait() from inspect while the exec is still running after close', async () => {
+      // A stream can close without 'end' while the process is still alive (e.g. the
+      // exec socket is torn down). Settling from inspect then would publish an exit
+      // for a process that never exited, so the fallback polls (bounded) for the
+      // exec to stop before settling.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100');
+        const waitPromise = handle.wait();
+
+        let settled = false;
+        void waitPromise.then(() => {
+          settled = true;
+        });
+
+        // The exec is still running when the stream closes.
+        mockExec.inspect.mockResolvedValue({ Running: true });
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => Promise<void>;
+        const closePromise = closeHandler();
+
+        // Still running at the bound: settlement must not have happened yet.
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(settled).toBe(false);
+
+        // The bound elapses — settle rather than hang, reporting an abnormal exit.
+        await vi.advanceTimersByTimeAsync(1);
+        await closePromise;
+        expect(settled).toBe(true);
+
+        const result = await waitPromise;
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(1);
+        expect(result.killed).toBeUndefined();
+        expect(result.timedOut).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should preserve killed metadata when the stream errors while kill is still confirming', async () => {
