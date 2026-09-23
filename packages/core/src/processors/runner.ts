@@ -2314,8 +2314,12 @@ export class ProcessorRunner {
     } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
-    // Run through all output processors that have processToolResult
-    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+    // Run through every registered processor that implements processToolResult.
+    // Input-registered processors participate too (mirrors runProcessAPIError) so a
+    // processor that guards what reaches the next LLM call does not have to be
+    // registered as an output processor to see tool results.
+    const toolResultProcessors = [...this.inputProcessors, ...this.outputProcessors];
+    for (const [index, processorOrWorkflow] of toolResultProcessors.entries()) {
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();

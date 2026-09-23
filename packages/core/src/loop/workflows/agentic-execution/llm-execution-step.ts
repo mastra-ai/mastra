@@ -97,6 +97,7 @@ import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
+import { getToolResultInputProcessors } from './tool-result-processors';
 
 /**
  * Finish reasons that terminate the agentic loop. The loop must NOT continue on
@@ -185,6 +186,9 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   // invoke output processors after tool.execute() returns and before the result
   // chunk is forwarded to streaming clients.
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Input-registered processors, so ones implementing processToolResult also see tool results. */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
   processorStates?: Map<string, ProcessorState>;
   agentId?: string;
   processorRetryCount?: number;
@@ -540,16 +544,23 @@ async function processOutputStream<OUTPUT = undefined>({
   tracingContext,
   pendingProviderToolCallsByToolCallId,
   modelSpanTracker,
+  inputProcessors,
+  llmRequestInputProcessors,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
   let hasStepContent = false;
   let toolResultTripwire: TripWire | null = null;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
+  const toolResultInputProcessors = getToolResultInputProcessors({
+    inputProcessors,
+    llmRequestInputProcessors,
+    outputProcessors,
+  });
   const getToolResultProcessorRunner = (): ProcessorRunner => {
     if (toolResultProcessorRunner) return toolResultProcessorRunner;
     toolResultProcessorRunner = new ProcessorRunner({
-      inputProcessors: [],
+      inputProcessors: toolResultInputProcessors,
       outputProcessors: outputProcessors ?? [],
       logger: logger || new ConsoleLogger({ level: 'error' }),
       agentName: agentId || 'unknown',
@@ -1007,7 +1018,7 @@ async function processOutputStream<OUTPUT = undefined>({
           // web_search) whose results arrive in a later LLM stream. Client-executed
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
-          if (outputProcessors && outputProcessors.length > 0) {
+          if ((outputProcessors && outputProcessors.length > 0) || toolResultInputProcessors.length > 0) {
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
@@ -1918,6 +1929,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             transportRef: readScoped(scopeCtx, TRANSPORT_REF_KEY, 'transportRef'),
             transportResolver,
             outputProcessors,
+            inputProcessors,
+            llmRequestInputProcessors,
             processorStates,
             agentId,
             processorRetryCount: inputData.processorRetryCount,

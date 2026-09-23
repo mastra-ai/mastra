@@ -22,6 +22,7 @@ import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } fro
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError, getSubAgentErrorResult } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
+import { getToolResultInputProcessors } from './tool-result-processors';
 
 /**
  * Walk messageList backwards looking for a tool-invocation part with the given
@@ -67,10 +68,20 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
    * 2. Processor state (streamParts, customState) is shared across all chunks
    * 3. Blocking/tripwire works correctly for tool results
    */
+  // Input-registered processors that implement processToolResult also run here, so a
+  // processor that bounds what reaches the next LLM call does not have to be registered
+  // as an output processor. Ones already present in outputProcessors are dropped so they
+  // still run once per tool result.
+  const toolResultInputProcessors = getToolResultInputProcessors({
+    inputProcessors: rest.inputProcessors,
+    llmRequestInputProcessors: rest.llmRequestInputProcessors,
+    outputProcessors: rest.outputProcessors,
+  });
+
   const processorRunner =
-    rest.outputProcessors?.length && rest.logger
+    (rest.outputProcessors?.length || toolResultInputProcessors.length) && rest.logger
       ? new ProcessorRunner({
-          inputProcessors: [],
+          inputProcessors: toolResultInputProcessors,
           outputProcessors: rest.outputProcessors,
           logger: rest.logger,
           agentName: 'LLMMappingStep',
@@ -174,7 +185,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     stepNumber: number;
     steps: Array<StepResult<ToolSet>>;
   }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
-    if (!processorRunner || !rest.outputProcessors?.length) {
+    if (!processorRunner || !(rest.outputProcessors?.length || toolResultInputProcessors.length)) {
       return { ok: true };
     }
     const { chunk, stepNumber, steps } = args;

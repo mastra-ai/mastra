@@ -2,11 +2,18 @@ import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
+import { sanitizeToolName } from '../../agent/message-list/utils/tool-name';
 import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
 import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
-import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
+import type {
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+  ProcessOutputStreamArgs,
+  ProcessToolResultArgs,
+  Processor,
+} from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -38,6 +45,14 @@ export interface TokenLimiterOptions {
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
   /** Persist a memory cursor after trimming. */
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
+  /**
+   * Cap a single tool result at this many tokens. Unset by default, so tool results
+   * pass through untouched. When set, an oversized result is truncated in place (with a
+   * visible marker) before it reaches history or the next LLM call, so one large result
+   * cannot consume the whole context budget and force the run to evict the tool call it
+   * belongs to.
+   */
+  maxToolResultTokens?: number;
 }
 
 /**
@@ -114,6 +129,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private atMaxRemoveTokens = 0;
   private tokenCounter?: TokenLimiterOptions['tokenCounter'];
   private onMemoryTrim?: TokenLimiterOptions['onMemoryTrim'];
+  private maxToolResultTokens?: number;
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -143,6 +159,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       this.atMaxRemoveTokens = options.atMaxRemoveTokens ?? this.maxTokens * 0.25;
       this.tokenCounter = options.tokenCounter;
       this.onMemoryTrim = options.onMemoryTrim;
+      this.maxToolResultTokens = options.maxToolResultTokens;
       if (
         this.trimMode === 'memory-only' &&
         (!Number.isFinite(this.maxTokens) ||
@@ -465,6 +482,46 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     }
 
     return result;
+  }
+
+  /**
+   * Cap a single oversized tool result before it reaches history or the next LLM call.
+   *
+   * Without this, one huge result can consume the whole context budget, and the
+   * step-level trimming then evicts the very tool call/result pair the model is
+   * waiting on, leaving the agent to loop without ever seeing the data.
+   *
+   * No-op unless `maxToolResultTokens` is configured.
+   */
+  async processToolResult(args: ProcessToolResultArgs): Promise<void> {
+    const limit = this.maxToolResultTokens;
+    if (limit === undefined) return;
+
+    const { result, messageList, toolCallId, toolName, args: toolArgs } = args;
+    if (result === undefined || result === null) return;
+
+    const text = typeof result === 'string' ? result : JSON.stringify(result);
+    if (typeof text !== 'string') return;
+
+    const tokens = this.countTokens(text);
+    if (tokens <= limit) return;
+
+    // Truncation is visible rather than silent so the model (and anyone reading
+    // the persisted thread) can tell the result was cut rather than empty.
+    const truncated = `${sliceByTokensSafe(text, 0, limit)}\n\n[truncated: showing ${limit} of ${tokens} tokens]`;
+
+    // Write through messageList so both persistence and the next model input
+    // carry the bounded value; the runtime reads this back to sync the stream chunk.
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId,
+        toolName: sanitizeToolName(toolName),
+        args: toolArgs,
+        result: truncated,
+      },
+    });
   }
 
   private async countTokensInChunk(part: ChunkType): Promise<number> {

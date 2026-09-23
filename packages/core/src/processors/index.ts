@@ -947,6 +947,12 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   __processOutputStream?: boolean;
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
+  /**
+   * @internal Ids of the plain processors this framework-generated workflow wraps, so a
+   * processor registered on two phases is still recognizable as the same instance after
+   * the phases have been combined into separate workflows.
+   */
+  __sourceProcessorIds?: string[];
 };
 
 /**
