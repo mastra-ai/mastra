@@ -609,6 +609,59 @@ describe('TokenLimiter maxToolResultTokens', () => {
     expect(capped).toContain('rule number');
   });
 
+  // The cap is a promise about the whole result, not about each text part, so count what
+  // the model actually receives. Media is charged its flat estimate rather than its own
+  // length, matching what input trimming will later attribute to this message.
+  //
+  // Media is never cut, so a result whose media alone exceeds the cap cannot come under it.
+  // The guarantee is therefore that text adds nothing beyond the budget media leaves behind.
+  it.each([40, 200, 900, 2_000])('keeps the whole media result within a cap of %i', async limit => {
+    const image = { type: 'image', data: 'A'.repeat(200), mimeType: 'image/png' };
+    const content: unknown[] = [image];
+    for (let i = 0; i < 12; i++) {
+      content.push({ type: 'text', text: 'rule number seven hundred and seventy seven. '.repeat(20) });
+    }
+
+    let captured: any;
+    const limiter = new TokenLimiterProcessor({ limit: 100_000, maxToolResultTokens: limit });
+    await limiter.processToolResult({
+      result: { content },
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    // Media keeps its structure, so charge it the estimate instead of its serialized size.
+    const counted = (captured?.content ?? content).reduce((sum: number, part: any) => {
+      if (part.type === 'image') return sum + 765;
+      return sum + estimateTokenCount(part.text ?? '');
+    }, 0);
+
+    expect(captured.content).toContainEqual(image);
+    expect(counted).toBeLessThanOrEqual(Math.max(limit, 765));
+  });
+
+  // When media alone fills the cap there is no budget left for prose. Replacing each text
+  // part with a marker would quietly spend tokens the cap already ruled out, so they go.
+  it('drops text parts outright when media alone fills the cap', async () => {
+    const image = { type: 'image', data: 'A'.repeat(200), mimeType: 'image/png' };
+    const content: unknown[] = [image];
+    for (let i = 0; i < 12; i++) {
+      content.push({ type: 'text', text: 'rule number seven hundred and seventy seven. '.repeat(20) });
+    }
+
+    let captured: any;
+    const limiter = new TokenLimiterProcessor({ limit: 100_000, maxToolResultTokens: 40 });
+    await limiter.processToolResult({
+      result: { content },
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    expect(captured.content).toEqual([image]);
+  });
+
   // Exempting the shape from capping is only half the job. Input trimming has to estimate
   // that media rather than tokenize its base64, or the message looks enormous and gets
   // trimmed away — losing the result and sending the model back to re-call the tool.

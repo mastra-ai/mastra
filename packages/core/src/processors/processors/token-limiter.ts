@@ -608,36 +608,40 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Truncation is visible rather than silent so the model (and anyone reading
     // the persisted thread) can tell the result was cut rather than empty.
     //
-    // The marker costs tokens too, so slicing to the full cap and then appending it
-    // would land over budget. That overshoot is what the cap exists to prevent: near
-    // the context boundary it is enough for trimming to evict the result and send the
-    // model back to re-call the tool. Reserve the marker first and slice into what is
-    // left. If the cap is too small to hold the marker plus any content, keep the
-    // marker alone — it stays bounded and still reports what happened.
-    // Sizing the marker is circular — its own text contains the retained count. Size it
-    // against `limit` first, which has at least as many digits as any budget derived from
-    // it, so the real marker can only be cheaper and the total can only come in under cap.
-    const markerTokens = this.countTokens(buildTruncationMarker(limit, tokens));
-    const contentBudget = limit - markerTokens;
-
-    let truncated: string;
-    if (contentBudget > 0) {
-      truncated = `${sliceByTokensSafe(text, 0, contentBudget)}${buildTruncationMarker(contentBudget, tokens)}`;
-    } else {
-      // The cap is too small for the counted marker, so fall back to a fixed short one.
-      // Sliced if even that does not fit, because staying under the cap matters more than
-      // staying readable — an overshoot here is what evicts the result.
-      truncated =
-        this.countTokens(SHORT_TRUNCATION_MARKER) <= limit
-          ? SHORT_TRUNCATION_MARKER
-          : sliceByTokensSafe(SHORT_TRUNCATION_MARKER, 0, limit);
-    }
+    // A whole result always has to be replaced by something, so when not even the short
+    // marker fits, slice it — staying under the cap matters more than staying readable,
+    // since an overshoot here is what evicts the result.
+    const truncated = this.capTextToBudget(text, tokens, limit) ?? sliceByTokensSafe(SHORT_TRUNCATION_MARKER, 0, limit);
 
     // setResult, not messageList: for a provider that emits the call and the result in
     // one stream there is no tool-invocation part to update yet, because history is
     // assembled from the chunks after this hook runs. setResult covers the stream chunk,
     // history, and the next model call for both provider- and client-executed tools.
     setResult?.(truncated);
+  }
+
+  /**
+   * Fit text into a token budget, reserving the truncation marker's own cost.
+   *
+   * Slicing to the full budget and then appending the marker would land over it. That
+   * overshoot is what the cap exists to prevent: near the context boundary it is enough
+   * for trimming to evict the result and send the model back to re-call the tool.
+   *
+   * Sizing the marker is circular — its own text contains the retained count. Size it
+   * against `budget` first, which has at least as many digits as any budget derived from
+   * it, so the real marker can only be cheaper and the total can only come in under cap.
+   *
+   * Returns undefined when not even the short marker fits, leaving the caller to decide
+   * between dropping the content and slicing the marker itself.
+   */
+  private capTextToBudget(text: string, tokens: number, budget: number): string | undefined {
+    const contentBudget = budget - this.countTokens(buildTruncationMarker(budget, tokens));
+    if (contentBudget > 0) {
+      return `${sliceByTokensSafe(text, 0, contentBudget)}${buildTruncationMarker(contentBudget, tokens)}`;
+    }
+
+    // Too small for the counted marker, so fall back to a fixed short one.
+    return this.countTokens(SHORT_TRUNCATION_MARKER) <= budget ? SHORT_TRUNCATION_MARKER : undefined;
   }
 
   /**
@@ -674,27 +678,27 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const textBudget = Math.max(0, limit - mediaTokens);
 
     let remaining = textBudget;
-    const capped = content.map(part => {
-      if (isMcpMediaPart(part)) return part;
+    const capped = content.flatMap(part => {
+      if (isMcpMediaPart(part)) return [part];
 
       const text = isTextBearingPart(part) ? part.text : serializeToolResult(part);
-      if (text === undefined) return part;
+      if (text === undefined) return [part];
 
       const tokens = this.countTokens(text);
       if (tokens <= remaining) {
         remaining -= tokens;
-        return part;
+        return [part];
       }
 
-      const marker = buildTruncationMarker(remaining, tokens);
-      const contentBudget = remaining - this.countTokens(marker);
-      const truncated =
-        contentBudget > 0
-          ? `${sliceByTokensSafe(text, 0, contentBudget)}${buildTruncationMarker(contentBudget, tokens)}`
-          : SHORT_TRUNCATION_MARKER;
+      // Unlike a whole result, an over-budget part can simply be dropped — the parts that
+      // did fit still carry a marker, so the truncation is still visible. Emitting a marker
+      // per dropped part is what pushes the result back over the cap, and when media alone
+      // fills the budget that is every text part at once.
+      const truncated = this.capTextToBudget(text, tokens, remaining);
       remaining = 0;
+      if (truncated === undefined) return [];
 
-      return isTextBearingPart(part) ? { ...part, text: truncated } : { type: 'text', text: truncated };
+      return [isTextBearingPart(part) ? { ...part, text: truncated } : { type: 'text', text: truncated }];
     });
 
     setResult?.({ ...result, content: capped });

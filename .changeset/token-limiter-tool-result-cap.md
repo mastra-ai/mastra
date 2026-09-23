@@ -8,7 +8,7 @@ Processors registered as `inputProcessors` now also run their `processToolResult
 
 `TokenLimiterProcessor` accepts a new `maxToolResultTokens` option that caps a single tool result. It is unset by default, so tool results pass through untouched. When set, an oversized result is truncated in place with a visible `[truncated: showing X of Y tokens]` marker before it reaches history or the next LLM call. The marker's own cost is counted against the cap, so the capped result stays within `maxToolResultTokens`; the reported count is therefore the retained content, excluding the marker.
 
-Tool results carrying MCP media (`{ content: [{ type: 'image' | 'audio', data }] }`) keep their structure so they still reach the model as native image/audio rather than a truncated JSON string. The media itself is never cut — truncating base64 corrupts it rather than shrinking it — but the result as a whole is still capped: media is charged a flat size estimate and any text alongside it is truncated to fit the remaining budget.
+Tool results carrying MCP media (`{ content: [{ type: 'image' | 'audio', data }] }`) keep their structure so they still reach the model as native image/audio rather than a truncated JSON string. The media itself is never cut — truncating base64 corrupts it rather than shrinking it — but text riding alongside it no longer escapes the cap: media is charged a flat size estimate, and any text is truncated, or dropped, to fit whatever budget the media leaves. A result whose media alone exceeds the cap therefore stays over it; the cap bounds everything except the media.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
