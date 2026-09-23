@@ -312,13 +312,15 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
   });
 });
 
-describe('createInngestDurableAgenticWorkflow step events (#24731)', () => {
-  it('disables step events on the agentic loop and iteration workflows', () => {
+describe('createInngestDurableAgenticWorkflow bookkeeping (#24731)', () => {
+  it('configures both workflows to skip no-op durable bookkeeping', () => {
     const inngest = new Inngest({ id: 'inngest-agentic-workflow-events-tests' });
     const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
     const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
 
     expect(workflow.options.emitStepEvents).toBe(false);
     expect(iterationWorkflow.options.emitStepEvents).toBe(false);
+    expect(workflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+    expect(iterationWorkflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
   });
 });

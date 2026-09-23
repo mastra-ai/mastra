@@ -540,6 +540,14 @@ export interface WorkflowOptions {
    */
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Evaluates `shouldPersistSnapshot` before entering the durable operation so a
+   * false verdict does not consume a durable step.
+   *
+   * @internal Only enable this for framework-owned predicates that depend solely
+   * on serialized workflow state and are guaranteed deterministic across replay.
+   */
+  evaluatePersistencePredicateBeforeDurableOperation?: boolean;
 
   /**
    * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated

@@ -1805,6 +1805,7 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
