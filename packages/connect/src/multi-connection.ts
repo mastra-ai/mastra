@@ -7,7 +7,7 @@ import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './
 import { platformMcpTransport } from './client.js';
 import { MastraConnectError } from './errors.js';
 import type { McpProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { applyAllowTools } from './toolset.js';
+import { applyToolFilter } from './toolset.js';
 
 /**
  * A resolved candidate connection for one provider, tagged with the display
@@ -196,27 +196,36 @@ function buildListConnectionsTool(integrationId: string, connections: NamedConne
 /**
  * Composes a full multi-connection toolset for a proxy provider: one inner
  * toolset per connection, wrapped tools that dispatch by `connection_name`,
- * and the `<provider>_list_connections` tool. `allowTools` is honored on the
- * underlying tools; the list tool is always included.
+ * and the `<provider>_list_connections` tool. `allowTools` and `disallowTools`
+ * are honored on the underlying tools (mutually exclusive; connect() validates
+ * that up front). The list tool is always included.
  */
 export function buildProxyMultiConnectionTools(input: {
   registration: ProxyProviderRegistration;
   connections: NamedConnection[];
   allowTools?: string[];
+  disallowTools?: string[];
   client?: ConnectClientOptions;
 }): ToolsInput {
-  const { registration, connections, allowTools, client } = input;
+  const { registration, connections, allowTools, disallowTools, client } = input;
   // The `<provider>_list_connections` key exists only on the wrapper, not on
-  // the underlying provider toolset. Strip it before passing the allowlist to
-  // the inner builder so allowing it never surfaces as an "unknown tool".
+  // the underlying provider toolset. Strip it before passing either filter to
+  // the inner builder so referencing it never surfaces as an "unknown tool".
   const listToolKey = `${registration.integrationId}_list_connections`;
   const innerAllowTools = allowTools?.filter(name => name !== listToolKey);
+  const innerDisallowTools = disallowTools?.filter(name => name !== listToolKey);
   const innerToolsByConnectionId = new Map<string, ToolsInput>();
-  // Build one full inner toolset per connection and apply the allowlist to
-  // each. Applied per-inner so unknown-name errors surface exactly once with
-  // the same key set the user sees on the wrapped tools.
+  // Build one full inner toolset per connection and apply the filter to each.
+  // Applied per-inner so unknown-name errors surface exactly once with the
+  // same key set the user sees on the wrapped tools.
+  const innerFilter =
+    innerAllowTools !== undefined ? { allowTools: innerAllowTools } : { disallowTools: innerDisallowTools };
   for (const connection of connections) {
-    const inner = registration.createTools({ connectionId: connection.id, allowTools: innerAllowTools, client });
+    const inner = registration.createTools({
+      connectionId: connection.id,
+      client,
+      ...innerFilter,
+    } as Parameters<typeof registration.createTools>[0]);
     innerToolsByConnectionId.set(connection.id, inner);
   }
   const [firstConnection] = connections;
@@ -249,18 +258,21 @@ export async function buildMcpMultiConnectionTools(input: {
   registration: McpProviderRegistration;
   connections: NamedConnection[];
   allowTools?: string[];
+  disallowTools?: string[];
   autoApproveTools?: string[];
   client: ResolvedClient;
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ToolsInput> {
-  const { registration, connections, allowTools, autoApproveTools, client, mcpClients, resolverId } = input;
+  const { registration, connections, allowTools, disallowTools, autoApproveTools, client, mcpClients, resolverId } =
+    input;
   const autoApproved = new Set(autoApproveTools ?? []);
   // The `<provider>_list_connections` key exists only on the wrapper; strip
-  // it from the allowlist that reaches MCP discovery so a caller that
-  // explicitly allows it never trips the unknown-tool guard.
+  // it from either filter that reaches MCP discovery so a caller that
+  // references it never trips the unknown-tool guard.
   const listToolKey = `${registration.integrationId}_list_connections`;
   const innerAllowTools = allowTools?.filter(name => name !== listToolKey);
+  const innerDisallowTools = disallowTools?.filter(name => name !== listToolKey);
   const innerToolsByConnectionId = new Map<string, ToolsInput>();
   for (const connection of connections) {
     const cacheKey = `${registration.integrationId}::${connection.id}`;
@@ -297,7 +309,10 @@ export async function buildMcpMultiConnectionTools(input: {
         )}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
       );
     }
-    const filtered = applyAllowTools(discovery.tools, innerAllowTools);
+    const filtered = applyToolFilter(discovery.tools, {
+      allowTools: innerAllowTools,
+      disallowTools: innerDisallowTools,
+    });
     innerToolsByConnectionId.set(connection.id, filtered);
   }
   const [firstConnection] = connections;

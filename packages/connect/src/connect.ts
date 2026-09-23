@@ -12,13 +12,11 @@ import {
 } from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
 import { PROVIDERS } from './registry.js';
-import { applyAllowTools } from './toolset.js';
+import { applyToolFilter } from './toolset.js';
 
-export interface ConnectIntegrationOptions {
+interface ConnectIntegrationOptionsBase {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
   connectionId?: string;
-  /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
-  allowTools?: string[];
   /**
    * MCP tool keys that may run without tool approval. Every other discovered
    * MCP tool requires approval, whatever the server's annotations claim, since
@@ -30,6 +28,26 @@ export interface ConnectIntegrationOptions {
   disabled?: boolean;
 }
 
+/**
+ * Per-provider overrides. `allowTools` and `disallowTools` are mutually
+ * exclusive: pick one filter direction per provider. The XOR type catches
+ * accidental co-occurrence in typed object literals; `connect()` also
+ * validates at build time so loosely typed callers get a clear error.
+ */
+export type ConnectIntegrationOptions = ConnectIntegrationOptionsBase &
+  (
+    | {
+        /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
+        allowTools?: string[];
+        disallowTools?: never;
+      }
+    | {
+        allowTools?: never;
+        /** Remove these tool keys from the returned toolset. Unknown names throw at build time. */
+        disallowTools?: string[];
+      }
+  );
+
 export interface ConnectOptions {
   /** Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID. */
   projectId?: string;
@@ -37,8 +55,9 @@ export interface ConnectOptions {
    * Providers to enable, in one of two shapes:
    * - `["linear", "github"]` — string array shorthand for enabling providers
    *   with no per-provider options.
-   * - `{ linear: { allowTools: [...] }, github: {} }` — object form for
-   *   per-provider overrides (allowTools, connectionId pin, disabled, etc).
+   * - `{ linear: { allowTools: [...] }, github: { disallowTools: [...] } }` —
+   *   object form for per-provider overrides. Each provider may set at most
+   *   one of `allowTools` and `disallowTools`; supplying both throws.
    *
    * Both forms may be combined by passing the object form; use the array
    * shorthand only when no overrides are needed.
@@ -263,11 +282,17 @@ function normalizeIntegrationOverrides(
 
 function validateIntegrationOverrides(integrations: Record<string, ConnectIntegrationOptions>): void {
   const integrationIdPattern = /^[a-zA-Z0-9_-]{1,128}$/;
-  for (const integrationId of Object.keys(integrations)) {
+  for (const [integrationId, providerOptions] of Object.entries(integrations)) {
     if (!integrationIdPattern.test(integrationId)) {
       throw new MastraConnectError(
         'invalid_options',
         `Invalid provider '${integrationId}' in integrations option: expected 1-128 letters, numbers, underscores, or hyphens.`,
+      );
+    }
+    if (providerOptions.allowTools !== undefined && providerOptions.disallowTools !== undefined) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Invalid options for '${integrationId}': allowTools and disallowTools are mutually exclusive; set at most one.`,
       );
     }
   }
@@ -346,6 +371,7 @@ async function mapTools(
             registration: request.registration,
             connectionId: resolution.connectionId,
             allowTools: request.options.allowTools,
+            disallowTools: request.options.disallowTools,
             autoApproveTools: request.options.autoApproveTools,
             client,
             mcpClients,
@@ -354,9 +380,9 @@ async function mapTools(
         } else {
           providerTools = request.registration.createTools({
             connectionId: resolution.connectionId,
-            allowTools: request.options.allowTools,
             client: options.client,
-          });
+            ...providerFilterOptions(request.options),
+          } as Parameters<typeof request.registration.createTools>[0]);
         }
       } else {
         // kind === 'multi'
@@ -368,6 +394,7 @@ async function mapTools(
             registration: request.registration,
             connections: resolution.connections,
             allowTools: request.options.allowTools,
+            disallowTools: request.options.disallowTools,
             autoApproveTools: request.options.autoApproveTools,
             client,
             mcpClients,
@@ -378,6 +405,7 @@ async function mapTools(
             registration: request.registration as ProxyProviderRegistration,
             connections: resolution.connections,
             allowTools: request.options.allowTools,
+            disallowTools: request.options.disallowTools,
             client: options.client,
           });
         }
@@ -408,16 +436,34 @@ async function mapTools(
   return result;
 }
 
+/**
+ * Extracts whichever provider tool filter is set. Since `ConnectIntegrationOptions`
+ * is an XOR union and connect() validates co-occurrence up front, at most one
+ * of the two will ever be defined here.
+ */
+function providerFilterOptions(options: ConnectIntegrationOptions): {
+  allowTools?: string[];
+  disallowTools?: string[];
+} {
+  return options.allowTools !== undefined
+    ? { allowTools: options.allowTools }
+    : options.disallowTools !== undefined
+      ? { disallowTools: options.disallowTools }
+      : {};
+}
+
 async function discoverMcpTools(input: {
   registration: McpProviderRegistration;
   connectionId: string;
   allowTools?: string[];
+  disallowTools?: string[];
   autoApproveTools?: string[];
   client: ResolvedClient;
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ResolvedConnectTools> {
-  const { registration, connectionId, allowTools, autoApproveTools, client, mcpClients, resolverId } = input;
+  const { registration, connectionId, allowTools, disallowTools, autoApproveTools, client, mcpClients, resolverId } =
+    input;
   const autoApproved = new Set(autoApproveTools ?? []);
   const cacheKey = `${registration.integrationId}::${connectionId}`;
   let entry = mcpClients.get(cacheKey);
@@ -453,7 +499,7 @@ async function discoverMcpTools(input: {
       `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
     );
   }
-  return applyAllowTools(discovery.tools, allowTools) as ResolvedConnectTools;
+  return applyToolFilter(discovery.tools, { allowTools, disallowTools }) as ResolvedConnectTools;
 }
 
 function groupByIntegrationId(connections: ProjectConnection[]): Map<string, ProjectConnection[]> {

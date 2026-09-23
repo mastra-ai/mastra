@@ -109,9 +109,10 @@ describe('connect', () => {
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
     expect(tools).toEqual(fakeTools);
-    expect(createTools).toHaveBeenCalledWith(
-      expect.objectContaining({ connectionId: 'c_lin1', allowTools: undefined }),
-    );
+    const [callArgs] = createTools.mock.calls[0]!;
+    expect(callArgs).toMatchObject({ connectionId: 'c_lin1' });
+    expect(callArgs.allowTools).toBeUndefined();
+    expect(callArgs.disallowTools).toBeUndefined();
   });
 
   it('accepts the string-array shorthand for integrations', async () => {
@@ -123,8 +124,51 @@ describe('connect', () => {
       integrations: ['linear'],
     })();
     expect(tools).toEqual(fakeTools);
-    expect(createTools).toHaveBeenCalledWith(
-      expect.objectContaining({ connectionId: 'c_lin1', allowTools: undefined }),
+    const [callArgs] = createTools.mock.calls[0]!;
+    expect(callArgs).toMatchObject({ connectionId: 'c_lin1' });
+    expect(callArgs.allowTools).toBeUndefined();
+    expect(callArgs.disallowTools).toBeUndefined();
+  });
+
+  it('threads allowTools through to the provider', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { allowTools: ['linear_fake_tool'] } },
+    })();
+    const [callArgs] = createTools.mock.calls[0]!;
+    expect(callArgs.allowTools).toEqual(['linear_fake_tool']);
+    expect(callArgs.disallowTools).toBeUndefined();
+  });
+
+  it('threads disallowTools through to the provider', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { disallowTools: ['linear_deprecated_tool'] } },
+    })();
+    const [callArgs] = createTools.mock.calls[0]!;
+    expect(callArgs.disallowTools).toEqual(['linear_deprecated_tool']);
+    expect(callArgs.allowTools).toBeUndefined();
+  });
+
+  it('rejects invalid_options when both allowTools and disallowTools are set on a provider', () => {
+    installProvider();
+    expect(() =>
+      connect({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN },
+        integrations: {
+          // Bypass the XOR type so we can exercise the runtime guard.
+          linear: { allowTools: ['a'], disallowTools: ['b'] } as unknown as Record<string, never>,
+        },
+      }),
+    ).toThrow(
+      expect.objectContaining({ code: 'invalid_options', message: expect.stringMatching(/mutually exclusive/) }),
     );
   });
 
@@ -420,6 +464,84 @@ describe('connect', () => {
     // No list_connections tool, no wrapping — behaves like a single-connection provider.
     expect(Object.keys(tools)).toEqual(['linear_fake_tool']);
     expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_active' }));
+  });
+
+  it('threads disallowTools through the multi-connection wrapper', async () => {
+    const createTools = vi
+      .fn()
+      .mockImplementation(({ connectionId, disallowTools }: { connectionId: string; disallowTools?: string[] }) => {
+        const all = {
+          linear_get_issue: createTool({
+            id: 'linear_get_issue',
+            description: 'Get a Linear issue.',
+            inputSchema: z.object({ id: z.string() }),
+            outputSchema: z.object({ resolvedConnectionId: z.string() }),
+            execute: async () => ({ resolvedConnectionId: connectionId }),
+          }),
+          linear_delete_issue: createTool({
+            id: 'linear_delete_issue',
+            description: 'Delete a Linear issue.',
+            inputSchema: z.object({ id: z.string() }),
+            outputSchema: z.object({ ok: z.boolean() }),
+            execute: async () => ({ ok: true }),
+          }),
+        };
+        const remove = new Set(disallowTools ?? []);
+        const filtered: Record<string, unknown> = {};
+        for (const [key, tool] of Object.entries(all)) if (!remove.has(key)) filtered[key] = tool;
+        return filtered;
+      });
+    installProvider({ createTools });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { disallowTools: ['linear_delete_issue'] } },
+    })();
+    // The wrapped toolset exposes the non-disallowed provider tool plus the list-connections helper.
+    expect(Object.keys(tools).sort()).toEqual(['linear_get_issue', 'linear_list_connections']);
+    // Every inner createTools call received the same disallowTools list (with the list_connections key stripped).
+    for (const call of createTools.mock.calls) {
+      expect(call[0].disallowTools).toEqual(['linear_delete_issue']);
+      expect(call[0].allowTools).toBeUndefined();
+    }
+  });
+
+  it('strips linear_list_connections from disallowTools before reaching the inner provider', async () => {
+    const createTools = vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+      linear_get_issue: createTool({
+        id: 'linear_get_issue',
+        description: 'Get a Linear issue.',
+        inputSchema: z.object({ id: z.string() }),
+        outputSchema: z.object({ resolvedConnectionId: z.string() }),
+        execute: async () => ({ resolvedConnectionId: connectionId }),
+      }),
+    }));
+    installProvider({ createTools });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
+      }),
+    );
+    await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      // Referencing the wrapper-only key must not blow up the inner provider.
+      integrations: { linear: { disallowTools: ['linear_list_connections'] } },
+    })();
+    for (const call of createTools.mock.calls) {
+      expect(call[0].disallowTools).toEqual([]);
+    }
   });
 
   it('uses the pinned connection id from integrations override', async () => {

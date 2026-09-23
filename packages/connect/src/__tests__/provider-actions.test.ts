@@ -27,13 +27,16 @@ for (const [providerId, count] of [
       readFileSync(new URL(`./fixtures/provider-actions/${providerId}.json`, import.meta.url), 'utf8'),
     );
 
-    it('registers its complete toolset and supports allowTools', () => {
+    it('registers its complete toolset and supports allowTools and disallowTools', () => {
       const provider = PROVIDERS.find(entry => entry.integrationId === providerId)!;
       if (provider.transport === 'mcp') throw new Error(`${providerId} unexpectedly uses MCP`);
       expect(Object.keys(provider.createTools({ connectionId: 'connection' }))).toHaveLength(count);
       expect(
         Object.keys(provider.createTools({ connectionId: 'connection', allowTools: [fixtures[0]!.tool] })),
       ).toEqual([fixtures[0]!.tool]);
+      const withoutFirst = provider.createTools({ connectionId: 'connection', disallowTools: [fixtures[0]!.tool] });
+      expect(Object.keys(withoutFirst)).toHaveLength(count - 1);
+      expect(Object.keys(withoutFirst)).not.toContain(fixtures[0]!.tool);
     });
 
     for (const fixture of fixtures) {

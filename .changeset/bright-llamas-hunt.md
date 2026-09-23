@@ -19,7 +19,7 @@ await tools.linear_list_connections.execute({ context: {} });
 await tools.linear_get_issue.execute({ context: { connection_name: 'Work', id: 'LIN-123' } });
 ```
 
-**String-array shorthand for `integrations`:** you can now pass a plain array of integration ids when no per-provider overrides are needed. The object form still works whenever you need `allowTools`, `autoApproveTools`, `connectionId`, or `disabled`.
+**String-array shorthand for `integrations`:** you can now pass a plain array of integration ids when no per-provider overrides are needed. The object form still works whenever you need `allowTools`, `disallowTools`, `autoApproveTools`, `connectionId`, or `disabled`.
 
 ```ts
 // Shorthand
@@ -30,6 +30,19 @@ connect({
   integrations: {
     linear: { allowTools: ['linear_get_issue'] },
     github: {},
+  },
+});
+```
+
+**`disallowTools` per provider:** each provider now accepts either `allowTools` or `disallowTools` — `ConnectIntegrationOptions` is a mutually exclusive union, so setting both is a compile-time and runtime error. Use `disallowTools` when you want the whole toolset minus a few keys instead of an explicit allowlist.
+
+```ts
+connect({
+  integrations: {
+    // Everything except the delete tool
+    linear: { disallowTools: ['linear_delete_issue'] },
+    // Explicit allowlist still works
+    github: { allowTools: ['github_get_repo'] },
   },
 });
 ```
