@@ -779,6 +779,11 @@ export class SessionRunEngine {
           threadId: state.threadId,
           runId: this.#session.run.getRunId() ?? undefined,
           resourceId: this.#session.identity.getResourceId(),
+          // Pinned for the same reason: a mode switch swaps `getAgent()` and a
+          // successor run replaces the session's abort controller, so both must
+          // be read now — while this run is the session's current run.
+          agent,
+          abortSignal: this.#session.run.getAbortSignal(),
         };
 
         if (policy === 'allow') {

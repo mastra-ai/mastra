@@ -9,10 +9,11 @@
  * it, so resolving the approval with the newly-bound thread either fails to find
  * the run or resumes it against the wrong thread — stranding the parked call.
  *
- * The engine therefore forwards its own thread/run/resource binding on every
- * resolution path. These tests pin that: the agent must be asked to approve on
- * the run's thread and under the run's resource even after the session has
- * moved on.
+ * The engine therefore forwards its own thread/run/resource/agent/abort-signal
+ * binding on every resolution path. These tests pin that: the agent must be
+ * asked to approve on the run's thread, under the run's resource, through the
+ * run's own agent, and with the run's own abort signal — even after the session
+ * has moved on.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
@@ -37,6 +38,33 @@ function createController() {
   });
 
   return { controller, agent };
+}
+
+function createControllerWithPlanMode() {
+  const buildAgent = new Agent({
+    id: 'approval-binding-build-agent',
+    name: 'approval-binding-build-agent',
+    instructions: 'Test agent.',
+    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' } as any,
+  });
+  const planAgent = new Agent({
+    id: 'approval-binding-plan-agent',
+    name: 'approval-binding-plan-agent',
+    instructions: 'Test agent.',
+    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' } as any,
+  });
+
+  const controller = new AgentController({
+    workspace: createMockWorkspace(),
+    id: 'approval-binding-modes-controller',
+    storage: new InMemoryStore(),
+    modes: [
+      { id: 'default', name: 'Default', default: true, agent: buildAgent },
+      { id: 'plan', name: 'Plan', agent: planAgent },
+    ],
+  });
+
+  return { controller, buildAgent, planAgent };
 }
 
 const toolCallApprovalChunk = () => ({
@@ -146,10 +174,12 @@ describe('tool approvals resolve against the run that raised them', () => {
       if (event.type !== 'tool_approval_required' || responded) return;
       responded = true;
       // The host re-scopes the session to another resource while the gate is
-      // still parked. A re-scope tears down the subscription but does not abort
-      // the run, so the engine still has to settle this call afterwards.
-      session.identity.setResourceId({ resourceId: 'resource-b' });
-      session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+      // still parked. The production path tears the subscription down and resets
+      // the run tracker, but does not abort the run, so the engine still has to
+      // settle this call afterwards.
+      void controller
+        .setResourceId(session, { resourceId: 'resource-b' })
+        .then(() => session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
     });
 
     await processSubscribedChunks(session, [{ type: 'start', runId: 'run-a' }, toolCallApprovalChunk(), finishChunk()]);
@@ -166,5 +196,77 @@ describe('tool approvals resolve against the run that raised them', () => {
       thread: 'thread-a',
       resource: runResourceId,
     });
+  });
+
+  it('resolves a parked gate through the agent that owns the run after a mode switch', async () => {
+    const { controller, buildAgent, planAgent } = createControllerWithPlanMode();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    const buildApproval = vi
+      .spyOn(buildAgent, 'sendToolApproval')
+      .mockResolvedValue({ accepted: true, runId: 'run-a' });
+    const planApproval = vi.spyOn(planAgent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    let responded = false;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || responded) return;
+      responded = true;
+      // A mode switch replaces `machinery.getAgent()` while the gate stays
+      // parked, but only the agent holding this run's snapshot can reclaim it.
+      void session.mode
+        .switch({ modeId: 'plan' })
+        .then(() => session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
+    });
+
+    await processSubscribedChunks(session, [{ type: 'start', runId: 'run-a' }, toolCallApprovalChunk(), finishChunk()]);
+
+    expect(responded).toBe(true);
+    // The session really did move to the other mode...
+    expect(session.mode.get()).toBe('plan');
+    // ...but the approval went to the agent that owns the run.
+    expect(buildApproval).toHaveBeenCalledTimes(1);
+    expect(planApproval).not.toHaveBeenCalled();
+  });
+
+  it('settles a parked gate with the signal of the run that parked it', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    let parkedSignal: AbortSignal | undefined;
+    let successorSignal: AbortSignal | undefined;
+    let responded = false;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || responded) return;
+      responded = true;
+      // A successor run takes over the session's run tracker — minting a fresh
+      // controller — while this run's gate is still parked.
+      session.run.reset();
+      successorSignal = session.run.ensureAbortController().signal;
+      session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+    });
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-a' },
+      { __effect: () => void (parkedSignal = session.run.ensureAbortController().signal) },
+      toolCallApprovalChunk(),
+      finishChunk(),
+    ]);
+
+    expect(responded).toBe(true);
+    expect(parkedSignal).toBeDefined();
+    expect(successorSignal).toBeDefined();
+    // The tracker really did hand out a different signal...
+    expect(parkedSignal).not.toBe(successorSignal);
+    // ...but the parked run is resumed with its own.
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    expect(sendToolApproval.mock.calls[0]?.[0].abortSignal).toBe(parkedSignal);
   });
 });

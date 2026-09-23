@@ -4370,6 +4370,11 @@ export class Session<TState = unknown> {
    * to another resource) while a run is still in flight, and the agent locates
    * the suspended run by `threadId`/`resourceId` — resolving with the
    * newly-bound identity would throw or land on the wrong thread.
+   *
+   * `binding.agent` pins the agent that owns the run: a mid-run mode switch
+   * changes `machinery.getAgent()`, and a suspended run is only reclaimable by
+   * the agent whose snapshot holds it. `binding.abortSignal` pins the run's own
+   * signal, because a successor run replaces the session's abort controller.
    */
   async approveToolCall({
     toolCallId,
@@ -4378,14 +4383,20 @@ export class Session<TState = unknown> {
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
-    binding?: { threadId?: string; runId?: string; resourceId?: string };
+    binding?: {
+      threadId?: string;
+      runId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    };
   }): Promise<void> {
     const runId = binding?.runId ?? this.run.getRunId();
     if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
 
-    const agent = this.machinery.getAgent();
+    const agent = binding?.agent ?? this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = binding?.threadId ?? this.thread.getId();
@@ -4401,7 +4412,7 @@ export class Session<TState = unknown> {
       approved: true,
       requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
-      abortSignal: this.run.ensureAbortController().signal,
+      abortSignal: binding?.abortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
     });
@@ -4424,14 +4435,20 @@ export class Session<TState = unknown> {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
-    binding?: { threadId?: string; runId?: string; resourceId?: string };
+    binding?: {
+      threadId?: string;
+      runId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    };
   }): Promise<void> {
     const runId = binding?.runId ?? this.run.getRunId();
     if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
 
-    const agent = this.machinery.getAgent();
+    const agent = binding?.agent ?? this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = binding?.threadId ?? this.thread.getId();
@@ -4448,7 +4465,7 @@ export class Session<TState = unknown> {
       declineContext,
       requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
-      abortSignal: this.run.ensureAbortController().signal,
+      abortSignal: binding?.abortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
     });
