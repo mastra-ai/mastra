@@ -2505,6 +2505,87 @@ describe('Agent signals', () => {
     }
   });
 
+  it('keeps the cancellation of a draining wake when the drain cannot hand over the lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held cancel response',
+      'cancelled drain response',
+    );
+    const ownerAgent = new Agent({
+      id: 'cancel-drain-lease-owner',
+      name: 'Cancel Drain Lease Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'cancel-drain-lease-sender',
+      name: 'Cancel Drain Lease Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'cancel-drain-lease-user', threadId: 'cancel-drain-lease-thread' };
+    const holdAttributes = { messageId: 'cancel-drain-lease-hold', sourcePeerId: 'cancel-drain-lease-peer' };
+    const attributes = { messageId: 'cancel-drain-lease-message', sourcePeerId: 'cancel-drain-lease-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      // Hold the thread so the logical message under test is queued behind a run.
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hold the thread', attributes: holdAttributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then cancel', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      // The drain that follows the held run cancels the message it is about to
+      // start and then loses the lease. Only a SYNCHRONOUS throw reaches the
+      // drain's catch, so the cancellation must land synchronously with it.
+      vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
+        ownerRuntime.cancelQueuedMessages(
+          ownerAgent,
+          { resourceId: target.resourceId, threadId: target.threadId, signalIds: [queuedSignal.signal.id] },
+          pubsub,
+        );
+        throw new Error('lease backend down');
+      });
+      releaseFirst();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-failed' && data?.error === 'lease backend down'),
+      );
+
+      // The cancellation is the outcome the sender must observe: a retry of the
+      // cancelled message is told it was cancelled rather than quietly starting
+      // the turn the user cancelled.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then cancel', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('The accepted message was cancelled before it ran');
+      expect(getStreamCount()).toBe(1);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
   it('preserves an acknowledged remote wake when the busy owner releases its claim', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const pubsub = new ControlledLeasePubSub();

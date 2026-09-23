@@ -2828,8 +2828,14 @@ export class AgentThreadStreamRuntime {
     } catch (err) {
       // No run started for this message and it will not be retried from the queue,
       // so the accepted identity must not keep claiming delivery — a sender retry
-      // has to be free to route it again.
-      if (drainedIdentity && state.acceptedIdleMessagesByIdentity.get(drainedIdentity)?.runId === pendingIdle.runId) {
+      // has to be free to route it again. Unless the signal was cancelled while the
+      // lease was pending: that cancellation is the outcome a retry must observe, so
+      // the tombstone has to outlive this failure instead of being cleared.
+      if (
+        !pendingIdle.cancelled &&
+        drainedIdentity &&
+        state.acceptedIdleMessagesByIdentity.get(drainedIdentity)?.runId === pendingIdle.runId
+      ) {
         state.acceptedIdleMessagesByIdentity.delete(drainedIdentity);
       }
       state.drainingIdleSignalsByThread.delete(key);
