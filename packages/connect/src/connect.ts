@@ -4,7 +4,13 @@ import { MCPClient } from '@mastra/mcp';
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { listIntegrations, listProjectConnections, platformMcpTransport, resolveClient } from './client.js';
 import { MastraConnectError } from './errors.js';
-import type { McpProviderRegistration, ProviderRegistration } from './registry.js';
+import type { NamedConnection } from './multi-connection.js';
+import {
+  buildMcpMultiConnectionTools,
+  buildProxyMultiConnectionTools,
+  toNamedConnections,
+} from './multi-connection.js';
+import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
 import { PROVIDERS } from './registry.js';
 import { applyAllowTools } from './toolset.js';
 
@@ -96,7 +102,9 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
 
   const client = resolveClient(options.client);
   const resolverId = ++nextResolverId;
-  const mcpClients = new Map<string, { connectionId: string; client: MCPClient }>();
+  // Keyed by `${integrationId}::${connectionId}` so multiple active
+  // connections for the same provider each get their own MCP client.
+  const mcpClients = new Map<string, { integrationId: string; connectionId: string; client: MCPClient }>();
   validateIntegrationOverrides(options.integrations);
 
   let cache: { snapshot: ResolvedConnectTools; fetchedAt: number } | undefined;
@@ -258,17 +266,29 @@ function buildRequests(
   return requests;
 }
 
+/**
+ * Discriminated resolution of one provider request against its candidate
+ * connections. `single` maps to unwrapped tools with the connection id baked
+ * in; `multi` triggers connection_name wrapping so the agent picks a
+ * connection per call. `skip` means warn-and-continue.
+ */
+type ProviderResolution =
+  | { kind: 'single'; connectionId: string }
+  | { kind: 'multi'; connections: NamedConnection[] }
+  | { kind: 'skip' };
+
 /** Maps one platform connection list snapshot to a flat tool record without allowing ambiguous tool ownership. */
 async function mapTools(
   connections: ProjectConnection[],
   requests: NormalizedRequest[],
   options: ConnectOptions,
   client: ResolvedClient,
-  mcpClients: Map<string, { connectionId: string; client: MCPClient }>,
+  mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>,
   resolverId: number,
 ): Promise<ResolvedConnectTools> {
   const byIntegrationId = groupByIntegrationId(connections);
-  const activeMcpIntegrations = new Set<string>();
+  // Set of ${integrationId}::${connectionId} keys still in use this snapshot.
+  const activeMcpKeys = new Set<string>();
   const result: ResolvedConnectTools = {};
   const toolOwners = new Map<string, string>();
   for (const request of requests) {
@@ -277,25 +297,50 @@ async function mapTools(
     try {
       const candidates = byIntegrationId.get(integrationId) ?? [];
       if (candidates.length === 0) continue;
-      const connectionId = resolveProviderConnection(request, candidates);
-      if (!connectionId) continue; // warned + skipped
-      if (request.registration.transport === 'mcp') {
-        activeMcpIntegrations.add(integrationId);
-        providerTools = await discoverMcpTools({
-          registration: request.registration,
-          connectionId,
-          allowTools: request.options.allowTools,
-          autoApproveTools: request.options.autoApproveTools,
-          client,
-          mcpClients,
-          resolverId,
-        });
+      const resolution = resolveProviderConnection(request, candidates);
+      if (resolution.kind === 'skip') continue;
+      if (resolution.kind === 'single') {
+        if (request.registration.transport === 'mcp') {
+          activeMcpKeys.add(`${integrationId}::${resolution.connectionId}`);
+          providerTools = await discoverMcpTools({
+            registration: request.registration,
+            connectionId: resolution.connectionId,
+            allowTools: request.options.allowTools,
+            autoApproveTools: request.options.autoApproveTools,
+            client,
+            mcpClients,
+            resolverId,
+          });
+        } else {
+          providerTools = request.registration.createTools({
+            connectionId: resolution.connectionId,
+            allowTools: request.options.allowTools,
+            client: options.client,
+          });
+        }
       } else {
-        providerTools = request.registration.createTools({
-          connectionId,
-          allowTools: request.options.allowTools,
-          client: options.client,
-        });
+        // kind === 'multi'
+        if (request.registration.transport === 'mcp') {
+          for (const connection of resolution.connections) {
+            activeMcpKeys.add(`${integrationId}::${connection.id}`);
+          }
+          providerTools = await buildMcpMultiConnectionTools({
+            registration: request.registration,
+            connections: resolution.connections,
+            allowTools: request.options.allowTools,
+            autoApproveTools: request.options.autoApproveTools,
+            client,
+            mcpClients,
+            resolverId,
+          });
+        } else {
+          providerTools = buildProxyMultiConnectionTools({
+            registration: request.registration as ProxyProviderRegistration,
+            connections: resolution.connections,
+            allowTools: request.options.allowTools,
+            client: options.client,
+          });
+        }
       }
     } catch (error) {
       console.warn(
@@ -317,10 +362,8 @@ async function mapTools(
     Object.assign(result, providerTools);
   }
 
-  const staleClients = Array.from(mcpClients.entries()).filter(
-    ([integrationId]) => !activeMcpIntegrations.has(integrationId),
-  );
-  for (const [integrationId] of staleClients) mcpClients.delete(integrationId);
+  const staleClients = Array.from(mcpClients.entries()).filter(([key]) => !activeMcpKeys.has(key));
+  for (const [key] of staleClients) mcpClients.delete(key);
   await Promise.allSettled(staleClients.map(([, entry]) => entry.client.disconnect()));
   return result;
 }
@@ -331,16 +374,17 @@ async function discoverMcpTools(input: {
   allowTools?: string[];
   autoApproveTools?: string[];
   client: ResolvedClient;
-  mcpClients: Map<string, { connectionId: string; client: MCPClient }>;
+  mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ResolvedConnectTools> {
   const { registration, connectionId, allowTools, autoApproveTools, client, mcpClients, resolverId } = input;
   const autoApproved = new Set(autoApproveTools ?? []);
-  let entry = mcpClients.get(registration.integrationId);
-  if (entry?.connectionId !== connectionId) {
-    if (entry) await entry.client.disconnect();
+  const cacheKey = `${registration.integrationId}::${connectionId}`;
+  let entry = mcpClients.get(cacheKey);
+  if (!entry) {
     const transport = platformMcpTransport(client, connectionId);
     entry = {
+      integrationId: registration.integrationId,
       connectionId,
       client: new MCPClient({
         id: `mastra-connect-${resolverId}-${registration.integrationId}-${connectionId}`,
@@ -356,7 +400,7 @@ async function discoverMcpTools(input: {
         },
       }),
     };
-    mcpClients.set(registration.integrationId, entry);
+    mcpClients.set(cacheKey, entry);
   }
 
   const discovery = await entry.client.listToolsWithErrors();
@@ -387,13 +431,15 @@ function readEnvConnectionId(registration: ProviderRegistration): string | undef
 }
 
 /**
- * Resolves the connection to use for one provider, per the contract:
- * option/env var wins; else a single active connection; anything else
- * (ambiguity, needs_reauth, no usable candidate) warns and skips so one bad
- * integration never takes down the whole toolset resolution. A needs_reauth
- * connection is never silently mapped.
+ * Resolves how to configure one provider given its candidate connections:
+ *   - An explicit pin (option or env var) forces `single` at that id.
+ *   - Exactly one active connection → `single`.
+ *   - Two or more active connections → `multi`; the caller wraps tools with
+ *     `connection_name` so the agent chooses per call at execute time.
+ *   - No active candidate at all → `skip` with a warning.
+ * A `needs_reauth` connection is never silently mapped.
  */
-function resolveProviderConnection(request: NormalizedRequest, candidates: ProjectConnection[]): string | undefined {
+function resolveProviderConnection(request: NormalizedRequest, candidates: ProjectConnection[]): ProviderResolution {
   const integrationId = request.registration.integrationId;
   const directed = request.options.connectionId?.trim() || readEnvConnectionId(request.registration);
   if (directed) {
@@ -402,31 +448,30 @@ function resolveProviderConnection(request: NormalizedRequest, candidates: Proje
       console.warn(
         `[@mastra/connect] Skipping ${integrationId}: pinned connection ${directed} is not attached to this project.`,
       );
-      return undefined;
+      return { kind: 'skip' };
     }
     if (match.status === 'needs_reauth') {
       console.warn(`[@mastra/connect] Skipping ${integrationId}: connection ${directed} needs re-auth.`);
-      return undefined;
+      return { kind: 'skip' };
     }
     if (match.status !== 'active') {
       console.warn(
         `[@mastra/connect] Skipping ${integrationId}: connection ${directed} is not active (status '${match.status}').`,
       );
-      return undefined;
+      return { kind: 'skip' };
     }
-    return directed;
+    return { kind: 'single', connectionId: directed };
   }
 
   const active = candidates.filter(connection => connection.status === 'active');
-  if (active.length === 1) return active[0]!.id;
+  if (active.length === 1) return { kind: 'single', connectionId: active[0]!.id };
   if (active.length === 0) {
     console.warn(
       `[@mastra/connect] Skipping ${integrationId}: no active connections (found ${candidates.length} in other states).`,
     );
-    return undefined;
+    return { kind: 'skip' };
   }
-  console.warn(
-    `[@mastra/connect] Skipping ${integrationId}: ${active.length} active connections; pin one with connectionId or ${request.registration.envVar}.`,
-  );
-  return undefined;
+  // Multiple active connections: expose all of them through the wrapped
+  // toolset so the agent disambiguates per call via `connection_name`.
+  return { kind: 'multi', connections: toNamedConnections(active) };
 }

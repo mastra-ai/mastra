@@ -7,7 +7,11 @@ export type MastraConnectErrorCode =
   | 'unauthorized'
   | 'proxy_error'
   | 'unsupported_credential_type'
-  | 'platform_error';
+  | 'platform_error'
+  // Raised at tool-execute time when the caller supplies a connection_name
+  // that does not match any active connection for the provider. Recovery is
+  // to call `<provider>_list_connections` and retry with a valid name.
+  | 'unknown_connection';
 
 const MAX_DETAIL_LENGTH = 2000;
 

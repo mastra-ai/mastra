@@ -1,5 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { connect } from '../connect.js';
 import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
@@ -191,19 +193,197 @@ describe('connect', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("connection c_err is not active (status 'error')"));
   });
 
-  it('skips when multiple active connections exist without a pin', async () => {
-    installProvider();
+  it('wraps tools with connection_name when multiple active connections exist without a pin', async () => {
+    // Real inner tools per connection so we can observe wrapping vs. passthrough.
+    installProvider({
+      createTools: vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+        linear_get_issue: createTool({
+          id: 'linear_get_issue',
+          description: 'Get a Linear issue.',
+          inputSchema: z.object({ id: z.string() }),
+          outputSchema: z.object({ resolvedConnectionId: z.string(), issueId: z.string() }),
+          execute: async input => ({ resolvedConnectionId: connectionId, issueId: (input as { id: string }).id }),
+        }),
+      })),
+    });
     const fetchMock = platformFetch(
       Response.json({
-        connections: [makeConnection({ id: 'c1' }), makeConnection({ id: 'c2' })],
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
       }),
     );
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    expect(tools).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 active connections'));
+    // Public tools include both the wrapped provider tool and the discovery tool.
+    expect(Object.keys(tools).sort()).toEqual(['linear_get_issue', 'linear_list_connections']);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('routes a wrapped tool call to the connection matching connection_name', async () => {
+    installProvider({
+      createTools: vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+        linear_get_issue: createTool({
+          id: 'linear_get_issue',
+          description: 'Get a Linear issue.',
+          inputSchema: z.object({ id: z.string() }),
+          outputSchema: z.object({ resolvedConnectionId: z.string(), issueId: z.string() }),
+          execute: async input => ({ resolvedConnectionId: connectionId, issueId: (input as { id: string }).id }),
+        }),
+      })),
+    });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    const wrapped = tools.linear_get_issue as unknown as {
+      execute: (input: unknown, ctx?: unknown) => Promise<{ resolvedConnectionId: string; issueId: string }>;
+    };
+    const result = await wrapped.execute({ id: 'LIN-1', connection_name: 'Globex' }, {});
+    expect(result).toEqual({ resolvedConnectionId: 'c2', issueId: 'LIN-1' });
+  });
+
+  it('list_connections returns the display names of active connections', async () => {
+    installProvider({
+      createTools: vi.fn().mockImplementation(() => ({
+        linear_get_issue: createTool({
+          id: 'linear_get_issue',
+          description: 'Get a Linear issue.',
+          inputSchema: z.object({ id: z.string() }),
+          execute: async () => ({}),
+        }),
+      })),
+    });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+          makeConnection({ id: 'c3', accountLabel: null }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    const list = tools.linear_list_connections as unknown as {
+      execute: (
+        input: unknown,
+        ctx?: unknown,
+      ) => Promise<{
+        connections: Array<{ name: string; accountLabel: string | null }>;
+      }>;
+    };
+    const result = await list.execute({}, {});
+    expect(result.connections).toEqual([
+      { name: 'Acme', accountLabel: 'Acme' },
+      { name: 'Globex', accountLabel: 'Globex' },
+      // Null/empty label falls back to the connection id so the agent still has a stable handle.
+      { name: 'c3', accountLabel: null },
+    ]);
+  });
+
+  it('throws unknown_connection when connection_name matches nothing', async () => {
+    installProvider({
+      createTools: vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+        linear_get_issue: createTool({
+          id: 'linear_get_issue',
+          description: 'Get a Linear issue.',
+          inputSchema: z.object({ id: z.string() }),
+          execute: async input => ({ resolvedConnectionId: connectionId, issueId: (input as { id: string }).id }),
+        }),
+      })),
+    });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    const wrapped = tools.linear_get_issue as unknown as {
+      execute: (input: unknown, ctx?: unknown) => Promise<unknown>;
+    };
+    await expect(wrapped.execute({ id: 'LIN-1', connection_name: 'Nope' }, {})).rejects.toMatchObject({
+      code: 'unknown_connection',
+    });
+  });
+
+  it('disambiguates duplicate accountLabels by suffixing with the connection id', async () => {
+    installProvider({
+      createTools: vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+        linear_get_issue: createTool({
+          id: 'linear_get_issue',
+          description: 'Get a Linear issue.',
+          inputSchema: z.object({ id: z.string() }),
+          execute: async () => ({ resolvedConnectionId: connectionId }),
+        }),
+      })),
+    });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Acme' }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    const list = tools.linear_list_connections as unknown as {
+      execute: (
+        input: unknown,
+        ctx?: unknown,
+      ) => Promise<{
+        connections: Array<{ name: string; accountLabel: string | null }>;
+      }>;
+    };
+    const listed = await list.execute({}, {});
+    expect(listed.connections.map(c => c.name)).toEqual(['Acme', 'Acme (c2)']);
+    // The raw id remains a valid connection_name so callers can always disambiguate.
+    const wrapped = tools.linear_get_issue as unknown as {
+      execute: (input: unknown, ctx?: unknown) => Promise<{ resolvedConnectionId: string }>;
+    };
+    const routed = await wrapped.execute({ id: 'LIN-1', connection_name: 'c1' }, {});
+    expect(routed.resolvedConnectionId).toBe('c1');
+  });
+
+  it('does not wrap tools when only one active connection exists (single-connection path unchanged)', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c_active', status: 'active' }),
+          makeConnection({ id: 'c_stale', status: 'needs_reauth' }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    // No list_connections tool, no wrapping — behaves like a single-connection provider.
+    expect(Object.keys(tools)).toEqual(['linear_fake_tool']);
+    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_active' }));
   });
 
   it('uses the pinned connection id from integrations override', async () => {
