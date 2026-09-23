@@ -71,7 +71,7 @@ export function CommentEditor({
           <Button icon={<X />} type="button" variant="ghost" size="sm" disabled={isPending} onClick={onClose}>
             Cancel
           </Button>
-          <Button icon={<Check />} type="button" variant="outline" size="sm" disabled={!canSave} onClick={save}>
+          <Button icon={<Check />} type="button" size="sm" disabled={!canSave} onClick={save}>
             {isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>

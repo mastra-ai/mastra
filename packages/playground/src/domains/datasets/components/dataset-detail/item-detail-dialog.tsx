@@ -225,10 +225,10 @@ export function ItemDetailDialog({
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleEdit} icon={<Pencil />}>
+            <Button size="sm" onClick={handleEdit} icon={<Pencil />}>
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDelete} icon={<Trash2 />}>
+            <Button size="sm" onClick={handleDelete} icon={<Trash2 />}>
               Delete
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>

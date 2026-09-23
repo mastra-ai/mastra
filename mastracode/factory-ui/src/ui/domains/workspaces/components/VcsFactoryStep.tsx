@@ -107,7 +107,7 @@ export function VcsFactoryStep({
                 provider="github"
                 onSelectRepository={onSelectRepository}
               />
-              <Button variant="outline" size="sm" className="self-start" onClick={onManageConnection}>
+              <Button size="sm" className="self-start" onClick={onManageConnection}>
                 Manage GitHub connection
               </Button>
             </>
