@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { Classifier } from '../../classifier';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -1009,6 +1010,7 @@ describe('predicate round-trip', () => {
       classifiers: { router: classifier },
       tools: { 'billing-route': billingTool, 'support-route': supportTool } as any,
       storage: new InMemoryStore({ id: `classifier-round-trip-${evented}` }),
+      pubsub: evented ? new EventEmitterPubSub() : undefined,
     });
     const { workflow: rehydrated } = await rehydrateWorkflow(
       {
@@ -1018,10 +1020,12 @@ describe('predicate round-trip', () => {
         graph: wire,
       },
       mastra,
+      { engineType: evented ? 'evented' : 'default' },
     );
+    expect(rehydrated.engineType === 'evented').toBe(evented);
     mastra.addWorkflow(rehydrated, 'classifier-round-trip');
+    if (evented) await mastra.startWorkers();
 
-    if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
     try {
       const result = await (
         await mastra.getWorkflow('classifier-round-trip').createRun()
@@ -1033,7 +1037,7 @@ describe('predicate round-trip', () => {
         expect(result.result).toEqual({ 'billing-route': { routedTo: 'billing' } });
       }
     } finally {
-      delete process.env.MASTRA_EVENTED_EXECUTION;
+      if (evented) await mastra.stopWorkers?.();
     }
   });
 

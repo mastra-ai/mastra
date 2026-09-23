@@ -45,7 +45,7 @@ describe('workflow builder authoring contract', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# How a workflow runs');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Discovery — your four catalog tools');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('list-available-classifiers');
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('answers.<question>.choice');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('inputData.answers.<question>.choice');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('following `conditional` entry');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Composition procedure');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Run the shared pre-action check');

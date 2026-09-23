@@ -130,7 +130,7 @@ export const workflowBuilderToolEntryInputSchema = workflowBuilderToolEntrySchem
   .describe(TOOL_ENTRY_DESCRIPTION);
 
 const CLASSIFIER_ENTRY_DESCRIPTION =
-  'Classifier step. Evaluates its complete input with a registered configured classifier and returns { answers, usage }. Route with a following conditional entry using answers.<question>.choice, answers.<question>.score, or answers.<question>.probability. Use a mapping entry before the classifier to reshape its input.';
+  'Classifier step. Evaluates its complete input with a registered configured classifier and returns { answers, usage }. Route with a following conditional entry using inputData.answers.<question>.choice, inputData.answers.<question>.score, or inputData.answers.<question>.probability. Use a mapping entry before the classifier to reshape its input.';
 
 const classifierOptionsSchema = z
   .object({
