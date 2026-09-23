@@ -45,6 +45,8 @@ const THREAD_ID = 'thread-1';
 // the message row remounts. Both are far slower than a JSON fetch when the whole
 // suite runs in parallel, so those assertions get more than waitFor's 1s default.
 const SSE_TIMEOUT = { timeout: 5000 };
+// Attachment reads and IndexedDB restores are slow on loaded machines; do not rely on the 1 s default.
+const ATTACHMENT_TIMEOUT = { timeout: 10_000 };
 
 // jsdom has no layout, so react-resizable-panels never resizes anything and
 // `collapse()`/`expand()` are silently ignored. Replace Group/Panel with a
@@ -688,12 +690,12 @@ describe('Standalone thread page', () => {
           if (!(picker instanceof HTMLInputElement)) throw new Error('File picker did not open');
           const contents = 'name,note\r\nZoë,"hello\nworld"\r\n';
           fireEvent.change(picker, { target: { files: [new File([contents], 'leads.csv', { type: 'text/csv' })] } });
-          await screen.findByRole('button', { name: 'Preview leads.csv' });
+          await screen.findByRole('button', { name: 'Preview leads.csv' }, ATTACHMENT_TIMEOUT);
           cleanup();
           renderAt(path);
           const input = await composerInput();
           expect(input.value).toBe('Read my attachment');
-          await screen.findByRole('button', { name: 'Preview leads.csv' });
+          await screen.findByRole('button', { name: 'Preview leads.csv' }, ATTACHMENT_TIMEOUT);
           const originalRead = FileReader.prototype.readAsText;
           let finishReading = () => {};
           const reader = vi
@@ -711,7 +713,7 @@ describe('Standalone thread page', () => {
             fireEvent.change(nextPicker, {
               target: { files: [new File(['Next file'], 'next.txt', { type: 'text/plain' })] },
             });
-            await screen.findByRole('button', { name: 'Preview next.txt' });
+            await screen.findByRole('button', { name: 'Preview next.txt' }, ATTACHMENT_TIMEOUT);
           }
           finishReading();
           reader.mockRestore();
@@ -729,13 +731,14 @@ describe('Standalone thread page', () => {
           expect((await composerInput()).value).toBe(editWhilePreparing ? 'Keep the next question' : '');
           expect(screen.queryByRole('button', { name: 'Remove leads.csv' })).toBeNull();
           expect(screen.queryAllByRole('button', { name: 'Remove next.txt' })).toHaveLength(editWhilePreparing ? 1 : 0);
-          if (editWhilePreparing) await screen.findByRole('button', { name: 'Preview next.txt' });
+          if (editWhilePreparing) await screen.findByRole('button', { name: 'Preview next.txt' }, ATTACHMENT_TIMEOUT);
         } finally {
           cleanup();
           await readThreadDraft('__drain__');
           vi.unstubAllGlobals();
         }
       },
+      20_000,
     );
     it('restores separate drafts after navigating between threads', async () => {
       installHandlers();
