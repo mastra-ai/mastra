@@ -2,7 +2,7 @@ import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/messag
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
-import { Message, MessageActions, MessageCopyButton } from '@mastra/playground-ui/components/Message';
+import { Message, MessageActions, MessageCopyButton, MessageMetadata } from '@mastra/playground-ui/components/Message';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChatRunningContext, useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
@@ -252,9 +252,17 @@ export const MessageRow = memo(function MessageRow({
   const displayRole = dbMessage.role;
 
   if (displayRole === 'user') {
-    const isPending = isPendingMessage(message);
+    const isPending = isPendingMessage(message) && metadata?.deliveryState !== 'queued';
     const text = getTextFromParts(message);
     const canCopy = text.trim().length > 0;
+    const deliveryLabel =
+      metadata?.deliveryState === 'queued'
+        ? 'Queued'
+        : metadata?.deliveryState === 'steered'
+          ? 'Sent to current run'
+          : metadata?.deliveryState === 'failed'
+            ? 'Not sent'
+            : undefined;
 
     return (
       <Message
@@ -262,13 +270,17 @@ export const MessageRow = memo(function MessageRow({
         from="user"
         className={className}
         data-message-id={message.id}
+        data-message-delivery={typeof metadata?.deliveryState === 'string' ? metadata.deliveryState : undefined}
         pending={isPending}
         footer={
-          <MessageActions>
-            {canCopy && <MessageCopyButton text={text} />}
-            <DatasetSaveAction messageText={text} />
-            {footer}
-          </MessageActions>
+          <>
+            {deliveryLabel && <MessageMetadata role="status">{deliveryLabel}</MessageMetadata>}
+            <MessageActions>
+              {canCopy && <MessageCopyButton text={text} />}
+              <DatasetSaveAction messageText={text} />
+              {footer}
+            </MessageActions>
+          </>
         }
       >
         <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
