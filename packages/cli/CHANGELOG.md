@@ -1,5 +1,107 @@
 # mastra
 
+## 1.31.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+  - @mastra/deployer@1.70.0-alpha.0
+
+## 1.31.1
+
+### Patch Changes
+
+- Fixed `mastra deploy` aborting on temporary server errors or dropped connections while checking deployment status. ([#24701](https://github.com/mastra-ai/mastra/pull/24701))
+
+  - Status checks retry with backoff until the polling deadline, including when reading a response fails.
+  - Stalled status requests are cancelled instead of blocking the deploy.
+  - Retry notices appear at most every 30 seconds and keep streamed deployment logs on screen.
+  - The CLI confirms when status checks resume.
+  - If status cannot be confirmed, the CLI says the deployment may still be running and links to the deployment dashboard.
+
+- Enabled dedicated worker deploys to opt projects into worker infrastructure automatically. ([#24602](https://github.com/mastra-ai/mastra/pull/24602))
+
+- Studio only shows the Server-Sent Events endpoint for MCP 1.x servers; MCP v2 servers list Streamable HTTP alone. Running a tool that answers with `status: 'suspended'` (it needs native MCP input rounds) now shows a notice explaining that Studio cannot supply that input, with the suspend payload still visible, and other execution failures are surfaced in the result panel instead of leaving it empty. ([#24388](https://github.com/mastra-ai/mastra/pull/24388))
+
+  Open Studio as before to see the updated MCP pages:
+
+  ```bash
+  mastra dev
+  ```
+
+- Fixed compatibility by requiring @mastra/core 1.58.0 or newer. These packages all build on @mastra/server, which needs core 1.58.0, but they still advertised support for core versions as old as 1.50.0. Installing one of those older pairings produced a broken setup instead of a clear version conflict. ([#24715](https://github.com/mastra-ai/mastra/pull/24715))
+
+  If your package manager reports a peer conflict after this release, upgrade @mastra/core to 1.58.0 or newer.
+
+- Fixed production startup so active workflow runs are recovered after restarting a server. Fixes #24592. ([#24663](https://github.com/mastra-ai/mastra/pull/24663))
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`66da3ca`](https://github.com/mastra-ai/mastra/commit/66da3cafd4c23ffbe6cdf1a0bca72c2a6abb9532), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`115b4d9`](https://github.com/mastra-ai/mastra/commit/115b4d9b22fa74560ab0d71310b5013a88dfa24c), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`66da3ca`](https://github.com/mastra-ai/mastra/commit/66da3cafd4c23ffbe6cdf1a0bca72c2a6abb9532)]:
+  - @mastra/core@1.69.0
+  - @mastra/deployer@1.69.0
+
+## 1.31.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0-alpha.4
+  - @mastra/deployer@1.69.0-alpha.4
+
+## 1.31.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c)]:
+  - @mastra/core@1.69.0-alpha.3
+  - @mastra/deployer@1.69.0-alpha.3
+
+## 1.31.1-alpha.3
+
+### Patch Changes
+
+- Fixed `mastra deploy` aborting on temporary server errors or dropped connections while checking deployment status. ([#24701](https://github.com/mastra-ai/mastra/pull/24701))
+
+  - Status checks retry with backoff until the polling deadline, including when reading a response fails.
+  - Stalled status requests are cancelled instead of blocking the deploy.
+  - Retry notices appear at most every 30 seconds and keep streamed deployment logs on screen.
+  - The CLI confirms when status checks resume.
+  - If status cannot be confirmed, the CLI says the deployment may still be running and links to the deployment dashboard.
+
+- Enabled dedicated worker deploys to opt projects into worker infrastructure automatically. ([#24602](https://github.com/mastra-ai/mastra/pull/24602))
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+  - @mastra/deployer@1.69.0-alpha.2
+
+## 1.31.1-alpha.2
+
+### Patch Changes
+
+- Fixed compatibility by requiring @mastra/core 1.58.0 or newer. These packages all build on @mastra/server, which needs core 1.58.0, but they still advertised support for core versions as old as 1.50.0. Installing one of those older pairings produced a broken setup instead of a clear version conflict. ([#24715](https://github.com/mastra-ai/mastra/pull/24715))
+
+  If your package manager reports a peer conflict after this release, upgrade @mastra/core to 1.58.0 or newer.
+
+- Updated dependencies [[`115b4d9`](https://github.com/mastra-ai/mastra/commit/115b4d9b22fa74560ab0d71310b5013a88dfa24c)]:
+  - @mastra/deployer@1.69.0-alpha.1
+  - @mastra/core@1.69.0-alpha.1
+
+## 1.31.1-alpha.1
+
+### Patch Changes
+
+- Studio only shows the Server-Sent Events endpoint for MCP 1.x servers; MCP v2 servers list Streamable HTTP alone. Running a tool that answers with `status: 'suspended'` (it needs native MCP input rounds) now shows a notice explaining that Studio cannot supply that input, with the suspend payload still visible, and other execution failures are surfaced in the result panel instead of leaving it empty. ([#24388](https://github.com/mastra-ai/mastra/pull/24388))
+
+  Open Studio as before to see the updated MCP pages:
+
+  ```bash
+  mastra dev
+  ```
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`66da3ca`](https://github.com/mastra-ai/mastra/commit/66da3cafd4c23ffbe6cdf1a0bca72c2a6abb9532), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`66da3ca`](https://github.com/mastra-ai/mastra/commit/66da3cafd4c23ffbe6cdf1a0bca72c2a6abb9532)]:
+  - @mastra/core@1.69.0-alpha.0
+  - @mastra/deployer@1.69.0-alpha.0
+
 ## 1.31.1-alpha.0
 
 ### Patch Changes

@@ -1,11 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
@@ -112,9 +111,10 @@ function DatasetPage() {
   if (error) {
     return (
       <DatasetPageShell crumbs={crumbs}>
-        <ErrorState
-          title="Failed to load dataset"
-          message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+        <EmptyState
+          tone="error"
+          titleSlot="Failed to load dataset"
+          descriptionSlot={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
         />
       </DatasetPageShell>
     );
@@ -140,7 +140,7 @@ function DatasetPage() {
               onAddItemClick={() => setAddItemDialogOpen(true)}
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
-                <span className="text-caption text-muted-foreground mr-3 whitespace-nowrap">
+                <span className="mr-3 text-caption whitespace-nowrap text-muted-foreground">
                   {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
                 </span>
               }

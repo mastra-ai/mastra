@@ -1,6 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
@@ -56,7 +56,7 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
           <>
             <PanelSeparator className="pointer-events-auto" />
             <Panel id="workflow-step-detail" minSize={300} maxSize="60%" defaultSize={420} className="min-w-0">
-              <div className="rounded-studio-panel border-border bg-background pointer-events-auto h-full min-h-0 overflow-hidden border">
+              <div className="pointer-events-auto h-full min-h-0 overflow-hidden rounded-studio-panel border border-border bg-background">
                 <WorkflowStepDetailContent />
               </div>
             </Panel>

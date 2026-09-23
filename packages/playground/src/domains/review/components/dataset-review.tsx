@@ -483,7 +483,6 @@ export function DatasetReview({
           {toolbarEnd}
           {showCreateScorer && (
             <Button
-              variant="outline"
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
@@ -508,7 +507,7 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" disabled={isAnalyzing} aria-label="More actions">
+                  <Button disabled={isAnalyzing} aria-label="More actions">
                     {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
                   </Button>
                 </DropdownMenu.Trigger>
@@ -605,12 +604,12 @@ export function DatasetReview({
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-caption mt-1"
+                className="mt-1 text-caption"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
+            <Button icon={<X />} onClick={() => setShowAnalyzeDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
@@ -634,7 +633,7 @@ export function DatasetReview({
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
-                <div key={proposal.itemId} className={cn('p-3 border rounded-lg', !proposal.accepted && 'opacity-50')}>
+                <div key={proposal.itemId} className={cn('rounded-lg border p-3', !proposal.accepted && 'opacity-50')}>
                   <div className="flex items-start gap-2">
                     <Checkbox
                       checked={proposal.accepted}
@@ -684,7 +683,7 @@ export function DatasetReview({
             })}
           </div>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
             <Button

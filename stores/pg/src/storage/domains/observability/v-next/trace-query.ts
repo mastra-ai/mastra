@@ -7,6 +7,7 @@ import type {
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
+  TraceQueryTenantScope,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -50,6 +51,7 @@ const TRACE_FIELDS = {
   entityType: 'r."entityType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -170,6 +172,18 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'collection') {
+    // `tags` is `text[] NOT NULL DEFAULT '{}'`, so an empty list is the only "no tags" shape.
+    if (predicate.operator === 'includes' || predicate.operator === 'notIncludes') {
+      const contains = `${field} @> ARRAY[$${parameterOffset}]::text[]`;
+      return {
+        sql: predicate.operator === 'includes' ? contains : `cardinality(${field}) > 0 AND NOT (${contains})`,
+        values: [...fieldValues, predicate.value],
+      };
+    }
+    return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+  }
+
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
@@ -214,6 +228,7 @@ function compileFeedbackScalarPredicate(
   if (predicate.field !== 'value') {
     return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset);
   }
+  if (predicate.type === 'collection') throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
   if (predicate.type === 'presence') {
     const present = `(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)`;
     return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
@@ -362,12 +377,35 @@ function compilePostgresTraceScope(
   schema: string,
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
+  scope: TraceQueryTenantScope | undefined,
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
   const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
   const values: unknown[] = [selection.timeRange.from, selection.timeRange.to];
+  // The delta window binds fixed positions $3..$5, so it must be pushed before the
+  // dynamically numbered tenant scope values.
+  const deltaConditions: string[] = [];
+  if (deltaWindow) {
+    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
+    // Restrict candidates before materializing roots and their related records.
+    // latestRootPredicate must still see replacements outside this interval.
+    deltaConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
+  }
+  // Tenant scope is ANDed into every scan (roots and related signals) so a related
+  // row from another tenant sharing a traceId can never match.
+  const scopeConditions: string[] = [];
+  if (scope) {
+    values.push(scope.organizationId);
+    scopeConditions.push(`"organizationId" = $${values.length}`);
+    if (scope.resourceId !== undefined) {
+      values.push(scope.resourceId);
+      scopeConditions.push(`"resourceId" = $${values.length}`);
+    }
+  }
+  const scopeSql = (alias: string): string =>
+    scopeConditions.map(condition => `\n      AND ${alias}.${condition}`).join('');
   const rootConditions = [
     `r."parentSpanId" IS NULL`,
     latestRootPredicate(spanTable),
@@ -375,13 +413,9 @@ function compilePostgresTraceScope(
     `r."endedAt" IS NOT NULL`,
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
+    ...deltaConditions,
+    ...scopeConditions.map(condition => `r.${condition}`),
   ];
-  if (deltaWindow) {
-    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
-    // Restrict candidates before materializing roots and their related records.
-    // latestRootPredicate must still see replacements outside this interval.
-    rootConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
-  }
   const ctes = [
     `root_scope AS MATERIALIZED (
     SELECT *
@@ -415,7 +449,7 @@ function compilePostgresTraceScope(
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestSpanPredicate(spanTable)}
+      AND ${latestSpanPredicate(spanTable)}${scopeSql('s')}
   )`);
   }
   if (relationCollections.has('scores')) {
@@ -434,7 +468,7 @@ function compilePostgresTraceScope(
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestScorePredicate(scoreTable)}
+      AND ${latestScorePredicate(scoreTable)}${scopeSql('s')}
   )`);
   }
   if (relationCollections.has('feedback')) {
@@ -455,7 +489,7 @@ function compilePostgresTraceScope(
     FROM ${feedbackTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestFeedbackPredicate(feedbackTable)}
+      AND ${latestFeedbackPredicate(feedbackTable)}${scopeSql('s')}
   )`);
   }
 
@@ -476,7 +510,7 @@ export function compilePostgresTraceQuery(
       throw new Error('Delta query requires a cursor and safe horizon');
     deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
   }
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, deltaWindow);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, plan.scope, deltaWindow);
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -565,7 +599,7 @@ LIMIT $${values.length}`,
 export function compilePostgresThreadQuery(schema: string, plan: TrustedThreadQueryPlan): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections, plan.scope);
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -634,7 +668,7 @@ export function compilePostgresTraceQueryObservedFields(
   schema: string,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledPostgresTraceQuery {
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set());
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set(), plan.scope);
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower($${searchParameter})) > 0` : '';
   if (plan.search) values.push(plan.search);
@@ -662,17 +696,26 @@ export function compilePostgresTraceQueryValues(
   schema: string,
   plan: TrustedTraceQueryValuesPlan,
 ): CompiledPostgresTraceQuery {
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, discoveryCollections(plan.predicateScope));
-  let field: string;
-  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    plan,
+    discoveryCollections(plan.predicateScope),
+    plan.scope,
+  );
+  let extracted: string;
+  if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (trace, distinct tag) so the outer count is a per-trace count.
+    extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
+  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
-    field = `COALESCE(
+    extracted = `SELECT COALESCE(
       CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
       CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )`;
+    )::text AS value FROM root_scope r`;
     values.push(plan.path.slice('metadata.'.length));
   } else {
-    field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    extracted = `SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}`;
   }
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower(value), lower($${searchParameter})) > 0` : '';
@@ -680,7 +723,7 @@ export function compilePostgresTraceQueryValues(
   values.push(plan.limit + 1);
   return {
     text: `WITH ${ctes.join(',\n')}, extracted AS (
-  SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}
+  ${extracted}
 )
 SELECT value, count(*)::bigint AS count
 FROM extracted

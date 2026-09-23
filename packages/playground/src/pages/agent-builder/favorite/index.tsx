@@ -1,12 +1,11 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -77,7 +76,7 @@ export default function AgentBuilderFavoritePage() {
     }
     return (
       <div className="flex items-center justify-center pt-10">
-        <ErrorState title={`Failed to load favorite ${resource}`} message={error.message} />
+        <EmptyState tone="error" titleSlot={`Failed to load favorite ${resource}`} descriptionSlot={error.message} />
       </div>
     );
   };
@@ -137,11 +136,11 @@ export default function AgentBuilderFavoritePage() {
             <ActionRow>
               <ActionRow.Start>
                 {features.skills && (
-                  <div className="border-border flex overflow-hidden rounded-lg border">
+                  <div className="flex overflow-hidden rounded-lg border border-border">
                     <button
                       onClick={() => setTab('agents')}
                       className={cn(
-                        'text-column px-3 py-1.5',
+                        'px-3 py-1.5 text-column',
                         controlStateColorTransition,
                         tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                       )}
@@ -151,7 +150,7 @@ export default function AgentBuilderFavoritePage() {
                     <button
                       onClick={() => setTab('skills')}
                       className={cn(
-                        'text-column px-3 py-1.5',
+                        'px-3 py-1.5 text-column',
                         controlStateColorTransition,
                         tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                       )}

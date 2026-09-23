@@ -29,7 +29,7 @@ import {
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
+import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull, normalizeTags } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 
 // ============================================================================
@@ -602,7 +602,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     serviceName: s.serviceName ?? null,
     attributes: (s.attributes as Record<string, unknown>) ?? null,
     metadata: (s.metadata as Record<string, unknown>) ?? null,
-    tags: s.tags ?? null,
+    tags: s.tags == null ? null : normalizeTags(s.tags),
     scope: (s.scope as Record<string, unknown>) ?? null,
     links: null,
     input: (s.input as Record<string, unknown>) ?? null,
@@ -642,7 +642,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     serviceName: s.serviceName ?? null,
     attributes: (s.attributes as Record<string, unknown>) ?? null,
     metadata: (s.metadata as Record<string, unknown>) ?? null,
-    tags: s.tags ?? null,
+    tags: s.tags == null ? null : normalizeTags(s.tags),
     scope: (s.scope as Record<string, unknown>) ?? null,
     links: s.links ?? null,
     input: (s.input as Record<string, unknown>) ?? null,

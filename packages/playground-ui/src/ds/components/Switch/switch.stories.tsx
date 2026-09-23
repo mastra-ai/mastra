@@ -53,8 +53,8 @@ function RepositoryVisibilitySwitch() {
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`border-border/70 rounded-2xl border p-5 ${className}`}>
-      <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`rounded-2xl border border-border/70 p-5 ${className}`}>
+      <p className="mb-4 text-meta tracking-wide text-muted-foreground uppercase">{label}</p>
       {children}
     </div>
   );
@@ -62,7 +62,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function SwitchStateGrid({ idPrefix, icons }: { idPrefix: string; icons?: SwitchIconProps }) {
   return (
-    <div className="text-caption text-muted-foreground grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-caption text-muted-foreground">
       <span />
       <span>Default</span>
       <span>On</span>
@@ -82,7 +82,7 @@ function RepositoryVisibilitySwitch() {
   const [isPrivate, setIsPrivate] = useState(true);
 
   return (
-    <div className="bg-background grid gap-4 rounded-lg p-4">
+    <div className="grid gap-4 rounded-lg bg-background p-4">
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
@@ -184,8 +184,8 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="bg-background grid min-w-108 gap-4 rounded-lg p-4">
-      <div className="text-caption text-muted-foreground grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
+    <div className="grid min-w-108 gap-4 rounded-lg bg-background p-4">
+      <div className="grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-caption text-muted-foreground">
         <span />
         <span>Default</span>
         <span>On</span>
@@ -198,7 +198,7 @@ export const AllStates: Story = {
           aria-label="focused on"
           checked
           onCheckedChange={() => {}}
-          className="outline-border-focus outline-1 outline-offset-2 outline-solid"
+          className="outline-1 outline-offset-2 outline-border-focus outline-solid"
         />
 
         <span className="text-foreground">Disabled</span>
@@ -209,7 +209,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="outline-border-focus outline-1 outline-offset-2 outline-solid"
+          className="outline-1 outline-offset-2 outline-border-focus outline-solid"
         />
       </div>
     </div>

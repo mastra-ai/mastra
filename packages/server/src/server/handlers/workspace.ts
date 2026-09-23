@@ -491,7 +491,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
-      const decodedPath = decodeURIComponent(path);
+      const decodedPath = path;
 
       // Check if path exists
       if (!(await workspace.filesystem.exists(decodedPath))) {
@@ -541,7 +541,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
-      const decodedPath = decodeURIComponent(path);
+      const decodedPath = path;
 
       // Handle base64-encoded content for binary files
       let fileContent: string | Buffer = content;
@@ -582,13 +582,13 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.filesystem) {
         return {
-          path: decodeURIComponent(path),
+          path,
           entries: [],
           error: 'No workspace filesystem configured',
         };
       }
 
-      const decodedPath = decodeURIComponent(path);
+      const decodedPath = path;
 
       // Check if path exists
       if (!(await workspace.filesystem.exists(decodedPath))) {
@@ -634,7 +634,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
-      const decodedPath = decodeURIComponent(path);
+      const decodedPath = path;
 
       // Check if path exists (unless force is true)
       const exists = await workspace.filesystem.exists(decodedPath);
@@ -688,7 +688,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
-      const decodedPath = decodeURIComponent(path);
+      const decodedPath = path;
 
       await workspace.filesystem.mkdir(decodedPath, { recursive: recursive ?? true });
 
@@ -725,7 +725,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
-      const decodedPath = decodeURIComponent(path);
+      const decodedPath = path;
 
       // Check if path exists
       if (!(await workspace.filesystem.exists(decodedPath))) {
@@ -958,7 +958,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
-      const identifier = path ? decodeURIComponent(path) : skillName;
+      const identifier = path ?? skillName;
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1011,7 +1011,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
-      const identifier = path ? decodeURIComponent(path) : skillName;
+      const identifier = path ?? skillName;
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1052,12 +1052,8 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
     try {
       requireWorkspaceV1Support();
 
-      if (!skillName || !referencePath) {
-        throw new HTTPException(400, { message: 'Skill name and reference path are required' });
-      }
-
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
-      const identifier = skillPath ? decodeURIComponent(skillPath) : skillName;
+      const identifier = skillPath ?? skillName;
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1073,13 +1069,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
-      // Decode the reference path (it may be URL encoded)
-      let decodedPath: string;
-      try {
-        decodedPath = decodeURIComponent(referencePath);
-      } catch {
-        throw new HTTPException(400, { message: 'Malformed referencePath' });
-      }
+      const decodedPath = referencePath;
 
       // Prevent path traversal via the reference path parameter
       assertSafeFilePath(decodedPath);

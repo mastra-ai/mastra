@@ -3,7 +3,7 @@ import { buttonVariants, isIconButtonSize } from '../Button/Button';
 import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
-import { fieldTriggerSurfaceStyle } from '@/ds/primitives/form-element';
+import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -17,8 +17,7 @@ import { cn } from '@/lib/utils';
 /**
  * A combobox is a form field, so it reuses the Button's size/shape recipe,
  * mirroring `SelectTrigger`: `default` (the Input's overlay surface — the
- * default here too), `outline` (bordered, transparent) and `ghost`
- * (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
+ * default here too) and `ghost` (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
  * look is intentionally NOT offered (a field is not a call-to-action).
  */
 export type ComboboxVisualVariant = ControlTriggerVisualVariant;
@@ -51,14 +50,13 @@ export function comboboxTriggerClass({
 
   return cn(
     buttonVariants({ variant: visualVariant, size }),
-    // The filled look is the Input surface, not the Button one.
-    visualVariant === 'default' && fieldTriggerSurfaceStyle,
+    visualVariant === 'default' && fieldTriggerStyle,
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
     !isIconButtonSize(size) && 'justify-between text-body-sm',
     // Read as "active" while the popup is open, per variant (see map above).
-    controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
+    controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
     error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
     className,

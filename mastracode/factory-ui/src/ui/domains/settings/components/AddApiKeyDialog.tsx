@@ -97,7 +97,7 @@ export function AddApiKeyDialog({
               <Txt as="span" variant="caption" className="text-muted-foreground">
                 Who can use this key
               </Txt>
-              <ButtonsGroup role="group" aria-label="API key access">
+              <ButtonsGroup size="sm" role="group" aria-label="API key access">
                 {(
                   [
                     { value: 'user', label: 'Just me' },
@@ -106,8 +106,7 @@ export function AddApiKeyDialog({
                 ).map(option => (
                   <Button
                     key={option.value}
-                    variant={scope === option.value ? 'primary' : 'outline'}
-                    size="sm"
+                    variant={scope === option.value ? 'primary' : 'default'}
                     aria-pressed={scope === option.value}
                     disabled={saveKeyMutation.isPending || (option.value === 'org' && !canWriteOrgKey)}
                     title={

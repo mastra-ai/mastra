@@ -1,3 +1,4 @@
+import { fork } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -2409,6 +2410,159 @@ describe('Agent signals', () => {
     expect(peers[0]?.discoveredAt).toBeInstanceOf(Date);
 
     claim.unsubscribe();
+  });
+
+  it('clears the per-request discovery reply topic once discovery settles', async () => {
+    const cleared: string[] = [];
+    class RecordingPubSub extends EventEmitterPubSub {
+      override async clearTopic(topic: string): Promise<void> {
+        cleared.push(topic);
+      }
+    }
+    const pubsub = new RecordingPubSub();
+    const discoveryAgent = new Agent({
+      id: 'reply-topic-discovery-agent',
+      name: 'Reply Topic Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+
+    await discoveryAgent.discoverThreadPeers({ timeoutMs: 10 });
+    // releaseReplyTopic is fire-and-forget; let its unsubscribe → clearTopic chain flush.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // On persistent brokers the reply stream would otherwise outlive the
+    // request forever — every discovery must drop its own reply topic.
+    expect(cleared).toEqual([expect.stringMatching(/^agent\.thread-peer-discovery\./)]);
+  });
+
+  it('clears the owner-discovery and idle-acceptance reply topics after a claimed-owner wake', async () => {
+    const cleared: string[] = [];
+    class RecordingPubSub extends EventEmitterPubSub {
+      override async clearTopic(topic: string): Promise<void> {
+        cleared.push(topic);
+      }
+    }
+    const pubsub = new RecordingPubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ownerAgent = new Agent({
+      id: 'reply-topic-owner-agent',
+      name: 'Reply Topic Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'reply-topic-sender-agent',
+      name: 'Reply Topic Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'reply-topic-user', threadId: 'reply-topic-thread' };
+
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    expect(claim.claimed).toBe(true);
+
+    const signalResult = senderRuntime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake the owner' },
+      { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+      pubsub,
+    );
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+    await nextRun;
+
+    // Both per-request reply topics must be dropped once their round trips
+    // settle — on persistent brokers each would otherwise leak a stream.
+    await waitForCondition(
+      () =>
+        cleared.some(topic => topic.startsWith('agent.thread-owner-discovery.')) &&
+        cleared.some(topic => topic.includes('.idle-acceptance.')),
+    );
+
+    claim.unsubscribe();
+    subscription.unsubscribe();
+  });
+
+  it('clears the owner-discovery reply topic when discovery times out without an owner', async () => {
+    const cleared: string[] = [];
+    class RecordingPubSub extends EventEmitterPubSub {
+      override async clearTopic(topic: string): Promise<void> {
+        cleared.push(topic);
+      }
+    }
+    const pubsub = new RecordingPubSub();
+    const agent = new Agent({
+      id: 'reply-topic-timeout-agent',
+      name: 'Reply Topic Timeout Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('must not run'),
+      pubsub,
+    });
+
+    const result = agent.sendSignal(
+      { type: 'user-message', contents: 'nobody home' },
+      {
+        resourceId: 'reply-topic-timeout-resource',
+        threadId: 'reply-topic-timeout-thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+    );
+
+    await expect(result.accepted).rejects.toThrow('No claimed thread owner responded');
+    await waitForCondition(() => cleared.some(topic => topic.startsWith('agent.thread-owner-discovery.')));
+  });
+
+  it('skips the discovery request and re-releases the reply topic when subscribe finishes after the timeout', async () => {
+    const cleared: string[] = [];
+    const publishedTypes: string[] = [];
+    let releaseSubscribe!: () => void;
+    const subscribeGate = new Promise<void>(resolve => {
+      releaseSubscribe = resolve;
+    });
+    class GatedSubscribePubSub extends EventEmitterPubSub {
+      override async subscribe(topic: string, cb: EventCallback): Promise<void> {
+        // Hold the per-request reply-topic subscribe past the discovery timeout.
+        if (topic.startsWith('agent.thread-peer-discovery.')) await subscribeGate;
+        return super.subscribe(topic, cb);
+      }
+      override async publish(topic: string, event: any): Promise<void> {
+        publishedTypes.push(event.data?.type);
+        return super.publish(topic, event);
+      }
+      override async clearTopic(topic: string): Promise<void> {
+        cleared.push(topic);
+      }
+    }
+    const pubsub = new GatedSubscribePubSub();
+    const agent = new Agent({
+      id: 'late-subscribe-discovery-agent',
+      name: 'Late Subscribe Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+
+    await agent.discoverThreadPeers({ timeoutMs: 10 });
+    expect(cleared).toEqual([expect.stringMatching(/^agent\.thread-peer-discovery\./)]);
+
+    releaseSubscribe();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // The late subscribe must not publish the request (replies would recreate
+    // the released reply stream) and must release the reply topic again, since
+    // its callback attached after the first release.
+    expect(publishedTypes).not.toContain('thread-peer-request');
+    expect(cleared).toEqual([
+      expect.stringMatching(/^agent\.thread-peer-discovery\./),
+      expect.stringMatching(/^agent\.thread-peer-discovery\./),
+    ]);
+    expect(cleared[0]).toBe(cleared[1]);
   });
 
   it('updates advertised peer metadata without replacing thread ownership', async () => {
@@ -6303,6 +6457,40 @@ describe('Agent signals', () => {
 
     subscription.unsubscribe();
   });
+
+  it('lets a run start immediately after a persisted idle signal without starving the event loop', async () => {
+    // Runs in a child process on purpose: the regression starves the macrotask queue, so an
+    // in-process timeout would never fire. The parent bounds it with SIGKILL instead.
+    const fixture = new URL('./fixtures/persisted-signal-immediate-run.ts', import.meta.url);
+    const child = fork(fixture, { execArgv: ['--import', import.meta.resolve('tsx')], silent: true });
+    const stderr: Buffer[] = [];
+    child.stderr?.on('data', chunk => stderr.push(chunk));
+    let reachedWait = false;
+    let completed = false;
+    child.on('message', message => {
+      if (message === 'waiting') reachedWait = true;
+      if (message === 'ok') completed = true;
+    });
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      const timeout = setTimeout(() => child.kill('SIGKILL'), 10_000);
+      child.once('error', error => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.once('close', (code, signal) => {
+        clearTimeout(timeout);
+        resolve({ code, signal });
+      });
+    });
+
+    const diagnostics = `reached wait: ${reachedWait}\n${Buffer.concat(stderr).toString() || 'child produced no stderr'}`;
+    expect({ ...result, completed }, diagnostics).toEqual({
+      code: 0,
+      signal: null,
+      completed: true,
+    });
+  }, 20_000);
 
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
     let streamCount = 0;

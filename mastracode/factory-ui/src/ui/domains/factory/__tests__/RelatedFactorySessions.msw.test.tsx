@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
-import { FactorySessionHeader } from '../components/RelatedFactorySessions';
+import { FactorySessionPage } from '../components/RelatedFactorySessions';
 
 const FACTORY_ID = 'factory-1';
 const REPOSITORY_ID = 'repository-1';
@@ -96,7 +96,7 @@ function renderHeader() {
             path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
             element={
               <WorkspaceFilesProvider>
-                <FactorySessionHeader />
+                <FactorySessionPage>{null}</FactorySessionPage>
               </WorkspaceFilesProvider>
             }
           />
@@ -106,7 +106,7 @@ function renderHeader() {
   );
 }
 
-describe('FactorySessionHeader', () => {
+describe('FactorySessionPage', () => {
   describe('when the active work item has an external issue URL', () => {
     it('renders an issue pill that opens the external issue in a new tab', async () => {
       const issueUrl = 'https://github.com/acme/app/issues/7';

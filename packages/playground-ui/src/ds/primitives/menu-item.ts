@@ -3,7 +3,7 @@ import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
-// Select, Combobox, PropertyFilter, DataFilter). An item is a ghost/md Button laid out
+// Select, Combobox, PropertyFilter). An item is a ghost/md Button laid out
 // left-aligned, with `rounded-lg` instead of the pill radius so stacked items sit
 // concentrically inside a `rounded-xl p-1` popup. Base UI drives keyboard/pointer
 // highlight via `data-highlighted`, which `:hover` alone does not cover.
@@ -19,8 +19,9 @@ const MENU_ITEM_OVERRIDES = cn(
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
   // No row background: the popup's FluidMenuItems highlight travels between rows;
-  // the row only lifts its text color.
-  'hover:bg-transparent data-highlighted:text-foreground',
+  // the row only lifts its text color. Same modifiers as Button's ghost fills so
+  // tailwind-merge drops them; any other spelling leaves both surfaces painted.
+  'not-disabled:hover:bg-transparent not-disabled:active:bg-transparent data-highlighted:text-foreground',
   'data-selected:text-foreground',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
   '[&>span]:truncate',
@@ -31,7 +32,7 @@ export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' })
 export const menuItemDestructiveClass = cn(
   buttonVariants({ variant: 'destructive-ghost', size: 'md' }),
   MENU_ITEM_OVERRIDES,
-  'data-highlighted:bg-destructive/20 data-highlighted:text-destructive',
+  'data-highlighted:text-destructive',
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
@@ -56,6 +57,8 @@ export const menuPopupClass = cn(
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
+  // A destructive row tints the travelling highlight instead of painting its own.
+  '[&:has([data-variant=destructive][data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:bg-destructive/20',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );

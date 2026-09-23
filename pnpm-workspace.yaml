@@ -109,7 +109,7 @@ packageExtensions:
   'react-docgen-typescript@2.4.0':
     dependencies:
       typescript-classic: npm:typescript@^6.0.3
-  'eslint-plugin-storybook@10.5.0':
+  'eslint-plugin-storybook@10.6.0':
     dependencies:
       typescript: ^6.0.3
   'eslint-plugin-tailwindcss@4.1.0':

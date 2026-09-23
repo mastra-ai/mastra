@@ -17,7 +17,8 @@ describe('tryGenerateWithJsonFallback', () => {
         }),
       )
       .mockResolvedValueOnce({ object: { name: 'Ana' } });
-    const agent = { generate } as unknown as Agent;
+    const warn = vi.fn();
+    const agent = { generate, __getLogger: () => ({ warn }) } as unknown as Agent;
 
     await expect(
       tryGenerateWithJsonFallback(agent, 'prompt', {
@@ -26,6 +27,7 @@ describe('tryGenerateWithJsonFallback', () => {
     ).resolves.toMatchObject({ object: { name: 'Ana' } });
 
     expect(generate).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledOnce();
     expect(generate.mock.calls[1]?.[1]).toMatchObject({
       structuredOutput: { jsonPromptInjection: true },
     });

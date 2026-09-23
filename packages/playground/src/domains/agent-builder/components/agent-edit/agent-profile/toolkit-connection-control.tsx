@@ -225,7 +225,6 @@ export const ToolkitConnectionControl = ({
       <Button
         icon={<Plug />}
         type="button"
-        variant="outline"
         size="sm"
         onClick={handleConnect}
         disabled={disabled || authorize.isPending}

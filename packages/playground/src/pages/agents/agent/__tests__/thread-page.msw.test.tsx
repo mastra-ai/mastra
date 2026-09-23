@@ -235,6 +235,13 @@ const threadsResponse = {
 
 const onTracesRequest = vi.fn<(threadId: string | null) => void>();
 
+/** Without observability the tab bar renders a single disabled "Traces" placeholder, never an aside toggle. */
+function expectOnlyDisabledTracesButton() {
+  const tracesButtons = screen.getAllByRole('button', { name: /traces/i });
+  expect(tracesButtons).toHaveLength(1);
+  expect(tracesButtons[0]?.getAttribute('aria-disabled')).toBe('true');
+}
+
 function installHandlers(baseUrl = BASE_URL) {
   const emptyTraces = ({ request }: { request: Request }) => {
     onTracesRequest(new URL(request.url).searchParams.get('threadId'));
@@ -295,9 +302,7 @@ afterEach(async () => {
 });
 
 async function composerInput(placeholder = 'Enter your message...') {
-  await act(async () => {
-    await screen.findByPlaceholderText(placeholder);
-  });
+  await screen.findByPlaceholderText(placeholder);
   await waitFor(() => expect(screen.queryByText('Restoring draft…')).toBeNull());
   return screen.getByPlaceholderText<HTMLTextAreaElement>(placeholder);
 }
@@ -416,7 +421,7 @@ describe('Standalone thread page', () => {
       );
       renderAt(`/agents/${AGENT_ID}/threads/new`);
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
       expect(messagesRequested).not.toHaveBeenCalled();
     });
@@ -435,7 +440,7 @@ describe('Standalone thread page', () => {
       );
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
       expect(messagesRequested).not.toHaveBeenCalled();
     });
@@ -1073,7 +1078,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expectOnlyDisabledTracesButton();
     expect(screen.queryByRole('complementary')).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
@@ -1083,7 +1088,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expectOnlyDisabledTracesButton();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 

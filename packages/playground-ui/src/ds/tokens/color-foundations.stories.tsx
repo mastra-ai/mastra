@@ -34,7 +34,10 @@ const surfaceRoles: { token: ColorToken; note: string }[] = [
   { token: 'background', note: 'The canvas every page sits on' },
   { token: 'sidebar', note: 'App chrome, one step behind the canvas' },
   { token: 'card', note: 'Raised container' },
-  { token: 'popover', note: 'Menu, dropdown, dialog' },
+  { token: 'popover', note: 'Menu, dropdown, tooltip' },
+  { token: 'dialog', note: 'Dialog, drawer, alert dialog' },
+  { token: 'field', note: 'Text field fill, set by its surface' },
+  { token: 'field-disabled', note: 'Disabled field fill' },
   { token: 'muted', note: 'Quiet region inside a container' },
 ];
 
@@ -108,7 +111,7 @@ const Swatch = ({ value, height = 'h-16' }: { value: string; height?: string }) 
   <div
     role="img"
     aria-label={`${value} swatch`}
-    className={`${height} border-border border`}
+    className={`${height} border border-border`}
     style={{ background: value }}
   />
 );
@@ -126,7 +129,7 @@ const RampRow = ({ tokens }: { tokens: string[] }) => (
       <Txt variant="meta" font="mono" tone="muted" className="uppercase">
         Subtle
       </Txt>
-      <div className="bg-border h-px flex-1" />
+      <div className="h-px flex-1 bg-border" />
       <Txt variant="meta" font="mono" tone="muted" className="uppercase">
         Strong
       </Txt>
@@ -147,11 +150,11 @@ const AccentRow = ({ label, tokens }: { label: string; tokens: ColorToken[] }) =
 );
 
 const SeriesSwatch = ({ value }: { value: string }) => (
-  <div role="img" aria-label={`${value} swatch`} className="border-border flex flex-col border">
+  <div role="img" aria-label={`${value} swatch`} className="flex flex-col border border-border">
     <div className="bg-background p-1.5">
       <span className="block h-8 rounded-sm" style={{ background: value }} />
     </div>
-    <div className="bg-sidebar flex h-8 items-center gap-1.5 px-1.5">
+    <div className="flex h-8 items-center gap-1.5 bg-sidebar px-1.5">
       <span className="size-2 shrink-0 rounded-full" style={{ background: value }} />
       <span className="h-0.5 flex-1 rounded-full" style={{ background: value }} />
     </div>
@@ -250,7 +253,7 @@ export const ColorFoundations: Story = {
             <Txt variant="caption" className="text-destructive">
               Field is required.
             </Txt>
-            <span className="bg-destructive text-label text-destructive-foreground inline-flex rounded-md px-3 py-1">
+            <span className="inline-flex rounded-md bg-destructive px-3 py-1 text-label text-destructive-foreground">
               Delete thread
             </span>
           </div>

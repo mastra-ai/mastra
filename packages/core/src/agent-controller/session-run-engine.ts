@@ -631,7 +631,8 @@ export class SessionRunEngine {
         const payload = getPayload(chunk);
         const toolCallId = getString(payload.toolCallId) ?? '';
         const toolName = getString(payload.toolName) ?? '';
-        this.#session.emit({ type: 'tool_input_start', threadId: state.threadId, toolCallId, toolName });
+        const title = getString(payload.title);
+        this.#session.emit({ type: 'tool_input_start', threadId: state.threadId, toolCallId, toolName, title });
         break;
       }
 
@@ -664,6 +665,7 @@ export class SessionRunEngine {
         const toolCallId = getString(toolCall.toolCallId) ?? '';
         const toolName = getString(toolCall.toolName) ?? '';
         const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
+        const title = getString(toolCall.title);
         const toolIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({
           type: 'tool-invocation',
@@ -673,6 +675,7 @@ export class SessionRunEngine {
             toolName,
             args,
           },
+          title,
         });
         state.toolPartById.set(toolCallId, toolIndex);
         this.emitMessagePart(state, toolIndex);
@@ -682,6 +685,7 @@ export class SessionRunEngine {
           toolCallId,
           toolName,
           args,
+          title,
         });
         break;
       }
@@ -793,6 +797,7 @@ export class SessionRunEngine {
         // Once it lands we finish the teardown, which stops the run rather than
         // letting the model continue past the denied call.
         const deferredAbort = this.#session.run.isAbortRequested();
+        const deferredAbortOrigin = deferredAbort ? this.#session.takeDeferredAbortOrigin() : undefined;
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
@@ -816,7 +821,7 @@ export class SessionRunEngine {
           // display state shows the denied result instead of a call stuck
           // mid-flight.
           this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort();
+          this.#session.completeDeferredAbort(deferredAbortOrigin);
         }
         break;
       }

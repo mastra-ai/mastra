@@ -53,6 +53,32 @@ const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
 
 /**
+ * Slack added to a request's carried `expiresAt` before a responder drops it
+ * as stale. Requests cross processes, so the check compares two machines'
+ * clocks; without slack, skew larger than the 100ms discovery window would
+ * make responders drop every live request and silently break cross-process
+ * discovery. The grace only needs to be small next to the delays it exists to
+ * reject — reclaim redelivery (tens of seconds) and backlog replay on a fresh
+ * fan-out group (arbitrarily old) — where a late reply would recreate the
+ * caller's already-released reply stream on persistent backends.
+ */
+const AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS = 5_000;
+
+/**
+ * True when a request's caller-side deadline has passed by more than the skew
+ * grace. Tolerates events without a deadline (older senders): comparisons
+ * against `undefined`/`NaN` are false, which degrades to the previous
+ * always-respond behavior.
+ */
+function isStaleRequest(expiresAt: number | undefined): boolean {
+  return (
+    typeof expiresAt === 'number' &&
+    Number.isFinite(expiresAt) &&
+    Date.now() - expiresAt > AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS
+  );
+}
+
+/**
  * Lease TTL for the cross-process thread lease acquired in the idle-wake
  * path. Kept short so a crashed owner process frees the thread quickly; a
  * background timer renews it while the run is still running. Overridable via
@@ -152,6 +178,24 @@ function sanitizeBroadcastPart(part: unknown): unknown {
   }
 
   return part;
+}
+
+/**
+ * Tear down a per-request reply topic once its request has settled. The
+ * requester mints the topic name (it embeds a fresh UUID), is its only
+ * subscriber, and nothing will publish to it again — so beyond unsubscribing,
+ * ask the broker to drop the topic entirely. On persistent backends (e.g.
+ * Redis Streams) merely subscribing creates a real key; without the
+ * `clearTopic` every discovery/acceptance round trip would leak one stream
+ * forever. Best-effort and fire-and-forget: `clearTopic` is a no-op on
+ * in-memory brokers and failures here must never affect the request outcome.
+ */
+function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback): void {
+  void pubsub
+    .unsubscribe(replyTopic, cb)
+    .catch(() => {})
+    .then(() => pubsub.clearTopic(replyTopic))
+    .catch(() => {});
 }
 
 function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
@@ -357,7 +401,14 @@ type AgentThreadStreamRuntimeEvent =
       requestId: string;
       replyTopic: string;
       targetSourceId: string;
-      timeoutMs: number;
+      /**
+       * Caller's absolute deadline. Optional only on the wire: current senders
+       * always set it, but during a rolling deploy an older process publishes
+       * `timeoutMs` instead. The receiving handler normalizes.
+       */
+      expiresAt?: number;
+      /** Legacy relative window from pre-`expiresAt` senders. */
+      timeoutMs?: number;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -365,11 +416,20 @@ type AgentThreadIdleSignalAcceptanceEvent =
   | { type: 'idle-signal-rejected'; requestId: string; runId: string; sourceId: string; error: string };
 
 type AgentThreadOwnerDiscoveryEvent =
-  | { type: 'thread-owner-request'; key: string; requestId: string; replyTopic: string; sourceId: string }
+  | {
+      type: 'thread-owner-request';
+      key: string;
+      requestId: string;
+      replyTopic: string;
+      sourceId: string;
+      /** Caller's absolute deadline; optional on the wire (legacy senders omit it). */
+      expiresAt?: number;
+    }
   | { type: 'thread-owner-response'; key: string; requestId: string; sourceId: string };
 
 type AgentThreadPeerDiscoveryEvent =
-  | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string }
+  // expiresAt is optional on the wire: legacy senders omit it.
+  | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string; expiresAt?: number }
   | { type: 'thread-peer-response'; requestId: string; peer: AgentThreadPeerInfo; sourceId: string };
 
 function toPublicThreadPeer(peer: AdvertisedThreadPeer): Omit<AdvertisedThreadPeer, 'unsubscribe'> {
@@ -822,6 +882,18 @@ export class AgentThreadStreamRuntime {
       if (data?.type !== 'idle-signal-enqueued' || data.sourceId === sourceId || data.targetSourceId !== sourceId) {
         return;
       }
+      // The caller's deadline, normalized for a legacy sender (a rolling-deploy
+      // peer on an older core) that published a relative `timeoutMs` instead of
+      // an absolute `expiresAt`. Deriving at receipt is exactly what that
+      // sender expected; without a deadline at all the checks degrade to the
+      // previous always-respond behavior.
+      const expiresAt =
+        data.expiresAt ?? (data.timeoutMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + data.timeoutMs);
+      // The caller already timed out on this request (it arrived via backlog
+      // replay or redelivery). Starting a run now would duplicate work the
+      // caller reported as failed, and the reply would recreate its released
+      // reply stream. Returning still acks: a stale request must not redeliver.
+      if (isStaleRequest(expiresAt)) return;
       const owner = state.claimedThreadOwners.get(key);
       if (!owner) return;
 
@@ -870,7 +942,19 @@ export class AgentThreadStreamRuntime {
           owner,
           data.runId,
           createSignal(data.signal),
-          Date.now() + data.timeoutMs,
+          // The caller's deadline translated onto this process's clock. The
+          // deadline crossed machines, so the strict `Date.now() >= expiresAt`
+          // checks inside #startClaimedIdleRun would reject live requests
+          // whenever this clock runs ahead of the caller's; the same skew
+          // grace `isStaleRequest` applies covers that. The cap keeps a
+          // request that arrived late (but inside the grace) or a slow local
+          // clock from granting more than one fresh acceptance window —
+          // deriving an uncapped fresh window at receive time is exactly the
+          // bug that let arbitrarily old replayed requests start runs.
+          Math.min(
+            expiresAt + AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS,
+            Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
+          ),
           () => active && state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
@@ -927,6 +1011,12 @@ export class AgentThreadStreamRuntime {
       if (!active) return;
       const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;
       if (data?.type !== 'thread-owner-request' || data.key !== key || data.sourceId === sourceId) return;
+      // A stale request's caller has timed out and released its reply topic;
+      // replying would recreate the stream on persistent backends. Fan-out
+      // groups anchor at the stream start, so a fresh claimant replays the
+      // whole discovery backlog — without this guard it would answer every
+      // request ever retained.
+      if (isStaleRequest(data.expiresAt)) return;
       await resolvedPubSub.publish(data.replyTopic, {
         type: 'thread-owner-response',
         runId: data.requestId,
@@ -938,6 +1028,7 @@ export class AgentThreadStreamRuntime {
       if (!active || !peer) return;
       const data = event.data as AgentThreadPeerDiscoveryEvent | undefined;
       if (data?.type !== 'thread-peer-request' || data.sourceId === sourceId) return;
+      if (isStaleRequest(data.expiresAt)) return; // see onOwnerDiscovery
       await resolvedPubSub.publish(data.replyTopic, {
         type: 'thread-peer-response',
         runId: data.requestId,
@@ -1048,24 +1139,37 @@ export class AgentThreadStreamRuntime {
         settled = true;
         clearTimeout(timeout);
         resolve();
-        void resolvedPubSub.unsubscribe(replyTopic, onReply).catch(() => {});
+        releaseReplyTopic(resolvedPubSub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadPeerDiscoveryEvent | undefined;
         if (data?.type !== 'thread-peer-response' || data.requestId !== requestId) return;
         peers.set(data.peer.id, { ...data.peer, sourceId: data.sourceId, discoveredAt: new Date() });
       });
-      const timeout = setTimeout(finish, options.timeoutMs ?? AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS);
+      const timeoutMs = options.timeoutMs ?? AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS;
+      // Absolute deadline carried on the request so a responder that receives
+      // it late (backlog replay, redelivery) can drop it instead of replying
+      // into the released reply topic.
+      const expiresAt = Date.now() + timeoutMs;
+      const timeout = setTimeout(finish, timeoutMs);
 
       void resolvedPubSub
         .subscribe(replyTopic, onReply)
-        .then(() =>
-          resolvedPubSub.publish(AGENT_THREAD_PEER_DISCOVERY_TOPIC, {
+        .then(() => {
+          // If the timeout already settled the request, the reply topic has
+          // been released. Publishing now would invite replies that recreate
+          // it, and the subscribe that just finished may have attached the
+          // callback after the release — so release again instead.
+          if (settled) {
+            releaseReplyTopic(resolvedPubSub, replyTopic, onReply);
+            return;
+          }
+          return resolvedPubSub.publish(AGENT_THREAD_PEER_DISCOVERY_TOPIC, {
             type: 'thread-peer-request',
             runId: requestId,
-            data: { type: 'thread-peer-request', requestId, replyTopic, sourceId: this.#getSourceId() },
-          }),
-        )
+            data: { type: 'thread-peer-request', requestId, replyTopic, sourceId: this.#getSourceId(), expiresAt },
+          });
+        })
         .catch(() => finish());
     });
 
@@ -1225,7 +1329,7 @@ export class AgentThreadStreamRuntime {
         clearTimeout(timeout);
         if ('error' in result) reject(result.error);
         else resolve(result.runId);
-        void pubsub.unsubscribe(replyTopic, onReply).catch(() => {});
+        releaseReplyTopic(pubsub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadIdleSignalAcceptanceEvent | undefined;
@@ -1238,6 +1342,10 @@ export class AgentThreadStreamRuntime {
           finish({ runId: data.runId });
         }
       });
+      // Absolute deadline carried on the request so a responder that receives
+      // it late (backlog replay, redelivery) drops it instead of starting a run
+      // this caller has already reported as timed out.
+      const expiresAt = Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS;
       const timeout = setTimeout(
         () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${key}`) }),
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
@@ -1251,8 +1359,18 @@ export class AgentThreadStreamRuntime {
       // a locally claimed owner only.
       void pubsub
         .subscribe(replyTopic, onReply)
-        .then(() =>
-          this.#publishAndWait(pubsub, key, {
+        .then(() => {
+          // If the acceptance timeout already settled the request, the reply
+          // topic has been released and the caller has its timeout error.
+          // Publishing now would recreate the topic and enqueue a signal the
+          // caller will never see accepted, and the subscribe that just
+          // finished may have attached the callback after the release — so
+          // release again instead.
+          if (settled) {
+            releaseReplyTopic(pubsub, replyTopic, onReply);
+            return;
+          }
+          return this.#publishAndWait(pubsub, key, {
             type: 'idle-signal-enqueued',
             runId,
             signal: this.#serializeSignal(signal),
@@ -1260,9 +1378,9 @@ export class AgentThreadStreamRuntime {
             requestId,
             replyTopic,
             targetSourceId,
-            timeoutMs: AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
-          }),
-        )
+            expiresAt,
+          });
+        })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
     });
   }
@@ -1302,7 +1420,7 @@ export class AgentThreadStreamRuntime {
         settled = true;
         clearTimeout(timeout);
         resolve(sourceId);
-        void pubsub.unsubscribe(replyTopic, onReply).catch(() => {});
+        releaseReplyTopic(pubsub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;
@@ -1310,17 +1428,34 @@ export class AgentThreadStreamRuntime {
           finish(data.sourceId);
         }
       });
+      // Absolute deadline carried on the request; see discoverThreadPeers.
+      const expiresAt = Date.now() + AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
       const timeout = setTimeout(() => finish(), AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS);
 
       void pubsub
         .subscribe(replyTopic, onReply)
-        .then(() =>
-          pubsub.publish(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, {
+        .then(() => {
+          // If the timeout already settled the request, the reply topic has
+          // been released. Publishing now would invite replies that recreate
+          // it, and the subscribe that just finished may have attached the
+          // callback after the release — so release again instead.
+          if (settled) {
+            releaseReplyTopic(pubsub, replyTopic, onReply);
+            return;
+          }
+          return pubsub.publish(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, {
             type: 'thread-owner-request',
             runId: requestId,
-            data: { type: 'thread-owner-request', key, requestId, replyTopic, sourceId: this.#getSourceId() },
-          }),
-        )
+            data: {
+              type: 'thread-owner-request',
+              key,
+              requestId,
+              replyTopic,
+              sourceId: this.#getSourceId(),
+              expiresAt,
+            },
+          });
+        })
         .catch(() => finish());
     });
   }
@@ -2875,6 +3010,13 @@ export class AgentThreadStreamRuntime {
           return;
         }
         await activeRecord.output._waitUntilFinished().catch(() => {});
+        // Awaiting a record that is already settled but still blocking (a persisted-signal
+        // broadcast, a suspended run) does not yield the macrotask queue, so re-checking here would
+        // spin on microtasks and starve the timers that end the wait. Force a macrotask whenever the
+        // same run is still active after the await.
+        if (state.activeThreadRunIds.get(key) === activeRunId) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
         continue;
       }
 

@@ -128,7 +128,7 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="text-meta text-placeholder px-2 py-1" role="note">
+            <p className="px-2 py-1 text-meta text-placeholder" role="note">
               {usageDisabledReason}
             </p>
           )}
@@ -201,7 +201,7 @@ export function TraceColumnsMenu({
               </FieldBlock.Column>
             </DialogBody>
             <DialogFooter>
-              <Button icon={<X />} type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
+              <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>
                 Cancel
               </Button>
               <Button icon={<Columns3 />} type="submit" variant="primary">

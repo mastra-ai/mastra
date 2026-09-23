@@ -27,6 +27,31 @@ export function SaveButton() {
 
 Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on an element to recolor its subtree.
 
+#### Surfaces
+
+| Token          | Utility         | Used for                                                                            |
+| -------------- | --------------- | ----------------------------------------------------------------------------------- |
+| `--background` | `bg-background` | The page canvas                                                                     |
+| `--sidebar`    | `bg-sidebar`    | App chrome, one step behind the canvas                                              |
+| `--card`       | `bg-card`       | Cards, panels, settings sections                                                    |
+| `--popover`    | `bg-popover`    | Menus, dropdowns, tooltips                                                          |
+| `--dialog`     | `bg-dialog`     | Dialogs, drawers, alert dialogs. Off-white in light mode so fields inside stand out |
+| `--muted`      | `bg-muted`      | A quiet region inside a container                                                   |
+
+#### Fields
+
+Text fields, textareas, input groups, and the default Select, Combobox, and DateTimePicker triggers read their fill and outline from these tokens. You don't set them at the call site: cards, overlays, and dialogs set them for every field inside, so a field is never darker than the surface it sits on.
+
+| Token                | Utility             | Used for                                                                                 |
+| -------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
+| `--field`            | `bg-field`          | Field fill. `--card` on the page, `--field-on-surface` inside a card, overlay, or dialog |
+| `--field-on-surface` | none                | Field fill inside a surface: one step lighter in dark mode, white in light mode          |
+| `--field-disabled`   | `bg-field-disabled` | Disabled field fill                                                                      |
+| `--field-rim`        | none                | Resting outline. Stronger inside white surfaces in light mode                            |
+| `--field-rim-focus`  | none                | Focus outline                                                                            |
+
+A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive`, so the red outline shows on every surface and stays red while focused.
+
 If your app generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
 
 ## Documentation

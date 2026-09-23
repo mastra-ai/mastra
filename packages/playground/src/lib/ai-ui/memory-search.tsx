@@ -228,16 +228,16 @@ export const MemorySearch = ({
   };
 
   return (
-    <div className={cn('flex flex-col h-full', className)} ref={dropdownRef}>
+    <div className={cn('flex h-full flex-col', className)} ref={dropdownRef}>
       <div className="relative shrink-0">
-        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
+        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
         <Input
           type="text"
           value={query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Search memory..."
-          className="bg-card border-border pr-10 pl-10"
+          className="border-border bg-card pr-10 pl-10"
         />
         {query && (
           <Button onClick={clearSearch} className="absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2 transform p-0">
@@ -274,14 +274,14 @@ export const MemorySearch = ({
                   key={result.id}
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
-                    'w-full px-4 py-3 hover:bg-fill-subtle text-left border-b border-border last:border-b-0',
+                    'w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-fill-subtle',
                     result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
                   )}
                 >
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
                     {result.context?.before && result.context.before.length > 0 && (
-                      <div className="text-caption space-y-1 opacity-50">
+                      <div className="space-y-1 text-caption opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
@@ -297,7 +297,7 @@ export const MemorySearch = ({
                         <div className="mb-1 flex items-center gap-2">
                           <span
                             className={cn(
-                              'text-column px-2 py-0.5 rounded',
+                              'rounded px-2 py-0.5 text-column',
                               result.role === 'user'
                                 ? 'bg-blue-500/20 text-blue-400'
                                 : 'bg-green-500/20 text-green-400',
@@ -314,7 +314,7 @@ export const MemorySearch = ({
                                 variant="meta"
                                 tone={result.threadId !== currentThreadId ? undefined : 'muted'}
                                 className={cn(
-                                  'truncate max-w-[150px]',
+                                  'max-w-[150px] truncate',
                                   result.threadId !== currentThreadId && 'text-blue-400',
                                 )}
                                 title={result.threadTitle}
@@ -335,7 +335,7 @@ export const MemorySearch = ({
 
                     {/* Context after */}
                     {result.context?.after && result.context.after.length > 0 && (
-                      <div className="text-caption space-y-1 opacity-50">
+                      <div className="space-y-1 text-caption opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>

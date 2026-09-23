@@ -10,7 +10,7 @@ import type {
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
 import type { ActorSignal } from '../auth/ee';
-import type { ToolBackgroundConfig } from '../background-tasks';
+import type { BackgroundTaskAdoptionContext, ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
@@ -376,6 +376,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     observe?: ToolObserve;
     /** Set by the agent tool-call step when the tool runs as a background task. */
     isBackgroundTask?: boolean;
+    /** Process-local lifecycle bridge for an operation adopted by the background task. */
+    background?: BackgroundTaskAdoptionContext;
   };
 
 /**
@@ -478,6 +480,7 @@ export interface MCPToolProperties {
  * - Supports FlexibleSchema | Schema for broader AI SDK compatibility
  */
 export type CoreTool = {
+  title?: string;
   description?: string;
   parameters: FlexibleSchema<any> | Schema;
   outputSchema?: FlexibleSchema<any> | Schema;
@@ -536,6 +539,7 @@ export type CoreTool = {
  * The only difference: parameters must be Schema (not FlexibleSchema | Schema)
  */
 export type InternalCoreTool = {
+  title?: string;
   description?: string;
   parameters: Schema;
   outputSchema?: Schema;
@@ -632,6 +636,13 @@ export interface ToolExecutionContext<
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
 
+  /**
+   * Process-local lifecycle bridge exposed only during native background
+   * execution. Acknowledgement-returning tools can adopt their existing
+   * operation so the native task remains running until it settles.
+   */
+  background?: BackgroundTaskAdoptionContext;
+
   // ============ Suspend/resume for direct and MCP 2.x execution ============
   // Agents and workflows nest these under `agent` / `workflow` until the next core major.
 
@@ -691,6 +702,8 @@ export interface ToolAction<
   TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TId;
+  /** Display name for UIs and MCP clients. Never sent to the model. */
+  title?: string;
   description: string;
   inputSchema?: PublicSchema<TSchemaIn>;
   outputSchema?: PublicSchema<TSchemaOut>;

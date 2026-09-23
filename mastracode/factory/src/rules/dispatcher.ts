@@ -12,6 +12,7 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -39,7 +40,7 @@ import type {
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -373,23 +374,7 @@ function retryAt(now: Date, attempts: number): Date {
 }
 
 function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>) {
-  const [integrationId, type] =
-    decision.source === 'github-pr'
-      ? ['github', 'pull-request']
-      : decision.source === 'github-issue'
-        ? ['github', 'issue']
-        : decision.source === 'gitlab-pr'
-          ? ['gitlab', 'pull-request']
-          : decision.source === 'gitlab-issue'
-            ? ['gitlab', 'issue']
-            : decision.source === 'linear-issue'
-              ? ['linear', 'issue']
-              : decision.source === 'jira-issue'
-                ? ['jira', 'issue']
-                : decision.source === 'incidentio-follow-up'
-                  ? ['incidentio', 'issue']
-                  : ['factory', 'manual'];
-  return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+  return externalSourceForWorkItem(decision.source, decision.sourceKey, decision.url ?? undefined);
 }
 
 function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {
@@ -1000,7 +985,7 @@ export class FactoryDecisionDispatcher {
 
           try {
             let settled = await sendKickoff();
-            if (settled.action === 'deliver') {
+            while (settled.action === 'deliver') {
               // `deliver` means the signal was queued onto a run that was already
               // in flight. If that run ends before draining its queue the prompt
               // is dropped silently: no turn starts, no error surfaces, and the
@@ -1009,28 +994,20 @@ export class FactoryDecisionDispatcher {
               // (the same identity the replay guard above reads), so confirm the
               // message actually landed in the thread rather than trusting the ack.
               const landed = await session.thread.listActiveMessages();
-              if (!landed.some(message => message.id === deliveryId)) {
-                // The condition that resolves this is the in-flight run ending, so
-                // wait for exactly that and redeliver into the idle session. A
-                // backoff cannot work here: retries are sized in seconds and a turn
-                // takes minutes, so every attempt lands on the same busy run and
-                // the card burns its whole budget without the session ever having
-                // had a chance to be free.
-                if (!(await run.wait())) {
-                  throw new FactoryDispatchError(
-                    'run_terminal_event_missing',
-                    'Factory skill invocation is waiting on a run whose terminal event was not observed.',
-                  );
-                }
-                run.arm();
-                settled = await sendKickoff();
-                if (settled.action !== 'wake') {
-                  throw new FactoryDispatchError(
-                    'skill_delivery_ambiguous',
-                    'Factory skill invocation was queued onto an ending run and never reached the agent.',
-                  );
-                }
+              if (landed.some(message => message.id === deliveryId)) break;
+
+              // Another run can start while the previous run is finishing, so one
+              // redelivery is not enough to prove the session is idle. Follow each
+              // run boundary until the kickoff either lands on an active run or
+              // wakes a new one.
+              if (!(await run.wait())) {
+                throw new FactoryDispatchError(
+                  'run_terminal_event_missing',
+                  'Factory skill invocation is waiting on a run whose terminal event was not observed.',
+                );
               }
+              run.arm();
+              settled = await sendKickoff();
             }
             await this.#recordRunStart(
               session,
@@ -1127,6 +1104,10 @@ export class FactoryDecisionDispatcher {
       source: externalSourceForDecision(decision),
     });
     if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
+      // Filing the card *was* the placement, so a retry of the same decision has
+      // nothing left to apply — and must not drag a card that has since moved
+      // back down to the stage this decision filed it at.
+      if (decision.skipRules === true) return;
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,
@@ -1140,6 +1121,12 @@ export class FactoryDecisionDispatcher {
     const definition = this.#boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
+    // `skipRules` files the card at the stage the decision names, as its first
+    // entry, and runs none of the board's phase rules. Without it the card
+    // enters through the board's initial phase and transitions from there, so
+    // arrival and destination-entry rules both run.
+    const skipRules = decision.skipRules === true;
+    const entryStage = skipRules ? decision.stage : initialPhase;
     const parentWorkItemId =
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
@@ -1160,7 +1147,7 @@ export class FactoryDecisionDispatcher {
           parentWorkItemId,
           title: decision.title,
           board: decision.board,
-          stages: [initialPhase],
+          stages: [entryStage],
           sessions: {},
           metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
         },
@@ -1183,7 +1170,7 @@ export class FactoryDecisionDispatcher {
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
-    if (itemBoard !== decision.board) {
+    if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
@@ -1198,7 +1185,10 @@ export class FactoryDecisionDispatcher {
       });
       if (item) result = { ...result, item };
     }
-    if (!result.created) {
+    // A `skipRules` decision is a placement and nothing else: the backfill would
+    // otherwise walk the arrival decision's facts back onto an existing card,
+    // restamping trust the sweep deliberately left unanswered.
+    if (!result.created && !skipRules) {
       // Backfill source facts (e.g. sourceCreatedAt) that older cards were filed
       // without. Fill-only: never overwrite, and never adopt the card as
       // materialized by this decision.
@@ -1216,6 +1206,23 @@ export class FactoryDecisionDispatcher {
         });
         if (filled) result = { ...result, item: filled.item };
       }
+    }
+    if (skipRules) {
+      // Creation already filed the card at `stage`. An existing card — a
+      // reconcile pass reacting to a label change, say — is placed there the
+      // same way, through the relocation the label routes use, so no phase rule
+      // runs for it and no transition is recorded.
+      if (!result.created) {
+        await moveCardToBoard({
+          workItems: this.#storage,
+          boardRegistry: this.#boards,
+          userId: 'factory-rule-dispatcher',
+          item: result.item,
+          targetBoard: decision.board,
+          targetStage: decision.stage,
+        });
+      }
+      return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
@@ -1238,7 +1245,8 @@ export class FactoryDecisionDispatcher {
         initialEntry: true,
       });
       if (initial.status === 'rejected') {
-        if (result.created) await this.#storage.delete({ orgId: record.orgId, id: result.item.id });
+        if (result.created)
+          await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
         throw new Error(`${initial.code}: ${initial.reason}`);
       }
       expectedRevision = initial.revision;
@@ -1547,23 +1555,23 @@ export class FactoryDecisionDispatcher {
             );
           try {
             let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
-            if (settled?.action === 'deliver') {
+            let deliveryGeneration = 0;
+            while (settled?.action === 'deliver') {
               // `deliver` only proves the signal was queued onto a run already
               // in flight. If that run ends without draining its queue the
-              // kickoff is dropped silently. There is no per-notification
-              // "processed" signal, so wait for the in-flight run to end and
-              // redeliver into the idle session unconditionally — the
-              // generation-scoped dedupeKey defeats inbox dedupe and the
-              // kickoff key keeps a duplicate run bounded, while a dropped
-              // kickoff strands the card forever.
+              // kickoff is dropped silently. Another run can start while the
+              // previous one is finishing, so follow every run boundary until
+              // the kickoff wakes an idle session. The generation-scoped
+              // dedupeKey defeats inbox dedupe and the kickoff key keeps a
+              // duplicate run bounded, while a dropped kickoff strands the card.
               if (!(await run.wait())) {
                 throw new Error('Factory kickoff is waiting on a run that has not ended.');
               }
               run.arm();
-              settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}:retry:${record.attempts}`);
-              if (settled?.action !== 'wake') {
-                throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
-              }
+              deliveryGeneration += 1;
+              settled = await sendKickoff(
+                `factory-kickoff:${record.kickoffKey}:retry:${record.attempts}:${deliveryGeneration}`,
+              );
             }
             await this.#recordRunStart(
               session,

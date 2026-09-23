@@ -38,7 +38,7 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-foreground" disabled={itemDisabled} />
       <Label
-        className={cn('text-foreground', !isNetworkAvailable && 'text-muted-foreground! cursor-not-allowed')}
+        className={cn('text-foreground', !isNetworkAvailable && 'cursor-not-allowed text-muted-foreground!')}
         htmlFor="network"
       >
         Network
@@ -85,7 +85,7 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
         disabled={itemDisabled}
       />
       <Label
-        className={cn('text-foreground', !supported && 'text-muted-foreground! cursor-not-allowed')}
+        className={cn('text-foreground', !supported && 'cursor-not-allowed text-muted-foreground!')}
         htmlFor="streamSubscription"
       >
         Stream subscription (default)
@@ -284,7 +284,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="text-muted-foreground bg-card text-caption flex items-center gap-2 rounded px-3 py-2"
+                  className="flex items-center gap-2 rounded bg-card px-3 py-2 text-caption text-muted-foreground"
                   data-testid="sampling-restriction-banner"
                 >
                   <Info className="h-3.5 w-3.5 shrink-0" />

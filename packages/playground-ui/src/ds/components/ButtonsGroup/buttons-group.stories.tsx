@@ -6,7 +6,7 @@ import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { ButtonsGroup, ButtonsGroupSeparator, ButtonsGroupText } from './buttons-group';
+import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',
@@ -26,6 +26,46 @@ export const Default: Story = {
       <Button>Button 2</Button>
       <Button>Button 3</Button>
     </ButtonsGroup>
+  ),
+};
+
+/**
+ * The rung lives on the group, not on the segments. Height, icon-mode width and glyph size all
+ * come from `size`, and a segment cannot lift itself off it: every row below asks for an
+ * `icon-lg` chevron and a `lg` trigger, and all three still come out flat. The field's inner
+ * control follows too, inset by its own border.
+ *
+ * This is why a segment rarely needs a `size` of its own. `icon-*` stays on the button because
+ * it also picks the square shape — the rung part of it is overridden here.
+ */
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-4">
+      {(['sm', 'md', 'lg'] as const).map(size => (
+        <ButtonsGroup key={size} size={size} aria-label={`${size} group`}>
+          <InputGroup className="w-50">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search..." />
+          </InputGroup>
+          <Button icon={<CopyIcon />}>Copy</Button>
+          <ButtonsGroupText>{size}</ButtonsGroupText>
+          <Select defaultValue="recent">
+            <SelectTrigger size="lg" aria-label="Sort by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="recent">Most recent</SelectItem>
+              <SelectItem value="oldest">Oldest</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="icon-lg" aria-label="More options">
+            <ChevronDownIcon />
+          </Button>
+        </ButtonsGroup>
+      ))}
+    </div>
   ),
 };
 
@@ -91,60 +131,18 @@ export const Vertical: Story = {
   ),
 };
 
-export const VerticalOutline: Story = {
+export const VerticalWithIcons: Story = {
   render: () => (
     <ButtonsGroup orientation="vertical">
-      <Button variant="outline">
+      <Button>
         <CopyIcon />
         Copy
       </Button>
-      <Button variant="outline">
+      <Button>
         <ScissorsIcon />
         Cut
       </Button>
-      <Button variant="outline">
-        <ClipboardIcon />
-        Paste
-      </Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const WithSeparator: Story = {
-  render: () => (
-    <ButtonsGroup>
-      <Button variant="ghost">
-        <CopyIcon />
-        Copy
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ScissorsIcon />
-        Cut
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ClipboardIcon />
-        Paste
-      </Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const VerticalWithSeparator: Story = {
-  render: () => (
-    <ButtonsGroup orientation="vertical">
-      <Button variant="ghost">
-        <CopyIcon />
-        Copy
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ScissorsIcon />
-        Cut
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
+      <Button>
         <ClipboardIcon />
         Paste
       </Button>
@@ -153,20 +151,16 @@ export const VerticalWithSeparator: Story = {
 };
 
 /**
- * A stepper: two outline buttons joined to a read-only value segment. The middle value
+ * A stepper: two buttons joined to a read-only value segment. The middle value
  * uses `ButtonsGroupText` (a filled chip). Because that segment is filled (opaque bg) the
  * group keeps its own border as the seam, so both dividers render as a single clean line.
  */
 export const Stepper: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button variant="outline" aria-label="Decrement">
-        −
-      </Button>
+      <Button aria-label="Decrement">−</Button>
       <ButtonsGroupText>42</ButtonsGroupText>
-      <Button variant="outline" aria-label="Increment">
-        +
-      </Button>
+      <Button aria-label="Increment">+</Button>
     </ButtonsGroup>
   ),
 };
@@ -176,7 +170,7 @@ export const WithText: Story = {
   render: () => (
     <ButtonsGroup>
       <ButtonsGroupText>https://</ButtonsGroupText>
-      <Button variant="outline">example.com</Button>
+      <Button>example.com</Button>
     </ButtonsGroup>
   ),
 };
@@ -191,8 +185,8 @@ export const WithText: Story = {
  * InputGroup fills the row and the Select trigger sizes to its content. The group collapses the
  * touching borders into a divider and flattens the inner corners, leaving the outer pill rounded.
  *
- * Both segments sit on the same rung of the size ladder (`md`, the default on both): the group
- * imposes no height of its own, so a segment on a different rung pokes out of the pill.
+ * Neither segment names a size. They cannot: the group puts every segment on its own rung, so
+ * the pill is flat by construction (see `Sizes`).
  *
  * Only one class is passed: `rounded-full` on the `SelectTrigger`, an intentional shape choice
  * so its outer corner matches the InputGroup pill (the trigger's standalone default is
@@ -204,7 +198,7 @@ export const SearchWithDropdown: Story = {
     const [sort, setSort] = useState('recent');
     return (
       <ButtonsGroup className="w-105">
-        <InputGroup size="md">
+        <InputGroup>
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>
