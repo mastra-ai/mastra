@@ -12,6 +12,7 @@ import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import {
   AgentChatLoadingSkeleton,
+  AgentLandingLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
@@ -89,7 +90,7 @@ function AgentThread() {
   }
 
   if (isAgentLoading) {
-    return <AgentThreadLoadingSkeleton />;
+    return isNewThread ? <AgentLandingLoadingSkeleton /> : <AgentThreadLoadingSkeleton />;
   }
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
@@ -106,6 +107,8 @@ function AgentThread() {
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
+  // A first visit has nothing to list: give the landing the full width until a thread exists.
+  const hideThreadsPanel = isNewThread && (isThreadsLoading || sidebarThreads.length === 0);
 
   const handleRefreshThreadList = async () => {
     if (isNewThread && activeNewThread.current === newThreadKey) {
@@ -140,7 +143,7 @@ function AgentThread() {
                       agentId={agentId!}
                       leftPanel={threadsPanel}
                       leftSlot={
-                        isThreadsLoading ? (
+                        hideThreadsPanel ? undefined : isThreadsLoading ? (
                           <AgentSidebarLoadingSkeleton />
                         ) : (
                           <AgentSidebar

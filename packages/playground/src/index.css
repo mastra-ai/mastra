@@ -202,6 +202,12 @@ th:has(header) {
     animation: starter-enter 560ms var(--ease-out-custom) 200ms both;
   }
 
+  /* Landing → chat: the named composer glides from center to the dock. */
+  ::view-transition-group(agent-chat-composer) {
+    animation-duration: 320ms;
+    animation-timing-function: var(--ease-out-custom);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
@@ -213,6 +219,11 @@ th:has(header) {
     }
     .ready-stage-sweep {
       opacity: 0;
+    }
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none;
     }
   }
 }

@@ -275,8 +275,26 @@ describe('Thread', () => {
         renderThread([]);
       });
 
-      expect(screen.getByText('How can I help you today?')).toBeTruthy();
+      expect(screen.getByTestId('thread-welcome')).toBeTruthy();
       expect(screen.getByRole('textbox')).toBeTruthy();
+    });
+
+    it('renders the greeting with the agent name and the composer inside the landing column', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      const heading = screen.getByRole('heading', { name: /what can .* do for you today\?/i });
+      expect(heading.textContent).toContain('Helper');
+      // Emphasis contract: only the agent name is high-contrast; the surrounding copy is muted and regular weight.
+      expect(heading.classList.contains('font-normal')).toBe(true);
+      expect(screen.getByText('Helper').classList.contains('text-foreground')).toBe(true);
+      const landing = screen.getByTestId('thread-landing');
+      expect(landing.contains(heading)).toBe(true);
+      expect(landing.contains(screen.getByRole('textbox'))).toBe(true);
+      expect(screen.queryByTestId('thread-message-column')).toBeNull();
     });
   });
 
@@ -288,7 +306,7 @@ describe('Thread', () => {
     });
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
-    expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+    expect(screen.queryByTestId('thread-welcome')).toBeFalsy();
   });
 
   describe('Thread history loading', () => {
@@ -301,7 +319,7 @@ describe('Thread', () => {
         });
 
         expect(screen.getByTestId('thread-history-skeleton')).toBeTruthy();
-        expect(screen.queryByText('How can I help you today?')).toBeNull();
+        expect(screen.queryByTestId('thread-welcome')).toBeNull();
       });
 
       it('keeps the composer available', async () => {
@@ -335,7 +353,7 @@ describe('Thread', () => {
 
         expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
-        expect(screen.queryByText('How can I help you today?')).toBeNull();
+        expect(screen.queryByTestId('thread-welcome')).toBeNull();
       });
     });
 
@@ -348,7 +366,7 @@ describe('Thread', () => {
         });
 
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
-        expect(screen.getByText('How can I help you today?')).toBeTruthy();
+        expect(screen.getByTestId('thread-welcome')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       });
     });
@@ -393,6 +411,20 @@ describe('Thread', () => {
       expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Check a stock' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Build a page' })).toBeTruthy();
+    });
+
+    it('renders the prompts as cards with increasing entrance delays', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([], { suggestedPrompts: ['Check the weather', 'Check a stock', 'Build a page'] });
+      });
+
+      const items = Array.from(screen.getByTestId('suggested-prompt-list').querySelectorAll('li'));
+      const delays = items.map(item => parseInt(item.style.animationDelay, 10));
+      expect(delays).toHaveLength(3);
+      expect(delays[1]).toBeGreaterThan(delays[0]);
+      expect(delays[2]).toBeGreaterThan(delays[1]);
     });
 
     it('sends the selected prompt through the agent stream endpoint', async () => {

@@ -384,7 +384,7 @@ describe('Standalone thread page', () => {
       );
       renderAt(`/agents/${AGENT_ID}/threads/new`);
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
       expect(messagesRequested).not.toHaveBeenCalled();
     });
@@ -403,7 +403,7 @@ describe('Standalone thread page', () => {
       );
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
       expect(messagesRequested).not.toHaveBeenCalled();
     });
