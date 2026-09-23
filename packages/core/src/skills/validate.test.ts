@@ -61,3 +61,23 @@ describe('validateSkillContent metadata', () => {
     expect(result.metadata?.name).toBe(1);
   });
 });
+
+describe('validateSkillContent parsing safety', () => {
+  it('reports malformed YAML consistently on repeated calls', () => {
+    const content = '---\nname: [unclosed\n---\nbody';
+    const first = validateSkillContent({ content });
+    const second = validateSkillContent({ content });
+    expect(first.errors[0]).toMatch(/^Invalid frontmatter/);
+    expect(second).toEqual(first);
+  });
+
+  it('rejects JavaScript frontmatter without evaluating it', () => {
+    const g = globalThis as { __skillFrontmatterEvaluated?: boolean };
+    const content =
+      '---js\n{ name: (globalThis.__skillFrontmatterEvaluated = true, "foo"), description: "d" }\n---\nbody';
+    const result = validateSkillContent({ content });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/JavaScript frontmatter is not supported/);
+    expect(g.__skillFrontmatterEvaluated).toBeUndefined();
+  });
+});

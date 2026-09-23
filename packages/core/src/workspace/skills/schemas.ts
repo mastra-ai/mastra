@@ -339,13 +339,26 @@ export interface SkillContentValidationResult extends SkillValidationResult {
   instructions?: string;
 }
 
+// Passing options disables gray-matter's process-wide cache (which also caches failed parses),
+// and JavaScript frontmatter (`---js`) is rejected instead of evaluated.
+const MATTER_OPTIONS = {
+  engines: {
+    js: () => {
+      throw new Error('JavaScript frontmatter is not supported');
+    },
+    javascript: () => {
+      throw new Error('JavaScript frontmatter is not supported');
+    },
+  },
+};
+
 /**
  * Parse SKILL.md content into frontmatter fields and body.
  * Throws if the frontmatter is not valid YAML.
  * @internal
  */
 export function extractSkillFrontmatter(content: string): { metadata: SkillMetadataInput; instructions: string } {
-  const parsed = matter(content);
+  const parsed = matter(content, MATTER_OPTIONS);
   const data = parsed.data;
   return {
     metadata: {
