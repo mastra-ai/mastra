@@ -2,4 +2,33 @@
 '@mastra/core': minor
 ---
 
-Added ClassifierProcessor for applying typed classifier policies to agent input, output, and streaming content. Registered classifiers can be reused by key or ID, and processor instances receive Mastra context even when another processor uses the same ID.
+Added `ClassifierProcessor` for applying typed classifier policies to agent input, output, and streaming content.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Classifier } from '@mastra/core/classifier'
+import { ClassifierProcessor } from '@mastra/core/processors'
+
+const safety = new Classifier({
+  id: 'safety',
+  model: 'openai/gpt-5-mini',
+  questions: {
+    unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+  },
+})
+
+const agent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer support questions.',
+  model: 'openai/gpt-5-mini',
+  inputProcessors: [
+    new ClassifierProcessor({
+      classifier: safety,
+      onResult: (answers, { abort }) => {
+        if (answers.unsafe.probability > 0.8) abort('Rejected by safety policy')
+      },
+    }),
+  ],
+})
+```

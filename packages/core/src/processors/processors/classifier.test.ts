@@ -89,6 +89,28 @@ describe('ClassifierProcessor', () => {
           }),
       ).toThrow(/configured questions/);
     });
+
+    it.each([-1, 1.5, NaN, Infinity])('rejects invalid chunkWindow %s', chunkWindow => {
+      expect(
+        () =>
+          new ClassifierProcessor({
+            classifier: safetyClassifier(unsafeModel(0)),
+            onResult: noop,
+            chunkWindow,
+          }),
+      ).toThrow(/chunkWindow to be a non-negative integer/);
+    });
+
+    it.each([-1, 1.5, NaN, Infinity])('rejects invalid maxInputLength %s', maxInputLength => {
+      expect(
+        () =>
+          new ClassifierProcessor({
+            classifier: safetyClassifier(unsafeModel(0)),
+            onResult: noop,
+            maxInputLength,
+          }),
+      ).toThrow(/maxInputLength to be a non-negative integer/);
+    });
   });
 
   describe('processInput', () => {

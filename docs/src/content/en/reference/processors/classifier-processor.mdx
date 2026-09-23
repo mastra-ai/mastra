@@ -37,17 +37,19 @@ const processor = new ClassifierProcessor({
 })
 ```
 
-Several conditions can share one `onResult`, or use separate processors when they need different classifiers:
+Several conditions can share one `onResult`, or use separate processors when they need different classifiers. Give each processor a unique `id`. Processor instances with the same `id` share per-run state, including accumulated stream chunks.
 
 ```typescript
 inputProcessors: [
   new ClassifierProcessor({
+    id: 'safety-check',
     classifier: safety,
     onResult: (a, { abort }) => {
       if (a.unsafe.probability > 0.8) abort('Rejected by safety policy')
     },
   }),
   new ClassifierProcessor({
+    id: 'topic-check',
     classifier: topic,
     onResult: (a, { abort }) => {
       if (a.topic.choice === 'other') abort('Support questions only')
@@ -86,7 +88,8 @@ inputProcessors: [
           {
             name: 'id',
             type: 'string',
-            description: 'Processor identifier',
+            description:
+              'Processor identifier. Use a unique ID for each ClassifierProcessor in the same phase because instances with the same ID share per-run processor state.',
             isOptional: true,
             default: "'classifier'",
           },
@@ -109,14 +112,15 @@ inputProcessors: [
             name: 'chunkWindow',
             type: 'number',
             description:
-              'Number of trailing stream chunks to classify together, including the current text-delta chunk. A value of 0 classifies only the current chunk. Each text chunk triggers a classifier call, so larger windows increase cost.',
+              'Non-negative integer number of trailing stream chunks to classify together, including the current text-delta chunk. A value of 0 classifies only the current chunk. Each text chunk triggers a classifier call, so larger windows increase cost.',
             isOptional: true,
             default: '0',
           },
           {
             name: 'maxInputLength',
             type: 'number',
-            description: 'Truncate the text sent to the classifier to this many characters.',
+            description:
+              'Non-negative integer maximum number of characters sent to the classifier. Longer text is truncated.',
             isOptional: true,
           },
           {

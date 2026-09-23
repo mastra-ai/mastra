@@ -108,6 +108,24 @@ export class ClassifierProcessor<
     this.providerOptions = options.providerOptions;
     this.lastMessageOnly = options.lastMessageOnly ?? false;
 
+    if (!Number.isInteger(this.chunkWindow) || this.chunkWindow < 0) {
+      throw new MastraError({
+        id: 'CLASSIFIER_PROCESSOR_INVALID_CHUNK_WINDOW',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `ClassifierProcessor '${this.id}' requires chunkWindow to be a non-negative integer.`,
+      });
+    }
+
+    if (this.maxInputLength !== undefined && (!Number.isInteger(this.maxInputLength) || this.maxInputLength < 0)) {
+      throw new MastraError({
+        id: 'CLASSIFIER_PROCESSOR_INVALID_MAX_INPUT_LENGTH',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `ClassifierProcessor '${this.id}' requires maxInputLength to be a non-negative integer.`,
+      });
+    }
+
     if (typeof this.classifierOrId !== 'string') {
       if (this.classifierOrId.questions === undefined) {
         throw new MastraError({
