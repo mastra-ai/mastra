@@ -3,4 +3,4 @@
 'mastracode': patch
 ---
 
-Removed the `payload` parameter from the `agent_signal_send` tool. Peer agents never received it: only `summary` is delivered, so senders could put important content in `payload` and the recipient would silently miss it. The `summary` description now states that it is the full message delivered to the peer.
+Fixed `agent_signal_send` so senders put content where the peer can see it. The `payload` parameter was removed because peers never received it, and the `summary` parameter was renamed to `message` to make clear it is the full message delivered to the peer.
