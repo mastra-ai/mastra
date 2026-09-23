@@ -495,6 +495,7 @@ function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisp
     activeTools: Object.fromEntries(snapshot.activeTools),
     toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
     pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    pendingApprovals: Object.fromEntries(snapshot.pendingApprovals),
     activeSubagents: Object.fromEntries(snapshot.activeSubagents),
     modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
   };

@@ -606,19 +606,41 @@ describe('agent-controller routes', () => {
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
+      session.emit({
+        type: 'tool_approval_required',
+        toolCallId: 'call-2',
+        toolName: 'edit_file',
+        args: { path: 'b.ts' },
+      });
 
-      let received: unknown;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      type WireDisplay = {
+        displayState: {
+          activeTools: Record<string, unknown>;
+          pendingApprovals: Record<string, unknown>;
+        };
+      };
+      let received: WireDisplay | undefined;
+      for (let i = 0; i < 20 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
-          received = value;
+        if (
+          value &&
+          typeof value === 'object' &&
+          'type' in value &&
+          value.type === 'display_state_changed' &&
+          typeof (value as WireDisplay).displayState.pendingApprovals?.['call-2'] === 'object'
+        ) {
+          received = value as WireDisplay;
         }
       }
       await reader.cancel();
 
       expect(received).toBeDefined();
-      const wire = JSON.parse(JSON.stringify(received));
+      const wire = JSON.parse(JSON.stringify(received)) as WireDisplay;
       expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+      expect(wire.displayState.pendingApprovals['call-2']).toMatchObject({
+        toolName: 'edit_file',
+        args: { path: 'b.ts' },
+      });
     });
   });
 
