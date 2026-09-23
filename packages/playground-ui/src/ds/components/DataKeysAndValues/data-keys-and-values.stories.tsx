@@ -14,7 +14,7 @@ const meta: Meta<typeof DataKeysAndValues> = {
   argTypes: {
     numOfCol: {
       control: { type: 'inline-radio' },
-      options: [1, 2],
+      options: [1, 2, 3],
     },
   },
   decorators: [

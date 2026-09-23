@@ -146,54 +146,6 @@ describe('TraceKeysAndValues', () => {
     expect(screen.getAllByText('\u2014')).toHaveLength(2);
     expect(screen.getByText('0')).not.toBeNull();
   });
-
-  it('uses container breakpoints for responsive columns', () => {
-    const { container } = render(
-      <TraceKeysAndValues
-        numOfCol={3}
-        rootSpan={{
-          startedAt: new Date(2026, 5, 1, 17, 9, 59, 665),
-          endedAt: new Date(2026, 5, 1, 17, 10, 45, 966),
-        }}
-      />,
-    );
-
-    expect(container.firstElementChild?.classList.contains('@container')).toBe(true);
-    const grid = container.querySelector('dl');
-    expect(grid?.className).toContain('grid-cols-[auto_1fr]!');
-    expect(grid?.className).toContain('@md:grid-cols-[auto_auto_auto_1fr]!');
-    expect(grid?.className).toContain('@xl:grid-cols-[auto_auto_auto_auto_auto_1fr]!');
-  });
-});
-
-describe('TraceKeysAndValues — column layouts', () => {
-  const gridOf = (numOfCol: 1 | 2 | 3) => {
-    const { container } = render(
-      <TraceKeysAndValues numOfCol={numOfCol} rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59) }} />,
-    );
-    return container.querySelector('dl')?.className ?? '';
-  };
-
-  it('keeps a single column stacked at every width', () => {
-    const grid = gridOf(1);
-
-    expect(grid).toContain('grid-cols-[auto_1fr]!');
-    expect(grid).not.toContain('@md:grid-cols-');
-  });
-
-  it('opens a second column at the medium container width', () => {
-    const grid = gridOf(2);
-
-    expect(grid).toContain('grid-cols-[auto_1fr]!');
-    expect(grid).toContain('@md:grid-cols-[auto_auto_auto_1fr]!');
-    expect(grid).not.toContain('@xl:grid-cols-');
-  });
-
-  it('lays out two columns by default', () => {
-    const { container } = render(<TraceKeysAndValues rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59) }} />);
-
-    expect(container.querySelector('dl')?.className).toContain('@md:grid-cols-[auto_auto_auto_1fr]!');
-  });
 });
 
 describe('TraceKeysAndValues — timestamps it cannot read', () => {

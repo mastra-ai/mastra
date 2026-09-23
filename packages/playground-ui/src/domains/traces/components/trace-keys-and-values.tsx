@@ -9,13 +9,6 @@ import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { cn } from '@/lib/utils';
-
-const RESPONSIVE_GRID_COLUMNS: Record<1 | 2 | 3, string> = {
-  1: 'grid-cols-[auto_1fr]!',
-  2: 'grid-cols-[auto_1fr]! @md:grid-cols-[auto_auto_auto_1fr]!',
-  3: 'grid-cols-[auto_1fr]! @md:grid-cols-[auto_auto_auto_1fr]! @xl:grid-cols-[auto_auto_auto_auto_auto_1fr]!',
-};
 
 function computeTraceStatus(span: { error?: unknown; endedAt?: Date | string | null }): TraceStatusValueStatus {
   if (span.error != null) return 'error';
@@ -65,63 +58,61 @@ export function TraceKeysAndValues({ rootSpan, usage, numOfCol = 2, className }:
   const exactEndedAtTimestamp = formatSpanTimestampExact(endedAt);
 
   return (
-    <div className="@container">
-      <DataKeysAndValues numOfCol={numOfCol} className={cn(className, RESPONSIVE_GRID_COLUMNS[numOfCol])}>
-        {rootSpan.entityId && (
-          <>
-            <DataKeysAndValues.Key>Entity</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{rootSpan.entityName || rootSpan.entityId}</DataKeysAndValues.Value>
-          </>
-        )}
-        {rootSpan.entityType && (
-          <>
-            <DataKeysAndValues.Key>Entity Type</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{formatEntityType(rootSpan.entityType)}</DataKeysAndValues.Value>
-          </>
-        )}
-        <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>
-          <TraceStatusValue status={status} />
-        </DataKeysAndValues.Value>
-        {duration && exactDuration && (
-          <>
-            <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithTooltip tooltip={exactDuration}>{duration}</DataKeysAndValues.ValueWithTooltip>
-          </>
-        )}
-        {startedAtTimestamp && exactStartedAtTimestamp && (
-          <>
-            <DataKeysAndValues.Key>Started at</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithTooltip tooltip={exactStartedAtTimestamp}>
-              {startedAtTimestamp}
-            </DataKeysAndValues.ValueWithTooltip>
-          </>
-        )}
-        {endedAtTimestamp && exactEndedAtTimestamp && (
-          <>
-            <DataKeysAndValues.Key>Ended at</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithTooltip tooltip={exactEndedAtTimestamp}>
-              {endedAtTimestamp}
-            </DataKeysAndValues.ValueWithTooltip>
-          </>
-        )}
-        {usage && (
-          <>
-            <DataKeysAndValues.Key>Trace input tokens</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
-            </DataKeysAndValues.Value>
-            <DataKeysAndValues.Key>Trace output tokens</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
-            </DataKeysAndValues.Value>
-            <DataKeysAndValues.Key>Trace est. cost</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}
-            </DataKeysAndValues.Value>
-          </>
-        )}
-      </DataKeysAndValues>
-    </div>
+    <DataKeysAndValues numOfCol={numOfCol} className={className}>
+      {rootSpan.entityId && (
+        <>
+          <DataKeysAndValues.Key>Entity</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>{rootSpan.entityName || rootSpan.entityId}</DataKeysAndValues.Value>
+        </>
+      )}
+      {rootSpan.entityType && (
+        <>
+          <DataKeysAndValues.Key>Entity Type</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>{formatEntityType(rootSpan.entityType)}</DataKeysAndValues.Value>
+        </>
+      )}
+      <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value>
+        <TraceStatusValue status={status} />
+      </DataKeysAndValues.Value>
+      {duration && exactDuration && (
+        <>
+          <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
+          <DataKeysAndValues.ValueWithTooltip tooltip={exactDuration}>{duration}</DataKeysAndValues.ValueWithTooltip>
+        </>
+      )}
+      {startedAtTimestamp && exactStartedAtTimestamp && (
+        <>
+          <DataKeysAndValues.Key>Started at</DataKeysAndValues.Key>
+          <DataKeysAndValues.ValueWithTooltip tooltip={exactStartedAtTimestamp}>
+            {startedAtTimestamp}
+          </DataKeysAndValues.ValueWithTooltip>
+        </>
+      )}
+      {endedAtTimestamp && exactEndedAtTimestamp && (
+        <>
+          <DataKeysAndValues.Key>Ended at</DataKeysAndValues.Key>
+          <DataKeysAndValues.ValueWithTooltip tooltip={exactEndedAtTimestamp}>
+            {endedAtTimestamp}
+          </DataKeysAndValues.ValueWithTooltip>
+        </>
+      )}
+      {usage && (
+        <>
+          <DataKeysAndValues.Key>Trace input tokens</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>
+            {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
+          </DataKeysAndValues.Value>
+          <DataKeysAndValues.Key>Trace output tokens</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>
+            {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
+          </DataKeysAndValues.Value>
+          <DataKeysAndValues.Key>Trace est. cost</DataKeysAndValues.Key>
+          <DataKeysAndValues.Value>
+            {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}
+          </DataKeysAndValues.Value>
+        </>
+      )}
+    </DataKeysAndValues>
   );
 }

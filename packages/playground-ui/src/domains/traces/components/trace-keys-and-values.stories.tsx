@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 
 const meta = {
-  title: 'Elements/TraceKeysAndValues',
+  title: 'Domains/Traces/TraceKeysAndValues',
   component: TraceKeysAndValues,
   parameters: {
     layout: 'centered',
