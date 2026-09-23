@@ -2,7 +2,7 @@
 '@mastra/client-js': minor
 ---
 
-`StreamVNextChunkType`, the chunk type of workflow run streams, is now the workflow stream event type from `@mastra/core` instead of `{ type: string; payload: any }`. Custom events sent with `writer.custom()` carry `data` and no `payload`, so check `type` before reading `payload`:
+`StreamVNextChunkType`, the chunk type of workflow run streams, is now the workflow stream event type from `@mastra/core` instead of `{ type: string; payload: any }`. Custom events sent with `writer.custom()` carry `data` and no `payload`, so check `type` before reading `payload`. Only custom events whose `type` starts with `data-` are part of the type:
 
 ```ts
 // Before: compiled, then threw on the first custom event
