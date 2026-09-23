@@ -54,6 +54,11 @@ describe('spanRecordSchema usage fields', () => {
     expect(spanRecordSchema.safeParse({ ...baseSpan, inputTokens: 0 }).success).toBe(true);
   });
 
+  it('rejects a negative estimatedCost', () => {
+    expect(spanRecordSchema.safeParse({ ...baseSpan, estimatedCost: -0.01 }).success).toBe(false);
+    expect(spanRecordSchema.safeParse({ ...baseSpan, estimatedCost: 0 }).success).toBe(true);
+  });
+
   it('flows into create and update record schemas', () => {
     const { createdAt: _c, updatedAt: _u, ...createSpan } = baseSpan;
     expect(createSpanRecordSchema.safeParse({ ...createSpan, totalTokens: 5 }).success).toBe(true);

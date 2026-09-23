@@ -142,7 +142,7 @@ export const spanRecordSchema = z
     totalTokens: z.number().int().nonnegative().nullish().describe('Total tokens for this span'),
     reasoningTokens: z.number().int().nonnegative().nullish().describe('Reasoning tokens produced by this span'),
     cachedTokens: z.number().int().nonnegative().nullish().describe('Cached input tokens read by this span'),
-    estimatedCost: z.number().nullish().describe('Estimated cost of this span'),
+    estimatedCost: z.number().nonnegative().nullish().describe('Estimated cost of this span'),
     costUnit: z.string().nullish().describe('Unit of estimatedCost (e.g. "usd")'),
 
     // Database timestamps
