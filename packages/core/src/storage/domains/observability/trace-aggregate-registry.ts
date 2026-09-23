@@ -1,4 +1,4 @@
-import { TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX } from './trace-aggregate';
+import { getTraceAggregateCountDistinctField } from './trace-aggregate';
 import { isTraceQueryMetadataPath } from './trace-query';
 import type { TraceQueryMetadataField } from './trace-query';
 
@@ -117,10 +117,8 @@ export function parseTraceAggregateMeasure(name: string): ParsedTraceAggregateMe
   if (isTraceAggregateCanonicalMeasure(name)) {
     return { type: 'canonical', measure: name, rule: TRACE_AGGREGATE_MEASURE_REGISTRY[name] };
   }
-  if (name.startsWith(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX)) {
-    const field = name.slice(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX.length);
-    if (isTraceAggregateCountDistinctField(field)) return { type: 'countDistinct', field };
-  }
+  const field = getTraceAggregateCountDistinctField(name);
+  if (field !== undefined && isTraceAggregateCountDistinctField(field)) return { type: 'countDistinct', field };
   return undefined;
 }
 

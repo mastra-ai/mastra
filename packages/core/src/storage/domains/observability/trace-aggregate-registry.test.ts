@@ -11,6 +11,7 @@ import {
   parseTraceAggregateMeasure,
   TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX,
   TRACE_AGGREGATE_DIMENSION_REGISTRY,
+  TRACE_AGGREGATE_FIXED_MEASURES,
   TRACE_AGGREGATE_IDENTITY_FIELDS,
   TRACE_AGGREGATE_MAX_DIMENSIONS,
   TRACE_AGGREGATE_MEASURE_REGISTRY,
@@ -144,6 +145,10 @@ describe('trace aggregate measure registry', () => {
   it('declares exactly the Decision 3 v1 measures, in spec order', () => {
     expect(Object.keys(TRACE_AGGREGATE_MEASURE_REGISTRY)).toEqual(DECISION_3_MEASURES);
     expect(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX).toBe('countDistinct.');
+  });
+
+  it('matches the fixed-measure enum in the request schema', () => {
+    expect(Object.keys(TRACE_AGGREGATE_MEASURE_REGISTRY)).toEqual([...TRACE_AGGREGATE_FIXED_MEASURES]);
   });
 
   it('marks only percentiles as approximate and assigns units', () => {
