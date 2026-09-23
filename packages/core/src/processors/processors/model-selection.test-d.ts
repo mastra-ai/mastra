@@ -1,7 +1,7 @@
 import { expectTypeOf } from 'vitest';
 
 import { Classifier, type BooleanAnswer, type ChoiceAnswer } from '../../classifier';
-import { ModelSelectionProcessor } from './model-selection';
+import { ModelSelectionProcessor, type ModelSelectionInstanceOptions, type ModelSelectionRegisteredOptions } from '.';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
 
@@ -50,3 +50,15 @@ new ModelSelectionProcessor({
     { model: 'openai/gpt-4o', criteria: 'Hard' },
   ],
 });
+
+// The option types are exported and each one matches a constructor overload.
+const instanceOptions: ModelSelectionInstanceOptions<typeof triage.questions> = {
+  classifier: triage,
+  select: () => undefined,
+};
+const registeredOptions: ModelSelectionRegisteredOptions<typeof triage.questions> = {
+  classifier: 'triage',
+  select: () => undefined,
+};
+new ModelSelectionProcessor(instanceOptions);
+new ModelSelectionProcessor(registeredOptions);

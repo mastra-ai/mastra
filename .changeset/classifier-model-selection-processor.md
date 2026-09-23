@@ -10,7 +10,7 @@ Describe each model and the requests it should handle. The processor builds the 
 import { Agent } from '@mastra/core/agent';
 import { ModelSelectionProcessor } from '@mastra/core/processors';
 
-// `model` is the evaluation model that makes the decision (an AI SDK EvaluationModelV4, as used by Classifier).
+// `model` is the evaluation model that makes the decision (`EvaluationModelV4 | MastraEvaluationModel`, the same type Classifier accepts).
 new Agent({
   name: 'support-agent',
   model: 'openai/gpt-5.6-sol',

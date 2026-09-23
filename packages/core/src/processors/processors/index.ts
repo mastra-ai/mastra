@@ -43,6 +43,8 @@ export {
   ModelSelectionProcessor,
   type ModelSelectionProcessorOptions,
   type ModelSelectionSelectOptions,
+  type ModelSelectionInstanceOptions,
+  type ModelSelectionRegisteredOptions,
   type ModelSelectionSelect,
   type ModelSelectionChoicesOptions,
   type ModelChoice,
