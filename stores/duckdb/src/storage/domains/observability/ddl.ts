@@ -72,6 +72,15 @@ CREATE TABLE IF NOT EXISTS span_events (
   isEvent BOOLEAN,
   endedAt TIMESTAMP,
 
+  -- Usage (OBS-381 / Decision 10: promoted from span attributes to columns)
+  inputTokens BIGINT,
+  outputTokens BIGINT,
+  totalTokens BIGINT,
+  reasoningTokens BIGINT,
+  cachedTokens BIGINT,
+  estimatedCost DOUBLE,
+  costUnit VARCHAR,
+
   -- JSON fields
   attributes JSON,
   metadata JSON,
@@ -334,6 +343,15 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
+  // Span usage columns (OBS-381 / Decision 10). Nullable with no default so
+  // rows written before the upgrade read back as NULL usage.
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS inputTokens BIGINT`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS outputTokens BIGINT`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS totalTokens BIGINT`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS reasoningTokens BIGINT`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cachedTokens BIGINT`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS estimatedCost DOUBLE`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS costUnit VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,

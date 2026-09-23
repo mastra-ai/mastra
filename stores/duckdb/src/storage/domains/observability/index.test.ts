@@ -9,7 +9,7 @@ import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
-import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
+import { ALL_DDL, ALL_MIGRATIONS, SPAN_EVENTS_DDL } from './ddl';
 import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
 
@@ -366,6 +366,113 @@ describe('ObservabilityStorageDuckDB', () => {
       await db?.close();
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  describe('span usage columns (OBS-381)', () => {
+    const USAGE_COLUMNS: Array<[name: string, type: string]> = [
+      ['inputTokens', 'BIGINT'],
+      ['outputTokens', 'BIGINT'],
+      ['totalTokens', 'BIGINT'],
+      ['reasoningTokens', 'BIGINT'],
+      ['cachedTokens', 'BIGINT'],
+      ['estimatedCost', 'DOUBLE'],
+      ['costUnit', 'VARCHAR'],
+    ];
+
+    it('adds nullable usage columns to span_events on fresh and migrated schemas', () => {
+      for (const [name, type] of USAGE_COLUMNS) {
+        expect(SPAN_EVENTS_DDL).toMatch(new RegExp(`^\\s*${name} ${type},?$`, 'm'));
+        expect(ALL_MIGRATIONS).toContain(`ALTER TABLE span_events ADD COLUMN IF NOT EXISTS ${name} ${type}`);
+      }
+
+      const usageStatements = [
+        ...SPAN_EVENTS_DDL.split('\n').filter(line => USAGE_COLUMNS.some(([name]) => line.trim().startsWith(name))),
+        ...ALL_MIGRATIONS.filter(sql => USAGE_COLUMNS.some(([name]) => sql.includes(` ${name} `))),
+      ];
+      expect(usageStatements).toHaveLength(USAGE_COLUMNS.length * 2);
+      for (const statement of usageStatements) {
+        expect(statement).not.toMatch(/NOT NULL|DEFAULT/i);
+      }
+    });
+
+    it('migrates a pre-usage span_events table and reads legacy spans back with null usage', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-usage-migration-'));
+      const dbPath = join(dir, 'observability.duckdb');
+      let db: DuckDBConnection | undefined;
+
+      try {
+        db = new DuckDBConnection({ path: dbPath });
+        // span_events as created by the version before usage columns existed.
+        await db.executeBatch([
+          `CREATE SEQUENCE IF NOT EXISTS span_events_cursor_id_seq START 1`,
+          `CREATE TABLE span_events (
+            eventType VARCHAR NOT NULL, timestamp TIMESTAMP NOT NULL, cursorId BIGINT,
+            traceId VARCHAR NOT NULL, spanId VARCHAR NOT NULL, parentSpanId VARCHAR, experimentId VARCHAR,
+            entityType VARCHAR, entityId VARCHAR, entityName VARCHAR,
+            entityVersionId VARCHAR, parentEntityVersionId VARCHAR, rootEntityVersionId VARCHAR,
+            userId VARCHAR, organizationId VARCHAR, resourceId VARCHAR, runId VARCHAR, sessionId VARCHAR,
+            threadId VARCHAR, requestId VARCHAR, environment VARCHAR, source VARCHAR, serviceName VARCHAR,
+            requestContext JSON,
+            name VARCHAR, spanType VARCHAR, isEvent BOOLEAN, endedAt TIMESTAMP,
+            attributes JSON, metadata JSON, tags JSON, scope JSON, links JSON, input JSON, output JSON, error JSON
+          )`,
+          `INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent)
+           VALUES ('start', '2026-05-19T00:00:00.000Z'::TIMESTAMP, nextval('span_events_cursor_id_seq'), 'legacy-usage-trace', 'legacy-span', 'root', 'agent_run', false)`,
+          `INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt)
+           VALUES ('end', '2026-05-19T00:00:01.000Z'::TIMESTAMP, nextval('span_events_cursor_id_seq'), 'legacy-usage-trace', 'legacy-span', 'root', 'agent_run', false, '2026-05-19T00:00:01.000Z'::TIMESTAMP)`,
+        ]);
+
+        const migrated = new ConcreteObservabilityStorageDuckDB({ db });
+        await migrated.init();
+
+        const columns = await db.query<{ column_name: string; is_nullable: string }>(
+          `SELECT column_name, is_nullable FROM information_schema.columns
+           WHERE table_name = 'span_events' AND column_name IN (${USAGE_COLUMNS.map(([n]) => `'${n}'`).join(', ')})`,
+        );
+        expect(columns.map(c => c.column_name).sort()).toEqual(USAGE_COLUMNS.map(([n]) => n).sort());
+        expect(columns.every(c => c.is_nullable === 'YES')).toBe(true);
+
+        await migrated.createSpan({
+          span: {
+            traceId: 'legacy-usage-trace',
+            spanId: 'new-span',
+            parentSpanId: 'legacy-span',
+            name: 'model call',
+            spanType: SpanType.MODEL_GENERATION,
+            isEvent: false,
+            startedAt: new Date('2026-05-19T00:00:00.200Z'),
+            endedAt: new Date('2026-05-19T00:00:00.800Z'),
+            inputTokens: 120,
+            outputTokens: 30,
+            totalTokens: 150,
+            reasoningTokens: 10,
+            cachedTokens: 40,
+            estimatedCost: 0.00123,
+            costUnit: 'usd',
+          },
+        });
+
+        const legacy = await migrated.getSpan({ traceId: 'legacy-usage-trace', spanId: 'legacy-span' });
+        expect(legacy).not.toBeNull();
+        for (const [name] of USAGE_COLUMNS) {
+          expect(legacy!.span[name as keyof typeof legacy.span]).toBeNull();
+        }
+
+        const fresh = await migrated.getSpan({ traceId: 'legacy-usage-trace', spanId: 'new-span' });
+        expect(fresh!.span).toMatchObject({
+          inputTokens: 120,
+          outputTokens: 30,
+          totalTokens: 150,
+          reasoningTokens: 10,
+          cachedTokens: 40,
+          estimatedCost: 0.00123,
+          costUnit: 'usd',
+        });
+      } finally {
+        await db?.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   // ==========================================================================

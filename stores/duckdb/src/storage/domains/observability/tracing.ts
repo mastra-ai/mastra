@@ -47,6 +47,13 @@ const COLUMNS = [
   'spanType',
   'isEvent',
   'endedAt',
+  'inputTokens',
+  'outputTokens',
+  'totalTokens',
+  'reasoningTokens',
+  'cachedTokens',
+  'estimatedCost',
+  'costUnit',
   'experimentId',
   'entityType',
   'entityId',
@@ -95,6 +102,13 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('isEvent')},
     coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
+    ${argMaxNonNull('inputTokens')},
+    ${argMaxNonNull('outputTokens')},
+    ${argMaxNonNull('totalTokens')},
+    ${argMaxNonNull('reasoningTokens')},
+    ${argMaxNonNull('cachedTokens')},
+    ${argMaxNonNull('estimatedCost')},
+    ${argMaxNonNull('costUnit')},
     ${argMaxNonNull('experimentId')},
     ${argMaxNonNull('entityType')},
     ${argMaxNonNull('entityId')},
@@ -278,6 +292,13 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
     endedAt: toDateOrNull(row.endedAt),
+    inputTokens: (row.inputTokens as number) ?? null,
+    outputTokens: (row.outputTokens as number) ?? null,
+    totalTokens: (row.totalTokens as number) ?? null,
+    reasoningTokens: (row.reasoningTokens as number) ?? null,
+    cachedTokens: (row.cachedTokens as number) ?? null,
+    estimatedCost: (row.estimatedCost as number) ?? null,
+    costUnit: (row.costUnit as string) ?? null,
     experimentId: (row.experimentId as string) ?? null,
     entityType: (row.entityType as SpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
@@ -493,6 +514,13 @@ interface SpanEventRow {
   spanType: string | null;
   isEvent: boolean | null;
   endedAt: Date | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  reasoningTokens: number | null;
+  cachedTokens: number | null;
+  estimatedCost: number | null;
+  costUnit: string | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -533,6 +561,13 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.spanType),
     v(row.isEvent),
     v(row.endedAt),
+    v(row.inputTokens),
+    v(row.outputTokens),
+    v(row.totalTokens),
+    v(row.reasoningTokens),
+    v(row.cachedTokens),
+    v(row.estimatedCost),
+    v(row.costUnit),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -583,6 +618,13 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: null,
+    inputTokens: s.inputTokens ?? null,
+    outputTokens: s.outputTokens ?? null,
+    totalTokens: s.totalTokens ?? null,
+    reasoningTokens: s.reasoningTokens ?? null,
+    cachedTokens: s.cachedTokens ?? null,
+    estimatedCost: s.estimatedCost ?? null,
+    costUnit: s.costUnit ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -623,6 +665,13 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
+    inputTokens: s.inputTokens ?? null,
+    outputTokens: s.outputTokens ?? null,
+    totalTokens: s.totalTokens ?? null,
+    reasoningTokens: s.reasoningTokens ?? null,
+    cachedTokens: s.cachedTokens ?? null,
+    estimatedCost: s.estimatedCost ?? null,
+    costUnit: s.costUnit ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
