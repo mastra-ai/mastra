@@ -348,6 +348,96 @@ describe('requests delivered after the caller timed out', () => {
     }
   });
 
+  it('still acts on an idle signal just past its deadline (clock-skew grace)', async () => {
+    const { runtime, pubsub } = setup();
+    let runs = 0;
+    (harness.agent as { stream?: unknown }).stream = async () => {
+      runs += 1;
+      return { text: Promise.resolve(''), runId: 'run-skewed' };
+    };
+    try {
+      const owner = await claim(runtime, pubsub);
+      const targetSourceId = await runtimeSourceId(pubsub);
+
+      const replyTopic = `${threadTopic}.skewed-reply`;
+      await pubsub.subscribe(replyTopic, () => {});
+
+      // A responder clock running 1s ahead sees a live request as already past
+      // its deadline. The strict expiry checks in the run-start path must not
+      // reject it — the caller's 5s acceptance window is still open.
+      await pubsub.publish(threadTopic, {
+        type: 'agent.thread-stream',
+        runId: 'run-skewed',
+        data: {
+          type: 'idle-signal-enqueued',
+          requestId: 'skewed-1',
+          runId: 'run-skewed',
+          sourceId: 'elsewhere',
+          targetSourceId,
+          replyTopic,
+          expiresAt: Date.now() - 1_000,
+          signal: { type: 'user', contents: 'hello' },
+        },
+      });
+      await nextTicks();
+
+      expect(runs).toBe(1);
+      const replies = deliveriesOn(pubsub, replyTopic);
+      expect(replies).toHaveLength(1);
+      expect(replies[0].event.data.type).toBe('idle-signal-accepted');
+
+      owner.unsubscribe();
+      await nextTicks();
+    } finally {
+      delete (harness.agent as { stream?: unknown }).stream;
+    }
+  });
+
+  it('acts on a legacy idle signal that carries timeoutMs instead of expiresAt', async () => {
+    const { runtime, pubsub } = setup();
+    let runs = 0;
+    (harness.agent as { stream?: unknown }).stream = async () => {
+      runs += 1;
+      return { text: Promise.resolve(''), runId: 'run-legacy' };
+    };
+    try {
+      const owner = await claim(runtime, pubsub);
+      const targetSourceId = await runtimeSourceId(pubsub);
+
+      const replyTopic = `${threadTopic}.legacy-reply`;
+      await pubsub.subscribe(replyTopic, () => {});
+
+      // During a rolling deploy an older process publishes the relative
+      // window. The handler derives the deadline at receipt, which is what
+      // that sender expected.
+      await pubsub.publish(threadTopic, {
+        type: 'agent.thread-stream',
+        runId: 'run-legacy',
+        data: {
+          type: 'idle-signal-enqueued',
+          requestId: 'legacy-1',
+          runId: 'run-legacy',
+          sourceId: 'elsewhere',
+          targetSourceId,
+          replyTopic,
+          timeoutMs: 1_000,
+          signal: { type: 'user', contents: 'hello' },
+        },
+      });
+      await nextTicks();
+
+      expect(runs).toBe(1);
+      const replies = deliveriesOn(pubsub, replyTopic);
+      expect(replies).toHaveLength(1);
+      expect(replies[0].event.data.type).toBe('idle-signal-accepted');
+
+      owner.unsubscribe();
+      await nextTicks();
+    } finally {
+      delete (harness.agent as { stream?: unknown }).stream;
+    }
+  });
+
   it('still answers a request just past its deadline (clock-skew grace)', async () => {
     const { runtime, pubsub } = setup();
     const owner = await claim(runtime, pubsub);

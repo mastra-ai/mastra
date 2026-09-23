@@ -70,8 +70,12 @@ const AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS = 5_000;
  * against `undefined`/`NaN` are false, which degrades to the previous
  * always-respond behavior.
  */
-function isStaleRequest(expiresAt: number): boolean {
-  return Number.isFinite(expiresAt) && Date.now() - expiresAt > AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS;
+function isStaleRequest(expiresAt: number | undefined): boolean {
+  return (
+    typeof expiresAt === 'number' &&
+    Number.isFinite(expiresAt) &&
+    Date.now() - expiresAt > AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS
+  );
 }
 
 /**
@@ -385,7 +389,14 @@ type AgentThreadStreamRuntimeEvent =
       requestId: string;
       replyTopic: string;
       targetSourceId: string;
-      expiresAt: number;
+      /**
+       * Caller's absolute deadline. Optional only on the wire: current senders
+       * always set it, but during a rolling deploy an older process publishes
+       * `timeoutMs` instead. The receiving handler normalizes.
+       */
+      expiresAt?: number;
+      /** Legacy relative window from pre-`expiresAt` senders. */
+      timeoutMs?: number;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -399,12 +410,14 @@ type AgentThreadOwnerDiscoveryEvent =
       requestId: string;
       replyTopic: string;
       sourceId: string;
-      expiresAt: number;
+      /** Caller's absolute deadline; optional on the wire (legacy senders omit it). */
+      expiresAt?: number;
     }
   | { type: 'thread-owner-response'; key: string; requestId: string; sourceId: string };
 
 type AgentThreadPeerDiscoveryEvent =
-  | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string; expiresAt: number }
+  // expiresAt is optional on the wire: legacy senders omit it.
+  | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string; expiresAt?: number }
   | { type: 'thread-peer-response'; requestId: string; peer: AgentThreadPeerInfo; sourceId: string };
 
 function toPublicThreadPeer(peer: AdvertisedThreadPeer): Omit<AdvertisedThreadPeer, 'unsubscribe'> {
@@ -857,11 +870,18 @@ export class AgentThreadStreamRuntime {
       if (data?.type !== 'idle-signal-enqueued' || data.sourceId === sourceId || data.targetSourceId !== sourceId) {
         return;
       }
+      // The caller's deadline, normalized for a legacy sender (a rolling-deploy
+      // peer on an older core) that published a relative `timeoutMs` instead of
+      // an absolute `expiresAt`. Deriving at receipt is exactly what that
+      // sender expected; without a deadline at all the checks degrade to the
+      // previous always-respond behavior.
+      const expiresAt =
+        data.expiresAt ?? (data.timeoutMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + data.timeoutMs);
       // The caller already timed out on this request (it arrived via backlog
       // replay or redelivery). Starting a run now would duplicate work the
       // caller reported as failed, and the reply would recreate its released
       // reply stream. Returning still acks: a stale request must not redeliver.
-      if (isStaleRequest(data.expiresAt)) return;
+      if (isStaleRequest(expiresAt)) return;
       const owner = state.claimedThreadOwners.get(key);
       if (!owner) return;
 
@@ -910,10 +930,19 @@ export class AgentThreadStreamRuntime {
           owner,
           data.runId,
           createSignal(data.signal),
-          // The caller's absolute deadline, not a fresh window derived here —
-          // deriving at receive time would grant a late-delivered request the
-          // full acceptance window after the caller already gave up.
-          data.expiresAt,
+          // The caller's deadline translated onto this process's clock. The
+          // deadline crossed machines, so the strict `Date.now() >= expiresAt`
+          // checks inside #startClaimedIdleRun would reject live requests
+          // whenever this clock runs ahead of the caller's; the same skew
+          // grace `isStaleRequest` applies covers that. The cap keeps a
+          // request that arrived late (but inside the grace) or a slow local
+          // clock from granting more than one fresh acceptance window —
+          // deriving an uncapped fresh window at receive time is exactly the
+          // bug that let arbitrarily old replayed requests start runs.
+          Math.min(
+            expiresAt + AGENT_REQUEST_EXPIRY_SKEW_GRACE_MS,
+            Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
+          ),
           () => active && state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
