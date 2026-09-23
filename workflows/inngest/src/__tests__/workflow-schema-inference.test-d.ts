@@ -48,6 +48,43 @@ describe('workflow input schemas with defaults (zod v4)', () => {
     expectTypeOf<StartInput>().toEqualTypeOf<z.input<typeof inputSchema> | undefined>();
   });
 
+  it('rejects wrongly typed run input while allowing defaulted fields to be omitted', () => {
+    const workflow = createWorkflow({ id: 'start-input', inputSchema, outputSchema }).then(firstStep).commit();
+
+    type Run = Awaited<ReturnType<typeof workflow.createRun>>;
+    const run = {} as Run;
+
+    // Defaulted fields may be omitted entirely on the raw caller face.
+    void run.start({ inputData: {} });
+    // @ts-expect-error - dryrun must be a boolean, not a string
+    void run.start({ inputData: { dryrun: 'yes' } });
+    // @ts-expect-error - unknown fields are rejected
+    void run.start({ inputData: { bogus: true } });
+  });
+
+  it('accepts cron and flow-control config alongside the schema', () => {
+    // Configured cron inputData uses the raw caller face: defaulted fields may be omitted.
+    createWorkflow({
+      id: 'cron-wf',
+      inputSchema,
+      outputSchema,
+      cron: '0 * * * *',
+      inputData: {},
+      concurrency: { limit: 1 },
+    })
+      .then(firstStep)
+      .commit();
+
+    createWorkflow({
+      id: 'cron-wf-bad',
+      inputSchema,
+      outputSchema,
+      cron: '0 * * * *',
+      // @ts-expect-error - cron inputData must match the workflow input schema
+      inputData: { dryrun: 'yes' },
+    });
+  });
+
   it('still rejects a genuinely incompatible step', () => {
     const incompatibleStep = createStep({
       id: 'incompatible',
