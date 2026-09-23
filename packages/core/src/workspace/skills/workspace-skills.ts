@@ -1349,7 +1349,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     dirName: string,
     instructions?: string,
   ): { valid: boolean; errors: string[]; warnings: string[] } {
-    const result = validateSkillMetadata(metadata, dirName, instructions);
+    const result = validateSkillMetadata({ metadata, directoryName: dirName, instructions });
 
     // Log warnings if any
     if (result.warnings.length > 0) {

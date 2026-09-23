@@ -48,7 +48,9 @@ describe('validateSkillContent', () => {
   });
 
   it('exports validateSkillMetadata', () => {
-    expect(validateSkillMetadata({ name: 'foo', description: 'x' }, 'foo').valid).toBe(true);
+    expect(validateSkillMetadata({ metadata: { name: 'foo', description: 'x' }, directoryName: 'foo' }).valid).toBe(
+      true,
+    );
   });
 });
 
