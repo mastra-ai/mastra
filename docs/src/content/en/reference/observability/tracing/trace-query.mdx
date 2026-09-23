@@ -644,7 +644,7 @@ const plan = planTraceQuery(parseTraceQueryRequest(request), {
 })
 ```
 
-`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped; stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `organizationId` or `projectId` in predicates. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
+`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `organizationId` or `projectId` in predicates. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
