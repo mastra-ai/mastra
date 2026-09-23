@@ -1,5 +1,43 @@
 # @mastra/client-js
 
+## 1.48.0-alpha.4
+
+### Minor Changes
+
+- Deprecated grouped results from `queryTraces()`. Existing grouped queries continue to work until the next major release; use `queryTraceThreads()` for new code. ([#23790](https://github.com/mastra-ai/mastra/pull/23790))
+
+  **Before:**
+
+  ```ts
+  await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
+  ```
+
+  **After:**
+
+  ```ts
+  await mastraClient.queryTraceThreads({ traces: { timeRange } });
+  ```
+
+### Patch Changes
+
+- Added client support for classifier workflow steps and their rendered workflow graph entries. ([#24747](https://github.com/mastra-ai/mastra/pull/24747))
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Updated dependencies [[`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0-alpha.4
+
 ## 1.48.0-alpha.3
 
 ### Patch Changes

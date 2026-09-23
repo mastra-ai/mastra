@@ -1,5 +1,39 @@
 # mastracode
 
+## 0.42.0-alpha.4
+
+### Minor Changes
+
+- **Added `--tui-initial-prompt` and `--tui-prompt` to start Mastra Code with a message already sent** ([#24754](https://github.com/mastra-ai/mastra/pull/24754))
+
+  ```sh
+  # sent only when there is no earlier conversation for this directory to resume
+  mastracode --tui-initial-prompt "/skill/review-pr https://github.com/org/repo/pull/1"
+
+  # sent even when the directory's last conversation is resumed
+  mastracode --tui-prompt "Pick up where we left off and run the tests"
+
+  # for launchers that can only pass environment variables (works like --tui-initial-prompt)
+  MASTRACODE_TUI_INITIAL_PROMPT="Review the changes on this branch" mastracode
+  ```
+
+  The interactive TUI opens and submits the text as if you had typed it, so slash commands and skills work, and the session stays open for follow-ups. Use `--prompt` instead for headless runs that exit when done.
+
+  - Mastra Code removes `MASTRACODE_TUI_INITIAL_PROMPT` at startup, so shells and nested sessions don't send the prompt again. A flag wins over the variable.
+  - Piped stdin follows a plain-text prompt in the same message, and is skipped with it when `--tui-initial-prompt` resumes a conversation. A prompt starting with `/` or `!` can't be combined with piped stdin; Mastra Code exits with an error instead of passing the piped text to the command.
+
+  **Fixed the first message rendering twice** in the transcript when Mastra Code starts with piped stdin or a startup prompt.
+
+### Patch Changes
+
+- Fixed a duplicated, animated status line that appeared while a new session's conversation was shorter than the terminal. The status line now animates in place no matter where in the terminal Mastra Code was launched. ([#24791](https://github.com/mastra-ai/mastra/pull/24791))
+
+- Updated dependencies [[`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/code-sdk@1.8.1-alpha.4
+  - @mastra/core@1.69.0-alpha.4
+  - @mastra/observability@1.18.0-alpha.0
+  - @mastra/mcp@2.0.0
+
 ## 0.41.1-alpha.3
 
 ### Patch Changes
