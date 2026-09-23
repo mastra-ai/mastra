@@ -11,7 +11,7 @@ import { ClassifierProcessor } from '@mastra/core/processors'
 
 const safety = new Classifier({
   id: 'safety',
-  model: 'openai/gpt-5-mini',
+  model,
   questions: {
     unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
   },
