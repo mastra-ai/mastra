@@ -1,30 +1,60 @@
 {
-  "name": "examples-evals-with-memory",
-  "type": "module",
+  "name": "evals-with-memory",
   "private": true,
-  "description": "Three ways to run Mastra evals against memory-enabled agents",
-  "version": "0.0.1",
+  "type": "module",
+  "description": "Mastra evals workshop \u2014 a headless CI-safe surface and a Studio demo surface over one shared core",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "ex:runeval-global": "npx tsx src/runeval-global.ts",
-    "ex:runeval-per-item": "npx tsx src/runeval-per-item.ts",
-    "ex:dataset": "npx tsx src/dataset.ts",
-    "ex:all": "pnpm ex:runeval-global && pnpm ex:runeval-per-item && pnpm ex:dataset",
-    "clean": "rm -rf .mastra"
+    "ex:1": "tsx --env-file-if-exists=.env headless/src/01-custom-scorer.ts",
+    "ex:2": "tsx --env-file-if-exists=.env headless/src/02-prebuilt-scorers.ts",
+    "ex:3": "tsx --env-file-if-exists=.env headless/src/03-gates-and-thresholds.ts",
+    "ex:4": "tsx --env-file-if-exists=.env headless/src/04-multi-turn.ts",
+    "ex:5": "tsx --env-file-if-exists=.env headless/src/05-workflow-scoring.ts",
+    "ex:6": "tsx --env-file-if-exists=.env headless/src/06-dataset-experiment.ts",
+    "ex:7": "tsx --env-file-if-exists=.env headless/src/07-evals-with-memory.ts",
+    "ex:8": "tsx --env-file-if-exists=.env headless/src/08-compare-experiments.ts",
+    "ex:9": "tsx --env-file-if-exists=.env headless/src/09-dataset-versioning.ts",
+    "ex:10": "tsx --env-file-if-exists=.env headless/src/10-tool-mocks.ts",
+    "ex:11": "tsx --env-file-if-exists=.env headless/src/11-score-traces.ts",
+    "ex:12": "tsx --env-file-if-exists=.env headless/src/12-prompt-versions.ts",
+    "ex:offline": "pnpm ex:1 && pnpm ex:3 && pnpm ex:4 && pnpm ex:5 && pnpm ex:6 && pnpm ex:7 && pnpm ex:8 && pnpm ex:9 && pnpm ex:10 && pnpm ex:11 && pnpm ex:12",
+    "ex:all": "pnpm ex:1 && pnpm ex:2 && pnpm ex:3 && pnpm ex:4 && pnpm ex:5 && pnpm ex:6 && pnpm ex:7 && pnpm ex:8 && pnpm ex:9 && pnpm ex:10 && pnpm ex:11 && pnpm ex:12",
+    "dev": "mastra dev --dir studio/src/mastra",
+    "build": "mastra build --dir studio/src/mastra",
+    "start": "mastra start",
+    "seed": "tsx studio/src/seed.ts",
+    "reset": "rm -f eval.db* observability.duckdb* && pnpm seed",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .mastra node_modules eval.db* observability.duckdb*"
   },
   "dependencies": {
-    "@mastra/core": "latest",
-    "@mastra/evals": "latest",
-    "@mastra/libsql": "latest",
-    "@mastra/memory": "latest",
-    "ai": "^4.3.19",
-    "typescript": "^5.9.3"
+    "@mastra/core": "catalog:",
+    "@mastra/duckdb": "catalog:",
+    "@mastra/editor": "catalog:",
+    "@mastra/evals": "catalog:",
+    "@mastra/libsql": "catalog:",
+    "@mastra/memory": "catalog:",
+    "@mastra/observability": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "mastra": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/duckdb": "link:../../stores/duckdb",
+      "@mastra/editor": "link:../../packages/editor",
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/memory": "link:../../packages/memory",
+      "@mastra/observability": "link:../../observability/mastra",
+      "mastra": "link:../../packages/cli",
       "nanoid@>=3.0.0 <3.3.19": "3.3.19",
       "proxy-addr": "2.0.8",
       "qs": "6.16.0",
@@ -49,12 +79,5 @@
       "axios@>=1.0.0 <1.20.0": "1.20.0"
     }
   },
-  "devDependencies": {
-    "@types/node": "^20.12.7",
-    "tsx": "catalog:"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "Apache-2.0",
   "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
 }
