@@ -34,7 +34,7 @@ Ask the agent things like "list my open Linear issues", "search Notion for the l
 
 ## Making it yours
 
-- **Scope the toolset** — pass per-integration options to `connect()` in `src/mastra/agents/connect-agent.ts`, e.g. `integrations: { linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] } }` to restrict what the agent can do.
+- **Scope the toolset** — pass per-integration options to `connect()` in `src/mastra/agents/connect-agent.ts`, e.g. `integrations: { linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] } }` to restrict the Linear tools available to the agent. `allowTools` only filters that integration's tools; use `disabled: true` to exclude another connected integration entirely.
 - **Pin connections** — set `connectionId` per integration if the project has more than one connection to the same provider.
 - **Tune the digest** — edit the prompt and schema in `src/mastra/workflows/activity-digest.ts`, or schedule the workflow to post digests wherever you like.
 - **Swap the model** — change the `model` string in `src/mastra/agents/connect-agent.ts` to any Gateway-supported model.

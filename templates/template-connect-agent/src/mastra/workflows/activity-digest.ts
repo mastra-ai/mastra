@@ -15,6 +15,17 @@ export const digestSchema = z.object({
 });
 
 /**
+ * Verbs that mutate connected data. The digest run only reads, so any tool
+ * whose `<integration>_<action>` key contains one of these is withheld from
+ * the agent via `activeTools`. Deny-by-verb (rather than allow-by-verb) so a
+ * tool like `notion_append_bulleted_list` is excluded even though it ends in
+ * a read-sounding word.
+ */
+const WRITE_VERBS =
+  /(^|_)(create|update|delete|append|add|remove|set|send|archive|unarchive|cancel|revoke|upsert|insert|move|duplicate|share|restore|resend|replay|publish|invoke|execute|assign|transition|resolve|unresolve|verify|deactivate|reactivate|copy|generate|connect)(_|$)/;
+const READ_VERBS = /(^|_)(get|list|search|retrieve|query|count)(_|$)/;
+
+/**
  * Calls the Connect resolver directly (outside an agent) to see which
  * integrations are currently connected. Tool keys are `<integration>_<action>`,
  * so the integration ids are the distinct key prefixes.
@@ -28,11 +39,14 @@ const discoverIntegrationsStep = createStep({
   outputSchema: z.object({
     focus: z.string().optional(),
     integrations: z.array(z.string()),
+    readOnlyTools: z.array(z.string()),
   }),
   execute: async ({ inputData, mastra }) => {
     const tools = await connectTools({ mastra });
-    const integrations = [...new Set(Object.keys(tools).map(key => key.split('_')[0]!))].sort();
-    return { focus: inputData.focus, integrations };
+    const keys = Object.keys(tools);
+    const integrations = [...new Set(keys.map(key => key.split('_')[0]!))].sort();
+    const readOnlyTools = keys.filter(key => READ_VERBS.test(key) && !WRITE_VERBS.test(key));
+    return { focus: inputData.focus, integrations, readOnlyTools };
   },
 });
 
@@ -42,15 +56,17 @@ const composeDigestStep = createStep({
   inputSchema: z.object({
     focus: z.string().optional(),
     integrations: z.array(z.string()),
+    readOnlyTools: z.array(z.string()),
   }),
   outputSchema: digestSchema,
   execute: async ({ inputData, mastra }) => {
     if (inputData.integrations.length === 0) {
       return {
-        headline: 'No integrations connected yet.',
+        headline: 'No integration tools available.',
         sections: [],
         suggestedActions: [
           'Attach integrations (Linear, Notion, …) to your Mastra platform project at https://cloud.mastra.ai, then set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID.',
+          'If integrations are already attached, check the server logs: connections that need re-authorization or are ambiguous are skipped with a warning.',
         ],
       };
     }
@@ -63,10 +79,15 @@ const composeDigestStep = createStep({
           role: 'user',
           content: `Build an activity digest across these connected integrations: ${inputData.integrations.join(', ')}.
 
-For each integration, use its read/list/search tools to find recent activity (roughly the last week), then summarize it. Only report what the tools actually returned. Do not create, update, or delete anything.${focus}`,
+For each integration, use its read/list/search tools to find recent activity (roughly the last week), then summarize it. Only report what the tools actually returned.${focus}`,
         },
       ],
-      { structuredOutput: { schema: digestSchema } },
+      {
+        structuredOutput: { schema: digestSchema },
+        // A digest run must not touch connected data: only the read tools
+        // discovered in the previous step are active for this call.
+        activeTools: inputData.readOnlyTools,
+      },
     );
     return result.object as z.infer<typeof digestSchema>;
   },
