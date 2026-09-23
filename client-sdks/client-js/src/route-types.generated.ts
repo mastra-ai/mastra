@@ -3381,6 +3381,20 @@ type Shared_Type_59 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Input tokens consumed by this span */
+  inputTokens?: (number | null) | undefined;
+  /** Output tokens produced by this span */
+  outputTokens?: (number | null) | undefined;
+  /** Total tokens for this span */
+  totalTokens?: (number | null) | undefined;
+  /** Reasoning tokens produced by this span */
+  reasoningTokens?: (number | null) | undefined;
+  /** Cached input tokens read by this span */
+  cachedTokens?: (number | null) | undefined;
+  /** Estimated cost of this span */
+  estimatedCost?: (number | null) | undefined;
+  /** Unit of estimatedCost (e.g. "usd") */
+  costUnit?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3486,6 +3500,20 @@ type Shared_Type_61 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Input tokens consumed by this span */
+  inputTokens?: (number | null) | undefined;
+  /** Output tokens produced by this span */
+  outputTokens?: (number | null) | undefined;
+  /** Total tokens for this span */
+  totalTokens?: (number | null) | undefined;
+  /** Reasoning tokens produced by this span */
+  reasoningTokens?: (number | null) | undefined;
+  /** Cached input tokens read by this span */
+  cachedTokens?: (number | null) | undefined;
+  /** Estimated cost of this span */
+  estimatedCost?: (number | null) | undefined;
+  /** Unit of estimatedCost (e.g. "usd") */
+  costUnit?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
