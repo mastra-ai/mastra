@@ -48,6 +48,12 @@ npm install @mastra/mcp@latest
         atomicmail: {
           command: 'npx',
           args: ['-y', '@atomicmail/mcp'],
+          // Stdio subprocesses inherit only a curated environment, so pass
+          // anything the server needs explicitly.
+          env: {
+            ATOMIC_MAIL_API_KEY: process.env.ATOMIC_MAIL_API_KEY ?? '',
+            ATOMIC_MAIL_CREDENTIALS_DIR: process.env.ATOMIC_MAIL_CREDENTIALS_DIR ?? '',
+          },
         },
       },
     })
@@ -88,9 +94,14 @@ npm install @mastra/mcp@latest
         You have an email inbox of your own.
 
         Call help before your first jmap_request — it documents the available
-        presets and JMAP method calls. If no inbox exists yet, call register
-        first; it is idempotent for the same username. Do not invent JMAP
-        method calls you have not seen in help.
+        presets and JMAP method calls.
+
+        If no inbox exists yet, call register first. It needs two inputs: a
+        username of 5-21 characters, and a watch value of "scheduled" or
+        "on-demand". The watch value is the operator's decision, so ask for it
+        rather than choosing one. register is idempotent for the same username.
+
+        Do not invent JMAP method calls you have not seen in help.
       `,
       model: '__GATEWAY_OPENAI_MODEL__',
       tools: await atomicMailClient.listTools(),
@@ -118,7 +129,7 @@ The server exposes three tools:
 
 | Tool | What it does |
 | --- | --- |
-| `register` | Provisions an inbox by proof of work and stores its credentials. Idempotent for the same username; pass a separate `credentials_dir` to hold more than one inbox. |
+| `register` | Provisions an inbox by proof of work and stores its credentials. Takes a `username` (5-21 characters) and a required `watch` value of `scheduled` or `on-demand`. Idempotent for the same username; pass a separate `credentials_dir` to hold more than one inbox. |
 | `jmap_request` | Runs a JMAP method-call batch, authenticated automatically. Takes inline `ops` or a named preset such as `list_inbox.json`, `send_mail.json` or `reply.json`, with placeholder substitution and file attachments. |
 | `help` | Serves the bundled docs — JMAP cheatsheet, preset list, troubleshooting. |
 
@@ -131,6 +142,8 @@ ATOMIC_MAIL_API_KEY=your-api-key
 ATOMIC_MAIL_CREDENTIALS_DIR=/path/to/.atomicmail
 ATOMIC_MAIL_INBOX_DOMAIN=mail.example.com
 ```
+
+With the local stdio server these do not reach the subprocess on their own — `MCPClient` passes a curated parent environment, so list each one in the server's `env` map as shown above. With the hosted server, pass the key in the `Authorization` header instead.
 
 `credentials_dir` can also be passed per tool call, so one Mastra instance can drive several inboxes — for example one agent that files receipts and one that answers customers.
 
