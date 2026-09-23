@@ -667,6 +667,8 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [
         { name: 'bad_type_entry', inputSchema: { type: 'object', properties: { a: { type: [42] } } } as any },
+        { name: 'bad_type_name', inputSchema: { type: 'object', properties: { a: { type: 'stringy' } } } as any },
+        { name: 'bad_type_name_in_array', inputSchema: { type: 'object', properties: { a: { type: ['string', 'stringy'] } } } as any },
         { name: 'empty_type', inputSchema: { type: [] } as any },
         { name: 'dup_type', inputSchema: { type: ['string', 'string'] } as any },
         { name: 'good_tool', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } as any },
@@ -678,6 +680,8 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(Object.keys(tools)).toEqual(['good_tool']);
     const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
     expect(warnMessages).toContain('bad_type_entry');
+    expect(warnMessages).toContain('bad_type_name');
+    expect(warnMessages).toContain('bad_type_name_in_array');
     expect(warnMessages).toContain('empty_type');
     expect(warnMessages).toContain('dup_type');
   });
@@ -733,6 +737,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     // additionalItems closes the tuple. The tool must be kept, not skipped.
     expect(Object.keys(tools)).toEqual(['good_tuple', 'good_tool']);
     expect(tools.good_tuple).toBeDefined();
+  });
+
+  it.each([
+    ['not', { not: [] }],
+    ['propertyNames', { propertyNames: [] }],
+    ['contentSchema', { contentSchema: [] }],
+    ['dependentSchemas', { dependentSchemas: { value: [] } }],
+    ['unevaluatedProperties', { unevaluatedProperties: [] }],
+    ['unevaluatedItems', { unevaluatedItems: [] }],
+  ])('should skip a tool with malformed %s schema-bearing keyword', async (keyword, malformedSchema) => {
+    const sdkClient = (client as any).client as Client;
+    const toolName = `bad_${keyword}`;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: toolName, inputSchema: malformedSchema as any }],
+    });
+
+    const tools = await client.tools();
+
+    expect(tools[toolName]).toBeUndefined();
+  });
+
+  it('should preserve boolean unevaluatedProperties and unevaluatedItems', async () => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { value: { type: 'string' as const } },
+      unevaluatedProperties: false,
+      unevaluatedItems: false,
+    };
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'boolean_evaluation_schema', inputSchema }],
+    });
+
+    const tool = (await client.tools()).boolean_evaluation_schema;
+
+    expect(tool).toBeDefined();
+    expect(tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' })).toMatchObject({
+      unevaluatedProperties: false,
+      unevaluatedItems: false,
+    });
   });
 
   it('should accept boolean input schemas without throwing and preserve false', async () => {

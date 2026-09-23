@@ -75,6 +75,7 @@ type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
+const JSON_SCHEMA_TYPE_NAMES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
 const MAX_JSON_SCHEMA_DEPTH = 128;
 const MAX_JSON_SCHEMA_NODES = 10_000;
 
@@ -1261,6 +1262,9 @@ export class InternalMastraMCPClient extends MastraBase {
       if (Array.isArray(node.type) && new Set(typeEntries).size !== typeEntries.length) {
         return '"type" array must not contain duplicates';
       }
+      if (typeEntries.some((entry: unknown) => typeof entry === 'string' && !JSON_SCHEMA_TYPE_NAMES.has(entry))) {
+        return '"type" contains an invalid type name';
+      }
     }
     if (node.enum !== undefined && !Array.isArray(node.enum)) {
       return '"enum" must be an array';
@@ -1325,6 +1329,21 @@ export class InternalMastraMCPClient extends MastraBase {
     if (node.additionalProperties !== undefined && typeof node.additionalProperties !== 'boolean') {
       const additionalError = this.getInputSchemaShapeError(node.additionalProperties, depth + 1);
       if (additionalError) return `"additionalProperties" ${additionalError}`;
+    }
+    for (const schemaKeyword of ['not', 'propertyNames', 'contentSchema', 'unevaluatedProperties', 'unevaluatedItems'] as const) {
+      if (node[schemaKeyword] !== undefined) {
+        const schemaError = this.getInputSchemaShapeError(node[schemaKeyword], depth + 1);
+        if (schemaError) return `"${schemaKeyword}" ${schemaError}`;
+      }
+    }
+    if (node.dependentSchemas !== undefined) {
+      if (node.dependentSchemas === null || typeof node.dependentSchemas !== 'object' || Array.isArray(node.dependentSchemas)) {
+        return '"dependentSchemas" must be an object';
+      }
+      for (const [propertyName, dependentSchema] of Object.entries(node.dependentSchemas)) {
+        const dependentError = this.getInputSchemaShapeError(dependentSchema, depth + 1);
+        if (dependentError) return `dependentSchemas entry "${propertyName}" ${dependentError}`;
+      }
     }
     if (node.prefixItems !== undefined) {
       if (!Array.isArray(node.prefixItems)) {
@@ -1522,8 +1541,12 @@ export class InternalMastraMCPClient extends MastraBase {
       const rawInputSchema = (
         typeof tool.inputSchema === 'boolean' ? tool.inputSchema : 'jsonSchema' in tool.inputSchema ? tool.inputSchema.jsonSchema : tool.inputSchema
       ) as JSONSchema7;
-      const inputSchemaShapeError = this.getInputSchemaShapeError(this.normalizeMisplacedRequired(rawInputSchema));
-      if (inputSchemaShapeError) {
+      const normalizedInputSchema = this.normalizeMisplacedRequired(rawInputSchema);
+      const inputSchemaComplexityError = getJsonSchemaComplexityError(normalizedInputSchema);
+      const inputSchemaShapeError = this.getInputSchemaShapeError(normalizedInputSchema);
+      // Complexity is reported by the schema validator at execution time, so a
+      // depth-limit shape error must not skip a tool that can otherwise be built.
+      if (inputSchemaShapeError && !inputSchemaComplexityError) {
         this.log('warning', `Skipping MCP tool "${tool.name}" from server "${this.name}": invalid input schema (${inputSchemaShapeError})`);
         return undefined;
       }
