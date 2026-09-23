@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
-import type { PubSub } from '@mastra/core/events';
+import { PubSub } from '@mastra/core/events';
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
@@ -49,6 +50,32 @@ function getNestedInngestWorkflow(entry: StepFlowEntry): InngestWorkflow | null 
   return nested instanceof InngestWorkflow ? nested : null;
 }
 
+class WorkflowEventPolicyPubSub extends PubSub {
+  constructor(
+    private readonly pubsub: PubSub,
+    private readonly emitWorkflowEvents: boolean,
+  ) {
+    super();
+  }
+
+  publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
+    if (!this.emitWorkflowEvents && topic.startsWith('workflow.events.v2.')) return Promise.resolve();
+    return this.pubsub.publish(topic, event, options);
+  }
+
+  subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    return this.pubsub.subscribe(topic, cb, options);
+  }
+
+  unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    return this.pubsub.unsubscribe(topic, cb);
+  }
+
+  flush(): Promise<void> {
+    return this.pubsub.flush();
+  }
+}
+
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -77,13 +104,11 @@ export class InngestWorkflow<
   private readonly functionRetries: NonNullable<InngestFlowControlConfig['retries']>;
   private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
   /**
-   * Optional override that lets a host (e.g. `createInngestAgent`) provide the
-   * PubSub instance used by workflow steps for publishing chunk/finish events.
-   * When set, the workflow function uses this factory instead of constructing
-   * a fresh `InngestPubSub`. This is what lets `DurableAgent.observe()` see
-   * cached history when the agent wraps its PubSub in a `CachingPubSub`.
+   * Optional override that lets a host (e.g. `createInngestAgent`) route topics
+   * while retaining the workflow-local `InngestPubSub` as the default.
    */
   #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
+  #emitWorkflowEvents = true;
 
   constructor(
     params: InngestWorkflowConfig<
@@ -149,22 +174,13 @@ export class InngestWorkflow<
   }
 
   /**
-   * Override the PubSub used inside the durable workflow function. Callers like
-   * `createInngestAgent` use this to route workflow event publishes through the
-   * agent's `CachingPubSub`, so `observe()` can replay cached history.
-   *
-   * The factory receives the workflow's own default `InngestPubSub` (constructed
-   * with this workflow's id) as input. Hosts should wrap that instance rather
-   * than substitute it, so workflow-event channels (which encode the workflow
-   * id) remain workflow-local. Returning a `CachingPubSub` wrapping the default
-   * is the canonical pattern.
+   * Override the PubSub used inside the durable workflow function. The factory
+   * receives the workflow's own default `InngestPubSub`, allowing hosts to route
+   * selected topics elsewhere while preserving workflow-local channels.
    *
    * The factory is propagated to every nested `InngestWorkflow` in the step
-   * graph. Nested workflows run as their own Inngest functions and resolve
-   * their own pubsub at runtime; each invocation passes its own workflow-local
-   * default into the same factory, so the host can share cross-workflow state
-   * (e.g. a single agent-scoped cache) without collapsing per-workflow channel
-   * isolation.
+   * graph. Nested workflows resolve their own default pubsub at runtime and pass
+   * it through the same factory.
    */
   __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
     this.#pubsubFactory = factory;
@@ -183,6 +199,23 @@ export class InngestWorkflow<
     }
   }
 
+  __setEmitWorkflowEvents(enabled: boolean) {
+    this.#emitWorkflowEvents = enabled;
+    const updateNested = (step: StepFlowEntry) => {
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        nested.__setEmitWorkflowEvents(enabled);
+      } else if (step.type === 'parallel' || step.type === 'conditional') {
+        for (const subStep of step.steps) {
+          updateNested(subStep);
+        }
+      }
+    };
+    for (const step of this.executionGraph.steps) {
+      updateNested(step);
+    }
+  }
+
   /**
    * Test-only accessor for the configured pubsub factory. Lets tests verify that
    * a host (e.g. `createInngestAgent`) wired the workflow to its agent pubsub
@@ -190,6 +223,11 @@ export class InngestWorkflow<
    */
   __getPubsubFactory(): ((defaultPubsub: PubSub) => PubSub) | undefined {
     return this.#pubsubFactory;
+  }
+
+  /** @internal Exposed for focused wiring tests. */
+  __getEmitWorkflowEvents(): boolean {
+    return this.#emitWorkflowEvents;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -407,7 +445,8 @@ export class InngestWorkflow<
         // wrap this default - typically with a `CachingPubSub` so `observe()` can replay
         // cached history - without disturbing per-workflow channel isolation.
         const defaultPubsub = new InngestPubSub(this.inngest, this.id);
-        const pubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
+        const configuredPubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
+        const pubsub = new WorkflowEventPolicyPubSub(configuredPubsub, this.#emitWorkflowEvents);
 
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
@@ -484,7 +523,7 @@ export class InngestWorkflow<
               }
               // Nested functions have workflow-local channels; send writer chunks
               // directly to the outermost run without forwarding lifecycle events.
-              if (parentStream) {
+              if (this.#emitWorkflowEvents && parentStream) {
                 try {
                   await defaultPubsub.publishWorkflowWatchTo(parentStream.workflowId, parentStream.runId, chunk);
                 } catch (err) {
@@ -579,8 +618,7 @@ export class InngestWorkflow<
                 // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
                 // which were set correctly by the handlers during execution
                 let existingSnapshot:
-                  | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
-                  | undefined;
+                  { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> } | undefined;
                 if (result.status === 'suspended') {
                   existingSnapshot =
                     (await workflowsStore.loadWorkflowSnapshot({
