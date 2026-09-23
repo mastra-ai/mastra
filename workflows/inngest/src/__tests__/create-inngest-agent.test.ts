@@ -918,6 +918,8 @@ describe('InngestAgent parity surface', () => {
         resumeLabels: {},
       });
       const fork = (durableAgent as any).__fork();
+      // The fork re-wraps the original InngestPubSub; isolate it like makeIsolatedAgent does.
+      (fork.pubsub as any).inner = new EventEmitterPubSub();
       const sendSpy = stubInngestSend();
       const runId = 'resume-forked-approve-run';
 
