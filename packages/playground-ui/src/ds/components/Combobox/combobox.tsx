@@ -3,13 +3,14 @@ import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
+import { isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -77,6 +78,20 @@ const ComboboxItem = React.forwardRef<HTMLDivElement, BaseCombobox.Item.Props>((
   <BaseCombobox.Item ref={useFluidMenuItemRef(ref)} {...props} />
 ));
 ComboboxItem.displayName = 'ComboboxItem';
+
+function ComboboxClearItem({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      ref={useFluidMenuItemRef<HTMLButtonElement>()}
+      onClick={onClear}
+      className={comboboxStyles.item}
+    >
+      <X aria-hidden />
+      <span>{label}</span>
+    </button>
+  );
+}
 
 function ComboboxOptionText({ option }: { option: ComboboxOption }) {
   return (
@@ -228,23 +243,15 @@ export function Combobox(props: ComboboxProps) {
                       );
                     }}
                   </BaseCombobox.List>
+                  {selectedValues.length > 0 && clearLabel ? (
+                    <div className="px-1 pb-1">
+                      <div role="separator" className={cn(menuSeparatorClass, 'mt-0')} />
+                      <ComboboxClearItem label={clearLabel} onClear={clearSelection} />
+                    </div>
+                  ) : null}
                 </FluidMenuItems>
               </div>
             </ScrollArea>
-            {selectedValues.length > 0 && clearLabel ? (
-              <div className={cn('border-t', 'border-border', 'p-1')}>
-                <Button
-                  type="button"
-                  variant="destructive-ghost"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={clearSelection}
-                  icon={<X />}
-                >
-                  {clearLabel}
-                </Button>
-              </div>
-            ) : null}
           </BaseCombobox.Popup>
         </BaseCombobox.Positioner>
       </BaseCombobox.Portal>
