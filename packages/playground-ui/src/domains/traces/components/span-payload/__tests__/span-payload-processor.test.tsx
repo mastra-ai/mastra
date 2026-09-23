@@ -11,6 +11,7 @@ import { SpanProcessorAttributes } from '../span-processor-attributes';
 import {
   legacyProcessorSpan,
   malformedProcessorSpan,
+  makeSpan,
   processorClearedMessagesSpan,
   processorInputSpan,
   processorInputStepSpan,
@@ -153,6 +154,16 @@ describe('SpanProcessorAttributes', () => {
     render(<SpanProcessorAttributes span={malformedProcessorSpan} />);
     fireEvent.click(screen.getByText('Other attributes'));
     expect(slot('span-processor-attributes')?.textContent).toContain('redacted-mutation-log');
+  });
+
+  it('shows a mutation entry it cannot read as JSON', () => {
+    const span = makeSpan({
+      ...processorClearedMessagesSpan,
+      attributes: { processorPhase: 'input', messageListMutations: [null, { type: 'clear', count: 2 }] },
+    });
+    render(<SpanProcessorAttributes span={span} />);
+    expect(screen.getByText('Cleared messages')).toBeTruthy();
+    expect(slot('span-processor-mutations')?.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
   });
 
   it('renders nothing for a span with no recorded phase', () => {

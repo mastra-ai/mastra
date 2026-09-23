@@ -198,10 +198,11 @@ executors emit processor spans and record different shapes. The payload is narro
 read time instead, by the phase the span recorded, and narrowing on `phase` narrows
 `data` to that phase alone.
 
-`describeSpanInput`, `describeSpanOutput` and `describeProcessorPipeline` return the
-JSON fallback for a span with no recorded phase, one written by a newer version
-with a phase this release doesn't know, or an empty payload. The stored payload and the JSON view remain
-unchanged.
+`describeSpanInput` and `describeSpanOutput` return the JSON fallback for a span with
+no recorded phase, one written by a newer version with a phase this release doesn't
+know, or an empty payload. `describeProcessorPipeline` returns `undefined` when the
+phase is missing or unknown, and still describes the pipeline when the payload is
+empty. The stored payload and the JSON view remain unchanged.
 
 ### Span
 

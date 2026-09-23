@@ -22,6 +22,13 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
   return (
     <ul data-slot="span-processor-mutations" className="flex flex-col gap-1.5">
       {mutations.map((mutation, index) => {
+        if (typeof mutation !== 'object' || mutation === null) {
+          return (
+            <li key={index}>
+              <SpanPayloadJson value={mutation} />
+            </li>
+          );
+        }
         const detail = [
           mutation.source,
           mutation.tag,
