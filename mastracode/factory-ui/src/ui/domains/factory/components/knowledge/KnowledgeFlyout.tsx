@@ -34,7 +34,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-300">
+    <span className="bg-badge-purple-bg text-badge-purple-fg rounded px-1.5 py-0.5 text-[10px] font-medium">
       {RUNG_LABELS[rung].toLowerCase()}
     </span>
   );
@@ -48,7 +48,7 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
           <button
             key={index}
             type="button"
-            className="rounded bg-purple-500/15 px-1 font-medium text-purple-300 hover:bg-purple-500/30"
+            className="bg-badge-purple-bg text-badge-purple-fg rounded px-1 font-medium hover:underline"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
@@ -112,13 +112,13 @@ function RecordCard({
         'rounded-lg border transition-colors',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        record.pinned ? 'bg-amber-400/10' : 'bg-card/60',
+        record.pinned ? 'bg-warning-bg' : 'bg-card/60',
         expanded
           ? record.pinned
-            ? 'border-amber-400/70'
-            : 'border-purple-400/50'
+            ? 'border-warning-border'
+            : 'border-badge-purple-border'
           : record.pinned
-            ? 'border-amber-400/40'
+            ? 'border-warning-border'
             : 'border-border',
       ].join(' ')}
     >
@@ -137,7 +137,7 @@ function RecordCard({
         <div className="text-foreground text-xs leading-relaxed">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned knowledge record" />
+            <Pin size={11} className="text-warning-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
         <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
@@ -154,7 +154,7 @@ function RecordCard({
               {record.sourceThreadId ? (
                 <button
                   type="button"
-                  className="flex items-center gap-1 text-purple-300 hover:underline"
+                  className="text-badge-purple-fg flex items-center gap-1 hover:underline"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
                   <span className="max-w-40 truncate">{record.sourceThreadId}</span>
@@ -180,9 +180,9 @@ function RecordCard({
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
-              className="mt-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-2"
+              className="border-warning-border bg-warning-bg mt-2 rounded-md border p-2"
             >
-              <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-amber-300 uppercase">
+              <div className="text-warning-fg mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
                 <Sparkles size={10} /> Reasoning
               </div>
               <p className="text-foreground text-[11px] leading-relaxed italic">{reason}</p>
@@ -311,7 +311,7 @@ export function KnowledgeFlyout({
                     nodeQuery.data.records.map(record => (
                       <div
                         key={record.id}
-                        className={record.id === focusRecordId ? 'rounded-lg ring-2 ring-purple-400/60' : undefined}
+                        className={record.id === focusRecordId ? 'ring-badge-purple rounded-lg ring-2' : undefined}
                       >
                         <RecordCard
                           record={record}

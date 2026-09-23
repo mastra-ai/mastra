@@ -91,7 +91,9 @@ export function NoiseDetailPanel({
                   snapshot.
                 </p>
                 {noiseQuery.isPending && <p className="mt-4 text-body text-muted-foreground">Loading noise details…</p>}
-                {noiseQuery.isError && <p className="mt-4 text-body text-red-500">Unable to load noise details.</p>}
+                {noiseQuery.isError && (
+                  <p className="mt-4 text-body text-destructive-fg">Unable to load noise details.</p>
+                )}
                 {noiseQuery.data && (
                   <p className="mt-4 font-mono text-body text-foreground tabular-nums">
                     {shareSentence(
@@ -110,7 +112,9 @@ export function NoiseDetailPanel({
                   Example summaries
                 </h2>
                 {examplesQuery.isPending && <p className="mt-3 text-body text-muted-foreground">Loading examples…</p>}
-                {examplesQuery.isError && <p className="mt-3 text-body text-red-500">Unable to load examples.</p>}
+                {examplesQuery.isError && (
+                  <p className="mt-3 text-body text-destructive-fg">Unable to load examples.</p>
+                )}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (

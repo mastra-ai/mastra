@@ -68,8 +68,9 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           selected ? 'ring-2 ring-purple-300' : '',
         ].join(' ')}
         style={{
-          background: 'radial-gradient(circle at 50% 32%, rgba(124,92,255,0.22), rgba(13,13,22,0.97) 72%)',
-          boxShadow: `0 0 ${glow}px rgba(139,92,246,0.35)`,
+          background:
+            'radial-gradient(circle at 50% 32%, color-mix(in oklab, var(--purple-500) 22%, transparent), rgba(13,13,22,0.97) 72%)',
+          boxShadow: `0 0 ${glow}px color-mix(in oklab, var(--purple-500) 35%, transparent)`,
         }}
       >
         {labeled ? (
@@ -135,22 +136,22 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
           // A selected record (open in the flyout) lights its edge up.
           data?.focused
             ? {
-                stroke: pinned ? 'rgba(251,191,36,1)' : 'rgba(255,255,255,0.95)',
+                stroke: pinned ? 'var(--yellow-400)' : 'rgba(255,255,255,0.95)',
                 strokeWidth: 2.5,
-                filter: `drop-shadow(0 0 4px ${pinned ? 'rgba(251,191,36,0.8)' : 'rgba(255,255,255,0.7)'})`,
+                filter: `drop-shadow(0 0 4px ${pinned ? 'color-mix(in oklab, var(--yellow-400) 80%, transparent)' : 'rgba(255,255,255,0.7)'})`,
               }
             : pinned
-              ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
+              ? { stroke: 'color-mix(in oklab, var(--yellow-400) 75%, transparent)', strokeWidth: 2 }
               : source.startsWith('record:') || target.startsWith('record:')
                 ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
-                : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
+                : { stroke: 'color-mix(in oklab, var(--purple-500) 40%, transparent)', strokeWidth: 1.4 }
         }
       />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
         <EdgeLabelRenderer>
           <span
             // Nodes always render above lines and their badges — no z lift.
-            className="absolute rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
+            className="absolute rounded-full bg-yellow-400 p-1 text-yellow-950 shadow-md shadow-yellow-500/40"
             style={{
               zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
@@ -185,12 +186,12 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
         // read as knowledge points, distinct from nodes (purple) and pins
         // (amber).
         record.pinned
-          ? 'border-amber-300/80 bg-amber-400 text-[#1a1305] shadow-md shadow-amber-500/40'
+          ? 'border-yellow-300/80 bg-yellow-400 text-yellow-950 shadow-md shadow-yellow-500/40'
           : 'border-white/70 bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.45)]',
         // The selected record (open in the flyout) glows hard.
         focused
           ? record.pinned
-            ? 'ring-2 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.9)]'
+            ? 'ring-2 ring-yellow-300 shadow-[0_0_14px_color-mix(in_oklab,var(--yellow-400)_90%,transparent)]'
             : 'ring-2 ring-white shadow-[0_0_14px_rgba(255,255,255,0.9)]'
           : '',
       ].join(' ')}
@@ -270,8 +271,8 @@ function FilterChip({
         'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
         active
           ? accent
-            ? 'border-amber-400/70 bg-amber-400/15 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.15)]'
-            : 'border-purple-400/70 bg-purple-500/20 text-purple-200 shadow-[0_0_12px_rgba(139,92,246,0.2)]'
+            ? 'border-yellow-400/70 bg-yellow-400/15 text-yellow-300 shadow-[0_0_12px_color-mix(in_oklab,var(--yellow-400)_15%,transparent)]'
+            : 'border-purple-400/70 bg-purple-500/20 text-purple-200 shadow-[0_0_12px_color-mix(in_oklab,var(--purple-500)_20%,transparent)]'
           : 'border-border bg-card/60 text-muted-foreground hover:text-foreground',
       ].join(' ')}
     >
@@ -500,11 +501,11 @@ function KnowledgeGraphInner({
         }
         .knowledge-arrive [data-testid='knowledge-node'] {
           animation: knowledgeArrive 0.9s ease-out;
-          box-shadow: 0 0 32px rgba(167, 139, 250, 0.7) !important;
+          box-shadow: 0 0 32px color-mix(in oklab, var(--purple-400) 70%, transparent) !important;
         }
         .react-flow__edge.knowledge-arrive path {
           animation: knowledgeArrive 0.9s ease-out;
-          stroke: rgba(196, 181, 253, 0.9) !important;
+          stroke: color-mix(in oklab, var(--purple-300) 90%, transparent) !important;
         }
       `}</style>
       <TruncationBanner payload={payload} />
@@ -584,8 +585,8 @@ function KnowledgeGraphInner({
           pannable
           zoomable
           style={{ background: '#111119', border: '1px solid #26263a', borderRadius: 8 }}
-          nodeColor="#8b5cf6"
-          nodeStrokeColor="#a78bfa"
+          nodeColor="var(--purple-500)"
+          nodeStrokeColor="var(--purple-400)"
           nodeStrokeWidth={3}
           nodeBorderRadius={999}
           maskColor="rgba(10,10,18,0.55)"
@@ -653,7 +654,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
           Record
-          {record.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
+          {record.pinned ? <Pin size={11} className="text-yellow-400" aria-label="Pinned" /> : null}
         </div>
         <div className="text-muted-foreground leading-relaxed">{record.text}</div>
       </div>

@@ -16,16 +16,16 @@ const PRIORITY_COLORS = {
 
 // Dark backgrounds for all priorities
 const PRIORITY_BG = {
-  '🔴': 'bg-purple-500/15',
-  '🟡': 'bg-blue-500/15',
-  '🟢': 'bg-green-500/15',
+  '🔴': 'bg-badge-purple-bg',
+  '🟡': 'bg-info-bg',
+  '🟢': 'bg-success-bg',
 } as const;
 
 // Full color left border accent
 const PRIORITY_BORDER = {
-  '🔴': 'border-l-purple-500',
-  '🟡': 'border-l-blue-500',
-  '🟢': 'border-l-green-500',
+  '🔴': 'border-l-badge-purple',
+  '🟡': 'border-l-info-indicator',
+  '🟢': 'border-l-success-indicator',
 } as const;
 
 type Priority = keyof typeof PRIORITY_COLORS;

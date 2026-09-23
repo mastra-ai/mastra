@@ -32,13 +32,13 @@ export function CodeDisplay({
           <pre className="pointer-events-none font-mono text-meta whitespace-pre-wrap">{content}</pre>
           {isDraft && (
             <div className="mt-1.5">
-              <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-meta text-yellow-500">
+              <span className="rounded-full bg-warning-bg px-1.5 py-0.5 text-meta text-warning-fg">
                 Draft - Save changes to apply
               </span>
             </div>
           )}
           {isCopied && (
-            <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-green-500/20 px-1.5 py-0.5 text-meta text-green-500">
+            <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-success-bg px-1.5 py-0.5 text-meta text-success-fg">
               Copied!
             </span>
           )}

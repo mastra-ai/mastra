@@ -1,7 +1,7 @@
 export const toneClass = {
-  messages: 'text-blue-500',
-  memory: 'text-violet-500',
-  warning: 'text-warning-fg',
+  messages: 'text-info-indicator',
+  memory: 'text-badge-purple',
+  warning: 'text-warning-indicator',
 } as const;
 
 export type TokenBudgetTone = keyof typeof toneClass;

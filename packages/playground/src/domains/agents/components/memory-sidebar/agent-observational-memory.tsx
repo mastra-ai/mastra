@@ -19,8 +19,8 @@ const formatTokens = (n: number) => {
 };
 
 const getBarColor = (percentage: number) => {
-  if (percentage >= 60) return 'bg-blue-500';
-  return 'bg-green-500';
+  if (percentage >= 60) return 'bg-info-indicator';
+  return 'bg-success-indicator';
 };
 
 const getModelLabel = (model: unknown, modelRouting?: Array<{ upTo: number; model: string }>) => {
@@ -101,11 +101,11 @@ const ProgressBar = ({
   const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
 
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
-  const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
-  const textColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
-  const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
-  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-fill';
-  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
+  const fillColor = isProcessing ? 'bg-info-bg' : barColor;
+  const textColor = isProcessing ? 'text-info-fg' : 'text-muted-foreground';
+  const textColorFilled = isProcessing ? 'text-info-fg' : 'text-white';
+  const tokenBg = isProcessing ? 'bg-info-bg' : 'bg-fill';
+  const tokenTextColor = isProcessing ? 'text-info-fg' : 'text-muted-foreground';
 
   return (
     <div className="min-w-0 flex-1">
@@ -147,7 +147,7 @@ const ProgressBar = ({
                 {isAdaptive && totalBudget && (
                   <div>
                     <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-amber-400">Adaptive</span>{' '}
+                    <span className="text-warning-fg">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
@@ -185,15 +185,15 @@ const ProgressBar = ({
           className={`text-meta ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
-          <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
+          <span className={isProcessing ? 'text-info-fg' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-amber-400">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-warning-fg">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-caption">
-                  <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
+                  <span className="text-warning-fg">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
@@ -210,7 +210,7 @@ const ProgressBar = ({
 
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
-    <Brain className="h-4 w-4 text-purple-400" />
+    <Brain className="h-4 w-4 text-badge-purple" />
     <h3 className="text-subheading text-foreground">Observational Memory</h3>
   </div>
 );
@@ -231,7 +231,7 @@ const ObservationalMemoryDisabled = () => (
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+          'inline-flex items-center gap-2 text-body text-info-fg hover:underline',
           controlStateColorTransition,
         )}
       >

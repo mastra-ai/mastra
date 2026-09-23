@@ -311,10 +311,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                     <Pencil />
                     Edit
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    onSelect={() => setShowDeleteConfirm(true)}
-                    className="text-red-500 focus:text-red-400"
-                  >
+                  <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
                     <Trash2 />
                     Delete Item
                   </DropdownMenu.Item>

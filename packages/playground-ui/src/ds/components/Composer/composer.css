@@ -9,27 +9,27 @@
 }
 
 [data-composer-tone='green'] {
-  --composer-tone-color: #4ade80;
+  --composer-tone-color: var(--green-400);
 }
 
 [data-composer-tone='purple'] {
-  --composer-tone-color: #c4b5fd;
+  --composer-tone-color: var(--purple-300);
 }
 
 [data-composer-tone='orange'] {
-  --composer-tone-color: #fdba74;
+  --composer-tone-color: var(--orange-300);
 }
 
 html.light [data-composer-tone='green'] {
-  --composer-tone-color: #087a32;
+  --composer-tone-color: var(--green-700);
 }
 
 html.light [data-composer-tone='purple'] {
-  --composer-tone-color: #6d28d9;
+  --composer-tone-color: var(--purple-700);
 }
 
 html.light [data-composer-tone='orange'] {
-  --composer-tone-color: #8a4400;
+  --composer-tone-color: var(--orange-800);
 }
 
 .composer-box {

@@ -84,9 +84,9 @@ export const ElevationFoundations: Story = {
         label="Not elevation"
         description="The focus halo is the only other box-shadow in the system. It belongs to focus, not to depth — it is documented on the Surface page beside --border-focus and --ring."
       >
-        <Specimen name="--shadow-focus-ring" note="Paired with ring-success-indicator by focusRing.visible">
+        <Specimen name="--shadow-focus-ring" note="Paired with ring-border-focus by focusRing.visible">
           <div className="flex h-20 items-center justify-center rounded-xl bg-background p-4">
-            <div className="rounded-md bg-fill px-3 py-1.5 shadow-focus-ring ring-1 ring-success-indicator">
+            <div className="rounded-md bg-fill px-3 py-1.5 shadow-focus-ring ring-1 ring-border-focus">
               <Txt variant="label">Focused row</Txt>
             </div>
           </div>

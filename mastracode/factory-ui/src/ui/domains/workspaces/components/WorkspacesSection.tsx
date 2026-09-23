@@ -238,12 +238,7 @@ export function WorkspacesSection() {
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
                   Cancel
                 </Button>
-                <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
-                  onClick={confirmDeleteWorkspace}
-                  disabled={deleteWorkspace.isPending}
-                >
+                <Button variant="destructive" onClick={confirmDeleteWorkspace} disabled={deleteWorkspace.isPending}>
                   {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
                 </Button>
               </div>

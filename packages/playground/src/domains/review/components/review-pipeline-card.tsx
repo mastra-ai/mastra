@@ -4,8 +4,8 @@ import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
 import { useMemo } from 'react';
 
 const REVIEW_COLORS = {
-  needsReview: '#facc15',
-  complete: '#22c55e',
+  needsReview: 'var(--warning-indicator)',
+  complete: 'var(--success-indicator)',
 };
 
 // "complete" is the DB status value; we label it "Reviewed" in the UI for clarity

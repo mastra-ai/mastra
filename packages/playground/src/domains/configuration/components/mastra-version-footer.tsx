@@ -224,7 +224,7 @@ const PackagesModalContent = ({
                         <span
                           className={cn(
                             'cursor-help',
-                            pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
+                            pkg.isDeprecated ? 'text-destructive-fg' : pkg.isOutdated ? 'text-warning-fg' : '',
                           )}
                         >
                           {pkg.version}

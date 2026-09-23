@@ -161,7 +161,10 @@ const ExtractedValuesPanel = ({
             </div>
           ))}
           {failures.map(failure => (
-            <div key={failure.slug} className="rounded border border-red-500/20 bg-red-500/5 p-2 text-red-700">
+            <div
+              key={failure.slug}
+              className="rounded border border-destructive-border bg-destructive-bg p-2 text-destructive-fg"
+            >
               <div className="text-meta tracking-wide uppercase">{failure.slug}</div>
               <div className="mt-1 text-caption">{failure.error}</div>
             </div>
@@ -222,15 +225,15 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const [isExtractedExpanded, setIsExtractedExpanded] = useState(false);
 
   // Colors - same scheme for both observation and reflection
-  const bgColor = 'bg-blue-500/10';
-  const textColor = 'text-blue-600';
-  const completeBgColor = 'bg-green-500/10';
-  const completeTextColor = 'text-green-600';
-  const completeHoverBgColor = 'hover:bg-green-500/20';
+  const bgColor = 'bg-info-bg';
+  const textColor = 'text-info-fg';
+  const completeBgColor = 'bg-success-bg';
+  const completeTextColor = 'text-success-fg';
+  const completeHoverBgColor = 'hover:opacity-80';
   // Same colors for expanded state
-  const expandedBgColor = 'bg-green-500/5';
-  const expandedBorderColor = 'border-green-500/10';
-  const labelColor = 'text-green-600';
+  const expandedBgColor = 'bg-success-bg';
+  const expandedBorderColor = 'border-success-border';
+  const labelColor = 'text-success-fg';
   const bufferExpandedBgColor = 'bg-background';
   const bufferExpandedBorderColor = 'border-border-1';
   const actionLabel = isReflection ? 'Reflecting' : 'Observing';
@@ -400,7 +403,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <div className="my-1 inline-flex items-center gap-1.5 rounded-md bg-yellow-500/10 px-2 py-1 text-column text-yellow-600">
+        <div className="my-1 inline-flex items-center gap-1.5 rounded-md bg-warning-bg px-2 py-1 text-column text-warning-fg">
           <Unplug className="size-3" />
           <span>
             {disconnectedLabel}
@@ -424,7 +427,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-500/10 px-2 py-1 text-column text-red-600 hover:bg-red-500/20"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-destructive-bg px-2 py-1 text-column text-destructive-fg hover:opacity-80"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -432,7 +435,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           </button>
 
           {isExpanded && error && (
-            <div className="mt-1 ml-4 rounded-md border border-red-500/10 bg-red-500/5 p-2 text-caption text-red-700">
+            <div className="mt-1 ml-4 rounded-md border border-destructive-border bg-destructive-bg p-2 text-caption text-destructive-fg">
               <span className="text-column">Error:</span> {error}
             </div>
           )}
@@ -526,7 +529,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-red-400/40 bg-red-500/10 px-2 py-1 text-column text-red-600 hover:bg-red-500/20"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-destructive-border bg-destructive-bg px-2 py-1 text-column text-destructive-fg hover:opacity-80"
           >
             {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
             <XCircle className="size-3" />
@@ -534,7 +537,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           </button>
 
           {isExpanded && error && (
-            <div className="mt-1 ml-4 rounded-md border border-red-500/10 bg-red-500/5 p-2 text-caption text-red-700">
+            <div className="mt-1 ml-4 rounded-md border border-destructive-border bg-destructive-bg p-2 text-caption text-destructive-fg">
               <span className="text-column">Error:</span> {error}
             </div>
           )}

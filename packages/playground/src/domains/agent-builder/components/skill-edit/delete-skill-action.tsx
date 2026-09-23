@@ -115,7 +115,7 @@ export const DeleteSkillMenuItem = ({ skillId, skillName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="skill-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);

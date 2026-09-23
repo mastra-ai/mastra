@@ -56,9 +56,9 @@ interface FlameGraphProps {
 
 type RechartsClickState = { activeLabel?: string | number } | null | undefined;
 
-const MSG_COLOR = 'var(--color-green-500, #22c55e)';
-const OBS_COLOR = '#f59e0b';
-const REFLECT_COLOR = '#ec4899';
+const MSG_COLOR = 'var(--chart-4)';
+const OBS_COLOR = 'var(--chart-3)';
+const REFLECT_COLOR = 'var(--chart-7)';
 
 function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];

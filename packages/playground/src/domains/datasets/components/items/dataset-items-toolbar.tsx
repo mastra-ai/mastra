@@ -124,7 +124,7 @@ export function DatasetItemsToolbar({
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+            <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
               <Trash2 /> Delete Items
             </DropdownMenu.Item>
           </>

@@ -13,7 +13,7 @@ export interface ChatSignalProps {
 }
 
 const rowIcons = {
-  state: <Layers size={13} className="text-purple-400" aria-hidden />,
+  state: <Layers size={13} className="text-badge-purple" aria-hidden />,
   reminder: <Info size={13} className="text-info-fg" aria-hidden />,
   reactive: <Info size={13} className="text-muted-foreground" aria-hidden />,
 };

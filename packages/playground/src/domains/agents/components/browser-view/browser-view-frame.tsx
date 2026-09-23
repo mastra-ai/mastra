@@ -132,7 +132,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       className={cn(
         'relative aspect-video w-full overflow-hidden rounded-md bg-background',
         isInteractive && !isAgentBusy && 'ring-2 ring-success-indicator',
-        isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
+        isInteractive && isAgentBusy && 'ring-2 ring-warning-indicator',
         className,
       )}
     >
@@ -179,9 +179,9 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       {hasError && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 px-4 py-4 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive-bg">
               <svg
-                className="h-7 w-7 text-red-400"
+                className="h-7 w-7 text-destructive-indicator"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

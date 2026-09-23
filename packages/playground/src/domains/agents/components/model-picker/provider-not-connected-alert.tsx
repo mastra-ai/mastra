@@ -15,7 +15,7 @@ export const ProviderNotConnectedAlert = ({ provider }: ProviderNotConnectedAler
       <Notice variant="warning" title="Provider not connected">
         <Notice.Message>
           Set the{' '}
-          <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
+          <code className="rounded bg-warning-bg px-1 py-0.5">
             {Array.isArray(provider.envVar) ? provider.envVar.join(', ') : provider.envVar}
           </code>{' '}
           environment {Array.isArray(provider.envVar) && provider.envVar.length > 1 ? 'variables' : 'variable'} to use

@@ -39,7 +39,7 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   /**
    * Optional inline styles applied to the underlying tab list element.
    * To override the active tab indicator color, set the `--tab-indicator-color`
-   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}`.
+   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--info-indicator)' } as React.CSSProperties}`.
    */
   style?: React.CSSProperties;
 };

@@ -55,7 +55,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           {!isLoading && templateSlug && (
             <div className={cn('mb-4 rounded-lg border border-border bg-background p-4', 'flex items-start gap-3')}>
               <div className="mt-0.5 shrink-0">
-                <InfoIcon className="h-[1.1em] w-[1.1em] text-blue-500" />
+                <InfoIcon className="h-[1.1em] w-[1.1em] text-info-indicator" />
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">

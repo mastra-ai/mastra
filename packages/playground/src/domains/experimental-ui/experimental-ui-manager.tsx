@@ -22,7 +22,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
         <Button
           aria-label="Experimental UI"
           size="sm"
-          className="mr-auto ml-3 bg-blue-600 text-white"
+          className="mr-auto ml-3 bg-info-indicator text-white"
           icon={<FlaskConicalIcon />}
         >
           UI

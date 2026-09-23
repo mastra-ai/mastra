@@ -219,8 +219,7 @@ export function UserSessionsSection() {
                   Cancel
                 </Button>
                 <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
+                  variant="destructive"
                   onClick={() => deleteSession.mutate(confirmDelete)}
                   disabled={deleteSession.isPending}
                 >

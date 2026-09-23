@@ -471,7 +471,7 @@ export function SankeySignals({
               </p>
             ) : null}
             {perspectiveMutation.isError ? (
-              <p className="text-caption text-red-500" role="alert">
+              <p className="text-caption text-destructive-fg" role="alert">
                 Unable to load that trace signal perspective. Try reordering the columns again.
               </p>
             ) : null}

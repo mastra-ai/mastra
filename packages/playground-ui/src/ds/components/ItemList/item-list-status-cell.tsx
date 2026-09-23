@@ -20,9 +20,9 @@ export function ItemListStatusCell({ status }: ItemListStatusCellProps) {
         <div className={cn('relative flex h-full w-10 items-center justify-center bg-transparent')}>
           <div
             className={cn('size-2 rounded-full', {
-              'bg-green-600': ['success', 'completed'].includes(status),
-              'bg-red-700': ['error', 'failed'].includes(status),
-              'bg-yellow-500': ['pending', 'running'].includes(status),
+              'bg-success-indicator': ['success', 'completed'].includes(status),
+              'bg-destructive-indicator': ['error', 'failed'].includes(status),
+              'bg-warning-indicator': ['pending', 'running'].includes(status),
             })}
           ></div>
         </div>

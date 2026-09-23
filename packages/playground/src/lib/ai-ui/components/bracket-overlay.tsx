@@ -229,24 +229,24 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
 function getStateColor(state: HighlightPosition['state']): string {
   switch (state) {
     case 'complete':
-      return 'rgba(34, 197, 94, 0.4)';
+      return 'color-mix(in oklab, var(--success-indicator) 40%, transparent)';
     case 'loading':
-      return 'rgba(59, 130, 246, 0.4)';
+      return 'color-mix(in oklab, var(--info-indicator) 40%, transparent)';
     case 'failed':
-      return 'rgba(239, 68, 68, 0.4)';
+      return 'color-mix(in oklab, var(--destructive-indicator) 40%, transparent)';
     case 'disconnected':
-      return 'rgba(234, 179, 8, 0.4)';
+      return 'color-mix(in oklab, var(--warning-indicator) 40%, transparent)';
     // Buffering states use a neutral bracket so they don't overpower the message content.
     case 'buffering':
       return 'rgba(156, 163, 175, 0.45)';
     case 'buffering-complete':
       return 'rgba(156, 163, 175, 0.45)';
     case 'buffering-failed':
-      return 'rgba(239, 68, 68, 0.4)';
+      return 'color-mix(in oklab, var(--destructive-indicator) 40%, transparent)';
     // Activation state uses green — same as sync observation/reflection 'complete'
     case 'activated':
-      return 'rgba(34, 197, 94, 0.4)';
+      return 'color-mix(in oklab, var(--success-indicator) 40%, transparent)';
     default:
-      return 'rgba(34, 197, 94, 0.4)';
+      return 'color-mix(in oklab, var(--success-indicator) 40%, transparent)';
   }
 }

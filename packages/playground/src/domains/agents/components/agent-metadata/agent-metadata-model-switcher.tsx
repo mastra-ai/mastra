@@ -233,7 +233,7 @@ export const AgentMetadataModelSwitcher = ({
         <div className="p-2 pt-2" data-testid="agent-metadata-model-stale-warning">
           <Notice variant="warning" title="Model not allowed">
             <Notice.Message>
-              <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
+              <code className="rounded bg-warning-bg px-1 py-0.5">
                 {selectedProvider}/{selectedModel}
               </code>{' '}
               is no longer allowed by the admin policy. Pick a different model to save changes.
@@ -248,7 +248,7 @@ export const AgentMetadataModelSwitcher = ({
           <Notice variant="warning" title="Provider not connected">
             <Notice.Message>
               Set the{' '}
-              <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
+              <code className="rounded bg-warning-bg px-1 py-0.5">
                 {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
               </code>{' '}
               environment{' '}

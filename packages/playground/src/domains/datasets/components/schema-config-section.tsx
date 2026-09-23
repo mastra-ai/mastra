@@ -188,7 +188,7 @@ export function SchemaConfigSection({
               href="https://json-schema.org/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-accent5Lighter underline"
+              className="underline hover:text-info-fg"
             >
               JSON Schema
             </a>{' '}

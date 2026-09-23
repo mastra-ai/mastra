@@ -635,9 +635,9 @@ function WorkspaceSearchPanel({
             Search Indexed Files
           </h3>
           {showInitWarning && (
-            <p className="mb-3 text-caption text-amber-400">
-              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
-              configured <code className="text-amber-300">autoIndexPaths</code>.
+            <p className="mb-3 text-caption text-warning-fg">
+              File search requires <code className="text-warning-fg">workspace.init()</code> to index files from your
+              configured <code className="text-warning-fg">autoIndexPaths</code>.
             </p>
           )}
           <SearchWorkspacePanel

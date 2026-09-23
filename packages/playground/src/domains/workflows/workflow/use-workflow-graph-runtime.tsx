@@ -73,7 +73,7 @@ export const useWorkflowGraphRuntime = ({
           },
           style: {
             ...edge.style,
-            stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
+            stroke: isFinishedEdge ? 'var(--success-indicator)' : '#8e8e8e',
             strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
           },
         };

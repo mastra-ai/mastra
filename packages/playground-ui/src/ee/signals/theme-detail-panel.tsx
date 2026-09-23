@@ -126,7 +126,7 @@ export function ThemeDetailPanel({
           {insightTraceId === undefined && (
             <>
               {detailQuery.isPending && <p className="text-body text-muted-foreground">Loading theme details…</p>}
-              {detailQuery.isError && <p className="text-body text-red-500">Unable to load theme details.</p>}
+              {detailQuery.isError && <p className="text-body text-destructive-fg">Unable to load theme details.</p>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
                   <h2 className="text-subheading text-foreground">Not present in this snapshot</h2>
@@ -165,7 +165,9 @@ export function ThemeDetailPanel({
                     {examplesQuery.isPending && (
                       <p className="mt-3 text-body text-muted-foreground">Loading examples…</p>
                     )}
-                    {examplesQuery.isError && <p className="mt-3 text-body text-red-500">Unable to load examples.</p>}
+                    {examplesQuery.isError && (
+                      <p className="mt-3 text-body text-destructive-fg">Unable to load examples.</p>
+                    )}
                     {examplesQuery.data && (
                       <>
                         {examplesQuery.data.examples.length === 0 ? (
@@ -207,7 +209,9 @@ export function ThemeDetailPanel({
                         Trend
                       </h2>
                       {historyQuery.isPending && <p className="mt-3 text-body text-muted-foreground">Loading trend…</p>}
-                      {historyQuery.isError && <p className="mt-3 text-body text-red-500">Unable to load the trend.</p>}
+                      {historyQuery.isError && (
+                        <p className="mt-3 text-body text-destructive-fg">Unable to load the trend.</p>
+                      )}
                       {oldestHistoryPoint !== undefined && (
                         <>
                           <p className="mt-3 text-body text-foreground">

@@ -321,7 +321,7 @@ export function BuilderAddSkillDialog({
           {selectedSkill && (
             <div className="flex flex-col gap-3 border-t border-border pt-4">
               {installError && (
-                <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-body text-red-400">
+                <div className="rounded-md border border-destructive-border bg-destructive-bg px-3 py-2 text-body text-destructive-fg">
                   {installError}
                 </div>
               )}
