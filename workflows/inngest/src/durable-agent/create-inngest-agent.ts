@@ -104,6 +104,9 @@ const CLOSE_ON_SUSPEND = Symbol('mastra.durable.inngest.closeOnSuspend');
  */
 const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
 
+const RESUME_SNAPSHOT_WAIT_MS = 10_000;
+const RESUME_SNAPSHOT_POLL_MS = 100;
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -1101,10 +1104,25 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       const dispatch = ready.then(async () => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-          runId,
-        });
+        const loadSnapshot = async (): Promise<any> =>
+          workflowsStore?.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
+
+        // The suspension reaches the caller's stream before the loop's finalize step
+        // persists the suspended snapshot. Resuming inside that window used to find no
+        // suspended step and dispatch a fresh run whose input was the resume payload,
+        // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
+        let snapshot: any = await loadSnapshot();
+        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+        while (workflowsStore && snapshot?.status !== 'suspended' && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+          snapshot = await loadSnapshot();
+        }
+        if (workflowsStore && snapshot?.status !== 'suspended') {
+          throw new NonRetriableError(
+            `Cannot resume run ${runId}: it is not suspended` +
+              (snapshot?.status ? ` (status: ${snapshot.status}).` : ' (no snapshot found).'),
+          );
+        }
 
         // Resolve which suspended leaf to resume. `resume.steps` is a path: the outer
         // step id followed by the nested step ids beneath it, so a nested suspension has
