@@ -174,6 +174,7 @@ export type ScenarioName =
   | 'skill-tab-autocomplete'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
+  | 'status-footer-inline-start'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
