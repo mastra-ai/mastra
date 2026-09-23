@@ -18,7 +18,7 @@
   <EmptyState tone="error" titleSlot="Failed to load tools" descriptionSlot={error.message} actionSlot={retryButton} />;
   ```
 
-- `PermissionDenied` and `SessionExpired` hold Studio's permission copy and SSO login flow, so they moved out of the design system into the auth domain. Only the import path changes:
+- `PermissionDenied` and `SessionExpired` hold Studio's permission copy and SSO login flow, so they moved out of the design system into the auth domain:
 
   ```tsx
   // Before
@@ -30,4 +30,10 @@
   import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
   ```
 
-`EmptyState` icons without their own color now render muted by default.
+- `PermissionDenied` now takes only `resource` (required) and `variant`, and `SessionExpired` only `variant`. The unused `title`, `description`, `actionSlot` and `className` overrides are removed.
+
+**Improved**
+
+- `PermissionDenied` shows a lock icon and `SessionExpired` a timer-off icon, so neither reads as an empty list anymore.
+- The **Log in** button on `SessionExpired` now sends the client's custom headers, like Studio's own login does.
+- `EmptyState` icons without their own color now render muted by default.

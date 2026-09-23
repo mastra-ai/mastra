@@ -21,13 +21,6 @@ type Story = StoryObj<typeof SessionExpired>;
 
 export const Default: Story = {};
 
-export const CustomCopy: Story = {
-  args: {
-    title: 'Sign in to continue',
-    description: 'Your Studio session ended while this page was open.',
-  },
-};
-
 export const Fill: Story = {
   args: { variant: 'fill' },
   render: args => (
