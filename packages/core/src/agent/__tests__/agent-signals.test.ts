@@ -2345,6 +2345,165 @@ describe('Agent signals', () => {
     }
   });
 
+  it('reports a queued run failure to a retry of the same logical message', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held owner response',
+      'queued owner response',
+    );
+    let failNextRun = false;
+    const ownerAgent = new Agent({
+      id: 'retry-queued-failed-owner',
+      name: 'Retry Queued Failed Owner',
+      instructions: async () => {
+        if (failNextRun) {
+          failNextRun = false;
+          throw new Error('queued owner preparation failed');
+        }
+        return 'Test';
+      },
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-queued-failed-sender',
+      name: 'Retry Queued Failed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-queued-failed-user', threadId: 'retry-queued-failed-thread' };
+    const holdAttributes = { messageId: 'retry-queued-failed-hold', sourcePeerId: 'retry-queued-failed-peer' };
+    const attributes = { messageId: 'retry-queued-failed-message', sourcePeerId: 'retry-queued-failed-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      // Hold the thread so the logical message under test is queued behind a run
+      // rather than admitted directly.
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hold the thread', attributes: holdAttributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      // The queued wake is the one that fails: arm the failing instructions once it
+      // is queued and only the drain is left to run it.
+      failNextRun = true;
+      releaseFirst();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(
+          data => data?.type === 'run-failed' && data?.error === 'queued owner preparation failed',
+        ),
+      );
+
+      // The queued run started and failed, so its identity must stay recorded on
+      // that failure: the retry has to learn the turn failed rather than resolve to
+      // a run that already errored.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('queued owner preparation failed');
+      expect(getStreamCount()).toBe(1);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('lets a retry of a queued wake route when the drain cannot hand over the lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held owner response',
+      'routed owner response',
+    );
+    const ownerAgent = new Agent({
+      id: 'retry-drain-lease-owner',
+      name: 'Retry Drain Lease Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-drain-lease-sender',
+      name: 'Retry Drain Lease Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-drain-lease-user', threadId: 'retry-drain-lease-thread' };
+    const holdAttributes = { messageId: 'retry-drain-lease-hold', sourcePeerId: 'retry-drain-lease-peer' };
+    const attributes = { messageId: 'retry-drain-lease-message', sourcePeerId: 'retry-drain-lease-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      // Hold the thread so the logical message under test is queued behind a run.
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hold the thread', attributes: holdAttributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then lose the lease', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      // Only a SYNCHRONOUS throw reaches the drain's catch; an async provider
+      // rejection is handled as a lease-lost handoff instead. The drain that
+      // follows the held run performs the first lease transfer of this exchange.
+      vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
+        throw new Error('lease backend down');
+      });
+      releaseFirst();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-failed' && data?.error === 'lease backend down'),
+      );
+
+      // The queued wake never started and is not retried from the queue, so its
+      // identity must not keep claiming delivery: the retry has to route and run
+      // instead of resolving to a wake that never happened.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then lose the lease', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 2);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
   it('preserves an acknowledged remote wake when the busy owner releases its claim', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const pubsub = new ControlledLeasePubSub();
