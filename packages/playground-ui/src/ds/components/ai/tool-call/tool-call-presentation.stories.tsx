@@ -53,7 +53,7 @@ function ToolPreview({
 }
 
 const meta = {
-  title: 'AI/Tool Call',
+  title: 'AI/Activity/Tool call',
   component: ToolPreview,
   decorators: [
     Story => (
