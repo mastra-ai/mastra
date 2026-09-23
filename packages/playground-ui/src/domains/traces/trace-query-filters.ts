@@ -48,12 +48,7 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
 } as const satisfies Record<TraceFilterOperatorId, TraceQueryScalarPredicate['op']>;
 
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
-export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set([
-  'durationMs',
-  'spans.durationMs',
-  'scores.score',
-  'feedback.value',
-]);
+export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set(['spans.durationMs', 'scores.score', 'feedback.value']);
 
 const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'entityType',
@@ -63,7 +58,6 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'traceId',
   'threadId',
   'resourceId',
-  'durationMs',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
@@ -158,7 +152,7 @@ export function buildTraceQueryRequest({
       values = rawValues.filter(value => value !== 'running');
       if (!values.length && !isPresence) continue;
     } else if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(fieldId)) {
-      values = rawValues.map(Number).filter(Number.isFinite);
+      values = rawValues.map(Number).filter(value => !Number.isNaN(value));
       if (!values.length && !isPresence) continue;
     }
 

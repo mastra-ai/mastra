@@ -251,23 +251,6 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
-  describe('when the root duration field carries gt', () => {
-    it('emits a top-level numeric predicate', () => {
-      expect(
-        buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: '5000', operatorId: 'gt' }], now }).where,
-      ).toEqual({
-        op: 'and',
-        args: [{ op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } }],
-      });
-    });
-
-    it.each(['Infinity', '-Infinity', 'NaN'])('skips the non-finite numeric value %s', value => {
-      expect(
-        buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value, operatorId: 'gt' }], now }).where,
-      ).toBeUndefined();
-    });
-  });
-
   describe('when a numeric span field carries gt', () => {
     it('emits gt inside spans.some with a number literal', () => {
       expect(

@@ -91,8 +91,6 @@ describe('createTraceFilterBarFields', () => {
   });
 
   it('offers comparison operators on numeric fields', () => {
-    expect(byId('durationMs')).toMatchObject({ label: 'Trace duration (ms)', type: 'number' });
-    expect(byId('durationMs')?.operators).toEqual(['is', 'isNot', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists']);
     expect(byId('spans.durationMs')?.type).toBe('number');
     expect(byId('spans.durationMs')?.operators).toEqual([
       'is',
@@ -123,7 +121,6 @@ describe('createTraceFilterBarFields', () => {
       'resourceId',
       'threadId',
       'traceId',
-      'durationMs',
       'spans.model',
       'spans.provider',
       'spans.durationMs',
@@ -289,16 +286,6 @@ describe('filter operator URL params', () => {
       );
     });
 
-    it('round-trips trace duration through filterDurationMs with its operator', () => {
-      const params = new URLSearchParams();
-      const tokens = [{ fieldId: 'durationMs', value: '5000', operatorId: 'gt' as const }];
-
-      applyTracePropertyFilterTokens(params, tokens);
-
-      expect(params.toString()).toBe('filterDurationMs=5000&filterDurationMs.op=gt');
-      expect(getTracePropertyFilterTokens(params)).toEqual(tokens);
-    });
-
     it('round-trips a many-valued notIn token', () => {
       const params = new URLSearchParams();
       const tokens = [{ fieldId: 'metadata.region', value: ['eu', 'us'], operatorId: 'notIn' as const }];
@@ -345,17 +332,6 @@ describe('filter operator URL params', () => {
       );
 
       expect(preserved.toString()).toBe('filterTraceId=abc&filterTraceId.op=isNot');
-    });
-
-    it('persists and removes the trace duration filter with the shared URL lifecycle', () => {
-      const params = new URLSearchParams('filterDurationMs=5000&filterDurationMs.op=gt');
-
-      saveTraceFiltersToStorage(params, KEY);
-      expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('filterDurationMs=5000&filterDurationMs.op=gt');
-
-      applyTracePropertyFilterTokens(params, []);
-      saveTraceFiltersToStorage(params, KEY);
-      expect(loadTraceFiltersFromStorage(KEY)).toBeNull();
     });
 
     it('keeps a presence-only filter', () => {
