@@ -1,7 +1,8 @@
 import type { IMastraLogger } from '../../logger';
 import { transformToolPayloadForTargets, withToolPayloadTransformMetadata } from '../../tools/payload-transform';
 import { findProviderToolByName } from '../../tools/provider-tool-utils';
-import type { ToolPayloadTransformPolicy } from '../../tools/types';
+import { withToolTitle } from '../../tools/tool-title';
+import type { CoreTool, ToolPayloadTransformPolicy } from '../../tools/types';
 
 type ToolsRecord = Record<string, unknown>;
 
@@ -40,10 +41,10 @@ export interface ApplyToolPayloadTransformOptions {
   transformInput?: { args?: unknown; providerMetadata?: Record<string, unknown> };
 }
 
-function resolveToolTransform(
+function resolveTool(
   tools: ToolsRecord | Array<ToolsRecord | undefined> | undefined,
   toolName: string,
-): unknown {
+): ToolsRecord[string] | undefined {
   const sources = Array.isArray(tools) ? tools : [tools];
   for (const source of sources) {
     if (!source) continue;
@@ -52,7 +53,7 @@ function resolveToolTransform(
       findProviderToolByName(source as any, toolName) ||
       Object.values(source).find((t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName);
     if (tool) {
-      return (tool as { transform?: unknown }).transform;
+      return tool;
     }
   }
   return undefined;
@@ -73,11 +74,6 @@ export async function applyToolPayloadTransformToChunk<
 >(chunk: TChunk, opts: ApplyToolPayloadTransformOptions): Promise<TChunk> {
   const { policy, logger, transformInput } = opts;
 
-  const phase = CHUNK_TYPE_PHASE[chunk.type];
-  if (!phase) {
-    return chunk;
-  }
-
   const payload = chunk.payload;
   if (!payload || typeof payload !== 'object') {
     return chunk;
@@ -89,7 +85,18 @@ export async function applyToolPayloadTransformToChunk<
     return chunk;
   }
 
-  const toolTransform = opts.toolTransform ?? resolveToolTransform(opts.tools, toolName);
+  // The display title is stamped on tool-call and streaming-start chunks
+  // regardless of whether any transform is configured — it is metadata, not a
+  // redaction, so it precedes the phase gate below.
+  const tool = resolveTool(opts.tools, toolName);
+  chunk = withToolTitle(chunk, tool as CoreTool | undefined);
+
+  const phase = CHUNK_TYPE_PHASE[chunk.type];
+  if (!phase) {
+    return chunk;
+  }
+
+  const toolTransform = opts.toolTransform ?? (tool as { transform?: unknown } | undefined)?.transform;
   if (!policy && !toolTransform) {
     return chunk;
   }

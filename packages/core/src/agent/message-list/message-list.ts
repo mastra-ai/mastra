@@ -5,6 +5,8 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import type { AnySpan } from '../../observability/types';
+import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
@@ -239,6 +241,7 @@ export class MessageList {
 
   // Event recording for observability
   private isRecording = false;
+  private spanRecordings = new Map<AnySpan, ReturnType<MessageList['getRecordedEvents']>>();
   private recordedEvents: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
     source?: MessageSource;
@@ -274,9 +277,14 @@ export class MessageList {
   }
 
   /**
-   * Start recording mutations to the MessageList for observability/tracing
+   * Start recording mutations to the MessageList for observability/tracing.
+   * A span scopes recording to that async context, allowing parallel processors.
    */
-  public startRecording(): void {
+  public startRecording(span?: AnySpan): void {
+    if (span) {
+      this.spanRecordings.set(span, []);
+      return;
+    }
     this.isRecording = true;
     this.recordedEvents = [];
   }
@@ -301,7 +309,7 @@ export class MessageList {
   /**
    * Stop recording and return the list of recorded events
    */
-  public stopRecording(): Array<{
+  public stopRecording(span?: AnySpan): Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
     source?: MessageSource;
     count?: number;
@@ -310,10 +318,32 @@ export class MessageList {
     tag?: string;
     message?: CoreMessageV4;
   }> {
+    if (span) {
+      const events = this.spanRecordings.get(span) ?? [];
+      this.spanRecordings.delete(span);
+      return events;
+    }
     this.isRecording = false;
     const events = this.getRecordedEvents();
     this.recordedEvents = [];
     return events;
+  }
+
+  private recordMutation(event: ReturnType<MessageList['getRecordedEvents']>[number]): void {
+    // Child operations belong to the nearest processor recording. Parallel
+    // processors share the list, but have separate async span contexts.
+    if (this.spanRecordings.size > 0) {
+      let span = resolveCurrentSpan();
+      while (span) {
+        const events = this.spanRecordings.get(span);
+        if (events) {
+          events.push(event);
+          return;
+        }
+        span = span.parent;
+      }
+    }
+    if (this.isRecording) this.recordedEvents.push(event);
   }
 
   public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
@@ -388,13 +418,11 @@ export class MessageList {
     const messageArray = Array.isArray(messages) ? messages : [messages];
 
     // Record event if recording is enabled
-    if (this.isRecording) {
-      this.recordedEvents.push({
-        type: 'add',
-        source: messageSource,
-        count: messageArray.length,
-      });
-    }
+    this.recordMutation({
+      type: 'add',
+      source: messageSource,
+      count: messageArray.length,
+    });
 
     for (const message of messageArray) {
       if (isCreatedAgentSignal(message) && messageSource === 'input') {
@@ -589,8 +617,8 @@ export class MessageList {
           const allMessages = [...this.messages];
           this.messages = [];
           this.stateManager.clearAll();
-          if (this.isRecording && allMessages.length > 0) {
-            this.recordedEvents.push({
+          if (allMessages.length > 0) {
+            this.recordMutation({
               type: 'clear',
               count: allMessages.length,
             });
@@ -603,8 +631,8 @@ export class MessageList {
           const userMessages = Array.from(this.stateManager.getUserMessages());
           this.messages = this.messages.filter(m => !this.stateManager.isUserMessage(m));
           this.stateManager.clearUserMessages();
-          if (this.isRecording && userMessages.length > 0) {
-            this.recordedEvents.push({
+          if (userMessages.length > 0) {
+            this.recordMutation({
               type: 'clear',
               source: 'input',
               count: userMessages.length,
@@ -618,8 +646,8 @@ export class MessageList {
           const responseMessages = Array.from(this.stateManager.getResponseMessages());
           this.messages = this.messages.filter(m => !this.stateManager.isResponseMessage(m));
           this.stateManager.clearResponseMessages();
-          if (this.isRecording && responseMessages.length > 0) {
-            this.recordedEvents.push({
+          if (responseMessages.length > 0) {
+            this.recordMutation({
               type: 'clear',
               source: 'response',
               count: responseMessages.length,
@@ -647,8 +675,8 @@ export class MessageList {
       }
       return true;
     });
-    if (this.isRecording && removed.length > 0) {
-      this.recordedEvents.push({
+    if (removed.length > 0) {
+      this.recordMutation({
         type: 'removeByIds',
         ids,
         count: removed.length,
@@ -1657,6 +1685,7 @@ export class MessageList {
       ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
         ? { providerExecuted: originalPart.providerExecuted }
         : {}),
+      ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
 
@@ -1933,21 +1962,17 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
-      if (this.isRecording) {
-        this.recordedEvents.push({
-          type: 'addSystem',
-          tag,
-          message: coreMessage,
-        });
-      }
+      this.recordMutation({
+        type: 'addSystem',
+        tag,
+        message: coreMessage,
+      });
     } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
-      if (this.isRecording) {
-        this.recordedEvents.push({
-          type: 'addSystem',
-          message: coreMessage,
-        });
-      }
+      this.recordMutation({
+        type: 'addSystem',
+        message: coreMessage,
+      });
     }
   }
 

@@ -131,18 +131,18 @@ export const Vertical: Story = {
   ),
 };
 
-export const VerticalOutline: Story = {
+export const VerticalWithIcons: Story = {
   render: () => (
     <ButtonsGroup orientation="vertical">
-      <Button variant="outline">
+      <Button>
         <CopyIcon />
         Copy
       </Button>
-      <Button variant="outline">
+      <Button>
         <ScissorsIcon />
         Cut
       </Button>
-      <Button variant="outline">
+      <Button>
         <ClipboardIcon />
         Paste
       </Button>
@@ -151,20 +151,16 @@ export const VerticalOutline: Story = {
 };
 
 /**
- * A stepper: two outline buttons joined to a read-only value segment. The middle value
+ * A stepper: two buttons joined to a read-only value segment. The middle value
  * uses `ButtonsGroupText` (a filled chip). Because that segment is filled (opaque bg) the
  * group keeps its own border as the seam, so both dividers render as a single clean line.
  */
 export const Stepper: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button variant="outline" aria-label="Decrement">
-        −
-      </Button>
+      <Button aria-label="Decrement">−</Button>
       <ButtonsGroupText>42</ButtonsGroupText>
-      <Button variant="outline" aria-label="Increment">
-        +
-      </Button>
+      <Button aria-label="Increment">+</Button>
     </ButtonsGroup>
   ),
 };
@@ -174,7 +170,7 @@ export const WithText: Story = {
   render: () => (
     <ButtonsGroup>
       <ButtonsGroupText>https://</ButtonsGroupText>
-      <Button variant="outline">example.com</Button>
+      <Button>example.com</Button>
     </ButtonsGroup>
   ),
 };

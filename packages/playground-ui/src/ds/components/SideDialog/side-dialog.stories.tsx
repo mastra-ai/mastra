@@ -76,13 +76,13 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
             onNext={index < items.length - 1 ? () => setIndex(index + 1) : undefined}
           />
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button size="sm">
               <Icon>
                 <PencilIcon />
               </Icon>
               Edit
             </Button>
-            <Button variant="outline" size="sm">
+            <Button size="sm">
               <Icon>
                 <Trash2Icon />
               </Icon>
@@ -179,11 +179,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
     <div className="p-8">
       <div className="flex gap-2">
         <Button onClick={() => openDepth(2)}>Open Nested Level 2</Button>
-        {depth === 3 && (
-          <Button variant="outline" onClick={() => openDepth(3)}>
-            Open Nested Level 3
-          </Button>
-        )}
+        {depth === 3 && <Button onClick={() => openDepth(3)}>Open Nested Level 3</Button>}
       </div>
 
       <SideDialog
@@ -198,7 +194,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
             <HashIcon /> item_a1b2c3
           </TextAndIcon>
           <div className="ml-auto">
-            <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
+            <Button size="sm" onClick={() => setIsLevel2Open(true)}>
               Open Trace
             </Button>
           </div>
@@ -237,7 +233,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
               <TextAndIcon>
                 <HashIcon /> trace_72f19
               </TextAndIcon>
-              <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
+              <Button size="sm" onClick={() => setIsLevel2Open(true)}>
                 Open
               </Button>
             </div>
@@ -256,7 +252,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
               </TextAndIcon>
               {depth === 3 && (
                 <div className="ml-auto">
-                  <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
+                  <Button size="sm" onClick={() => setIsLevel3Open(true)}>
                     Open Span
                   </Button>
                 </div>
@@ -295,7 +291,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
                     <TextAndIcon>
                       <HashIcon /> span_embed_query
                     </TextAndIcon>
-                    <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
+                    <Button size="sm" onClick={() => setIsLevel3Open(true)}>
                       Open
                     </Button>
                   </div>
@@ -433,9 +429,7 @@ const ConfirmationDialogDemo = () => {
               This action cannot be undone. The agent will be permanently deleted.
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsOpen(false)}>
-                Cancel
-              </Button>
+              <Button onClick={() => setIsOpen(false)}>Cancel</Button>
               <Button onClick={() => setIsOpen(false)}>Delete</Button>
             </div>
           </div>

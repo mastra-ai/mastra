@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
@@ -15,7 +16,18 @@ export const ComposerModelSwitcher = () => {
 
   const [modelOpen, setModelOpen] = useState(false);
 
-  if (providersLoading || !selection) return null;
+  if (!selection) return null;
+  // Reserve the picker footprint so the action row doesn't collapse then pop in.
+  if (providersLoading) {
+    // Lighter than the default `bg-muted`: the composer surface is already light, so the
+    // skeleton would otherwise read as a dark pill instead of a placeholder.
+    return (
+      <Skeleton
+        className="h-control-md w-40 rounded-full bg-fill-subtle before:via-fill"
+        data-testid="composer-model-switcher-skeleton"
+      />
+    );
+  }
 
   const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
   const providers = dataProviders?.providers || [];

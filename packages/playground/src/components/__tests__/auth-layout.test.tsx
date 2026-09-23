@@ -60,9 +60,9 @@ describe('AuthLayout', () => {
       renderAuthRoute('/login');
 
       const page = await screen.findByTestId('login-page');
-      const cards = document.querySelectorAll('[data-slot="studio-card"]');
+      const cards = document.querySelectorAll('[data-slot="main-card"]');
       expect(cards).toHaveLength(1);
-      expect(page.closest('[data-slot="studio-card"]')).toBe(cards[0]);
+      expect(page.closest('[data-slot="main-card"]')).toBe(cards[0]);
     });
 
     it('renders /signup inside the same studio card', async () => {
@@ -70,7 +70,7 @@ describe('AuthLayout', () => {
       renderAuthRoute('/signup');
 
       const page = await screen.findByTestId('login-page');
-      expect(page.closest('[data-slot="studio-card"]')).not.toBeNull();
+      expect(page.closest('[data-slot="main-card"]')).not.toBeNull();
       expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeTruthy();
     });
 

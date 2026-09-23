@@ -12,6 +12,8 @@ import {
   formatSpanTimestamp,
   formatSpanTimestampExact,
 } from '../utils/span-utils';
+import { TraceStatusValue } from './trace-status-value';
+import type { TraceStatusValueStatus } from './trace-status-value';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
@@ -24,6 +26,12 @@ function formatEntityType(entityType: string): string {
     .join(' ');
 }
 
+function computeTraceStatus(span: { error?: unknown; endedAt?: Date | string | null }): TraceStatusValueStatus {
+  if (span.error != null) return 'error';
+  if (span.endedAt == null) return 'running';
+  return 'success';
+}
+
 /** Lightweight root-span fields available from `useTraceLightSpans`. */
 type RootSpanSummary = {
   entityId?: string | null;
@@ -31,6 +39,7 @@ type RootSpanSummary = {
   entityType?: string | null;
   startedAt: Date | string;
   endedAt?: Date | string | null;
+  error?: unknown;
 };
 
 export interface TraceSummaryDescriptionProps {
@@ -72,6 +81,9 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
             {entityName}
           </DataPanel.Meta>
         ))}
+      <DataPanel.Meta tooltip="Trace status">
+        <TraceStatusValue status={computeTraceStatus(rootSpan)} />
+      </DataPanel.Meta>
       {startedAtTimestamp && exactStartedAtTimestamp && (
         <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
           {startedAtTimestamp}
