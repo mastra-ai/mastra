@@ -52,7 +52,7 @@ export const createTraceQueryValuesResolver = (
       { timeRange, predicateScope, path, search: search.trim() || undefined, limit: DISCOVERY_LIMIT },
       { signal },
     );
-    return values.flatMap(({ value }) => (typeof value === 'string' ? [{ value }] : []));
+    return values.map(({ value }) => ({ value }));
   };
 };
 
@@ -98,16 +98,10 @@ export const useTraceMetadataFilterFields = ({
 
   const fields = useMemo<TraceMetadataFilterField[]>(
     () =>
-      (observedFields ?? []).flatMap(field =>
-        typeof field.path === 'string'
-          ? [
-              {
-                path: field.path,
-                suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', field.path),
-              },
-            ]
-          : [],
-      ),
+      (observedFields ?? []).map(field => ({
+        path: field.path,
+        suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', field.path),
+      })),
     [observedFields, client, timeRange],
   );
 

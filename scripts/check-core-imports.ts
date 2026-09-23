@@ -225,39 +225,13 @@ function extractTarball(tarball: string, tempDir: string) {
   return join(tempDir, 'package');
 }
 
-let pendingCoreVersion: string | null | undefined;
-
-function getPendingCoreVersion(tempDir: string) {
-  if (pendingCoreVersion !== undefined) {
-    return pendingCoreVersion;
-  }
-
-  const statusPath = join(tempDir, 'changeset-status.json');
-  const status = runCommand('pnpm', ['changeset-cli', 'status', '--output', statusPath], repoRoot);
-
-  if (status.status !== 0 || !existsSync(statusPath)) {
-    pendingCoreVersion = null;
-    return pendingCoreVersion;
-  }
-
-  const releaseStatus = JSON.parse(readFileSync(statusPath, 'utf-8')) as {
-    releases?: Array<{ name?: string; newVersion?: string }>;
-  };
-  pendingCoreVersion = releaseStatus.releases?.find(release => release.name === '@mastra/core')?.newVersion ?? null;
-  return pendingCoreVersion;
-}
-
 function packLocalCore(version: string, tempDir: string) {
-  const usesCurrentVersion = corePackageJson.version === version;
-  const usesPendingVersion = getPendingCoreVersion(tempDir) === version;
-
-  if (!usesCurrentVersion && !usesPendingVersion) {
+  if (corePackageJson.version !== version) {
     return undefined;
   }
 
-  const localVersionReason = usesCurrentVersion ? 'current version matches' : 'pending changeset version matches';
   console.info(
-    `@mastra/core@${version} is not available from npm; packing local ${relative(repoRoot, corePackageRoot)} because its ${localVersionReason}`,
+    `@mastra/core@${version} is not available from npm; packing local ${relative(repoRoot, corePackageRoot)} because its version matches`,
   );
 
   if (!existsSync(join(corePackageRoot, 'dist'))) {

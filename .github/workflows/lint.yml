@@ -269,9 +269,6 @@ jobs:
           package-manager-cache: false
           install-dependencies: true
 
-      - name: Check @mastra/core import floor
-        run: pnpm check:core-imports
-
       - name: bump versions
         run: npx changeset pre exit && npx changeset version
 
@@ -285,6 +282,9 @@ jobs:
 
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
+
+      - name: Check @mastra/core import floor
+        run: pnpm check:core-imports
 
       - name: Check for git changes
         run: |

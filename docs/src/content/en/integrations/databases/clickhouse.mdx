@@ -32,10 +32,6 @@ You will also need a running ClickHouse server. See [Hosting options](#hosting-o
 
 `ObservabilityStorageClickhouseVNext` is the current observability domain implementation. It uses an insert-only schema backed by `ReplacingMergeTree` and is optimized for the volume produced by traces, logs, metrics, scores, and feedback.
 
-:::note
-Nested trace metadata field discovery requires ClickHouse 24.8 or later with the analyzer enabled (`enable_analyzer=1`). Field enumeration uses recursive common table expressions (CTEs). Filtering and value discovery for a known metadata path use targeted JSON extraction instead. See [trace queries](/reference/observability/tracing/trace-query) for the supported paths and operators.
-:::
-
 Compose it with another storage adapter so observability writes don't contend with your application data:
 
 ```typescript title="src/mastra/index.ts"
