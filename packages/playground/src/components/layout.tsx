@@ -5,7 +5,7 @@ import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
+import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
@@ -15,7 +15,6 @@ import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
-import { StudioCard } from './studio-card';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -139,11 +138,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
       >
         <StudioFrame className="flex min-h-0 flex-1 flex-col">
-          <StudioCard>
+          <MainCard>
             <AuthRequired>
               <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
             </AuthRequired>
-          </StudioCard>
+          </MainCard>
         </StudioFrame>
       </AppShell>
     </>

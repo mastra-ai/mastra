@@ -35,6 +35,7 @@ export interface ExecutionEngineOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+  evaluatePersistencePredicateBeforeDurableOperation?: boolean;
 
   /**
    * Acknowledges that `resume()` calls cannot be de-duplicated via the persisted

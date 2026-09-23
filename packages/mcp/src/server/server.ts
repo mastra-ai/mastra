@@ -445,6 +445,7 @@ export class MCPServer extends MCPServerBase {
     const info = this.toolInfo(name, tool);
     const validation = specTypeSchemas.Tool['~standard'].validate({
       name,
+      title: tool.title,
       description: info.description,
       inputSchema: info.inputSchema,
       outputSchema: info.outputSchema,
