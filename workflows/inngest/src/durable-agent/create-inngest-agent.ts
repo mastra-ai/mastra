@@ -1399,11 +1399,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async approveToolCallGenerate(options) {
       const { runId, ...resumeOptions } = options;
+      if (!runId) {
+        throw new Error('approveToolCallGenerate() on InngestAgent requires a runId.');
+      }
       return proxyRef!.resumeGenerate(runId, { approved: true }, resumeOptions as InngestAgentResumeOptions<TOutput>);
     },
 
     async declineToolCallGenerate(options) {
       const { runId, reason, ...resumeOptions } = options;
+      if (!runId) {
+        throw new Error('declineToolCallGenerate() on InngestAgent requires a runId.');
+      }
       return proxyRef!.resumeGenerate(
         runId,
         { approved: false, ...(reason !== undefined ? { reason } : {}) },
