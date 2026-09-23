@@ -802,9 +802,10 @@ SETTINGS allow_nullable_key = 1
 // Forward-only index: historical rows that predate this delta schema are not
 // backfilled into delta polling.
 //
-// A scoreId gets exactly one cursorId. Retried or re-written inserts of the
+// A scoreId normally gets one cursorId. Retried or re-written inserts of the
 // same scoreId (client retries, Pub/Sub redelivery, writeVersion bumps) are
-// skipped when the scoreId is already in the delta table, and `LIMIT 1 BY`
+// skipped while the scoreId is still in the delta table (until its TTL drops
+// the row, including after the score is deleted), and `LIMIT 1 BY`
 // collapses duplicates within a single insert block. This mirrors the DuckDB
 // store, which preserves cursorId on retry so the score is not re-emitted to
 // delta consumers. The inner `SELECT scoreId FROM mastra_score_events` refers

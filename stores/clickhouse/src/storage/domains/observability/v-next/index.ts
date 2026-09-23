@@ -562,6 +562,10 @@ export async function reconcileScoreDeltaMv(
     return;
   }
 
+  // One-shot legacy marker, not version detection: it only finds views created
+  // before per-scoreId dedup. A later revision that keeps `NOT IN` would be
+  // skipped, so switch to a version marker row (as mastra_score_events_current_backfill
+  // does) when this query changes again.
   if (createQueries.some(createQuery => createQuery.length > 0 && !/NOT IN/i.test(createQuery))) {
     await client.command({
       query: addOnClusterToDDL(

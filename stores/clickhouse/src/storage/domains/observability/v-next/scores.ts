@@ -343,6 +343,13 @@ export async function listScores(
   };
 }
 
+type ScoreDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  traceId: string | null;
+  timestamp: string;
+  scoreId: string;
+};
+
 /**
  * Delta reads join the delta stream to the current-state table by scoreId, so
  * a poll or replay always returns the latest write of a score (a rewrite may
@@ -354,13 +361,6 @@ export async function listScores(
  * (a concurrent-insert race past the MV check) therefore never surface, in
  * this poll or a later one.
  */
-type ScoreDeltaRow = Record<string, any> & {
-  cursorId?: string;
-  traceId: string | null;
-  timestamp: string;
-  scoreId: string;
-};
-
 async function queryScoresAfterCursor(
   client: ClickHouseClient,
   whereClause: string,
