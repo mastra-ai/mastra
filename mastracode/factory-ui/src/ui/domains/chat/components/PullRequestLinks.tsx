@@ -11,7 +11,6 @@ interface PullRequestLinksProps {
   repository?: Pick<LinkedRepositoryPayload, 'slug' | 'provider'>;
   reviewItem?: WorkItem;
   threadId: string | undefined;
-  size?: 'xs' | 'sm';
 }
 
 /** Provider vocabulary: GitHub numbers pull requests `#n`, GitLab numbers merge requests `!n`. */
@@ -74,7 +73,7 @@ function pullRequestLinks(
  * Must render inside `ChatSessionBoundary` — `usePullRequestSubscriptions`
  * reads the chat session and transcript contexts.
  */
-export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs' }: PullRequestLinksProps) {
+export function PullRequestLinks({ repository, reviewItem, threadId }: PullRequestLinksProps) {
   const provider: ChangeRequestProvider = repository?.provider === 'gitlab' ? 'gitlab' : 'github';
   const subscriptions = usePullRequestSubscriptions(threadId, Boolean(repository), provider);
   const activeReview = reviewSubscription(reviewItem, repository?.slug, provider);
@@ -89,7 +88,7 @@ export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs'
           key={subscription.id}
           as="a"
           variant="ghost"
-          size={size}
+          size="sm"
           href={subscription.url}
           target="_blank"
           rel="noreferrer"

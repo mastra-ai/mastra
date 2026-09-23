@@ -3,6 +3,7 @@ import { Fragment } from 'react';
 import { Button } from '../Button/Button';
 import { Txt } from '../Txt/Txt';
 import { Input } from './input';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Input> = {
   title: 'Elements/Input',
@@ -17,7 +18,7 @@ const meta: Meta<typeof Input> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['xs', 'sm', 'md', 'lg'],
+      options: ['sm', 'md', 'lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -43,7 +44,6 @@ export const Variants: Story = {
   render: () => (
     <div className="flex w-64 flex-col gap-3">
       <Input variant="default" placeholder="Default" />
-      <Input variant="outline" placeholder="Outline" />
       <Input variant="unstyled" placeholder="Unstyled" />
     </div>
   ),
@@ -52,7 +52,6 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex w-64 flex-col gap-3">
-      <Input size="xs" placeholder="Extra Small" />
       <Input size="sm" placeholder="Small" />
       <Input size="md" placeholder="Medium" />
       <Input size="lg" placeholder="Large" />
@@ -60,32 +59,25 @@ export const Sizes: Story = {
   ),
 };
 
-export const Outline: Story = {
-  args: {
-    placeholder: 'Outline variant',
-    variant: 'outline',
-  },
-};
-
 // export const Unstyled: Story = {
-//   args: {
-//     placeholder: 'Unstyled variant',
-//     variant: 'unstyled',
-//   },
+// args: {
+// placeholder: 'Unstyled variant',
+// variant: 'unstyled',
+// },
 // };
 
 // export const Small: Story = {
-//   args: {
-//     placeholder: 'Small input',
-//     size: 'sm',
-//   },
+// args: {
+// placeholder: 'Small input',
+// size: 'sm',
+// },
 // };
 
 // export const Large: Story = {
-//   args: {
-//     placeholder: 'Large input',
-//     size: 'lg',
-//   },
+// args: {
+// placeholder: 'Large input',
+// size: 'lg',
+// },
 // };
 
 export const Disabled: Story = {
@@ -126,7 +118,7 @@ export const Number: Story = {
 export const SizesWithButton: Story = {
   render: () => (
     <div className="grid grid-cols-[200px_auto] items-center gap-3">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Input size={size} placeholder={size} />
           <Button size={size} className="justify-self-start">
@@ -148,27 +140,27 @@ export const Error: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="new-theme flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
-      <div className="border-border bg-sidebar rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+    <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
+      <div className="rounded-lg border border-border bg-sidebar p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
         <Input aria-label="Search agents on the sidebar" placeholder="Search agents..." />
       </div>
-      <div className="border-border bg-background rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+      <div className="rounded-lg border border-border bg-background p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
         <Input aria-label="Search agents on the main canvas" placeholder="Search agents..." />
       </div>
-      <div className="border-border bg-card rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
+        <Txt variant="caption" tone="muted" className="mb-2">
           Card
         </Txt>
         <Input aria-label="Search agents on a card" placeholder="Search agents..." />
       </div>
-      <div className="border-border bg-popover rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+      <div className="rounded-lg border border-border bg-popover p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>
         <Input aria-label="Search agents in a popover" placeholder="Search agents..." />

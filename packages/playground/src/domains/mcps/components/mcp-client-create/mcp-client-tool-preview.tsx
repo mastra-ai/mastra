@@ -35,9 +35,7 @@ export function MCPClientToolPreview({
   if (serverType === 'stdio') {
     return (
       <EmptyState>
-        <Txt className="text-muted-foreground">
-          Tool preview is available for HTTP servers. Stdio servers cannot be previewed.
-        </Txt>
+        <Txt tone="muted">Tool preview is available for HTTP servers. Stdio servers cannot be previewed.</Txt>
       </EmptyState>
     );
   }
@@ -45,9 +43,7 @@ export function MCPClientToolPreview({
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-muted-foreground">
-          Enter a URL and click &quot;Try to connect&quot; to preview available tools.
-        </Txt>
+        <Txt tone="muted">Enter a URL and click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -55,7 +51,7 @@ export function MCPClientToolPreview({
   if (tryConnect.isIdle) {
     return (
       <EmptyState>
-        <Txt className="text-muted-foreground">Click &quot;Try to connect&quot; to preview available tools.</Txt>
+        <Txt tone="muted">Click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -65,7 +61,7 @@ export function MCPClientToolPreview({
       {tryConnect.isPending && (
         <div className="flex items-center gap-2">
           <Spinner className="h-3 w-3" />
-          <Txt className="text-muted-foreground">Connecting...</Txt>
+          <Txt tone="muted">Connecting...</Txt>
         </div>
       )}
 
@@ -78,7 +74,7 @@ export function MCPClientToolPreview({
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
-        <Txt className="text-muted-foreground">Connected successfully but no tools were found.</Txt>
+        <Txt tone="muted">Connected successfully but no tools were found.</Txt>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
@@ -112,11 +108,11 @@ function ToolList({
 
   return (
     <div className="overflow-y-auto p-5">
-      <div className="text-foreground flex items-center gap-2">
-        <Icon size="lg" className="bg-surface4 rounded-md p-1">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon size="lg" className="rounded-md bg-muted p-1">
           <McpServerIcon />
         </Icon>
-        <Txt variant="header-md" as="h2" className="font-medium">
+        <Txt variant="heading" as="h2">
           Available Tools ({selectedCount}/{tools.length} selected)
         </Txt>
       </div>
@@ -138,8 +134,8 @@ function ToolList({
                     type="text"
                     disabled={isDisabled}
                     className={cn(
-                      'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                      !isDisabled && 'border-border1 border-dashed',
+                      'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                      !isDisabled && 'border-dashed border-border',
                     )}
                     value={
                       isSelected

@@ -3,7 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { AlertTriangle, ArrowLeft, Eye, LockIcon, Settings } from 'lucide-react';
+import { ArrowLeft, Eye } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -57,11 +57,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   if (denialReason === 'error') {
     return (
       <div className="flex h-screen items-center justify-center">
-        <EmptyState
-          iconSlot={<AlertTriangle />}
-          titleSlot="Error"
-          descriptionSlot="Failed to load Agent Builder configuration."
-        />
+        <EmptyState titleSlot="Error" descriptionSlot="Failed to load Agent Builder configuration." />
       </div>
     );
   }
@@ -70,7 +66,6 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
     return (
       <div className="flex h-screen items-center justify-center">
         <EmptyState
-          iconSlot={<Settings />}
           titleSlot="Agent Builder Not Configured"
           descriptionSlot="Agent Builder is not enabled. Contact your administrator to enable this feature."
         />
@@ -82,11 +77,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   if (!hasAgentFeature) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <EmptyState
-          iconSlot={<Settings />}
-          titleSlot="No Features Enabled"
-          descriptionSlot="No Agent Builder features are configured."
-        />
+        <EmptyState titleSlot="No Features Enabled" descriptionSlot="No Agent Builder features are configured." />
       </div>
     );
   }
@@ -108,7 +99,6 @@ function AccessDeniedScreen() {
     <div className="flex h-screen items-center justify-center">
       <div className="flex flex-col items-center gap-4">
         <EmptyState
-          iconSlot={<LockIcon />}
           titleSlot="Access Denied"
           descriptionSlot="You don't have permission to access the Agent Builder."
         />

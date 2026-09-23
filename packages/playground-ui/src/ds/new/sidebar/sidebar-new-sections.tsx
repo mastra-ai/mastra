@@ -62,7 +62,7 @@ export function SidebarNewSections({
             aria-labelledby={headerId}
             aria-label={!headerId ? section.key : undefined}
           >
-            {showSeparator ? <MainSidebarNavSeparator className="[&:after]:border-sidebar-divider" /> : null}
+            {showSeparator ? <MainSidebarNavSeparator className="[&:after]:border-border" /> : null}
             {section.title ? (
               <SidebarNewNavHeader id={headerId} href={section.href} isActive={section.isHeaderActive}>
                 {section.title}

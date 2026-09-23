@@ -80,20 +80,12 @@ function AgentThread() {
 
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
-      </div>
-    );
+    return <PermissionDenied variant="fill" resource="agents" />;
   }
 
   if (isAgentLoading) {

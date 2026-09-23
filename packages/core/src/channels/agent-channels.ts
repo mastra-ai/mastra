@@ -298,21 +298,28 @@ export class AgentChannels {
       },
     );
 
+    // `accepted` rejects when the agent throws before a run exists (workspace,
+    // instructions, tools, or model resolution). Nothing was persisted and no
+    // run will render the failure, so let it propagate to the channel error
+    // boundary rather than silently dropping the message.
+    const accepted = await result.accepted;
+
     // When this call wakes a new run, drive it to completion before returning.
     // Without this, serverless runtimes (Vercel, Lambda, etc.) terminate the
     // invocation as soon as the webhook handler returns and kill the run
     // mid-flight. `consumeStream()` is idempotent and safe to call alongside
     // the existing per-thread subscription consumer.
-    try {
-      const accepted = await result.accepted;
-      // Only the `wake` action means this process started and owns the run.
-      // Any other action (deliver/persist/discard) handed the signal off, so
-      // there is nothing to drive to completion here.
-      if (accepted.action === 'wake') {
+    //
+    // Only the `wake` action means this process started and owns the run.
+    // Any other action (deliver/persist/discard) handed the signal off, so
+    // there is nothing to drive to completion here.
+    if (accepted.action === 'wake') {
+      try {
         await accepted.output.consumeStream();
+      } catch (err) {
+        // The run already started; the output processor reports its failure.
+        this.log('debug', 'accepted consume failed', err);
       }
-    } catch (err) {
-      this.log('debug', 'accepted consume failed', err);
     }
   }
 

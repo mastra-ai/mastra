@@ -40,7 +40,7 @@ export function CardDetailsHint() {
   return (
     <span
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
     </span>
@@ -70,7 +70,11 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
   if (status.kind === 'busy') {
     return (
-      <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex shrink-0 items-center gap-1.5">
+      <span
+        role="status"
+        aria-live="polite"
+        className="text-meta text-muted-foreground flex shrink-0 items-center gap-1.5"
+      >
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
       </span>
@@ -82,7 +86,7 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-ui-xs text-error flex w-full min-w-0 items-start gap-1.5',
+        'text-meta text-error flex w-full min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
           'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
@@ -111,7 +115,7 @@ function labelDotClass(label: string): string {
   if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-accent1';
   if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-accent3';
   if (normalized.includes('work') || normalized.includes('trio')) return 'bg-accent6';
-  return 'bg-icon3';
+  return 'bg-muted-foreground';
 }
 
 export function CardLabels({
@@ -129,7 +133,7 @@ export function CardLabels({
         {displayLabels.map(label => (
           <span
             key={label}
-            className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
+            className="border-border text-meta text-muted-foreground inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
             <span
@@ -160,13 +164,13 @@ export function CardActions({
   const [main] = actions;
   return (
     <div className="mt-auto flex items-center justify-between gap-2">
-      <div className="board-card-actions relative z-10 flex shrink-0">
+      <div className="board-card-actions relative z-10 flex min-w-0">
         {actions.map(action => (
           <CardActionButton key={action.label} action={action} main={action === main} beforeStart={beforeStart} />
         ))}
         {children}
       </div>
-      {trailing}
+      {trailing && <div className="shrink-0">{trailing}</div>}
     </div>
   );
 }
@@ -187,11 +191,21 @@ function CardActionButton({
   beforeStart?: () => void;
 }) {
   const variant = pillVariant(action, main);
+  // The lead action keeps its label whole; a narrow column eats into the ones behind it.
+  const width = main ? 'shrink-0' : 'min-w-0';
   // Both through Button, so the two pills can never differ by a class.
   if ('href' in action) {
     return (
-      <Button as={Link} to={action.href} draggable={false} variant={variant} size="sm" aria-label={action.ariaLabel}>
-        {action.label}
+      <Button
+        as={Link}
+        to={action.href}
+        draggable={false}
+        variant={variant}
+        size="sm"
+        aria-label={action.ariaLabel}
+        className={width}
+      >
+        <span className="truncate">{action.label}</span>
       </Button>
     );
   }
@@ -202,12 +216,13 @@ function CardActionButton({
       size="sm"
       aria-label={action.ariaLabel}
       disabled={action.disabled}
+      className={width}
       onClick={() => {
         beforeStart?.();
         action.start();
       }}
     >
-      {action.label}
+      <span className="truncate">{action.label}</span>
     </Button>
   );
 }

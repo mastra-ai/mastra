@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 56c9369bd7c6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -25,7 +25,7 @@ const ProviderMessageBatchSchema = z.object({
   created_at: z.string(),
   ended_at: z.string().optional(),
   expires_at: z.string(),
-  processing_status: z.enum(['in_progress', 'canceling', 'ended']),
+  processing_status: z.enum(['in_progress', 'canceling', 'ended']).or(z.string()),
   request_counts: ProviderRequestCountsSchema,
   results_url: z.string().optional(),
   type: z.literal('message_batch'),
@@ -38,7 +38,7 @@ export const cancelMessageBatchOutputSchema = z.object({
   created_at: z.string(),
   ended_at: z.string().optional(),
   expires_at: z.string(),
-  processing_status: z.enum(['in_progress', 'canceling', 'ended']),
+  processing_status: z.enum(['in_progress', 'canceling', 'ended']).or(z.string()),
   request_counts: z.object({
     canceled: z.number(),
     errored: z.number(),

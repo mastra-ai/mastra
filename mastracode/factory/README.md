@@ -356,6 +356,42 @@ const github = new PlatformGithubIntegration({
 
 Pass the integration in `MastraFactory`'s `integrations` array. The direct `GithubIntegration` accepts the same `rules` option alongside its GitHub App credentials. A function replaces one default handler without composing with it. `null` disables that event's handler, not authentication, webhook ingestion, or reconciliation bookkeeping. Omitted events and `undefined` retain their defaults. Each instance copies and freezes its resolved handler map; unknown event names and invalid handler values are rejected during construction.
 
+When Platform credentials are present, `MastraFactory` installs a `PlatformGithubIntegration` itself, so a deploy can change its handlers without constructing one. Pass the same options under `platform.github` and they are forwarded to that integration's constructor:
+
+```typescript
+import { MastraFactory } from '@mastra/factory';
+
+// Your own label → board mapping (Settings › Intake › GitHub label routes remain
+// the stored, per-project alternative when labels alone are enough).
+const boardForLabels = (labels: string[]) => (labels.includes('design') ? 'design' : 'work');
+
+new MastraFactory({
+  storage,
+  platform: {
+    github: {
+      rules: {
+        // Route a new issue to the board its existing labels select, instead of
+        // defaulting to Work.
+        issueOpened: context => ({
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:issue-intake`,
+          board: boardForLabels(context.issue?.labels ?? []),
+          source: 'github-issue',
+          sourceKey: `github-issue:${context.issue!.number}`,
+          title: context.issue!.title,
+          url: context.issue!.url,
+          stage: 'intake',
+        }),
+      },
+      // Optional. Overrides the sibling `githubAppSlug` for recognizing Factory's own writes.
+      slug: 'factory-app',
+    },
+  },
+});
+```
+
+`platform.github` applies only to the integration the factory installs itself. An explicit `github` entry in `integrations` takes precedence and makes the key a no-op; the factory warns rather than ignoring it silently, and warns the same way when no Platform credentials and no explicit GitHub integration are present. `GithubRuleOverrides` (the `rules` option type) is exported from `@mastra/factory`.
+
 **Migration:** Move each global `rules.github[event].onEvent` value to the integration constructor's `rules[event]` option:
 
 ```typescript
@@ -390,7 +426,7 @@ With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLA
 
 `GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
 
-For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active GitLab connection of the organization, whichever Platform credential flow created it (OAuth, group token, or personal access token), proxies provider requests through `/v2/connections/{connectionId}/proxy`, and polls the Platform event log for GitLab events. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
+For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active connection of the organization on the Platform's `gitlab` (OAuth) integration, proxies provider requests through `/v2/connections/{connectionId}/proxy`, and polls the Platform event log for GitLab events. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
 
 ```typescript
 import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';

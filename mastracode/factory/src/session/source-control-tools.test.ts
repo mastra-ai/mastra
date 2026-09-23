@@ -242,6 +242,74 @@ describe('createSourceControlTools', () => {
     });
   });
 
+  it('publishes diff-comment input as one object schema admitting either mode', async () => {
+    const setup = await fixture();
+    const tools = createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    const schema = tools.source_control_create_diff_comment!.inputSchema as {
+      safeParse(input: unknown): { success: boolean };
+      '~standard': { jsonSchema: { input(options: { target: string }): { type?: unknown } } };
+    };
+
+    // Provider function parameters must be an object schema at the root.
+    expect(schema['~standard'].jsonSchema.input({ target: 'draft-07' }).type).toBe('object');
+
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Please cover this branch.',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+      }).success,
+    ).toBe(true);
+    expect(schema.safeParse({ changeRequestId: 17, body: 'Addressed.', replyToId: 'discussion-note-1' }).success).toBe(
+      true,
+    );
+    expect(schema.safeParse({ changeRequestId: 17, body: 'No target.' }).success).toBe(false);
+    expect(
+      schema.safeParse({ changeRequestId: 17, body: 'Half an anchor.', commitId: 'abc', path: 'src/index.ts' }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Both modes at once.',
+        replyToId: 'discussion-note-1',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Unpaired range.',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+        startLine: 3,
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        changeRequestId: 17,
+        body: 'Paired range.',
+        commitId: 'abc',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'right',
+        startLine: 3,
+        startSide: 'right',
+      }).success,
+    ).toBe(true);
+  });
+
   it('validates review bodies before execution', async () => {
     const setup = await fixture();
     const tools = createSourceControlTools({

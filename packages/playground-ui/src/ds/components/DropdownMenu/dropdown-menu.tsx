@@ -60,12 +60,7 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
   ({ className, inset, children, ...props }, ref) => (
     <MenuPrimitive.SubmenuTrigger
       ref={useFluidMenuItemRef(ref)}
-      className={cn(
-        menuItemClass,
-        'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-foreground',
-        inset && menuItemInsetClass,
-        className,
-      )}
+      className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
       {...props}
     >
       {children}
@@ -227,7 +222,7 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
       }}
       className={cn(
         variant === 'destructive' ? menuItemDestructiveClass : menuItemClass,
-        size === 'sm' && 'h-form-xs gap-2 rounded-sm py-1 text-ui-xs leading-none',
+        size === 'sm' && 'h-control-sm gap-2 rounded-sm py-1 text-caption leading-none',
         inset && menuItemInsetClass,
         className,
       )}

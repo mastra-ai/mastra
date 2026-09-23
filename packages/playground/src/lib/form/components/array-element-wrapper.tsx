@@ -36,22 +36,22 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="border-border1 bg-surface2 overflow-hidden rounded-lg border motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
+      className="overflow-hidden rounded-lg border border-border bg-background motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <div className="flex min-w-0 items-center gap-1 pr-1">
         <CollapsibleTrigger
           ref={triggerRef}
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
-          className="text-ui-sm flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left focus-visible:shadow-none focus-visible:ring-inset"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:shadow-none focus-visible:ring-inset"
         >
-          <ChevronRight aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
-          <span className="text-muted-foreground shrink-0">Item {index + 1}</span>
+          <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="shrink-0 text-muted-foreground">Item {index + 1}</span>
           {summary && (
-            <span className="text-foreground truncate" title={summary}>
+            <span className="truncate text-foreground" title={summary}>
               {summary}
             </span>
           )}
-          {invalid && <span className="text-ui-xs text-accent2 ml-auto shrink-0">Needs input</span>}
+          {invalid && <span className="ml-auto shrink-0 text-meta text-accent2">Needs input</span>}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button
@@ -69,7 +69,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
           </Button>
         )}
       </div>
-      <CollapsibleContent keepMounted className="border-border1 border-t px-3 py-3">
+      <CollapsibleContent keepMounted className="border-t border-border px-3 py-3">
         {children}
         {!readOnly && (
           <div className="flex justify-end pt-2">

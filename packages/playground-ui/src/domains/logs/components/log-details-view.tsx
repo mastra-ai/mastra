@@ -48,7 +48,7 @@ export function LogDetailsView({
         <DataDetailsPanel.Heading>
           Log <b>{format(date, 'MMM dd, HH:mm:ss.SSS')}</b>
         </DataDetailsPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {onCollapsedChange && (
             <Button
               size="md"
@@ -59,54 +59,50 @@ export function LogDetailsView({
             </Button>
           )}
 
-          <ButtonsGroup spacing="close">
-            <Button size="md" tooltip="Previous log" onClick={onPrevious} disabled={!onPrevious}>
+          <ButtonsGroup>
+            <Button tooltip="Previous log" onClick={onPrevious} disabled={!onPrevious}>
               <ArrowUpIcon />
             </Button>
-            <Button size="md" tooltip="Next log" onClick={onNext} disabled={!onNext}>
+            <Button tooltip="Next log" onClick={onNext} disabled={!onNext}>
               <ArrowDownIcon />
             </Button>
           </ButtonsGroup>
 
           <DataDetailsPanel.CloseButton onClick={onClose} />
-        </ButtonsGroup>
+        </div>
       </DataDetailsPanel.Header>
 
       {!collapsed && (
         <DataDetailsPanel.Content>
-          <p className="text-ui-md text-muted-foreground font-mono wrap-break-word whitespace-pre-wrap">
-            {log.message}
-          </p>
+          <p className="font-mono text-body wrap-break-word whitespace-pre-wrap text-muted-foreground">{log.message}</p>
 
           {(traceId || spanId) && (
             <div className={cn('my-8 grid gap-2', '[&>button]:justify-between [&>button]:overflow-hidden')}>
               {traceId && (
-                <ButtonsGroup spacing="close" className="w-full min-w-0">
+                <ButtonsGroup className="w-full min-w-0">
                   <Button
-                    size="md"
                     className="min-w-0 flex-1 overflow-hidden"
                     icon={<ArrowRightIcon />}
                     onClick={() => onTraceClick?.(traceId)}
                   >
                     <span>Trace</span>
-                    <span className="text-ui-sm text-placeholder ml-auto min-w-0 truncate"># {traceId}</span>
+                    <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {traceId}</span>
                   </Button>
-                  <CopyButton content={traceId} size="md" tooltip="Copy Trace ID to clipboard" />
+                  <CopyButton content={traceId} tooltip="Copy Trace ID to clipboard" />
                 </ButtonsGroup>
               )}
               {spanId && (
-                <ButtonsGroup spacing="close" className="w-full min-w-0">
+                <ButtonsGroup className="w-full min-w-0">
                   <Button
-                    size="md"
                     className="min-w-0 flex-1 overflow-hidden"
                     disabled={!traceId || !onSpanClick}
                     onClick={() => traceId && onSpanClick?.(traceId, spanId)}
                     icon={<ArrowRightIcon />}
                   >
                     <span>Span</span>
-                    <span className="text-ui-sm text-placeholder ml-auto min-w-0 truncate"># {spanId}</span>
+                    <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {spanId}</span>
                   </Button>
-                  <CopyButton content={spanId} size="md" tooltip="Copy Span ID to clipboard" />
+                  <CopyButton content={spanId} tooltip="Copy Span ID to clipboard" />
                 </ButtonsGroup>
               )}
             </div>

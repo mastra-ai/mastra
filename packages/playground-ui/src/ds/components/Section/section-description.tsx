@@ -7,7 +7,7 @@ export function SectionDescription({ className, ...props }: SectionDescriptionPr
   return (
     <p
       data-slot="section-description"
-      className={cn('max-w-[62ch] text-ui-sm leading-ui-sm text-pretty text-muted-foreground', className)}
+      className={cn('max-w-[62ch] text-caption text-pretty text-muted-foreground', className)}
       {...props}
     />
   );

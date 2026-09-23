@@ -29,7 +29,7 @@ export function ThreadTraceMessages({ className, innerClassName, children, ...pr
   return (
     <div
       data-slot="thread-trace-messages"
-      className={cn('relative min-w-0 border-x border-border1', className)}
+      className={cn('relative min-w-0 border-x border-border', className)}
       {...props}
       style={{ minHeight, ...props.style }}
     >
@@ -56,7 +56,7 @@ export type ThreadTraceMessagesHeaderProps = DataPanelHeaderProps;
  * column; its border spans the column and continues into the details header's border as one line.
  */
 export function ThreadTraceMessagesHeader({ className, ...props }: ThreadTraceMessagesHeaderProps) {
-  return <DataPanel.Header className={cn('border-b border-border1', className)} {...props} />;
+  return <DataPanel.Header className={cn('border-b border-border', className)} {...props} />;
 }
 
 export type ThreadTraceTabListProps = Omit<TabListProps, 'variant' | 'size'> & {
