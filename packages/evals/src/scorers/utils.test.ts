@@ -2005,6 +2005,45 @@ describe('Scorer Utils', () => {
       expect(result.score).toBe(1);
     });
 
+    it('should detect redundant consecutive tool calls nested inside an agent_run', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'subagent',
+            children: [
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+            ],
+          },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toHaveLength(1);
+      expect(result.redundantCalls[0]!.name).toBe('search');
+      expect(result.score).toBeLessThan(1);
+    });
+
+    it('should not flag the last child of one parent as redundant with the first child of the next', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'first',
+            children: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } }],
+          },
+          {
+            stepType: 'agent_run' as const,
+            name: 'second',
+            children: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } }],
+          },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([]);
+      expect(result.score).toBe(1);
+    });
+
     it('should check token budget from model_generation steps', () => {
       const trajectory: Trajectory = {
         steps: [
@@ -2113,6 +2152,66 @@ describe('Scorer Utils', () => {
       expect(result.score).toBe(0);
       expect(result.violatedTools).toEqual(['deleteAll']);
       expect(result.violatedSequences).toEqual([['escalate', 'admin']]);
+    });
+
+    it('should detect a blacklisted tool nested inside an agent_run', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'subagent',
+            children: [{ stepType: 'tool_call' as const, name: 'deleteAll' }],
+          },
+        ],
+      };
+      const result = checkTrajectoryBlacklist(trajectory, {
+        blacklistedTools: ['deleteAll'],
+      });
+      expect(result.score).toBe(0);
+      expect(result.violatedTools).toEqual(['deleteAll']);
+    });
+
+    it('should detect a blacklisted sequence nested inside the same parent', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'subagent',
+            children: [
+              { stepType: 'tool_call' as const, name: 'auth' },
+              { stepType: 'tool_call' as const, name: 'escalate' },
+              { stepType: 'tool_call' as const, name: 'admin' },
+            ],
+          },
+        ],
+      };
+      const result = checkTrajectoryBlacklist(trajectory, {
+        blacklistedSequences: [['escalate', 'admin']],
+      });
+      expect(result.score).toBe(0);
+      expect(result.violatedSequences).toEqual([['escalate', 'admin']]);
+    });
+
+    it('should not flag a sequence split across two different parents', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'first',
+            children: [{ stepType: 'tool_call' as const, name: 'escalate' }],
+          },
+          {
+            stepType: 'agent_run' as const,
+            name: 'second',
+            children: [{ stepType: 'tool_call' as const, name: 'admin' }],
+          },
+        ],
+      };
+      const result = checkTrajectoryBlacklist(trajectory, {
+        blacklistedSequences: [['escalate', 'admin']],
+      });
+      expect(result.score).toBe(1);
+      expect(result.violatedSequences).toEqual([]);
     });
   });
 
