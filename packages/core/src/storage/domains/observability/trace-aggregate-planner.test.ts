@@ -10,6 +10,7 @@ import { TRACE_AGGREGATE_DIMENSION_REGISTRY, TRACE_AGGREGATE_IDENTITY_FIELDS } f
 import {
   parseTraceQueryRequest,
   planTraceQuery,
+  TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryValidationError,
 } from './trace-query';
@@ -286,6 +287,24 @@ describe('planTraceAggregate', () => {
         'args',
         TRACE_QUERY_MAX_NODES - 1,
       ]);
+
+      // Bypass the schema's pre-parse guard so the planner's own node/depth budget is exercised.
+      const parsedRequest = parseTraceAggregateRequest({ timeRange, measures });
+      const wide = validationError(() =>
+        planTraceAggregate({ ...parsedRequest, having: having as TraceQueryScalarPredicate }),
+      );
+      expect(wide.issues).toEqual([
+        expect.objectContaining({ code: 'predicate_too_complex', path: ['having', 'args', TRACE_QUERY_MAX_NODES - 1] }),
+      ]);
+
+      let deep: TraceQueryScalarPredicate = gt('count', 1);
+      const deepPath: Array<string | number> = ['having'];
+      for (let level = 0; level < TRACE_QUERY_MAX_DEPTH; level += 1) {
+        deep = { op: 'not', arg: deep };
+      }
+      for (let level = 0; level < TRACE_QUERY_MAX_DEPTH; level += 1) deepPath.push('arg');
+      const nested = validationError(() => planTraceAggregate({ ...parsedRequest, having: deep }));
+      expect(nested.issues).toEqual([expect.objectContaining({ code: 'predicate_too_complex', path: deepPath })]);
     });
   });
 

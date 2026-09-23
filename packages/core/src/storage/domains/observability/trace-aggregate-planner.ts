@@ -3,7 +3,7 @@ import {
   TRACE_AGGREGATE_INTERVALS,
   TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS,
 } from './trace-aggregate';
-import type { NormalizedTraceAggregateRequest, TraceAggregateInterval, TraceAggregateMeasure } from './trace-aggregate';
+import type { NormalizedTraceAggregateRequest, TraceAggregateInterval } from './trace-aggregate';
 import { isTraceAggregateDimension, parseTraceAggregateMeasure } from './trace-aggregate-registry';
 import type {
   TraceAggregateCanonicalMeasure,
@@ -55,9 +55,22 @@ export type TrustedTraceAggregateMeasure =
   | { type: 'canonical'; name: TraceAggregateCanonicalMeasure }
   | { type: 'countDistinct'; name: TraceAggregateCountDistinctMeasure; field: TraceAggregateCountDistinctField };
 
+/** A measure name that survived allowlisting; narrower than the request-level `TraceAggregateMeasure`. */
+export type TrustedTraceAggregateMeasureName = TrustedTraceAggregateMeasure['name'];
+
 export type TrustedTraceAggregateHavingPredicate =
-  | { type: 'comparison'; measure: TraceAggregateMeasure; operator: TraceQueryComparisonOperator; value: number }
-  | { type: 'membership'; measure: TraceAggregateMeasure; operator: TraceQueryMembershipOperator; values: number[] }
+  | {
+      type: 'comparison';
+      measure: TrustedTraceAggregateMeasureName;
+      operator: TraceQueryComparisonOperator;
+      value: number;
+    }
+  | {
+      type: 'membership';
+      measure: TrustedTraceAggregateMeasureName;
+      operator: TraceQueryMembershipOperator;
+      values: number[];
+    }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceAggregateHavingPredicate[] }
   | { type: 'not'; arg: TrustedTraceAggregateHavingPredicate };
 
@@ -69,7 +82,7 @@ export type TrustedTraceAggregateOrderBy =
        * default; when it is not in `measures`, backends compute it for ordering without
        * projecting it into the response (Decision 11).
        */
-      measure: TraceAggregateMeasure;
+      measure: TrustedTraceAggregateMeasureName;
       direction: 'asc' | 'desc';
     }
   | { target: 'dimension'; dimension: TraceAggregateDimension; direction: 'asc' | 'desc' };
@@ -94,7 +107,7 @@ type IssuePath = Array<string | number>;
 interface HavingState {
   nodes: number;
   issues: TraceQueryIssue[];
-  measureNames: Set<string>;
+  measureNames: Map<string, TrustedTraceAggregateMeasureName>;
 }
 
 /**
@@ -156,7 +169,7 @@ export function planTraceAggregate(
   });
 
   const measures: TrustedTraceAggregateMeasure[] = [];
-  const measureNames = new Set<string>();
+  const measureNames = new Map<string, TrustedTraceAggregateMeasureName>();
   request.measures.forEach((raw, index) => {
     const path: IssuePath = ['measures', index];
     const measure = planMeasure(raw, path, issues);
@@ -165,7 +178,7 @@ export function planTraceAggregate(
       issues.push({ code: 'invalid_request', path, message: 'Measures must be distinct' });
       return;
     }
-    measureNames.add(measure.name);
+    measureNames.set(measure.name, measure.name);
     measures.push(measure);
   });
 
@@ -310,23 +323,26 @@ function planHaving(
   return { type: 'comparison', measure, operator: comparison.op, value };
 }
 
-function resolveHavingMeasure(raw: string, path: IssuePath, state: HavingState): TraceAggregateMeasure | undefined {
-  const name = normalizeTraceAggregateMeasureName(raw);
-  if (state.measureNames.has(name)) return name as TraceAggregateMeasure;
+function resolveHavingMeasure(
+  raw: string,
+  path: IssuePath,
+  state: HavingState,
+): TrustedTraceAggregateMeasureName | undefined {
+  const measure = state.measureNames.get(normalizeTraceAggregateMeasureName(raw));
+  if (measure) return measure;
   state.issues.push({ code: 'field_not_allowed', path, message: 'having may only reference requested measures' });
   return undefined;
 }
 
 function planOrderBy(
   orderBy: NormalizedTraceAggregateRequest['orderBy'],
-  measureNames: Set<string>,
+  measureNames: Map<string, TrustedTraceAggregateMeasureName>,
   dimensions: TraceAggregateDimension[],
   issues: TraceQueryIssue[],
 ): TrustedTraceAggregateOrderBy | undefined {
   const field = normalizeTraceAggregateMeasureName(orderBy.field);
-  if (field === 'count' || measureNames.has(field)) {
-    return { target: 'measure', measure: field as TraceAggregateMeasure, direction: orderBy.direction };
-  }
+  const measure = field === 'count' ? field : measureNames.get(field);
+  if (measure) return { target: 'measure', measure, direction: orderBy.direction };
   const dimension = dimensions.find(candidate => candidate === field);
   if (dimension) return { target: 'dimension', dimension, direction: orderBy.direction };
   issues.push({
