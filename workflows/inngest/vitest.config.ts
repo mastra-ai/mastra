@@ -5,7 +5,6 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'unit:workflows/inngest',
           globals: true,
           include: ['src/**/*.test.ts'],
           pool: 'forks',

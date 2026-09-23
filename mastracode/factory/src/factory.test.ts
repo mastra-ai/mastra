@@ -1519,6 +1519,9 @@ describe('MastraFactory.prepare integrations', () => {
       // storage domain only a channel integration needs.
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
+      // A channel integration starts a new session on the linked sender's own
+      // model pack, so it reads the same model-packs handle the web routes use.
+      expect(ctx.storage.modelPacks).toBeDefined();
       expect(ctx.auth).toBeDefined();
     });
 
