@@ -32,6 +32,7 @@ const choiceScorer = createClassifierScorer({
   question: 'route',
   scores: { correct: 1, partial: 0.5, incorrect: 0 },
   type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
 });
 
 type ChoiceRun = Parameters<typeof choiceScorer.run>[0];
@@ -44,14 +45,27 @@ expectTypeOf(choiceEvidence.answer.probabilities).toEqualTypeOf<
   Record<'correct' | 'partial' | 'incorrect', number> | undefined
 >();
 
-createClassifierScorer({ id: 'quality-score', classifier, question: 'quality', type: 'agent' });
-createClassifierScorer({ id: 'factual-score', classifier, question: 'factual', type: 'trajectory' });
+createClassifierScorer({
+  id: 'quality-score',
+  classifier,
+  question: 'quality',
+  type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
+});
+createClassifierScorer({
+  id: 'factual-score',
+  classifier,
+  question: 'factual',
+  type: 'trajectory',
+  state: () => 'trajectory',
+});
 
 const registeredScorer = createClassifierScorer<typeof classifier, 'quality'>({
   id: 'registered-score',
   classifier: 'response-judge',
   question: 'quality',
   type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
 });
 type RegisteredRun = Parameters<typeof registeredScorer.run>[0];
 declare const registeredRun: RegisteredRun;
@@ -67,19 +81,24 @@ const customScorer = createClassifierScorer({
     input: z.object({ prompt: z.string() }),
     output: z.object({ response: z.string() }),
   },
-  state: ({ run, results, abortSignal, requestContext }) => {
+  state: ({ run, results, mastra }) => {
     expectTypeOf(run.input).toEqualTypeOf<{ prompt: string } | undefined>();
     expectTypeOf(run.output).toEqualTypeOf<{ response: string }>();
     expectTypeOf(results).toEqualTypeOf<Record<string, never>>();
-    expectTypeOf(abortSignal).toEqualTypeOf<AbortSignal | undefined>();
-    expectTypeOf(requestContext).not.toBeNever();
+    expectTypeOf(mastra).not.toBeNever();
     return { input: run.input, output: run.output };
   },
 });
 void customScorer;
 
 // @ts-expect-error choice questions require scores
-createClassifierScorer({ id: 'missing-map', classifier, question: 'route', type: 'agent' });
+createClassifierScorer({
+  id: 'missing-map',
+  classifier,
+  question: 'route',
+  type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
+});
 
 createClassifierScorer({
   id: 'incomplete-map',
@@ -88,6 +107,7 @@ createClassifierScorer({
   // @ts-expect-error choice score mappings must be exhaustive
   scores: { correct: 1, partial: 0.5 },
   type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
 });
 
 createClassifierScorer({
@@ -97,6 +117,7 @@ createClassifierScorer({
   // @ts-expect-error choice score mappings reject unknown keys
   scores: { correct: 1, partial: 0.5, incorrect: 0, unknown: 2 },
   type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
 });
 
 createClassifierScorer({
@@ -106,6 +127,7 @@ createClassifierScorer({
   // @ts-expect-error score questions do not accept choice mappings
   scores: { low: 0 },
   type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
 });
 
 createClassifierScorer({
@@ -115,11 +137,26 @@ createClassifierScorer({
   // @ts-expect-error boolean questions do not accept choice mappings
   scores: { true: 1, false: 0 },
   type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
 });
 
-// @ts-expect-error selected question must exist on the configured classifier
-createClassifierScorer({ id: 'unknown-question', classifier, question: 'unknown', type: 'agent' });
+createClassifierScorer({
+  id: 'unknown-question',
+  classifier,
+  // @ts-expect-error selected question must exist on the configured classifier
+  question: 'unknown',
+  type: 'agent',
+  state: ({ run }) => ({ messages: run.output.length }),
+});
 
 const unconfiguredClassifier = new Classifier({ id: 'unconfigured', model });
-// @ts-expect-error scorer adapters require constructor-configured classifier questions
-createClassifierScorer({ id: 'unconfigured-score', classifier: unconfiguredClassifier, question: 'quality' });
+// @ts-expect-error state is required
+createClassifierScorer({ id: 'missing-state', classifier, question: 'factual', type: 'agent' });
+
+createClassifierScorer({
+  id: 'unconfigured-score',
+  // @ts-expect-error scorer adapters require constructor-configured classifier questions
+  classifier: unconfiguredClassifier,
+  question: 'quality',
+  state: () => '',
+});

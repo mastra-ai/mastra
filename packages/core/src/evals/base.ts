@@ -281,8 +281,6 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
-  abortSignal?: AbortSignal;
-  requestContext?: RequestContext;
   mastra?: Mastra;
 };
 
@@ -1080,7 +1078,6 @@ class MastraScorer<
             inputData: {
               run,
             },
-            requestContext: normalizedRequestContext,
             ...scorerObservabilityContext,
           }),
       });
@@ -1255,8 +1252,6 @@ class MastraScorer<
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
           const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
-            abortSignal: rest.abortSignal,
-            requestContext: rest.requestContext,
             mastra: this.#mastra,
           });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
@@ -1419,10 +1414,7 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
-    executionContext: Pick<
-      StepContext<Record<string, any>, TInput, TRunOutput>,
-      'abortSignal' | 'requestContext' | 'mastra'
-    >,
+    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'mastra'>,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;

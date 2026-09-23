@@ -55,7 +55,7 @@ type ClassifierScorerBaseOptions<
   description?: string;
   classifier: TClassifier | string;
   question: TQuestion;
-  state?: ClassifierScorerStateSelector<TInput, TRunOutput>;
+  state: ClassifierScorerStateSelector<TInput, TRunOutput>;
   maxRetries?: number;
   providerOptions?: SharedV4ProviderOptions;
 } & ClassifierScoreOptions<QuestionsOf<TClassifier>[TQuestion]>;
@@ -117,17 +117,25 @@ function validateQuestionAndScores(
   const missing = choices.filter(choice => !(choice in scores));
   const extra = scoreKeys.filter(choice => !(choice in question.criteria));
   const nonNumeric = choices.filter(choice => typeof scores[choice] !== 'number' || !Number.isFinite(scores[choice]));
-  if (missing.length || extra.length || nonNumeric.length) {
+  const outOfRange = choices.filter(
+    choice => !nonNumeric.includes(choice) && (scores[choice]! < 0 || scores[choice]! > 1),
+  );
+  if (missing.length || extra.length || nonNumeric.length || outOfRange.length) {
     throw new TypeError(
       `Invalid scores mapping for choice question '${questionKey}' on scorer '${scorerId}'.` +
         (missing.length ? ` Missing: ${missing.join(', ')}.` : '') +
         (extra.length ? ` Unknown: ${extra.join(', ')}.` : '') +
-        (nonNumeric.length ? ` Non-numeric: ${nonNumeric.join(', ')}.` : ''),
+        (nonNumeric.length ? ` Non-numeric: ${nonNumeric.join(', ')}.` : '') +
+        (outOfRange.length ? ` Outside 0-1: ${outOfRange.join(', ')}.` : ''),
     );
   }
 }
 
-export function projectClassifierScore(answer: ClassifierAnswer<any>, scores?: Record<string, number>): number {
+function projectClassifierScore(
+  question: ClassifierQuestions[string],
+  answer: ClassifierAnswer<any>,
+  scores?: Record<string, number>,
+): number {
   if (answer.type === 'choice') {
     const score = scores?.[answer.choice];
     if (typeof score !== 'number') {
@@ -136,7 +144,9 @@ export function projectClassifierScore(answer: ClassifierAnswer<any>, scores?: R
     return score;
   }
   if (answer.type === 'score') {
-    return answer.score;
+    // Score answers range over criteria indices 0..levels-1; scorers use 0-1.
+    const levels = question.type === 'score' ? question.criteria.length : 2;
+    return answer.score / (levels - 1);
   }
   return answer.probability;
 }
@@ -207,6 +217,9 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
     validateQuestionAndScores(inlineClassifier, options.id, options.question, options.scores);
   }
 
+  const resolveClassifier = (mastra: Mastra | undefined): Classifier<ClassifierQuestions> =>
+    inlineClassifier ?? resolveRegisteredClassifier(mastra, options.classifier, options.id);
+
   return createScorer({
     id: options.id,
     name: options.name,
@@ -215,14 +228,12 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
     prepareRun: options.prepareRun,
   })
     .analyze(async context => {
-      const classifier: Classifier<ClassifierQuestions> =
-        inlineClassifier ?? resolveRegisteredClassifier(context.mastra, options.classifier, options.id);
+      const classifier = resolveClassifier(context.mastra);
       validateQuestionAndScores(classifier, options.id, options.question, options.scores);
 
-      const state = options.state ? await options.state(context) : context.run.output;
+      const state = await options.state(context);
       const result = await classifier.evaluate({
         state,
-        abortSignal: context.abortSignal,
         maxRetries: options.maxRetries,
         providerOptions: options.providerOptions,
       });
@@ -247,7 +258,13 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
         },
       };
     })
-    .generateScore(({ results }) => projectClassifierScore(results.analyzeStepResult.answer, options.scores))
+    .generateScore(({ results, mastra }) =>
+      projectClassifierScore(
+        resolveClassifier(mastra).questions[options.question]!,
+        results.analyzeStepResult.answer,
+        options.scores,
+      ),
+    )
     .generateReason(({ results, score }) =>
       classifierReason(options.question, results.analyzeStepResult.answer, score),
     );

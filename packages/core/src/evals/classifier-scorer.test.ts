@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Classifier } from '../classifier';
 import { Mastra } from '../mastra';
-import { createClassifierScorer, projectClassifierScore } from './classifier-scorer';
+import { ScorerRunError } from './base';
+import { createClassifierScorer } from './classifier-scorer';
 
 const questions = {
   route: {
@@ -92,13 +93,14 @@ describe('createClassifierScorer', () => {
     expect(result.analyzeStepResult?.response).not.toHaveProperty('body');
   });
 
-  it('projects score and boolean answers directly', async () => {
+  it('normalizes score answers to 0-1 and projects boolean probabilities directly', async () => {
     const scoreClassifier = createClassifier();
-    vi.spyOn(scoreClassifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1.75 }) as any);
+    vi.spyOn(scoreClassifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1.5 }) as any);
     const scoreScorer = createClassifierScorer({
       id: 'quality-score',
       classifier: scoreClassifier,
       question: 'quality',
+      state: ({ run }) => run.output,
     });
 
     const booleanClassifier = createClassifier();
@@ -109,13 +111,14 @@ describe('createClassifierScorer', () => {
       id: 'factual-score',
       classifier: booleanClassifier,
       question: 'factual',
+      state: ({ run }) => run.output,
     });
 
-    await expect(scoreScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 1.75 });
+    await expect(scoreScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.75 });
     await expect(booleanScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.37 });
   });
 
-  it('uses run.output by default and forwards classifier options', async () => {
+  it('forwards the selected state and classifier options', async () => {
     const classifier = createClassifier();
     const evaluate = vi
       .spyOn(classifier, 'evaluate')
@@ -124,6 +127,7 @@ describe('createClassifierScorer', () => {
       id: 'factual-score',
       classifier,
       question: 'factual',
+      state: ({ run }) => run.output,
       maxRetries: 4,
       providerOptions: { test: { mode: 'fast' } },
     });
@@ -132,7 +136,6 @@ describe('createClassifierScorer', () => {
 
     expect(evaluate).toHaveBeenCalledWith({
       state: { text: 'answer' },
-      abortSignal: expect.any(AbortSignal),
       maxRetries: 4,
       providerOptions: { test: { mode: 'fast' } },
     });
@@ -147,7 +150,7 @@ describe('createClassifierScorer', () => {
       id: 'policy-factual',
       classifier,
       question: 'factual',
-      state: ({ run, requestContext }) => `${requestContext?.get('policy')}: ${run.output}`,
+      state: ({ run }) => `${(run.requestContext as Record<string, string>).policy}: ${run.output}`,
     });
 
     await scorer.run({ output: 'answer', requestContext: { policy: 'cite sources' } });
@@ -157,15 +160,16 @@ describe('createClassifierScorer', () => {
 
   it('resolves registered classifier IDs at run time', async () => {
     const classifier = createClassifier();
-    vi.spyOn(classifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 0.9 }) as any);
+    vi.spyOn(classifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1 }) as any);
     const scorer = createClassifierScorer<typeof classifier, 'quality'>({
       id: 'registered-score',
       classifier: 'response-judge',
       question: 'quality',
+      state: ({ run }) => run.output,
     });
     new Mastra({ classifiers: { classifier }, scorers: { scorer } });
 
-    await expect(scorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.9 });
+    await expect(scorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.5 });
   });
 
   it('fails actionably when an ID-backed scorer is not registered', async () => {
@@ -174,8 +178,12 @@ describe('createClassifierScorer', () => {
       id: 'unregistered-score',
       classifier: 'missing-classifier',
       question: 'quality',
+      state: ({ run }) => run.output,
     });
 
+    const error = await scorer.run({ output: 'answer' }).catch(err => err);
+    expect(error).toBeInstanceOf(ScorerRunError);
+    expect(error).toMatchObject({ failedStep: 'analyze' });
     await expect(scorer.run({ output: 'answer' })).rejects.toThrow(
       /Classifier 'missing-classifier' for scorer 'unregistered-score'.*not registered with Mastra/,
     );
@@ -189,15 +197,61 @@ describe('createClassifierScorer', () => {
         classifier,
         question: 'route',
         scores: { correct: 1 } as any,
+        state: ({ run }) => run.output,
       }),
     ).toThrow(/Missing: partial, incorrect/);
   });
-});
 
-describe('projectClassifierScore', () => {
-  it('does not clamp caller-owned scores', () => {
-    expect(projectClassifierScore({ type: 'score', score: 4.5 })).toBe(4.5);
-    expect(projectClassifierScore({ type: 'boolean', probability: 0.42 })).toBe(0.42);
-    expect(projectClassifierScore({ type: 'choice', choice: 'high' }, { high: 2 })).toBe(2);
+  it('rejects choice scores outside 0-1', () => {
+    expect(() =>
+      createClassifierScorer({
+        id: 'out-of-range',
+        classifier: createClassifier(),
+        question: 'route',
+        scores: { correct: 2, partial: 0.5, incorrect: -1 },
+        state: ({ run }) => run.output,
+      }),
+    ).toThrow(/Outside 0-1: correct, incorrect/);
+  });
+
+  it('scores an agent-shaped run with a real classifier', async () => {
+    const doEvaluate = vi.fn(async () => ({
+      answers: { factual: { type: 'boolean' as const, probability: 0.9 } },
+      usage: { inputTokens: 4, outputTokens: 2 },
+      warnings: [],
+    }));
+    const classifier = new Classifier({
+      id: 'agent-judge',
+      model: { ...createModel(), doEvaluate },
+      questions: { factual: questions.factual },
+    });
+    const scorer = createClassifierScorer({
+      id: 'agent-factual',
+      type: 'agent',
+      classifier,
+      question: 'factual',
+      state: ({ run }) => ({
+        output: run.output.map(message =>
+          message.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
+        ),
+      }),
+    });
+
+    const result = await scorer.run({
+      input: { inputMessages: [], rememberedMessages: [], systemMessages: [], taggedSystemMessages: {} },
+      output: [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          createdAt: new Date('2026-09-19T00:00:00.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Paris is the capital of France.' }] },
+        },
+      ],
+    });
+
+    expect(result.score).toBe(0.9);
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({ state: { output: ['Paris is the capital of France.'] } }),
+    );
   });
 });

@@ -9,13 +9,19 @@ packages:
 
 `createClassifierScorer()` adapts one constructor-configured [`Classifier`](/reference/classifier/classifier) question to Mastra's scorer pipeline. It returns a normal `MastraScorer` with a numeric `score` and retains the selected answer, probabilities, usage, warnings, and safe response metadata in `analyzeStepResult`.
 
-The adapter evaluates exactly one question. It doesn't aggregate questions, apply boolean thresholds, infer choice ordering, clamp scores, or call a second judge model.
+The adapter evaluates exactly one question and always returns a score between 0 and 1. It doesn't aggregate questions, apply boolean thresholds, infer choice ordering, or call a second judge model.
+
+Agent scorer runs contain message objects that `Classifier.evaluate()` can't accept directly, so `state` is required. Use it to extract JSON-compatible text, for example with the helpers from `@mastra/evals/scorers/utils`.
 
 ## Example
 
 ```typescript title="src/mastra/scorers/response-quality.ts"
 import { Classifier } from '@mastra/core/classifier'
 import { createClassifierScorer } from '@mastra/core/evals'
+import {
+  getAssistantMessageFromRunOutput,
+  getUserMessageFromRunInput,
+} from '@mastra/evals/scorers/utils'
 
 const responseJudge = new Classifier({
   id: 'response-judge',
@@ -48,17 +54,17 @@ export const qualityScorer = createClassifierScorer({
   question: 'quality',
   type: 'agent',
   state: ({ run }) => ({
-    input: run.input,
-    output: run.output,
+    input: getUserMessageFromRunInput(run.input),
+    output: getAssistantMessageFromRunOutput(run.output),
   }),
 })
 ```
 
-For a score question, `result.score` is the numeric classifier answer without normalization or clamping.
+For a score question with N criteria, the classifier answers with a level from `0` to `N - 1`, and `result.score` divides that level by `N - 1`. With three criteria, `Partially correct` scores `0.5`.
 
 ## Choice questions
 
-Choice questions require an exhaustive numeric mapping where every configured choice has a score, without an assumed order or fallback.
+Choice questions require an exhaustive mapping that gives every configured choice a score between `0` and `1`, without an assumed order or fallback.
 
 ```typescript
 const routeScorer = createClassifierScorer({
@@ -71,6 +77,10 @@ const routeScorer = createClassifierScorer({
     partiallyCorrect: 0.5,
     incorrect: 0,
   },
+  state: ({ run }) => ({
+    input: getUserMessageFromRunInput(run.input),
+    output: getAssistantMessageFromRunOutput(run.output),
+  }),
 })
 ```
 
@@ -86,12 +96,16 @@ const factualityScorer = createClassifierScorer({
   classifier: responseJudge,
   question: 'factual',
   type: 'agent',
+  state: ({ run }) => ({
+    input: getUserMessageFromRunInput(run.input),
+    output: getAssistantMessageFromRunOutput(run.output),
+  }),
 })
 ```
 
 ## Request context
 
-The `state` function receives the scorer run's `requestContext`, so the classifier input can include per-request details such as a tenant policy. This lets one classifier judge the same output differently depending on who made the request:
+The `state` function receives the scorer run, including `run.requestContext`, so the classifier input can include per-request details such as a tenant policy. This lets one classifier judge the same output differently depending on who made the request:
 
 ```typescript
 export const policyScorer = createClassifierScorer({
@@ -99,9 +113,9 @@ export const policyScorer = createClassifierScorer({
   classifier: responseJudge,
   question: 'factual',
   type: 'agent',
-  state: ({ run, requestContext }) => ({
-    policy: requestContext?.get('policy'),
-    output: run.output,
+  state: ({ run }) => ({
+    policy: run.requestContext?.policy,
+    output: getAssistantMessageFromRunOutput(run.output),
   }),
 })
 ```
@@ -118,6 +132,10 @@ const registeredScorer = createClassifierScorer<typeof responseJudge, 'quality'>
   classifier: 'response-judge',
   question: 'quality',
   type: 'agent',
+  state: ({ run }) => ({
+    input: getUserMessageFromRunInput(run.input),
+    output: getAssistantMessageFromRunOutput(run.output),
+  }),
 })
 
 new Mastra({
@@ -126,7 +144,7 @@ new Mastra({
 })
 ```
 
-Running an ID-backed scorer before registering it with Mastra throws an error that identifies both the classifier and scorer IDs. You can avoid registry resolution by passing the configured classifier instance directly.
+Running an ID-backed scorer before registering it with Mastra rejects with an error that identifies both the classifier and scorer IDs. You can avoid registry resolution by passing the configured classifier instance directly.
 
 ## Options
 
@@ -153,7 +171,8 @@ Running an ID-backed scorer before registering it with Mastra throws an error th
   {
     name: 'scores',
     type: 'Record<ChoiceKey, number>',
-    description: 'Required exhaustive mapping for choice questions. Rejected for score and boolean questions.',
+    description:
+      'Required exhaustive mapping for choice questions. Each value must be between 0 and 1. Rejected for score and boolean questions.',
     isOptional: true,
   },
   {
@@ -165,8 +184,9 @@ Running an ID-backed scorer before registering it with Mastra throws an error th
   {
     name: 'state',
     type: '(context) => ClassifierState | Promise<ClassifierState>',
-    description: 'Selects classifier state from the scorer step context. Defaults to run.output.',
-    isOptional: true,
+    description:
+      'Selects JSON-compatible classifier state from the scorer step context, including run.input, run.output, and run.requestContext.',
+    isOptional: false,
   },
   {
     name: 'maxRetries',
@@ -193,15 +213,18 @@ The factory also accepts `name` and `description` from `createScorer()`.
 
 ## Errors
 
-`createClassifierScorer()` throws a `TypeError` for these configuration and evaluation errors:
+`createClassifierScorer()` throws a `TypeError` when an inline classifier configuration is invalid:
 
-- An inline classifier has no configured questions.
+- The classifier has no configured questions.
 - The selected question doesn't exist.
-- A choice mapping omits a configured choice, contains an unknown choice, or has a non-finite value.
+- A choice mapping omits a configured choice, contains an unknown choice, or has a value that isn't a finite number between `0` and `1`.
 - A score or boolean question receives a `scores` mapping.
-- Classifier evaluation doesn't return an answer for the selected question.
 
-When using a classifier ID, the scorer throws an `Error` at run time if it hasn't been registered with Mastra or the ID isn't present in `classifiers`.
+Failures while the scorer runs reject `scorer.run()` with a `ScorerRunError` whose `failedStep` is `analyze`, and the original error is available as its `cause`. This covers:
+
+- Classifier evaluation fails or doesn't return an answer for the selected question.
+- A classifier ID is used before the scorer is registered with Mastra, or the ID isn't present in `classifiers`.
+- A registered classifier has an invalid configuration for this scorer.
 
 ## Result evidence
 
@@ -215,4 +238,4 @@ When using a classifier ID, the scorer throws an `Error` at run time if it hasn'
 
 Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.evaluate()` directly when you need the full raw response.
 
-Classifier failures fail the scorer run. The scorer's abort signal is passed to `Classifier.evaluate()`, and classifier evaluation runs inside the scorer's active trace context.
+Classifier evaluation runs inside the scorer's active trace context.
