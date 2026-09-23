@@ -296,7 +296,7 @@ function BoardContent({
           </Notice>
         </div>
       )}
-      <div className="[container-type:inline-size] m-px min-h-0 flex-1 overflow-auto rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] overscroll-x-contain [scrollbar-gutter:stable] lg:overscroll-x-auto">
+      <div className="[container-type:inline-size] m-px min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-4">
