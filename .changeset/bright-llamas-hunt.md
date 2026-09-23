@@ -2,14 +2,14 @@
 '@mastra/connect': minor
 ---
 
-Added multi-connection support to `@mastra/connect`: when a provider has multiple active connections, tools are now wrapped with a required `connection_name` input and a new `<provider>_list_connections` tool is exposed so agents can discover and select which connection to use. Single-connection behavior and explicit connectionId pins are unchanged.
+Added multi-connection support and a string-array shorthand to `@mastra/connect`.
 
-**Before:** Multi-active provider connections were skipped with a warning.
+**Multi-connection support:** when a provider has more than one active connection, tools are wrapped with a required `connection_name` input and a new `<provider>_list_connections` tool is exposed so agents can discover and select which connection to use. Single-connection behavior and explicit `connectionId` pins are unchanged.
 
-**After:**
+Previously, multi-active provider connections were skipped with a warning.
 
 ```ts
-const tools = await connect({ integrations: { linear: {} } });
+const tools = await connect({ integrations: ['linear'] });
 
 // Agent lists available connections
 await tools.linear_list_connections.execute({ context: {} });
@@ -17,4 +17,19 @@ await tools.linear_list_connections.execute({ context: {} });
 
 // Agent calls tools with the chosen connection
 await tools.linear_get_issue.execute({ context: { connection_name: 'Work', id: 'LIN-123' } });
+```
+
+**String-array shorthand for `integrations`:** you can now pass a plain array of integration ids when no per-provider overrides are needed. The object form still works whenever you need `allowTools`, `autoApproveTools`, `connectionId`, or `disabled`.
+
+```ts
+// Shorthand
+connect({ integrations: ['linear', 'github'] });
+
+// Object form (unchanged)
+connect({
+  integrations: {
+    linear: { allowTools: ['linear_get_issue'] },
+    github: {},
+  },
+});
 ```

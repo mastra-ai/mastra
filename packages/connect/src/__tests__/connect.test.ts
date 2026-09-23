@@ -114,6 +114,42 @@ describe('connect', () => {
     );
   });
 
+  it('accepts the string-array shorthand for integrations', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: ['linear'],
+    })();
+    expect(tools).toEqual(fakeTools);
+    expect(createTools).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'c_lin1', allowTools: undefined }),
+    );
+  });
+
+  it('rejects a non-string entry in the integrations array', () => {
+    installProvider();
+    expect(() =>
+      connect({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN },
+        integrations: ['linear', 123 as unknown as string],
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
+  });
+
+  it('rejects duplicate entries in the integrations array', () => {
+    installProvider();
+    expect(() =>
+      connect({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN },
+        integrations: ['linear', 'linear'],
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
+  });
+
   it('rejects duplicate tool keys from different providers', async () => {
     const duplicateTools = { shared_tool: { id: 'shared_tool' } } as never;
     installProvider({ createTools: vi.fn().mockReturnValue(duplicateTools) });

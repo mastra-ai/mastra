@@ -33,8 +33,17 @@ export interface ConnectIntegrationOptions {
 export interface ConnectOptions {
   /** Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID. */
   projectId?: string;
-  /** Optional per-provider overrides keyed by integrationId. */
-  integrations?: Record<string, ConnectIntegrationOptions>;
+  /**
+   * Providers to enable, in one of two shapes:
+   * - `["linear", "github"]` — string array shorthand for enabling providers
+   *   with no per-provider options.
+   * - `{ linear: { allowTools: [...] }, github: {} }` — object form for
+   *   per-provider overrides (allowTools, connectionId pin, disabled, etc).
+   *
+   * Both forms may be combined by passing the object form; use the array
+   * shorthand only when no overrides are needed.
+   */
+  integrations?: string[] | Record<string, ConnectIntegrationOptions>;
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
@@ -105,7 +114,8 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
   // Keyed by `${integrationId}::${connectionId}` so multiple active
   // connections for the same provider each get their own MCP client.
   const mcpClients = new Map<string, { integrationId: string; connectionId: string; client: MCPClient }>();
-  validateIntegrationOverrides(options.integrations);
+  const integrationOverrides = normalizeIntegrationOverrides(options.integrations);
+  validateIntegrationOverrides(integrationOverrides);
 
   let cache: { snapshot: ResolvedConnectTools; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedConnectTools> | undefined;
@@ -134,7 +144,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       connection =>
         connection.status === 'active' &&
         !checkedIn.has(connection.integrationId) &&
-        !options.integrations?.[connection.integrationId]?.disabled,
+        !integrationOverrides[connection.integrationId]?.disabled,
     );
     if (needsCatalog) throw catalogResult.reason;
     const reason = catalogResult.reason;
@@ -154,7 +164,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       inflight = (async () => {
         try {
           const { connections, catalog } = await loadSnapshotInputs();
-          const requests = buildRequests(options.integrations, catalog);
+          const requests = buildRequests(integrationOverrides, catalog);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
@@ -221,9 +231,39 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
   });
 }
 
-function validateIntegrationOverrides(integrations: ConnectOptions['integrations']): void {
+/**
+ * Turns the two accepted `integrations` shapes into the internal Record form.
+ * The string-array shorthand (`["linear", "github"]`) becomes
+ * `{ linear: {}, github: {} }`; the object form passes through unchanged.
+ * Also rejects malformed inputs early (non-string array entries, duplicates)
+ * so a bad option throws at connect() time rather than at first refresh.
+ */
+function normalizeIntegrationOverrides(
+  integrations: ConnectOptions['integrations'],
+): Record<string, ConnectIntegrationOptions> {
+  if (integrations === undefined) return {};
+  if (Array.isArray(integrations)) {
+    const record: Record<string, ConnectIntegrationOptions> = {};
+    for (const entry of integrations) {
+      if (typeof entry !== 'string') {
+        throw new MastraConnectError(
+          'invalid_options',
+          `Invalid integrations entry: expected a string integration id, got ${typeof entry}.`,
+        );
+      }
+      if (record[entry] !== undefined) {
+        throw new MastraConnectError('invalid_options', `Duplicate integration '${entry}' in integrations array.`);
+      }
+      record[entry] = {};
+    }
+    return record;
+  }
+  return integrations;
+}
+
+function validateIntegrationOverrides(integrations: Record<string, ConnectIntegrationOptions>): void {
   const integrationIdPattern = /^[a-zA-Z0-9_-]{1,128}$/;
-  for (const integrationId of Object.keys(integrations ?? {})) {
+  for (const integrationId of Object.keys(integrations)) {
     if (!integrationIdPattern.test(integrationId)) {
       throw new MastraConnectError(
         'invalid_options',
@@ -238,10 +278,10 @@ function connectionIdEnvVar(integrationId: string): string {
 }
 
 function buildRequests(
-  integrations: ConnectOptions['integrations'],
+  integrations: Record<string, ConnectIntegrationOptions>,
   catalog: IntegrationCatalogEntry[],
 ): NormalizedRequest[] {
-  const overrides = integrations ?? {};
+  const overrides = integrations;
   const registrations = new Map(PROVIDERS.map(registration => [registration.integrationId, registration]));
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {

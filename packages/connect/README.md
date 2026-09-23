@@ -25,6 +25,18 @@ const tools = connect({
 });
 ```
 
+The `integrations` option accepts two shapes. Use the string-array shorthand when you don't need per-provider overrides:
+
+```ts
+const tools = connect({
+  projectId: process.env.MASTRA_PROJECT_ID,
+  client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+  integrations: ['resend', 'incident-io'],
+});
+```
+
+Use the object form (shown above) whenever you need `allowTools`, `autoApproveTools`, `connectionId`, or `disabled` for any provider.
+
 The resolver discovers active project connections. Where multiple connections match, select one with `MASTRA_RESEND_CONNECTION_ID`, `MASTRA_INCIDENT_IO_CONNECTION_ID`, or the integration's `connectionId` option. The `integrations` entries configure individual providers; they do not disable other attached providers. Set `disabled: true` on providers you want to exclude.
 
 | Provider    | Tool source          | Scope                                                                                                                                                     |
