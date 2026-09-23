@@ -181,16 +181,18 @@ export async function persistStepUpdate(
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
+  // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
+  // agent output processor, #19605) wins over the workflow-wide option.
+  // The predicate only reads deterministic state, so evaluate it before entering a
+  // durable operation to avoid spending one on a no-op.
+  const persistencePredicate = engine.getRunPersistenceOverride(runId) ?? engine.options?.shouldPersistSnapshot;
+  const shouldPersistSnapshot = persistencePredicate?.({ stepResults, workflowStatus });
+
+  if (!shouldPersistSnapshot) {
+    return;
+  }
+
   await engine.wrapDurableOperation(operationId, async () => {
-    // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
-    // agent output processor, #19605) wins over the workflow-wide option.
-    const persistencePredicate = engine.getRunPersistenceOverride(runId) ?? engine.options?.shouldPersistSnapshot;
-    const shouldPersistSnapshot = persistencePredicate?.({ stepResults, workflowStatus });
-
-    if (!shouldPersistSnapshot) {
-      return;
-    }
-
     // Guard: never overwrite a `suspended` / `paused` snapshot with a later
     // `running` update from the same run. During resume the loop transitions
     // suspended → running mid-execution, and any step-update write would

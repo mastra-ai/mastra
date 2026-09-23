@@ -218,6 +218,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     skipEmits?: boolean;
   }): Promise<number> {
+    // Nothing to publish, so avoid spending a durable operation on a bare timestamp.
+    if (params.skipEmits) {
+      return Date.now();
+    }
     return this.wrapDurableOperation(params.operationId, async () => {
       const startedAt = Date.now();
       if (!params.skipEmits) {

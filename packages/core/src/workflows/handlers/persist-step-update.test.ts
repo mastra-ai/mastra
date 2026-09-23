@@ -240,3 +240,67 @@ describe('DefaultExecutionEngine — lastPersistedStatus accessors', () => {
     expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
   });
 });
+
+describe('persistStepUpdate — durable operation skipping (#24731)', () => {
+  it('does not enter a durable operation when the snapshot predicate declines', async () => {
+    const { engine, store } = makeEngine(({ workflowStatus }) => workflowStatus === 'suspended');
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+
+    await persist(engine, 'run-1', 'running');
+
+    expect(wrapSpy).not.toHaveBeenCalled();
+    expect(store.calls).toHaveLength(0);
+  });
+
+  it('enters a durable operation when the snapshot predicate accepts', async () => {
+    const { engine, store } = makeEngine(({ workflowStatus }) => workflowStatus === 'suspended');
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+
+    await persist(engine, 'run-1', 'suspended');
+
+    expect(wrapSpy).toHaveBeenCalledTimes(1);
+    expect(store.calls).toHaveLength(1);
+  });
+});
+
+describe('onStepExecutionStart — durable operation skipping (#24731)', () => {
+  function startParams(skipEmits: boolean) {
+    const pubsub = { publish: vi.fn(async () => {}) } as any;
+    return {
+      pubsub,
+      params: {
+        step: { id: 'step-1' } as any,
+        inputData: {},
+        pubsub,
+        executionContext: baseExecutionContext(),
+        stepCallId: 'call-1',
+        stepInfo: {},
+        operationId: 'op',
+        skipEmits,
+      },
+    };
+  }
+
+  it('returns a timestamp without a durable operation when emits are skipped', async () => {
+    const { engine } = makeEngine(() => false);
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+    const { params, pubsub } = startParams(true);
+
+    const startedAt = await engine.onStepExecutionStart(params);
+
+    expect(typeof startedAt).toBe('number');
+    expect(wrapSpy).not.toHaveBeenCalled();
+    expect(pubsub.publish).not.toHaveBeenCalled();
+  });
+
+  it('publishes inside a durable operation when emits are enabled', async () => {
+    const { engine } = makeEngine(() => false);
+    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
+    const { params, pubsub } = startParams(false);
+
+    await engine.onStepExecutionStart(params);
+
+    expect(wrapSpy).toHaveBeenCalledTimes(1);
+    expect(pubsub.publish).toHaveBeenCalledTimes(1);
+  });
+});
