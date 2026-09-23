@@ -445,22 +445,23 @@ describe('HarnessLibSQL legacy Harness table migrations', () => {
 
     const standardClient = createClient({ url });
     const standardExecute = vi.spyOn(standardClient, 'execute');
+    const standardTransaction = vi.spyOn(standardClient, 'transaction');
     await new HarnessLibSQL({ client: standardClient }).init();
     expect(
       standardExecute.mock.calls.some(([statement]) =>
         (typeof statement === 'string' ? statement : statement.sql).startsWith('BEGIN'),
       ),
     ).toBe(false);
+    expect(standardTransaction).not.toHaveBeenCalled();
     standardClient.close();
 
     const optedInClient = createClient({ url });
-    const optedInExecute = vi.spyOn(optedInClient, 'execute');
+    // @libsql/client >= 0.18.0 pools file: connections, so the transactional
+    // init opens its critical section through client.transaction('write')
+    // rather than a raw BEGIN IMMEDIATE statement on a pooled borrow.
+    const optedInTransaction = vi.spyOn(optedInClient, 'transaction');
     await createHarnessStorage(optedInClient).init();
-    expect(
-      optedInExecute.mock.calls.some(([statement]) =>
-        (typeof statement === 'string' ? statement : statement.sql).startsWith('BEGIN IMMEDIATE'),
-      ),
-    ).toBe(true);
+    expect(optedInTransaction).toHaveBeenCalledWith('write');
     optedInClient.close();
   });
 

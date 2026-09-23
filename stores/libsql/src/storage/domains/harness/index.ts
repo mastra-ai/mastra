@@ -259,13 +259,16 @@ export class HarnessLibSQL extends HarnessStorage {
   }
 
   async #initLocalTransaction(): Promise<void> {
-    // Use explicit SQL boundaries on the existing connection. The libSQL
-    // transaction() API detaches that connection from the Client, which would
-    // discard LibSQLStore's connection-local pragmas and retain WAL sidecars
-    // until the detached transaction object is collected.
-    await this.#client.execute('BEGIN IMMEDIATE');
+    // `@libsql/client` >= 0.18.0 pools connections for local `file:` databases:
+    // every client.execute() borrows a pooled connection, so raw BEGIN/COMMIT
+    // statements can land on different connections and COMMIT fails with
+    // "cannot commit - no transaction is active". client.transaction() holds
+    // one pooled connection for the whole critical section; the returned
+    // Transaction object exposes execute/batch against that connection, so the
+    // existing migration path runs unchanged on it.
+    const tx = await this.#client.transaction('write');
     const transactionalStorage = new HarnessLibSQL({
-      client: this.#client,
+      client: tx as unknown as Client,
       maxRetries: this.#maxRetries,
       initialBackoffMs: this.#initialBackoffMs,
     });
@@ -274,11 +277,11 @@ export class HarnessLibSQL extends HarnessStorage {
 
     try {
       await transactionalStorage.#initOnCurrentClient();
-      await this.#client.execute('COMMIT');
+      await tx.commit();
     } catch (error) {
-      // Preserve the initialization error. ROLLBACK can itself fail when
-      // SQLite already closed the transaction after a failed statement.
-      await this.#client.execute('ROLLBACK').catch(() => undefined);
+      // Preserve the initialization error. rollback() is idempotent and a
+      // no-op once the transaction has already settled.
+      await tx.rollback().catch(() => undefined);
       throw error;
     }
 
@@ -354,6 +357,7 @@ export class HarnessLibSQL extends HarnessStorage {
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
       ifNotExists: [
         'harness_name',
+        'session_incarnation',
         'subagent_depth',
         'subagent_type_id',
         'subagent_tool_allowlist_scoped',
@@ -383,12 +387,15 @@ export class HarnessLibSQL extends HarnessStorage {
         'schema_id',
         'metadata_json',
         'object_json',
+        'session_incarnation',
+        'blob_ref',
+        'put_operation_id',
       ],
     });
     await this.#db.alterTable({
       tableName: TABLE_HARNESS_ATTACHMENT_REFERENCES,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
-      ifNotExists: ['harness_name'],
+      ifNotExists: ['harness_name', 'session_incarnation', 'retained_until'],
     });
     await this.#backfillHarnessNamespace();
     await this.#backfillPendingResumeExpiry();
@@ -5551,9 +5558,20 @@ export class HarnessLibSQL extends HarnessStorage {
 
     // createTable() plus the alterTable() calls in init() must bring managed
     // Harness tables to the current column set before this PK-only rebuild.
+    // Copy only columns present on the live table as well as in the schema:
+    // any drift left over (e.g. a column newer than the ifNotExists list)
+    // falls back to the column default instead of failing the whole init.
     const schema = TABLE_SCHEMAS[tableName as keyof typeof TABLE_SCHEMAS];
+    const existing = new Set(
+      (
+        await this.#client.execute({
+          sql: `PRAGMA table_info(${quoteIdentifier(tableName)})`,
+          args: [],
+        })
+      ).rows.map(row => String(row.name)),
+    );
     const tempTableName = `__${tableName}_pf442_rebuild`;
-    const columns = Object.keys(schema);
+    const columns = Object.keys(schema).filter(column => existing.has(column));
     const quotedColumns = columns.map(quoteIdentifier).join(', ');
 
     const statements = [
