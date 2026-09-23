@@ -645,8 +645,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // from the in-process registry — the predicate is a closure and can't
       // survive the wire; cross-process engines fall back to maxSteps only),
       // delegation bail, and the onIterationComplete ladder (see
-      // `decideContinuation` for the semantics and adjudications).
+      // `decideContinuation` for the per-engine policy). This engine (and
+      // evented/inngest, which inherit through this builder) runs the
+      // `durable` ladder — hard stops, gated stopWhen, and the two-phase
+      // stop past stopWhen, all grounded in persisted step records under
+      // at-least-once redelivery. `runMaxSteps` is always finite here, so
+      // the default ladder's hasFiniteMaxSteps question never arises.
       const decision = await decideContinuation({
+        policy: { mode: 'durable' },
         pendingFeedbackStop: state.pendingFeedbackStop ?? false,
         llmWantsToContinue: state.lastStepResult?.isContinued === true || drainForcedContinue,
         underMaxSteps: state.iterationCount < runMaxSteps,

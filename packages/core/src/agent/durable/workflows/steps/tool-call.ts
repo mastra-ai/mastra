@@ -1203,9 +1203,14 @@ export function createDurableToolCallStep() {
           backgroundTask: { taskId, status },
         },
       });
-      // Background task dispatch via the shared dispatch ladder (the
-      // checkIfRunning restart gate and fallback-to-sync now live in the core).
+      // Background task dispatch via the shared dispatch ladder with the
+      // durable policy: steps replay under at-least-once redelivery, so an
+      // already-running task is restarted to reattach hooks (ledger L5) and
+      // ladder failures degrade to sync execution to preserve forward
+      // progress across transport/store boundaries.
       const bgOutcome = await dispatchBackgroundTool({
+        existingRunningTask: 'restart',
+        dispatchFailure: 'fallback-to-sync',
         backgroundTaskManager: bgManager,
         agentBackgroundConfig: bgConfig,
         managerConfig: bgManager?.config,

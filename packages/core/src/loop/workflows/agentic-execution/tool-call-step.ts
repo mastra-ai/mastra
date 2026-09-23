@@ -851,6 +851,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           },
         });
         const bgOutcome = await dispatchBackgroundTool({
+          // D4.1/D4.2 — the in-process engine's released contract: no
+          // checkIfRunning probe (dispatch here is only re-entered by caller
+          // action, never redelivered), and a dispatch failure propagates as
+          // a tool error instead of silently degrading to sync execution.
+          existingRunningTask: 'dispatch-duplicate',
+          dispatchFailure: 'propagate',
           backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
           agentBackgroundConfig: agentBgConfig,
           managerConfig: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_CONFIG_KEY, 'backgroundTaskManagerConfig'),

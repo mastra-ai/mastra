@@ -46,25 +46,45 @@ export interface BackgroundTaskContextInfo {
  * onExecution — they close over engine transport and message-list state) and
  * how the placeholder projects onto their step output.
  *
- * Adjudications:
- * - checkIfRunning → restart (ledger L5): previously durable-only. When the
- *   LLM replays a tool call whose background task is already running (e.g.
- *   resume after process restart), restarting reattaches hooks instead of
- *   dispatching a duplicate task.
- * - Dispatch-failure fallback-to-sync: previously durable-only. A failure
- *   anywhere in the ladder (task creation, storage lookups, dispatch) now
- *   degrades to synchronous execution on both engines instead of surfacing
- *   as a tool error for the LLM to retry.
+ * The mechanics are shared; two rungs are per-engine policy (both required
+ * params, so every call site's choice is explicit):
+ *
+ * - `existingRunningTask` (D4.1): `'restart'` (durable, ledger L5) probes
+ *   `checkIfRunning` before dispatching and restarts an already-running task
+ *   for this toolCallId to reattach hooks — durable step redelivery
+ *   legitimately re-enters dispatch for the same toolCallId after a crash,
+ *   and dispatching again would duplicate background work on every
+ *   recovery. `'dispatch-duplicate'` (default engine) skips the probe
+ *   entirely and goes straight to `dispatch()` — the released in-process
+ *   contract; default dispatch is only re-entered by caller action, never
+ *   by transport redelivery, so the dedup problem doesn't exist and the
+ *   probe would add a storage read per dispatch that the released path
+ *   never made.
+ * - `dispatchFailure` (D4.2): `'fallback-to-sync'` (durable) degrades any
+ *   ladder failure (task creation, storage lookups, dispatch) to
+ *   synchronous execution — durable dispatch crosses transport/store
+ *   boundaries where transient failure is expected, and sync fallback
+ *   preserves forward progress. `'propagate'` (default engine) rethrows so
+ *   the failure surfaces as a tool error — the released contract; a tool
+ *   may be background *because* synchronous execution is unsafe, slow, or
+ *   process-affine, and an in-process dispatch failure indicates a
+ *   config/programmer error that silent sync execution would mask.
+ *
+ * Unconditional on both policies (each with pre-PR provenance on its own
+ * engine):
  * - Started-chunk emission is best-effort: previously the durable engine
  *   awaited its pubsub publish inside the ladder, so a transport failure
  *   *after* dispatch fell back to sync and executed the tool twice.
- * - The suspended-task lookup now only runs when a resume payload is present
+ * - The suspended-task lookup only runs when a resume payload is present
  *   (durable's gating; the main loop looked it up unconditionally but only
  *   consumed the answer when resuming, so this is observably identical).
  *   Nullish, not truthy: a tool with a primitive resumeSchema can be resumed
  *   with `false` / `0` / `''`, and treating those as "no resume data" would
  *   fall through to `dispatch()`, stranding the suspended task and starting
  *   a second one.
+ * - The `adoptPersistedTask` replay-adoption block (durable-only via its
+ *   existing flag, #24418) and the concurrency-limit `fallbackToSync` rung
+ *   (both engines' released contract).
  */
 export async function dispatchBackgroundTool(deps: {
   backgroundTaskManager: BackgroundTaskManager | undefined;
@@ -95,6 +115,21 @@ export async function dispatchBackgroundTool(deps: {
   emitTaskStarted: (task: { id: string }) => void | Promise<void>;
   /** Durable workflow steps may replay after the task reached persisted storage. */
   adoptPersistedTask?: boolean;
+  /**
+   * D4.1 — what to do when a task for this toolCallId is already running:
+   * `'restart'` (durable: redelivery dedup, ledger L5) probes
+   * `checkIfRunning` and restarts to reattach hooks; `'dispatch-duplicate'`
+   * (default engine: released contract) skips the probe entirely.
+   */
+  existingRunningTask: 'restart' | 'dispatch-duplicate';
+  /**
+   * D4.2 — what to do when the dispatch ladder throws:
+   * `'fallback-to-sync'` (durable: forward progress across transport/store
+   * failures) degrades to synchronous execution; `'propagate'` (default
+   * engine: released contract) rethrows so the failure surfaces as a tool
+   * error.
+   */
+  dispatchFailure: 'fallback-to-sync' | 'propagate';
   logger?: IMastraLogger;
 }): Promise<BackgroundDispatchOutcome> {
   const { backgroundTaskManager, toolName, toolCallId, agentId, threadId, resourceId, runId, logger } = deps;
@@ -242,20 +277,26 @@ export async function dispatchBackgroundTool(deps: {
       }
     }
 
-    // A task for this toolCallId+runId is already running (e.g. the LLM
-    // replayed the call after a process restart): restart it to reattach the
-    // per-stream hooks instead of dispatching a duplicate (ledger L5).
-    const isPreviouslyRunning = await bgTask.checkIfRunning({
-      toolCallId,
-      runId,
-      agentId,
-      threadId,
-      resourceId,
-      toolName,
-    });
-    if (isPreviouslyRunning) {
-      const task = await bgTask.restart();
-      return dispatched('restarted', task.id);
+    // D4.1 — durable only ('restart'): a task for this toolCallId+runId is
+    // already running (e.g. the step was redelivered after a process
+    // restart): restart it to reattach the per-stream hooks instead of
+    // dispatching a duplicate (ledger L5). The default engine
+    // ('dispatch-duplicate') skips the probe entirely — its dispatch is
+    // never redelivered, and the released contract made no storage read
+    // here.
+    if (deps.existingRunningTask === 'restart') {
+      const isPreviouslyRunning = await bgTask.checkIfRunning({
+        toolCallId,
+        runId,
+        agentId,
+        threadId,
+        resourceId,
+        toolName,
+      });
+      if (isPreviouslyRunning) {
+        const task = await bgTask.restart();
+        return dispatched('restarted', task.id);
+      }
     }
 
     const { task, fallbackToSync } = await bgTask.dispatch();
@@ -274,7 +315,17 @@ export async function dispatchBackgroundTool(deps: {
 
     return dispatched('started', task.id);
   } catch (bgError) {
+    // Adopt-persisted recovery failures (#24418) are ambiguous and fail
+    // closed regardless of the dispatchFailure policy.
     if (failClosed) {
+      throw bgError;
+    }
+    // D4.2 — default engine ('propagate'): surface the dispatch failure as
+    // a tool error (released contract; silent sync execution could run a
+    // tool that is background precisely because sync is unsafe). Durable
+    // ('fallback-to-sync'): degrade to synchronous execution to preserve
+    // forward progress across transport/store failures.
+    if (deps.dispatchFailure === 'propagate') {
       throw bgError;
     }
     logger?.debug?.(`Background task dispatch failed for ${toolName}, falling back to sync: ${bgError}`);

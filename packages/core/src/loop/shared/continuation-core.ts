@@ -23,36 +23,32 @@ export interface ContinuationDecision {
 }
 
 /**
- * Shared dowhile-predicate decision core (PHASE3 Step 3): given a settled
- * iteration, decide whether the loop runs another turn. Owns the two-phase
- * feedback stop, stopWhen evaluation, delegation bail, and the
- * onIterationComplete result ladder. Engine glue owns everything around it:
- * step accumulation, signal draining, message-boundary rotation, abort
- * checks, and emission.
+ * Per-engine continuation policy. Required (no default) so every call site's
+ * choice is explicit and a missed site is a compile error.
  *
- * Hard stops (`pendingFeedbackStop` from the previous turn, delegation bail)
- * are unconditional — the onIterationComplete hook cannot override them.
- * stopWhen is soft: the hook may still force-continue or run one feedback
- * turn past a matched condition (the two-phase stop then fires next turn).
- *
- * Adjudicated drift (previously engine-specific):
- * - `pendingFeedbackStop` and delegation bail are hard stops on both engines
- *   (previously main let `continue: true` override the two-phase stop, and
- *   only durable had the hard-stop concept).
- * - Delegation bail is consumed before the hook runs so the hook's `isFinal`
- *   context reflects it (main checked bail after the hook).
- * - `{ feedback, continue: true }` when the LLM already signaled done now
- *   injects the feedback AND resurrects the loop (main force-continued but
- *   silently dropped the feedback message).
- * - `{ feedback, continue: false }` after a matched stopWhen honors the
- *   two-phase stop (main injected the feedback but stopped immediately,
- *   wasting the feedback turn and leaking the pending flag).
- * - Feedback force-continue no longer requires a finite maxSteps on main
- *   (glue passes `underMaxSteps: true` for unbounded runs).
- * - stopWhen conditions are only evaluated while the outcome is still open
- *   (durable's gate; main evaluated them even when already stopping).
+ * Two ladders rather than per-behavior knobs: the four behaviors that differ
+ * between the engines (hard vs soft feedback stop, stopWhen gating, the
+ * feedback turn past a matched stopWhen, and the finite-maxSteps guard)
+ * interact inside one decision ladder — four booleans would generate 16
+ * states, of which only these 2 ever shipped. Each ladder is the contract
+ * its engine shipped, verified line-for-line against the pre-extraction
+ * predicates (`git show dc51cb24b3`).
  */
-export async function decideContinuation(deps: {
+export type ContinuationPolicy =
+  | { mode: 'durable' }
+  | {
+      mode: 'default';
+      /**
+       * True when the run has a finite maxSteps. Only the default ladder's
+       * feedback force-continue consumes this (which is why it lives on the
+       * policy union, not the shared deps): the shipped default contract
+       * never force-continued from the feedback branch on unbounded runs — a
+       * hook that always returns feedback must not spin the loop forever.
+       */
+      hasFiniteMaxSteps: boolean;
+    };
+
+export interface ContinuationDeps {
   /** Previous turn returned `{ continue: false, feedback }` — this turn ran with the feedback, stop now. */
   pendingFeedbackStop: boolean;
   /** The engine's own continuation flag after all in-iteration steps ran (stepResult/lastStepResult.isContinued). */
@@ -72,7 +68,62 @@ export async function decideContinuation(deps: {
   /** Append the hook's feedback as a synthetic assistant message the next turn will see. */
   injectFeedback: (feedback: string) => void | Promise<void>;
   logger?: IMastraLogger;
-}): Promise<ContinuationDecision> {
+  /** Which engine's shipped continuation contract to apply. */
+  policy: ContinuationPolicy;
+}
+
+/**
+ * Shared dowhile-predicate decision core (PHASE3 Step 3): given a settled
+ * iteration, decide whether the loop runs another turn. Owns the two-phase
+ * feedback stop, stopWhen evaluation, delegation bail, and the
+ * onIterationComplete result ladder. Engine glue owns everything around it:
+ * step accumulation, signal draining, message-boundary rotation, abort
+ * checks, and emission.
+ *
+ * The mechanics are shared; the policy is per-engine, because each engine
+ * shipped a different contract and each contract is grounded in that
+ * engine's constraints:
+ *
+ * - `{ mode: 'durable' }` — the durable/evented predicate as it shipped
+ *   before extraction. `pendingFeedbackStop` and delegation bail are hard
+ *   stops the hook cannot override (the stop is recorded in a persisted step
+ *   record before the next step is scheduled; at-least-once redelivery
+ *   re-running the predicate must not reopen a settled record). stopWhen
+ *   only runs while the outcome is still open (settled records must not be
+ *   re-evaluated). `{ feedback, continue: false }` grants one feedback turn
+ *   even past a matched stopWhen (two-phase stop).
+ *
+ * - `{ mode: 'default' }` — the in-process predicate as it shipped before
+ *   extraction (the released contract users run against). The feedback stop
+ *   is soft: `{ continue: true }` can override it — there is no persisted
+ *   record and no redelivery, so the durable constraint doesn't exist here.
+ *   stopWhen runs whenever the LLM wants to continue (user predicates are
+ *   observable API — invocation counts and side effects are behavior).
+ *   `{ feedback, continue: false }` after a matched stopWhen injects the
+ *   feedback but still stops (no extra turn — an extra LLM turn would change
+ *   step count, latency, and billing against the released contract). The
+ *   feedback force-continue requires a finite maxSteps (runaway guard).
+ *
+ * Two DELIBERATE DEVIATIONS from the pre-extraction default contract are
+ * kept on both engines (each has a disclosing changeset):
+ * - Delegation bail is consumed before the hook and always cleared, so the
+ *   hook's `isFinal` context reflects the bail (changeset loop-bail-ordering).
+ * - `{ continue: true, feedback }` on a stopped run injects the feedback
+ *   instead of silently dropping it (changeset loop-feedback-resurrection).
+ */
+export async function decideContinuation(deps: ContinuationDeps): Promise<ContinuationDecision> {
+  return deps.policy.mode === 'durable'
+    ? decideContinuationDurable(deps)
+    : decideContinuationDefault(deps, deps.policy);
+}
+
+/**
+ * The durable/evented engines' shipped predicate, unchanged by the policy
+ * split — this body is the pre-extraction durable ladder byte-for-byte.
+ * Hard stops, gated stopWhen, and the two-phase stop past stopWhen are all
+ * consequences of persisted step records under at-least-once redelivery.
+ */
+async function decideContinuationDurable(deps: ContinuationDeps): Promise<ContinuationDecision> {
   let hasFinishedSteps = false;
   // Hard-stop tracks reasons the onIterationComplete hook must NOT override.
   let hardStop = false;
@@ -151,6 +202,127 @@ export async function decideContinuation(deps: {
             hasFinishedSteps = false;
             isFinal = false;
             forceContinue = true;
+          }
+        }
+      }
+    } catch (error) {
+      // Log error but don't fail the iteration — the pre-hook decision stands.
+      deps.logger?.error('Error in onIterationComplete hook:', error);
+    }
+  }
+
+  return { isFinal, forceContinue, nextPendingFeedbackStop };
+}
+
+/**
+ * The in-process engine's shipped predicate: a port of the dowhile block the
+ * extraction removed (`git show dc51cb24b3 -- packages/core/src/loop/loop-builder.ts`,
+ * the removed code is the spec), with two tagged DELIBERATE DEVIATIONS
+ * (D1.2, D1.3 — see inline comments) and the extraction's maxSteps hard
+ * ceiling kept (previously maxSteps was only enforced via the default
+ * stopWhen; the ceiling is a kept adjudication, not part of this split).
+ */
+async function decideContinuationDefault(
+  deps: ContinuationDeps,
+  policy: Extract<ContinuationPolicy, { mode: 'default' }>,
+): Promise<ContinuationDecision> {
+  let hasFinishedSteps = false;
+  let nextPendingFeedbackStop = false;
+
+  // D1.1 — SOFT stop: the previous turn's `{ continue: false, feedback }`
+  // ends the loop, but the hook's `{ continue: true }` can still resurrect
+  // it below. The default engine has no persisted step record and no
+  // redelivery, so durable's hard-stop constraint does not exist here; the
+  // released contract let hook authors override the two-phase stop.
+  if (deps.pendingFeedbackStop) {
+    hasFinishedSteps = true;
+  }
+
+  const shouldContinue = deps.llmWantsToContinue;
+
+  // D1.6 — stopWhen runs whenever the LLM wants to continue: no
+  // underMaxSteps / !hasFinishedSteps gates. User stopWhen predicates are
+  // observable API on the default engine — invocation counts and side
+  // effects (logging, metrics, external calls) are behavior users shipped
+  // against. Durable's gate exists only for its settled-record constraint.
+  if (shouldContinue && deps.stopWhen && deps.steps.length > 0) {
+    // Cast steps to any for v5/v6 StopCondition compatibility — the step
+    // shapes differ slightly (rawFinishReason, finishReason format) but are
+    // compatible at runtime for stop condition evaluation.
+    const steps = deps.steps as any;
+    const conditions = await Promise.all(
+      (Array.isArray(deps.stopWhen) ? deps.stopWhen : [deps.stopWhen]).map(condition => condition({ steps })),
+    );
+    if (conditions.some(Boolean)) {
+      hasFinishedSteps = true;
+    }
+  }
+
+  // D1.2 — DELIBERATE DEVIATION (kept fix, changeset loop-bail-ordering):
+  // the pre-extraction default checked the bail AFTER the hook, gated on
+  // !hasFinishedSteps — so the hook received a wrong `isFinal` when a bail
+  // was pending, and when the loop was already stopping the flag leaked
+  // into the next run of the scope. Consuming it here (always cleared,
+  // before the hook) fixes both; the net stop outcome (bail wins) is
+  // unchanged.
+  let hardStop = false;
+  if (deps.consumeDelegationBail()) {
+    hasFinishedSteps = true;
+    hardStop = true;
+  }
+
+  let isFinal = !shouldContinue || !deps.underMaxSteps || hasFinishedSteps;
+  let forceContinue = false;
+
+  if (deps.onIterationComplete && !deps.backgroundTaskPending) {
+    try {
+      const iterationResult = await deps.onIterationComplete(await deps.buildIterationContext(isFinal));
+
+      if (iterationResult) {
+        // The shipped default feedback gate: the LLM must already want to
+        // continue (and no bail). Note there is no budget gate on the
+        // injection itself — old main injected feedback even over budget
+        // (shipped wart, pinned by tests; fixing it would be a separate,
+        // disclosed decision).
+        if (iterationResult.feedback && shouldContinue && !hardStop) {
+          await deps.injectFeedback(iterationResult.feedback);
+
+          if (iterationResult.continue === false) {
+            nextPendingFeedbackStop = true;
+            // D1.4 — inject-but-halt past a matched stopWhen: when stopWhen
+            // already matched (hasFinishedSteps), the run stops NOW — the
+            // feedback lands in the transcript unused. Durable grants one
+            // more feedback turn here; on the default engine that extra turn
+            // would change step count, latency, and billing against the
+            // released contract.
+            if (!hasFinishedSteps) {
+              isFinal = false;
+            }
+          } else if (!hasFinishedSteps && policy.hasFiniteMaxSteps && deps.underMaxSteps) {
+            // D1.5 — feedback force-continue requires a FINITE maxSteps:
+            // the released default contract never force-continued from the
+            // feedback branch on unbounded runs (a hook that always returns
+            // feedback must not spin the loop forever).
+            isFinal = false;
+            forceContinue = true;
+          }
+        } else if (iterationResult.continue === false && !hasFinishedSteps) {
+          hasFinishedSteps = true;
+          isFinal = true;
+        } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
+          if (deps.underMaxSteps) {
+            hasFinishedSteps = false;
+            isFinal = false;
+            forceContinue = true;
+            // D1.3 — DELIBERATE DEVIATION (kept fix, changeset
+            // loop-feedback-resurrection): the pre-extraction default
+            // silently dropped `feedback` when the hook resurrected a
+            // stopped model — i.e. exactly when the supervisor was
+            // course-correcting. Injecting it here is a data-loss fix, not
+            // a contract change worth preserving.
+            if (iterationResult.feedback) {
+              await deps.injectFeedback(iterationResult.feedback);
+            }
           }
         }
       }

@@ -454,8 +454,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       // Shared continuation decision: two-phase feedback stop, stopWhen,
       // delegation bail, and the onIterationComplete ladder (see
-      // `decideContinuation` for the semantics and adjudications).
+      // `decideContinuation` for the per-engine policy). This engine runs
+      // the `default` ladder — the in-process contract as released before
+      // the shared-core extraction (soft feedback stop, ungated stopWhen,
+      // inject-but-halt past stopWhen, finite-maxSteps feedback guard).
       const decision = await decideContinuation({
+        // D1.5 — the default ladder's feedback force-continue only fires on
+        // runs with a finite maxSteps (runaway guard from the released
+        // contract). `underMaxSteps` below collapses "unbounded" into true,
+        // so the ladder needs this separately.
+        policy: { mode: 'default', hasFiniteMaxSteps: !!rt.maxSteps },
         pendingFeedbackStop: state.pendingFeedbackStop,
         llmWantsToContinue: typedInputData.stepResult?.isContinued === true,
         underMaxSteps: !rt.maxSteps || state.accumulatedSteps.length < rt.maxSteps,

@@ -30,14 +30,33 @@ const isWorkingMemoryToolName = (name?: string) =>
  * processed it yet); or the iteration only updated working memory
  * (housekeeping, not task progress).
  *
- * Error policy (adjudicated like ledger L4): best-effort. Scorer and
- * `onComplete` failures are logged and grading is skipped rather than
- * failing the run — previously the main loop propagated these while the
- * durable loop swallowed them. Chunk emission is best-effort via the
- * injected transport.
+ * Error policy is per-engine (`errorPolicy`, required so every call site's
+ * choice is explicit):
+ * - `'fatal'` (default in-process engine): scorer throws, `onComplete`
+ *   throws, and chunk-emission failures propagate to the caller and fail
+ *   the run — the released in-process contract. The engine has no
+ *   redelivery, so a throw surfaces exactly once; swallowing it would hide
+ *   real bugs in user scorer/callback code and break error handling users
+ *   wrote against the shipped behavior. A failing `emitChunk` means the
+ *   consumer's stream is broken — surface it rather than running against a
+ *   dead stream.
+ * - `'best-effort'` (durable/evented engines): failures are logged and
+ *   grading is skipped. A scorer throw fails the durable *step*, and
+ *   at-least-once redelivery re-runs the step — re-invoking the throwing
+ *   scorer against the same state, potentially forever. Log-and-skip is
+ *   the only stable policy under redelivery (ledger L4). Post-verdict
+ *   publish failure must not fail a step whose verdict is already settled
+ *   and persisted.
+ *
+ * The errored-iteration skip (`reason === 'error'` above) is unconditional
+ * on BOTH policies — it is a bug fix (#21897), not an engine policy: a
+ * failing scorer must not flip `isContinued` back on and re-issue the
+ * failing request until maxSteps.
  */
 export async function evaluateTaskCompletion(deps: {
   policy: IsTaskCompleteConfig | undefined;
+  /** Per-engine failure policy for scorer / onComplete / chunk-emission errors (see docblock). */
+  errorPolicy: 'fatal' | 'best-effort';
   /** 1-based iteration number used for maxIterations bookkeeping + the chunk payload. */
   iteration: number;
   maxIterations: number | undefined;
@@ -124,6 +143,12 @@ export async function evaluateTaskCompletion(deps: {
       timeout: policy.timeout,
     });
   } catch (error) {
+    // D2a — 'fatal' (default engine): a throwing user scorer fails the run,
+    // as released. 'best-effort' (durable): log-and-skip — redelivery would
+    // re-invoke the throwing scorer against the same state forever.
+    if (deps.errorPolicy === 'fatal') {
+      throw error;
+    }
     deps.logger?.warn('isTaskComplete scoring failed; skipping completion check', { error });
     return { evaluated: false };
   }
@@ -135,6 +160,12 @@ export async function evaluateTaskCompletion(deps: {
     try {
       await policy.onComplete(result);
     } catch (error) {
+      // D2b — 'fatal' (default engine): a throwing user callback is user
+      // code signaling failure; the released contract surfaced it.
+      // 'best-effort' (durable): log-and-keep-verdict under redelivery.
+      if (deps.errorPolicy === 'fatal') {
+        throw error;
+      }
       deps.logger?.warn('isTaskComplete onComplete callback failed', { error });
     }
   }
@@ -186,8 +217,15 @@ export async function evaluateTaskCompletion(deps: {
         },
       }),
     );
-  } catch {
-    // Transport may be closed — the verdict still stands.
+  } catch (error) {
+    // D2c — 'fatal' (default engine): a failing enqueue means the consumer's
+    // stream is broken; the released contract surfaced that instead of
+    // continuing against a dead stream. 'best-effort' (durable): the pubsub
+    // transport may be closed — the verdict is already settled and
+    // persisted, so a post-verdict publish failure must not fail the step.
+    if (deps.errorPolicy === 'fatal') {
+      throw error;
+    }
   }
 
   return { evaluated: true, complete: result.complete };
