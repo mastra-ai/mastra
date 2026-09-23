@@ -32,6 +32,7 @@ import type { FactoryActorExternalIdentity } from '../../storage/domains/comment
 import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
 import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
+import type { ModelPacksStorage } from '../../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -103,6 +104,14 @@ interface SlackChannelDeps {
    * web kickoff.
    */
   memorySettings?: MemorySettingsStorage;
+  /**
+   * Model-packs domain. When provided, a new repo-backed session starts on the
+   * linked sender's active pack build model — the model that user picked for
+   * themselves — before the factory's shared default. Read once, when the
+   * thread's build model is first chosen; the choice is persisted on the thread
+   * and never re-resolved. Unset → the factory default, as before.
+   */
+  modelPacks?: ModelPacksStorage;
   /**
    * Factory work-items domain. When provided, a dispatched new-session thread
    * (DM or mention) upserts a Work-board card in Building (`execute`) carrying
@@ -449,13 +458,18 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * session id, which the source-control rows turn back into a project — a
  * chat-only `channel:...` id names no project, so there is nothing to read.
  *
+ * The model this session starts on is picked here, once, in the order of who
+ * chose it: the linked sender's active model pack, else the factory project's
+ * default, else the SDK's built-in mode default. The choice is persisted on the
+ * thread as `modeModelId_<mode>`, so it outlives the process that made it.
+ *
  * Skips a session whose mode already has a model persisted on the thread. That
  * is the durable record of a deliberate choice — either an earlier start or a
- * user's own switch — and re-applying the factory default over it would undo
- * the user's selection every time the process restarts.
+ * user's own switch — and re-applying a preference over it would undo the
+ * user's selection every time the process restarts.
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
-  const { projects, memorySettings } = deps;
+  const { projects, memorySettings, modelPacks } = deps;
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ session, thread, requestContext }) => {
     // Seed the tenant org above every guard below. `gateDispatch` stamps it on
@@ -486,14 +500,64 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     const modeModelKey = `modeModelId_${session.mode.get()}`;
     if (await session.thread.getSetting({ key: modeModelKey })) return;
 
-    const defaultModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
+    const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
+    const userModelId = await resolveActivePackBuildModel(modelPacks, owner);
+
     await hydrateFactorySession(session, {
       orgId: owner.orgId,
       factoryProjectId: owner.factoryProjectId,
-      defaultModelId,
+      // The FACTORY model drives observational-memory's provider-aware
+      // fallback, even when the sender's pack supplies the model the session
+      // actually runs — a factory connected only to Anthropic should not
+      // observe with an uncredentialed provider.
+      defaultModelId: factoryModelId,
       memorySettings,
     });
+
+    const selectedModelId = userModelId ?? factoryModelId;
+    if (selectedModelId && selectedModelId !== factoryModelId) {
+      // The sender's own choice beats the factory's. `switch` applies the model
+      // and persists it as this mode's model on the thread in one step — which
+      // is what makes the choice outlive this process. A switch that fails is
+      // logged by the channel machinery and leaves the factory/SDK model that
+      // `hydrateFactorySession` already applied: the message still answers.
+      await session.model.switch({ modelId: selectedModelId });
+    } else if (!selectedModelId) {
+      // Neither preference exists, so the SDK's built-in mode default is this
+      // thread's model of record. Pin it too: a later SDK upgrade that moves
+      // that default must not silently retarget a thread that already started.
+      const currentModelId = session.model.get();
+      if (currentModelId) {
+        await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+      }
+    }
   };
+}
+
+/**
+ * The `build` model of the sender's active model pack — the model that user
+ * chose for themselves — or `undefined` when they have no pack.
+ *
+ * Best-effort by design: an uninitialized model-packs domain, a read failure, or
+ * a pack saved without a build model all mean "no personal preference", which
+ * falls through to the factory default rather than failing the dispatch.
+ */
+async function resolveActivePackBuildModel(
+  modelPacks: ModelPacksStorage | undefined,
+  owner: { orgId: string; userId: string },
+): Promise<string | undefined> {
+  if (!modelPacks) return undefined;
+  try {
+    const active = await modelPacks.getActive({ orgId: owner.orgId, userId: owner.userId });
+    return active?.models.build || undefined;
+  } catch (error) {
+    console.warn('[slack] model pack lookup failed for a new session', {
+      orgId: owner.orgId,
+      userId: owner.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
 }
 
 /**
