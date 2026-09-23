@@ -1352,7 +1352,13 @@ interface ApprovalGate {
   resolve: (decision: ApprovalDecision) => void;
 }
 
-/** Narrows which parked gate(s) an operation applies to. */
+/**
+ * Narrows which parked gate(s) an operation applies to. A field the filter
+ * *names* is a constraint, so `{ threadId: undefined }` selects the gates the
+ * producer left untagged rather than every gate — a caller with no thread
+ * binding must not release a detached thread's gate. Omitted fields constrain
+ * nothing.
+ */
 interface ApprovalGateFilter {
   toolCallId?: string;
   threadId?: string;
@@ -1461,8 +1467,10 @@ export class SessionApproval {
    * message interrupts a run. Each is resolved as a `decline` so the gated tool
    * is rejected (not run) and the run can finalize. `filter` narrows the release
    * to a specific call, thread, or run (so aborting one thread cannot decline
-   * another's gate); with no filter every gate is released. Returns the ids that
-   * were released.
+   * another's gate): naming `threadId`/`runId` with an undefined value — a
+   * caller with no thread binding — releases only the untagged gates rather than
+   * every gate. With no filter every gate is released. Returns the ids that were
+   * released.
    */
   cancel(options: ApprovalGateFilter & { declineContext?: { reason?: string; message?: string } } = {}): string[] {
     const gates = this.#matching(options);
@@ -1474,17 +1482,24 @@ export class SessionApproval {
   }
 
   /**
-   * Parked gates matching every field supplied in `filter`. A gate that never
-   * recorded a field the filter names (the producer did not know its thread or
-   * run) is treated as matching: it cannot be attributed to a *different*
-   * thread, and stranding it would hang the run it belongs to.
+   * Parked gates matching every field `filter` *names*. For the optional gate
+   * tags (thread/run) a named field is a constraint even when its value is
+   * undefined: `{ threadId: undefined }` matches the gates the producer left
+   * untagged, which is what a caller with no thread binding must be limited to,
+   * since a gate tagged with another thread is that thread's authority to
+   * release. `toolCallId` is always present on a gate, so an unset one imposes
+   * no constraint.
+   *
+   * A gate that never recorded the field a filter names is treated as matching:
+   * it cannot be attributed to a *different* thread, and stranding it would hang
+   * the run it belongs to.
    */
   #matching(filter: ApprovalGateFilter): ApprovalGate[] {
     const matched: ApprovalGate[] = [];
     for (const gate of this.#gates.values()) {
       if (filter.toolCallId !== undefined && gate.toolCallId !== filter.toolCallId) continue;
-      if (filter.threadId !== undefined && gate.threadId !== undefined && gate.threadId !== filter.threadId) continue;
-      if (filter.runId !== undefined && gate.runId !== undefined && gate.runId !== filter.runId) continue;
+      if ('threadId' in filter && gate.threadId !== undefined && gate.threadId !== filter.threadId) continue;
+      if ('runId' in filter && gate.runId !== undefined && gate.runId !== filter.runId) continue;
       matched.push(gate);
     }
     return matched;

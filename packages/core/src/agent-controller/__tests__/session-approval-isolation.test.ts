@@ -107,6 +107,21 @@ describe('SessionApproval isolation', () => {
     await expect(parked).resolves.toEqual(expect.objectContaining({ decision: 'decline' }));
   });
 
+  it('releases only untagged gates when the caller names a thread it does not have', async () => {
+    // An abort with no thread binding must not decline a detached thread's gate,
+    // so `{ threadId: undefined }` selects the untagged gates instead of every
+    // gate — mirroring the scoped case above for callers with no thread id.
+    const approval = new SessionApproval();
+    void approval.arm({ toolName: 'write_file', toolCallId: 'call-tagged', threadId: 'thread-b' });
+    const untagged = approval.arm({ toolName: 'write_file', toolCallId: 'call-untagged' });
+
+    expect(approval.isArmed({ threadId: undefined })).toBe(true);
+    expect(approval.cancel({ threadId: undefined })).toEqual(['call-untagged']);
+
+    await expect(untagged).resolves.toEqual(expect.objectContaining({ decision: 'decline' }));
+    expect(approval.isArmed({ toolCallId: 'call-tagged' })).toBe(true);
+  });
+
   it('releases every gate when cancelled without a filter', async () => {
     const approval = new SessionApproval();
     const first = approval.arm({ toolName: 'write_file', toolCallId: 'call-1', threadId: 'thread-a' });
