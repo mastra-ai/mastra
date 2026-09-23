@@ -245,7 +245,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
           </SidebarNew.NavStack>
         </SidebarNew.Nav>
 
-        <SidebarNew.Footer className="space-y-1.5">
+        <SidebarNew.Footer>
           <SidebarNew.Meter
             label="Credits"
             value="$4"
