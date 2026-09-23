@@ -147,13 +147,18 @@ const approvalClassifier = new Classifier({
 const stream = await agent.stream('Clean up old records', {
   requireToolApproval: async ({ toolName, args }) => {
     const result = await approvalClassifier.evaluate({
-      state: { toolName, args },
+      state: {
+        toolName,
+        argumentNames: Object.keys(args),
+      },
     })
 
     return result.answers.requiresApproval.probability >= 0.7
   },
 })
 ```
+
+The example sends argument names rather than values because the classifier forwards its state to the configured evaluation model. If the decision requires argument values, redact sensitive data first or use an evaluation model and provider that meet the protected tool's data-handling requirements.
 
 Returning `true` pauses the tool call for human approval. It doesn't approve or decline the call automatically. Choose a threshold that matches the risk of the tools available to the agent. If this `requireToolApproval` function throws, it defaults to requiring approval.
 
