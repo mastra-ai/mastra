@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
@@ -519,6 +521,8 @@ export class GithubRules {
     const evaluate = async (
       item: WorkItemRow | undefined,
       ingressIdentity: string,
+      /** Set on the evaluation that files the pull request's own Review card. */
+      pullRequestIntake = false,
     ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
@@ -545,6 +549,7 @@ export class GithubRules {
             }
           : {}),
         ...(intake ? { intake } : {}),
+        ...(pullRequestIntake ? { pullRequestIntake: true } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
@@ -670,13 +675,19 @@ export class GithubRules {
     };
 
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
-    const primary = await evaluate(relatedItem, deliveryIdentity);
-    // A merged pull request is the one event both linked cards need: the
-    // Review card has to close, and the Work item that wrote the code has to
-    // assess whether it is finished. Resolution binds the delivery to whichever
-    // card it matched first, so evaluate the other one too — under an identity
-    // suffixed with its id, because ingress identities are the replay key and
-    // reusing the delivery's own would drop this evaluation as a duplicate.
+    // A pull request opening concerns two cards: its own Review card, which the
+    // arrival rule files — committed against the Work item that authored the
+    // pull request when one exists, because that binding is what links the two
+    // — and that authoring item, which is now out for review. The arrival is
+    // the delivery's own evaluation; the item's is a second one, under an
+    // identity suffixed with its id, because ingress identities are the replay
+    // key and reusing the delivery's own would drop it as a duplicate.
+    const pullRequestOpened = event === 'pullRequestOpened';
+    const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
+    // A merged pull request is the one *other* event both linked cards need:
+    // the Review card has to close, and the Work item that wrote the code has
+    // to assess whether it is finished. Resolution binds the delivery to
+    // whichever card it matched first, so evaluate the other one too.
     const linked =
       event === 'pullRequestMerged' && relatedItem && pullRequestNumber
         ? await this.#linkedClosureItem(
@@ -688,8 +699,16 @@ export class GithubRules {
             relatedItem,
           )
         : undefined;
-    if (!linked) return primary;
-    const secondary = await evaluate(linked, `${deliveryIdentity}:${linked.id}`);
+    const authoringItem =
+      linked === undefined &&
+      pullRequestOpened &&
+      relatedItem !== undefined &&
+      relatedItem.externalSource?.type !== 'pull-request'
+        ? relatedItem
+        : undefined;
+    if (linked === undefined && authoringItem === undefined) return primary;
+    const companion = linked ?? authoringItem;
+    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
     for (const status of ['committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }
@@ -961,6 +980,50 @@ export function reconciledIssueClosedEvent(
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
         assignees: (state.assignees ?? []).map(login => ({ login })),
+      },
+    },
+  };
+}
+
+/**
+ * The label-drift replay: an open issue whose labels changed without a
+ * `labeled`/`unlabeled` webhook ever arriving (Factory was down, the delivery
+ * was lost, or the label was applied by something other than a delivery the
+ * webhook saw). Synthesized as an `opened` delivery so the deployment's
+ * `issueOpened` rule decides placement, exactly as it does at arrival — one
+ * source of placement policy for both.
+ */
+export function reconciledIssueRelabeledEvent(
+  repository: ReconcileRepository,
+  issueNumber: number,
+  state: ReconcileIssueState,
+): ParsedGithubWebhook {
+  const labels = state.labels ?? [];
+  // GitHub updates `updated_at` for a label change. Including it makes retries
+  // of one observed issue version idempotent while allowing A → B → A to replay
+  // its final A placement as a new version. Synthetic callers without it retain
+  // the legacy label-only identity.
+  const digest = createHash('sha256').update([...labels].sort().join('\n')).digest('hex').slice(0, 16);
+  const version = state.updatedAt ? `:${createHash('sha256').update(state.updatedAt).digest('hex').slice(0, 16)}` : '';
+  return {
+    event: 'issues',
+    deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:relabeled:${digest}${version}`,
+    payload: {
+      // `opened` is the event that carries an issue's labels through the rules;
+      // an already-filed card is re-placed by the decision, not re-materialized.
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? 'github' },
+      issue: {
+        number: issueNumber,
+        title: state.title,
+        html_url: state.url,
+        state: 'open',
+        ...(state.createdAt ? { created_at: state.createdAt } : {}),
+        ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
+        assignees: (state.assignees ?? []).map(login => ({ login })),
+        labels: labels.map(name => ({ name })),
       },
     },
   };

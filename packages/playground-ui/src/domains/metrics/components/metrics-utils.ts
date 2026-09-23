@@ -1,9 +1,12 @@
 import type { DataListRootProps } from '@/ds/components/DataList';
 
+const compactNumberFormatter = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumSignificantDigits: 3,
+});
+
 export function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return compactNumberFormatter.format(n).replace('K', 'k');
 }
 
 export function formatCost(value: number, unit?: string | null): string {
@@ -19,15 +22,12 @@ export const METRICS_DATA_LIST_PROPS = {
 } satisfies Pick<DataListRootProps, 'className' | 'mask'>;
 
 export const CHART_COLORS = {
-  green: '#22c55e',
-  orange: '#fb923c',
-  pink: '#f472b6',
-  purple: '#8b5cf6',
-  blue: '#4f83f1',
-  blueDark: '#2b5cd9',
-  blueLight: '#6b8fe5',
-  red: '#f87171',
-  greenDark: '#15613a',
-  redDark: '#991b1b',
-  yellow: '#facc15',
+  green: 'var(--chart-green)',
+  orange: 'var(--chart-orange)',
+  pink: 'var(--chart-pink)',
+  purple: 'var(--chart-purple)',
+  blue: 'var(--chart-blue)',
+  blueDark: 'var(--chart-blue-deep)',
+  red: 'var(--chart-red)',
+  yellow: 'var(--chart-yellow)',
 } as const;

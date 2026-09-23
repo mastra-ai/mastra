@@ -2,9 +2,12 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { raisedSurfaceStyle, surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { NetworkIcon, WorkflowIcon } from 'lucide-react';
-import { getRepoName } from './shared';
+import { getRepoName } from './get-repo-name';
 
 type Template = {
   slug: string;
@@ -35,7 +38,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
     return (
       <div className={cn('grid gap-y-4', className)}>
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="bg-surface3 h-16 animate-pulse rounded-lg" />
+          <div key={index} className="h-16 animate-pulse rounded-lg bg-card" />
         ))}
       </div>
     );
@@ -50,13 +53,14 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
         return (
           <article
             className={cn(
-              'border border-border1 rounded-lg overflow-hidden w-full grid grid-cols-[1fr_auto] bg-surface3 transition-colors hover:bg-surface4',
+              raisedSurfaceStyle,
+              'state-layer grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg',
             )}
             key={template.slug}
           >
             <LinkComponent
               to={`/templates/${template.slug}`}
-              className={cn('grid [&:hover_p]:text-foreground', {
+              className={cn('group grid', {
                 'grid-cols-[8rem_1fr] lg:grid-cols-[12rem_1fr]': template.imageURL,
               })}
             >
@@ -72,20 +76,20 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               )}
               <div
                 className={cn(
-                  'grid py-3 px-4 w-full gap-0.5',
-                  '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-muted-foreground',
+                  'grid w-full gap-0.5 px-4 py-3',
+                  '[&_svg]:h-[1em] [&_svg]:w-[1em] [&_svg]:text-muted-foreground',
                 )}
               >
-                <h2 className="text-ui-md text-foreground">{template.title}</h2>
-                <p className="text-ui-md text-muted-foreground transition-colors duration-500">
+                <h2 className="text-body text-foreground">{template.title}</h2>
+                <p className={cn('text-body', quietTextHoverInGroup, controlStateColorTransition)}>
                   {template.description}
                 </p>
-                <div className="text-muted-foreground text-ui-md mt-3 hidden flex-wrap items-center gap-4 2xl:flex">
+                <div className="mt-3 hidden flex-wrap items-center gap-4 text-body text-muted-foreground 2xl:flex">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
-                        'flex gap-4 text-ui-md text-muted-foreground m-0 p-0 list-none',
-                        '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5 text-muted-foreground',
+                        'm-0 flex list-none gap-4 p-0 text-body text-muted-foreground',
+                        'text-muted-foreground [&>li]:flex [&>li]:items-center [&>li]:gap-0.5',
                       )}
                     >
                       {template?.agents && template.agents.length > 0 && (
@@ -116,7 +120,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                     </ul>
                   )}
                   {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="text-muted-foreground flex items-center gap-4">
+                  <div className="flex items-center gap-4 text-muted-foreground">
                     {template.supportedProviders.map(provider => (
                       <span key={provider} className="">
                         {provider}
@@ -128,11 +132,18 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
             </LinkComponent>
             <a
               href={template.githubUrl}
-              className={cn('group items-center gap-2 text-ui-md ml-auto pr-4 hidden', 'lg:flex')}
+              className={cn('group ml-auto hidden items-center gap-2 pr-4 text-body', 'lg:flex')}
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="bg-surface1 group-hover:bg-surface2 text-muted-foreground group-hover:text-foreground flex items-center gap-2 rounded px-2 py-1 transition-colors">
+              <span
+                className={cn(
+                  'flex items-center gap-2 rounded bg-sidebar px-2 py-1',
+                  surfaceGroupStateLayerStyle,
+                  quietTextHoverInGroup,
+                  controlStateColorTransition,
+                )}
+              >
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
             </a>

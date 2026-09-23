@@ -69,12 +69,12 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="text-muted-foreground mb-5 content-center space-y-6">
+    <Container className="mb-5 content-center space-y-6 text-muted-foreground">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-foreground text-header-sm font-semibold">{getPhaseMessage()}</h3>
+        <h3 className="text-heading text-foreground">{getPhaseMessage()}</h3>
         {(streamResult?.runId || runId) && (
-          <div className="text-ui-sm text-muted-foreground mt-2">Run ID: {streamResult?.runId ?? runId}</div>
+          <div className="mt-2 text-caption text-muted-foreground">Run ID: {streamResult?.runId ?? runId}</div>
         )}
       </div>
 
@@ -89,8 +89,8 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-foreground p-4 flex items-center gap-3 text-ui-md bg-red-500/10',
-            '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:opacity-70 [&>svg]:text-red-500',
+            'flex items-center gap-3 rounded-lg bg-red-500/10 p-4 text-body text-foreground',
+            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-red-500 [&>svg]:opacity-70',
           )}
         >
           <OctagonXIcon />
@@ -103,7 +103,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-muted-foreground text-ui-md grid justify-items-center gap-4 text-center">
+        <div className="grid justify-items-center gap-4 text-center text-body text-muted-foreground">
           <Spinner />
           <p>This may take some time...</p>
         </div>

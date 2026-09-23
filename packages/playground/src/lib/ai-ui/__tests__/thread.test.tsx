@@ -185,6 +185,41 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
   content: { format: 2, parts: [{ type: 'text', text }], metadata },
 });
 
+// Controllable browser SpeechRecognition stub: mocks the browser API only, not our hooks.
+interface FakeRecognitionEvent {
+  resultIndex: number;
+  results: Array<{ 0: { transcript: string }; isFinal: boolean }>;
+}
+
+let lastRecognition: {
+  onstart: (() => void) | null;
+  onresult: ((event: FakeRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+} | null = null;
+
+const installFakeSpeechRecognition = () => {
+  class FakeSpeechRecognition {
+    continuous = false;
+    lang = '';
+    onstart: (() => void) | null = null;
+    onresult: ((event: FakeRecognitionEvent) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    start = () => this.onstart?.();
+    stop = () => this.onend?.();
+    constructor() {
+      lastRecognition = this;
+    }
+  }
+  Object.assign(window, { SpeechRecognition: FakeSpeechRecognition, webkitSpeechRecognition: FakeSpeechRecognition });
+};
+
+const uninstallFakeSpeechRecognition = () => {
+  delete (window as { SpeechRecognition?: unknown }).SpeechRecognition;
+  delete (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+  lastRecognition = null;
+};
+
 afterEach(() => {
   delete window.MASTRA_AGENT_SIGNALS;
   cleanup();
@@ -196,6 +231,42 @@ describe('Thread', () => {
     server.resetHandlers();
   });
 
+  describe('when the user dictates two phrases in one browser dictation session', () => {
+    beforeEach(() => installFakeSpeechRecognition());
+    afterEach(() => uninstallFakeSpeechRecognition());
+
+    it('keeps both phrases in the composer', async () => {
+      // `/voice/speakers` returns [] in baseHandlers, so the hook uses the browser path.
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
+      await screen.findByRole('button', { name: 'Stop dictation' });
+
+      const first = { 0: { transcript: 'Accept the newer address.' }, isFinal: true };
+      act(() => {
+        lastRecognition?.onresult?.({ resultIndex: 0, results: [first] });
+      });
+      act(() => {
+        lastRecognition?.onresult?.({
+          resultIndex: 1,
+          results: [first, { 0: { transcript: 'And note that Sentinel confirmed it.' }, isFinal: true }],
+        });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+
+      await waitFor(() =>
+        expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+          'Accept the newer address. And note that Sentinel confirmed it. ',
+        ),
+      );
+    });
+  });
+
   describe('when no suggested prompts are provided for an empty thread', () => {
     it('renders the default welcome state', async () => {
       server.use(...baseHandlers());
@@ -204,8 +275,28 @@ describe('Thread', () => {
         renderThread([]);
       });
 
-      expect(screen.getByText('How can I help you today?')).toBeTruthy();
+      expect(screen.getByTestId('thread-welcome')).toBeTruthy();
       expect(screen.getByRole('textbox')).toBeTruthy();
+    });
+
+    it('renders the greeting with the agent name and the composer inside the landing column', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      const heading = screen.getByRole('heading', { name: /what can .* do for you today\?/i });
+      expect(heading.textContent).toContain('Helper');
+      // Emphasis contract: only the agent name is high-contrast; the surrounding copy is muted and regular weight.
+      expect(heading.classList.contains('font-normal')).toBe(true);
+      const name = screen.getByText('Helper');
+      expect(name.classList.contains('font-medium')).toBe(true);
+      expect(name.classList.contains('starter-shimmer-ink')).toBe(true);
+      const landing = screen.getByTestId('thread-landing');
+      expect(landing.contains(heading)).toBe(true);
+      expect(landing.contains(screen.getByRole('textbox'))).toBe(true);
+      expect(screen.queryByTestId('thread-message-column')).toBeNull();
     });
   });
 
@@ -217,7 +308,7 @@ describe('Thread', () => {
     });
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
-    expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+    expect(screen.queryByTestId('thread-welcome')).toBeFalsy();
   });
 
   describe('Thread history loading', () => {
@@ -230,7 +321,7 @@ describe('Thread', () => {
         });
 
         expect(screen.getByTestId('thread-history-skeleton')).toBeTruthy();
-        expect(screen.queryByText('How can I help you today?')).toBeNull();
+        expect(screen.queryByTestId('thread-welcome')).toBeNull();
       });
 
       it('keeps the composer available', async () => {
@@ -264,7 +355,7 @@ describe('Thread', () => {
 
         expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
-        expect(screen.queryByText('How can I help you today?')).toBeNull();
+        expect(screen.queryByTestId('thread-welcome')).toBeNull();
       });
     });
 
@@ -277,7 +368,7 @@ describe('Thread', () => {
         });
 
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
-        expect(screen.getByText('How can I help you today?')).toBeTruthy();
+        expect(screen.getByTestId('thread-welcome')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       });
     });
@@ -322,6 +413,20 @@ describe('Thread', () => {
       expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Check a stock' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Build a page' })).toBeTruthy();
+    });
+
+    it('renders the prompts as cards with increasing entrance delays', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([], { suggestedPrompts: ['Check the weather', 'Check a stock', 'Build a page'] });
+      });
+
+      const items = Array.from(screen.getByTestId('suggested-prompt-list').querySelectorAll('li'));
+      const delays = items.map(item => parseInt(item.style.animationDelay, 10));
+      expect(delays).toHaveLength(3);
+      expect(delays[1]).toBeGreaterThan(delays[0]);
+      expect(delays[2]).toBeGreaterThan(delays[1]);
     });
 
     it('sends the selected prompt through the agent stream endpoint', async () => {

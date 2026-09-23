@@ -34,6 +34,7 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
+import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
@@ -58,6 +59,7 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
+import { withToolTitle } from '../../../tools/tool-title';
 import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
 import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
@@ -333,6 +335,7 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
   }
 
   const tool = resolveTool(toolName);
+  chunk = withToolTitle(chunk, tool);
   const source = {
     policy,
     toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
@@ -1272,7 +1275,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
-      const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
+      const maxErrorProcessorRetries = resolveMaxProcessorRetries({
+        maxProcessorRetries,
+        hasErrorProcessors: Boolean(errorProcessors?.length),
+        agentId,
+        logger,
+      });
       const {
         outputStream,
         callBail,

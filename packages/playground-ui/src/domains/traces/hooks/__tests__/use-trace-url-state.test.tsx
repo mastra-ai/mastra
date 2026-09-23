@@ -675,6 +675,16 @@ describe('useTraceUrlState.handleRemoveAll', () => {
     expect(() => act(() => api.handleRemoveAll())).not.toThrow();
     expect(paramsNow().get('status')).toBeNull();
   });
+
+  describe('when a filter carries an operator or is a metadata field', () => {
+    it('removes the operator and metadata params too', () => {
+      render(<Harness initial="filterTraceId=t&filterTraceId.op=isNot&filterMetadata.region=eu" />);
+
+      act(() => api.handleRemoveAll());
+
+      expect(paramsNow().toString()).toBe('');
+    });
+  });
 });
 
 describe('useTraceUrlState.applyFilterTokens', () => {
@@ -697,6 +707,36 @@ describe('useTraceUrlState.applyFilterTokens', () => {
     render(<Harness initial="" />);
 
     expect(api.handleFilterTokensChange).toBe(api.applyFilterTokens);
+  });
+
+  describe('when advanced filter groups are applied with the tokens', () => {
+    const group = {
+      id: 'g1',
+      logic: 'or' as const,
+      nodes: [
+        { id: 'a', fieldId: 'status', value: 'error' },
+        { id: 'b', fieldId: 'spans.model', value: 'gpt-4o' },
+      ],
+    };
+
+    it('exposes them back from the URL', () => {
+      render(<Harness initial="" />);
+
+      act(() => api.applyFilterTokens([{ fieldId: 'traceId', value: 'abc' }], [group]));
+
+      expect(paramsNow().getAll('filterGroup')).toHaveLength(1);
+      expect(api.filterGroups).toEqual([group]);
+      expect(api.filterTokens).toEqual([{ fieldId: 'traceId', value: 'abc' }]);
+    });
+
+    it('drops existing groups when none are passed', () => {
+      render(<Harness initial={`filterGroup=${encodeURIComponent(JSON.stringify(group))}`} />);
+      expect(api.filterGroups).toEqual([group]);
+
+      act(() => api.applyFilterTokens([]));
+
+      expect(api.filterGroups).toEqual([]);
+    });
   });
 });
 

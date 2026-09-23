@@ -4,6 +4,7 @@ import {
   listPullRequestSubscriptions,
   pullRequestSubscriptionsQueryKey,
 } from '../ui/domains/factory/services/githubSubscriptions';
+import type { ChangeRequestProvider } from '../ui/domains/factory/services/githubSubscriptions';
 
 export const WORKSPACE_PR_STATUS_POLL_MS = 5_000;
 
@@ -12,6 +13,8 @@ export interface WorkspacePullRequestTarget {
   threadId: string;
   projectPath: string;
   pullRequestNumber: number;
+  /** Route to poll; defaults to GitHub for callers that predate GitLab review cards. */
+  provider?: ChangeRequestProvider;
   knownMerged: boolean;
 }
 
@@ -30,10 +33,11 @@ export function useWorkspacePullRequestMerges({
     queries: targets.map(target =>
       queryOptions({
         queryKey: [
-          ...pullRequestSubscriptionsQueryKey(resourceId, target.threadId, target.projectPath),
+          ...pullRequestSubscriptionsQueryKey(resourceId, target.threadId, target.projectPath, target.provider),
           target.pullRequestNumber,
         ],
-        queryFn: () => listPullRequestSubscriptions(baseUrl, resourceId, target.threadId, target.projectPath),
+        queryFn: () =>
+          listPullRequestSubscriptions(baseUrl, resourceId, target.threadId, target.projectPath, target.provider),
         enabled,
         refetchOnWindowFocus: true,
         refetchInterval: query => {

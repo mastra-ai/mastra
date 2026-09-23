@@ -1,15 +1,17 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useState } from 'react';
 import { useSchedules } from '../hooks/use-schedules';
 import { SchedulesList } from './schedules-list';
+import type { SchedulesSort } from './schedules-list';
 
 export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
   const { data: schedules, isLoading, error } = useSchedules(workflowId ? { workflowId } : {});
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SchedulesSort>();
 
   if (error) {
-    return <ErrorState title="Failed to load schedules" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load schedules" descriptionSlot={error.message} />;
   }
 
   return (
@@ -18,7 +20,13 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
         <ListSearch onSearch={setSearch} label="Filter schedules" placeholder="Filter by id or workflow" />
       </div>
       <div className="overflow-y-auto">
-        <SchedulesList schedules={schedules ?? []} isLoading={isLoading} search={search} />
+        <SchedulesList
+          schedules={schedules ?? []}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
       </div>
     </div>
   );

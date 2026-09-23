@@ -1,6 +1,6 @@
 import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
@@ -21,7 +21,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
@@ -92,6 +92,7 @@ export interface DatasetReviewProps {
   renderFilters?: (filters: ReviewListFilters) => ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
   toolbarEnd?: ReactNode;
+  breadcrumbs?: ReactNode;
   /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }
@@ -108,6 +109,7 @@ export function DatasetReview({
   renderFilters,
   toolbarEnd,
   onCreateScorer,
+  breadcrumbs,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
@@ -431,59 +433,60 @@ export function DatasetReview({
   };
 
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
-      {renderFilters ? (
-        <>
-          {toolbarStart}
-          {renderFilters({
-            status,
-            onStatusChange,
-            tag: activeTagFilter,
-            onTagChange: setActiveTagFilter,
-            tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
-          })}
-        </>
-      ) : (
-        <ButtonsGroup>
-          {toolbarStart}
-          <SelectFieldBlock
-            label="Status"
-            labelIsHidden
-            name="filter-status"
-            options={STATUS_OPTIONS}
-            value={status}
-            onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
-            className="whitespace-nowrap"
-          />
-          {tagOptions.length > 1 && (
+    <ActionRow>
+      <ActionRow.Start>
+        {renderFilters ? (
+          <>
+            {toolbarStart}
+            {renderFilters({
+              status,
+              onStatusChange,
+              tag: activeTagFilter,
+              onTagChange: setActiveTagFilter,
+              tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
+            })}
+          </>
+        ) : (
+          <>
+            {toolbarStart}
             <SelectFieldBlock
-              label="Tags"
+              label="Status"
               labelIsHidden
-              name="filter-tags"
-              options={tagOptions}
-              value={activeTagFilter ?? ALL_TAGS}
-              onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+              name="filter-status"
+              options={STATUS_OPTIONS}
+              value={status}
+              onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
               className="whitespace-nowrap"
             />
-          )}
-          {hasActiveFilters && (
-            <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
-              Reset
-            </Button>
-          )}
-        </ButtonsGroup>
-      )}
+            {tagOptions.length > 1 && (
+              <SelectFieldBlock
+                label="Tags"
+                labelIsHidden
+                name="filter-tags"
+                options={tagOptions}
+                value={activeTagFilter ?? ALL_TAGS}
+                onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+                className="whitespace-nowrap"
+              />
+            )}
+            {hasActiveFilters && (
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+                Reset
+              </Button>
+            )}
+          </>
+        )}
+      </ActionRow.Start>
 
       {(hasSelection || toolbarEnd || showCreateScorer) && (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <ActionRow.End>
           {toolbarEnd}
           {showCreateScorer && (
             <Button
-              variant="outline"
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="sm">
+              <Icon size="xs">
                 <GaugeIcon />
               </Icon>
               Create Scorer
@@ -504,20 +507,20 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" disabled={isAnalyzing} aria-label="More actions">
+                  <Button disabled={isAnalyzing} aria-label="More actions">
                     {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={openAnalyzeDialog}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Sparkles />
                     </Icon>
                     Analyze
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Trash2 />
                     </Icon>
                     Remove from queue
@@ -526,19 +529,17 @@ export function DatasetReview({
               </DropdownMenu>
             </>
           )}
-        </div>
+        </ActionRow.End>
       )}
-    </div>
+    </ActionRow>
   );
 
   if (isLoadingReview) {
     return (
-      <>
-        <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-        <PageLayout.MainArea isCentered>
-          <Spinner className="h-6 w-6" />
-        </PageLayout.MainArea>
-      </>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+        <h1 className="sr-only">Review Queue</h1>
+        <Spinner fill />
+      </PageLayout>
     );
   }
 
@@ -573,9 +574,8 @@ export function DatasetReview({
   );
 
   return (
-    <>
-      <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <h1 className="sr-only">Review Queue</h1>
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -594,7 +594,7 @@ export function DatasetReview({
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="ui-xs" className="text-muted-foreground">
+            <Txt variant="meta" tone="muted">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
@@ -604,12 +604,12 @@ export function DatasetReview({
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-ui-sm mt-1"
+                className="mt-1 text-caption"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
+            <Button icon={<X />} onClick={() => setShowAnalyzeDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
@@ -633,7 +633,7 @@ export function DatasetReview({
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
-                <div key={proposal.itemId} className={cn('p-3 border rounded-lg', !proposal.accepted && 'opacity-50')}>
+                <div key={proposal.itemId} className={cn('rounded-lg border p-3', !proposal.accepted && 'opacity-50')}>
                   <div className="flex items-start gap-2">
                     <Checkbox
                       checked={proposal.accepted}
@@ -644,7 +644,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="ui-xs" className="text-muted-foreground block truncate">
+                      <Txt variant="meta" tone="muted" className="block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -672,7 +672,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-muted-foreground mt-1 block italic">
+                        <Txt variant="meta" tone="muted" className="mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}
@@ -683,7 +683,7 @@ export function DatasetReview({
             })}
           </div>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
             <Button
@@ -698,24 +698,20 @@ export function DatasetReview({
       </Dialog>
 
       {/* Main layout: list; the detail opens as a drawer. */}
-      <PageLayout.MainArea className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
+      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="h-6 w-6" />
-            </div>
+            <Spinner fill />
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
-              <EmptyState
-                iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
-                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                descriptionSlot={
-                  showCompleted
-                    ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'
-                }
-              />
-            </div>
+            <EmptyState
+              titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+              descriptionSlot={
+                showCompleted
+                  ? 'Items marked as complete will appear here for auditing.'
+                  : 'When experiment results are flagged for review, they will appear here.'
+              }
+              variant="fill"
+            />
           ) : (
             <ExperimentResultsList
               results={displayItems}
@@ -731,7 +727,7 @@ export function DatasetReview({
         </div>
 
         {detailPanel}
-      </PageLayout.MainArea>
-    </>
+      </div>
+    </PageLayout>
   );
 }

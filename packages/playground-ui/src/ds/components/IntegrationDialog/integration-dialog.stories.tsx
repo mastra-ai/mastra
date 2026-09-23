@@ -25,7 +25,7 @@ function Example({ items = integrations }: { items?: IntegrationDialogItem[] }) 
       >
         <IntegrationDialog.Trigger render={<Button>Add connection</Button>} />
       </IntegrationDialog>
-      <p role="status" className="text-ui-sm text-muted-foreground">
+      <p role="status" className="text-caption text-muted-foreground">
         {selected ? `Selected ${selected}.` : 'Nothing selected.'}
       </p>
     </div>

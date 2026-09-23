@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-sandbox",
-  "version": "0.3.12-alpha.0",
+  "version": "0.3.14-alpha.0",
   "description": "Deploy a Mastra server into any workspace sandbox that supports networking and get a live public URL",
   "type": "module",
   "files": [
@@ -71,7 +71,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.52.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.58.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.13.0"

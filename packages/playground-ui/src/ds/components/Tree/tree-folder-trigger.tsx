@@ -32,9 +32,9 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         ref={ref}
         data-tree-folder-row="true"
         className={cn(
-          'group flex h-7 w-full min-w-0 items-center rounded-sm hover:bg-surface4',
+          'group flex h-7 w-full min-w-0 items-center rounded-sm hover:bg-fill-subtle',
           transitions.colors,
-          folderCtx?.isFocused && 'bg-surface4 text-foreground',
+          folderCtx?.isFocused && 'bg-fill-hover text-foreground',
           className,
         )}
       >
@@ -51,7 +51,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
             focusFolderItem(e.currentTarget, { focus: false });
           }}
         >
-          <ChevronRight aria-hidden="true" className="text-muted-foreground size-3 shrink-0" />
+          <ChevronRight aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
           {children}
         </CollapsibleTrigger>
         {actions && (

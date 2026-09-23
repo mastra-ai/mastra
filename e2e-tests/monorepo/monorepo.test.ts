@@ -1444,7 +1444,123 @@ export const mastra = new Mastra({
           expect(await findInDir(outputRoot, 'node_modules')).toBe(true);
         } finally {
           await removeOutputDir(isolatedFixturePath);
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('pnpm patched dependencies', () => {
+    it(
+      'keeps source workspace patches applied in the built output',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Adding a file is version-independent, so the patch stays valid as the package moves.
+          await mkdir(join(isolatedFixturePath, 'patches'), { recursive: true });
+          await writeFile(
+            join(isolatedFixturePath, 'patches', 'unicorn-magic.patch'),
+            [
+              'diff --git a/mastra-patch-marker.txt b/mastra-patch-marker.txt',
+              'new file mode 100644',
+              '--- /dev/null',
+              '+++ b/mastra-patch-marker.txt',
+              '@@ -0,0 +1 @@',
+              '+patched-by-mastra-e2e',
+              '',
+            ].join('\n'),
+          );
+
+          const workspacePath = join(isolatedFixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(
+            workspacePath,
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+          );
+          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
+            cwd: isolatedFixturePath,
+            env: process.env,
+          });
+
+          await removeOutputDir(isolatedFixturePath);
+          await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            env: process.env,
+          });
+
+          const outputDir = join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output');
+          const outputWorkspace = await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8');
+
+          expect(outputWorkspace).toContain('"unicorn-magic@0.4.0": "pnpm-patches/unicorn-magic.patch"');
+          expect(outputWorkspace).toContain('allowUnusedPatches: true');
+          expect(await readFile(join(outputDir, 'pnpm-patches', 'unicorn-magic.patch'), 'utf8')).toContain(
+            'patched-by-mastra-e2e',
+          );
+          expect(
+            await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
+          ).toContain('patched-by-mastra-e2e');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('patches applied in node_modules', () => {
+    it(
+      'applies patches to node_modules during install from the workspace config',
+      async () => {
+        const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-monorepo-patch-install-'));
+        try {
+          await setupMonorepo(fixturePath, pkgManager);
+
+          // Add unicorn-magic as a dependency of the custom app (version matches
+          // the transitive dep already resolved by setupMonorepo's pnpm install)
+          const appPkgPath = join(fixturePath, 'apps', 'custom', 'package.json');
+          const appPkg = JSON.parse(await readFile(appPkgPath, 'utf8'));
+          appPkg.dependencies = { ...appPkg.dependencies, 'unicorn-magic': '0.2.0' };
+          await writeFile(appPkgPath, JSON.stringify(appPkg, null, 2));
+
+          // Create patch file at the monorepo root
+          await mkdir(join(fixturePath, 'patches'), { recursive: true });
+          await writeFile(
+            join(fixturePath, 'patches', 'unicorn-magic.patch'),
+            [
+              'diff --git a/mastra-patch-marker.txt b/mastra-patch-marker.txt',
+              'new file mode 100644',
+              '--- /dev/null',
+              '+++ b/mastra-patch-marker.txt',
+              '@@ -0,0 +1 @@',
+              '+patched-by-mastra-e2e',
+              '',
+            ].join('\n'),
+          );
+
+          // After setupMonorepo, setupMonorepo's pnpm install already resolved
+          // unicorn-magic as a transitive dependency at 0.2.0. Use 0.2.0 in
+          // both the explicit app dep and the patch specifier so they match.
+          const workspacePath = join(fixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(
+            workspacePath,
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.2.0: patches/unicorn-magic.patch\n`,
+          );
+
+          // Install with patches — the patched file should appear in node_modules
+          await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
+            cwd: fixturePath,
+            env: process.env,
+          });
+
+          expect(
+            await readFile(join(fixturePath, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
+          ).toContain('patched-by-mastra-e2e');
+        } finally {
+          await rm(fixturePath, { recursive: true, force: true });
         }
       },
       timeout,

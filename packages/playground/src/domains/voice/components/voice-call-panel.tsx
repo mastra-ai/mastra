@@ -1,3 +1,4 @@
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { VoiceAgentState, VoiceCallControls, VoiceCaptionSegment } from '../types';
 
@@ -29,26 +30,26 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
   return (
     <div
       data-testid="voice-call-panel"
-      className="border-border2/40 bg-surface3 mx-auto mb-2 w-full max-w-3xl rounded-[16px] border px-4 py-3"
+      className={cn(raisedSurfaceStyle, 'mx-auto mb-2 w-full max-w-3xl rounded-[16px] px-4 py-3')}
     >
       <div className="flex items-center gap-2">
         <span
           className={cn(
             'h-2 w-2 rounded-full',
-            voiceCall.status === 'connecting' && 'bg-neutral3',
-            voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'bg-accent1 animate-pulse',
+            voiceCall.status === 'connecting' && 'bg-muted-foreground',
+            voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'animate-pulse bg-accent1',
             voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
           )}
         />
-        <span className="text-ui-sm text-muted-foreground">{stateLabel}</span>
+        <span className="text-caption text-muted-foreground">{stateLabel}</span>
       </div>
       {lastUserCaption && (
-        <p className="text-ui-sm text-muted-foreground mt-2 truncate" data-testid="voice-caption-user">
+        <p className="mt-2 truncate text-caption text-muted-foreground" data-testid="voice-caption-user">
           {lastUserCaption.text}
         </p>
       )}
       {lastAgentCaption && (
-        <p className="text-ui-sm text-foreground mt-1" data-testid="voice-caption-agent">
+        <p className="mt-1 text-caption text-foreground" data-testid="voice-caption-agent">
           {lastAgentCaption.text}
         </p>
       )}

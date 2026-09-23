@@ -55,12 +55,7 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
-import {
-  formatToolResult,
-  getBackgroundToolTaskId,
-  isBackgroundToolPlaceholder,
-  isTaskMutationTool,
-} from './handlers/tool.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
@@ -930,8 +925,9 @@ function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefi
  * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
-export async function renderExistingMessages(state: TUIState): Promise<void> {
+export async function renderExistingMessages(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
   const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  if (!isCurrent()) return;
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   disposeAssistantRenderState(state);
@@ -998,7 +994,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             !!state.options?.backgroundToolsEnabled &&
             hasResult &&
             !resultIsError &&
-            isBackgroundToolPlaceholder(resultValue);
+            part.backgroundTask?.status === 'running' &&
+            !backgroundTasksByToolCallId.has(part.toolCallId);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -1081,8 +1078,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               },
             );
             const backgroundTaskId =
-              (isBackgroundPlaceholder ? getBackgroundToolTaskId(resultValue) : undefined) ??
-              backgroundTasksByToolCallId.get(part.toolCallId);
+              (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+                ? part.backgroundTask?.taskId
+                : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
             if (backgroundTaskId) {
               subComponent.setBackgroundTaskId(backgroundTaskId);
             }
@@ -1109,8 +1107,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.ui,
           );
           const backgroundTaskId =
-            (isBackgroundPlaceholder ? getBackgroundToolTaskId(resultValue) : undefined) ??
-            backgroundTasksByToolCallId.get(part.toolCallId);
+            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+              ? part.backgroundTask?.taskId
+              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
           if (backgroundTaskId) {
             toolComponent.setBackgroundTaskId(backgroundTaskId);
           }
@@ -1131,6 +1130,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+            toolComponent.updateResult(
+              { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+              true,
+            );
             toolComponent.cancelBackground();
           } else if (isBackgroundPlaceholder) {
             state.pendingTools.set(part.toolCallId, toolComponent);
@@ -1195,6 +1198,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath)
                 : undefined;
               const recovered = recoverAbsPath ? await readPlanFile(recoverAbsPath) : undefined;
+              if (!isCurrent()) return;
               const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
               const planTitle = submittedPlan?.title || recovered?.title || 'Implementation Plan';
               const planResult = new PlanResultComponent({
@@ -1292,15 +1296,21 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     const currentTasks = (state.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await state.session.state.set({ tasks: previousTasksAcc });
+        if (state.session.state.setIf) {
+          await state.session.state.setIf({ tasks: previousTasksAcc }, isCurrent);
+        } else if (isCurrent()) {
+          await state.session.state.set({ tasks: previousTasksAcc });
+        }
       } catch {
         // Custom controller state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }
+    if (!isCurrent()) return;
     state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
+  if (!isCurrent()) return;
   reconcileChatBoundarySpacers(state.chatContainer);
   pruneChatContainer(state);
   state.ui.requestRender();

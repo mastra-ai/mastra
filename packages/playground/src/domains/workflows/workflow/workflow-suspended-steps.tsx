@@ -5,6 +5,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
@@ -12,6 +13,8 @@ import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
+
+import { panelSurfaceStyle } from '../components/workflow-layout';
 
 import type { SuspendedStep } from './use-workflow-trigger';
 import { WorkflowInputData } from './workflow-input-data';
@@ -63,13 +66,13 @@ export function WorkflowSuspendedSteps({
 
   return (
     <section
-      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto relative isolate border"
+      className={cn(panelSurfaceStyle, 'pointer-events-auto relative isolate')}
       data-testid="workflow-suspended-steps"
       aria-label="Step suspended"
     >
       <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
-        <div className="border-border1/50 bg-surface2 flex items-center justify-between gap-3 border-b px-5 py-4">
-          <Txt as="h2" variant="ui-sm" className="text-foreground flex items-center gap-2 font-medium">
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-background px-5 py-4">
+          <Txt as="h2" variant="column" tone="ink" className="flex items-center gap-2">
             <Icon>
               <CirclePause />
             </Icon>
@@ -127,13 +130,13 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   };
 
   return (
-    <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
+    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border/50">
       <div className="space-y-2">
-        <Txt as="p" variant="ui-md" className="text-foreground font-medium break-words">
+        <Txt as="p" variant="subheading" tone="ink" className="break-words">
           {step.stepId}
         </Txt>
         {description && (
-          <Txt as="p" variant="ui-sm" className="text-muted-foreground">
+          <Txt as="p" variant="caption" tone="muted">
             {description}
           </Txt>
         )}
@@ -141,7 +144,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
 
       {step.suspendPayload !== undefined && (
         <div className="space-y-2">
-          <Txt as="p" variant="ui-sm" className="text-muted-foreground flex items-center gap-2">
+          <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
             <Icon>
               <MoveDownLeft />
             </Icon>
@@ -149,20 +152,25 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
           </Txt>
 
           <Collapsible open={isPayloadOpen} onOpenChange={setIsPayloadOpen}>
-            <CollapsibleTrigger className="border-border1 bg-surface3 flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5">
+            <CollapsibleTrigger
+              className={cn(
+                raisedSurfaceStyle,
+                'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5',
+              )}
+            >
               <span className="flex min-w-0 items-center gap-2">
                 <Icon>
                   <ChevronRight
-                    className={cn('transition-transform text-muted-foreground', {
-                      'transform rotate-90': isPayloadOpen,
+                    className={cn('text-muted-foreground transition-transform', {
+                      'rotate-90 transform': isPayloadOpen,
                     })}
                   />
                 </Icon>
-                <Txt as="span" variant="ui-md" className="text-foreground truncate">
+                <Txt as="span" variant="body" tone="ink" className="truncate">
                   {getPayloadLabel(step.suspendPayload, step.stepId)}
                 </Txt>
               </span>
-              <Txt as="span" variant="ui-sm" className="text-muted-foreground shrink-0">
+              <Txt as="span" variant="caption" tone="muted" className="shrink-0">
                 {formatPayloadSize(step.suspendPayload)}
               </Txt>
             </CollapsibleTrigger>
@@ -181,7 +189,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
       )}
 
       <div className="space-y-3">
-        <Txt as="p" variant="ui-sm" className="text-muted-foreground flex items-center gap-2">
+        <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
           <Icon>
             <MoveUpRight />
           </Icon>

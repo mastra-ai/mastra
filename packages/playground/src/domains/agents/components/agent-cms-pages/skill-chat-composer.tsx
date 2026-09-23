@@ -132,14 +132,14 @@ export function SkillChatComposer({
 
   const emptyState = (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-5 text-center">
-      <div className="bg-accent5/10 rounded-full p-3">
-        <Sparkles className="text-accent5 h-6 w-6" />
+      <div className="rounded-full bg-accent5/10 p-3">
+        <Sparkles className="h-6 w-6 text-accent5" />
       </div>
       <div className="flex flex-col gap-1">
-        <Txt variant="ui-md" className="text-foreground font-medium" as="p">
+        <Txt variant="subheading" tone="ink" as="p">
           {hasFields ? 'Refine your skill' : 'Describe your skill'}
         </Txt>
-        <Txt variant="ui-sm" className="text-muted-foreground" as="p">
+        <Txt variant="caption" tone="muted" as="p">
           {hasFields
             ? 'Ask the agent to adjust the name, description, or instructions.'
             : 'Tell the agent what this skill should do and it will fill in the details for you.'}

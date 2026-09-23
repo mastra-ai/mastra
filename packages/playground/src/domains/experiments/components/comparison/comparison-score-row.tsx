@@ -18,22 +18,22 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
   const { Link, paths } = useLinkComponent();
 
   return (
-    <div className="bg-surface2 grid gap-1 rounded-lg px-3 py-2">
+    <div className="grid gap-1 rounded-lg bg-background px-3 py-2">
       <div className="flex items-center justify-between gap-4">
         <Link
           href={paths.scorerLink(scorerId)}
           aria-label={`Open ${scorerId}`}
-          className="text-foreground text-ui-md flex min-w-0 items-center gap-1.5 font-medium hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 text-subheading text-foreground hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{scorerId}</span>
         </Link>
         <div className="flex items-center gap-3">
-          <span className="text-muted-foreground text-ui-md font-mono">{value != null ? value.toFixed(2) : '-'}</span>
+          <span className="font-mono text-body text-muted-foreground">{value != null ? value.toFixed(2) : '-'}</span>
           {delta != null && <ScoreDelta delta={delta} />}
         </div>
       </div>
-      {reason && <p className="text-muted-foreground text-ui-md">{reason}</p>}
+      {reason && <p className="text-body text-muted-foreground">{reason}</p>}
     </div>
   );
 }
