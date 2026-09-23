@@ -68,6 +68,28 @@ describe('agent_signal_send rendering', () => {
     expect(visible).toContain('Delivered high signal to "Peer Reviewer" in run run-1');
   });
 
+  it.each([
+    ['standard', {}],
+    ['quiet', { quietDisplayMode: 'quiet' as const, quietPreviewLineLimit: 20, collapsedByDefault: true }],
+  ])('preserves paragraphs and grapheme clusters in %s mode', (mode, options) => {
+    const message = `First paragraph.\n\n${'👩‍💻'.repeat(40)}`;
+    const component = new ToolExecutionComponentEnhanced('agent_signal_send', { ...args, message }, options, ui);
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const lines = stripAnsi(component.render(80).join('\n')).split('\n');
+    const firstParagraph = lines.findIndex(line => line.includes('First paragraph.'));
+    const emojiParagraph = lines.findIndex(line => line.includes('👩‍💻'));
+    expect(emojiParagraph - firstParagraph).toBe(2);
+    const visible = lines.join('\n');
+    const graphemes = visible.match(/👩‍💻/gu) ?? [];
+    if (mode === 'standard') expect(graphemes).toHaveLength(40);
+    else expect(graphemes.length).toBeGreaterThan(0);
+    expect(visible.replaceAll('👩‍💻', '')).not.toMatch(/[👩💻‍�]/u);
+  });
+
   it('truncates the message to the quiet preview line limit', () => {
     const component = new ToolExecutionComponentEnhanced(
       'agent_signal_send',

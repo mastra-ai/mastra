@@ -4,7 +4,7 @@
  */
 
 import * as os from 'node:os';
-import { Box, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
+import { Box, Spacer, Text, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
@@ -480,9 +480,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
-        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
-          -this.quietPreviewLineLimit,
-        );
+        const wrapped = (
+          this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND
+            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2))
+            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth)
+        ).slice(-this.quietPreviewLineLimit);
 
         lines = wrapped.map(line => {
           const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
@@ -676,6 +678,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
 
     return lines;
+  }
+
+  private wrapAgentSignalMessageLines(message: string, width: number): string[] {
+    return message.split('\n').flatMap(line => (line.length === 0 ? [''] : wrapTextWithAnsi(line, width)));
   }
 
   private getCompactToolSummaryLines(): string[] {
@@ -2479,8 +2485,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const status = this.getStatusIndicator();
     const footerText = `${theme.bold(theme.fg('toolTitle', MC_TOOLS.AGENT_SIGNAL_SEND))}${status}`;
 
-    const renderField = (label: string, value: string): void => {
-      const lines = this.wrapPreviewLines(value || '—', maxLineWidth, maxLineWidth);
+    const renderField = (label: string, value: string, preserveMessageFormatting = false): void => {
+      const displayValue = value || '—';
+      const lines = preserveMessageFormatting
+        ? this.wrapAgentSignalMessageLines(displayValue, maxLineWidth)
+        : this.wrapPreviewLines(displayValue, maxLineWidth, maxLineWidth);
       this.contentBox.addChild(new Text(`${border('│')} ${theme.fg('toolArgs', `${label}:`)}`, 0, 0));
       for (const line of lines) {
         this.contentBox.addChild(new Text(`${border('│')}   ${theme.fg('text', line)}`, 0, 0));
@@ -2497,7 +2506,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       ),
     );
     this.contentBox.addChild(new Text(border('│'), 0, 0));
-    renderField('message', message);
+    renderField('message', message, true);
     if (outcome) {
       this.contentBox.addChild(new Text(border('│'), 0, 0));
       renderField('outcome', outcome);
