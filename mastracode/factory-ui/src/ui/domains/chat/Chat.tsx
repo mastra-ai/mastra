@@ -24,7 +24,6 @@ export function ChatSessionRouteProvider({ children }: { children: ReactNode }) 
 
   return (
     <ChatSessionConfigProvider
-      key={userDraftMatch?.params.draftSessionId}
       threadId={threadId}
       userScoped={userScoped}
       draftSessionId={userDraftMatch?.params.draftSessionId}

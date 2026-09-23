@@ -1,6 +1,6 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { SettingsLayout } from '@mastra/playground-ui/components/SettingsLayout';
+import { SettingsLayout } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 

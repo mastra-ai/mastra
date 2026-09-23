@@ -40,6 +40,16 @@ function PageA() {
     <main>
       <h1>Page A</h1>
       <Link to={`/factories/${FACTORY_ID}/b`}>go-b</Link>
+      <Link to={`/factories/${FACTORY_ID}/user/new/draft-1`}>go-draft-1</Link>
+    </main>
+  );
+}
+
+function DraftPage() {
+  return (
+    <main>
+      <h1>Draft</h1>
+      <Link to={`/factories/${FACTORY_ID}/user/new/draft-2`}>go-draft-2</Link>
     </main>
   );
 }
@@ -61,6 +71,7 @@ function renderApp() {
         children: [
           { path: 'a', element: <PageA /> },
           { path: 'b', element: <PageB /> },
+          { path: 'user/new/:draftSessionId', element: <DraftPage /> },
         ],
       },
     ],
@@ -83,6 +94,19 @@ describe('AppLayout', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
     // Same DOM node: the sidebar was not remounted by the navigation.
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
+  });
+
+  it('keeps the shell mounted when switching between draft sessions', async () => {
+    stubFactory();
+    renderApp();
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    await userEvent.click(screen.getByRole('link', { name: 'go-draft-1' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Draft' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('link', { name: 'go-draft-2' }));
+
+    await waitFor(() => expect(screen.getByRole('link', { name: 'go-draft-2' })).toBeInTheDocument());
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
   });
 });

@@ -25,7 +25,7 @@ import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const activeFactory = factoryQuery.data;
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
@@ -52,7 +52,8 @@ export function NewPage() {
         </>
       }
     >
-      <ChatSessionBoundary>
+      {/* Remount only the chat content per draft, never the app shell. */}
+      <ChatSessionBoundary key={draftSessionId}>
         <NewPageContent
           activeFactory={activeFactory}
           missingDefaultModel={missingDefaultModel}
