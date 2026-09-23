@@ -281,6 +281,8 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
+  abortSignal?: AbortSignal;
+  requestContext?: RequestContext;
 };
 
 // Simplified AccumulatedResults - don't try to resolve Promise types here.
@@ -769,6 +771,7 @@ class MastraScorer<
       | GenerateScorePromptObject<any, TInput, TRunOutput>
     > = new Map(),
     mastra?: Mastra,
+    private mastraRegistrationCallbacks: Array<(mastra: Mastra) => void> = [],
   ) {
     this.#mastra = mastra;
     if (!this.config.id) {
@@ -788,6 +791,21 @@ class MastraScorer<
    */
   __registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
+    for (const callback of this.mastraRegistrationCallbacks) {
+      callback(mastra);
+    }
+  }
+
+  /**
+   * Registers a callback for adapters that need Mastra-backed runtime resolution.
+   * The callback is preserved when scorer builder methods clone the scorer.
+   * @internal
+   */
+  __onRegisterMastra(callback: (mastra: Mastra) => void): void {
+    this.mastraRegistrationCallbacks.push(callback);
+    if (this.#mastra) {
+      callback(this.#mastra);
+    }
   }
 
   /**
@@ -859,6 +877,7 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
+      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -889,6 +908,7 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
+      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -919,6 +939,7 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
+      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -949,6 +970,7 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
+      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -1077,6 +1099,7 @@ class MastraScorer<
             inputData: {
               run,
             },
+            requestContext: normalizedRequestContext,
             ...scorerObservabilityContext,
           }),
       });
@@ -1250,7 +1273,10 @@ class MastraScorer<
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
-          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
+            abortSignal: rest.abortSignal,
+            requestContext: rest.requestContext,
+          });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
           const scorerRunSpan =
             currentSpan?.type === SpanType.SCORER_RUN
@@ -1411,13 +1437,14 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
+    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'abortSignal' | 'requestContext'>,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;
-      return { run, results: accumulatedResults, score };
+      return { run, results: accumulatedResults, score, ...executionContext };
     }
 
-    return { run, results: accumulatedResults };
+    return { run, results: accumulatedResults, ...executionContext };
   }
 
   private async executeFunctionStep(scorerStep: ScorerStepDefinition, context: any) {
@@ -2257,7 +2284,7 @@ function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions):
   });
 }
 
-// Export types and interfaces for use in test files
-export type { ScorerConfig, ScorerRun, PromptObject };
+// Export types and interfaces for adapters and test files
+export type { ScorerConfig, ScorerRun, ScorerTypeShortcuts, StepContext, PromptObject };
 
 export { MastraScorer };

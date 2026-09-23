@@ -305,6 +305,7 @@ const sidebars = {
       label: 'Evals',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'evals/create-classifier-scorer', label: 'createClassifierScorer()' },
         { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
         { type: 'doc', id: 'evals/filter-run', label: 'filterRun()' },
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
