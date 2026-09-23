@@ -222,3 +222,21 @@ describe('OM marker persistence plumbing', () => {
     expect(listMessages).not.toHaveBeenCalled();
   });
 });
+
+describe('ObservationalMemory.persistMarkerToMessage', () => {
+  it('returns false when saving the marker fails so callers can fall back to storage', async () => {
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([makeUserMessage('user-1'), makeAssistantMessage('assistant-1')], 'memory');
+    const fakeThis = { messageHistory: { persistMessages: vi.fn().mockRejectedValue(new Error('db down')) } };
+
+    const persisted = await ObservationalMemory.prototype.persistMarkerToMessage.call(
+      fakeThis as unknown as ObservationalMemory,
+      marker,
+      messageList,
+      threadId,
+      resourceId,
+    );
+
+    expect(persisted).toBe(false);
+  });
+});

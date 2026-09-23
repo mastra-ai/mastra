@@ -1326,8 +1326,7 @@ export class ObservationalMemory {
           msg.content.parts.push(marker as any);
         }
         // Upsert the modified message to DB so the marker part is persisted.
-        // Non-critical — if this fails, the marker is still in the stream,
-        // it just won't survive page reload.
+        // On failure, return false so the caller can fall back to storage.
         try {
           await this.messageHistory.persistMessages({
             messages: [msg],
@@ -1336,6 +1335,7 @@ export class ObservationalMemory {
           });
         } catch (e) {
           omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
+          return false;
         }
         return true;
       }
