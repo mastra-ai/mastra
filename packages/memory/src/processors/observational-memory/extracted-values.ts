@@ -290,7 +290,7 @@ export async function applyExtractorHooks(opts: {
       if (isHook || hookValue === undefined) {
         continue;
       }
-      const parsed = extractor.schema.safeParse(hookValue);
+      const parsed = await extractor.schema.safeParseAsync(hookValue);
       if (parsed.success) {
         values[extractor.slug] = parsed.data;
       } else {

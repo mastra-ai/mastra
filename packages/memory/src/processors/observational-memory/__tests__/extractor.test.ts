@@ -494,7 +494,8 @@ describe('Extractor', () => {
       await applyWorkingMemoryValue(memory, { city: 'Toronto', budget: 500 });
       expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
 
-      await applyWorkingMemoryValue(memory, { city: '  Toronto  ', budget: 50 });
+      const result = await applyWorkingMemoryValue(memory, { city: '  Toronto  ', budget: 50 });
+      expect(result.failures).toBeUndefined();
       expect(memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
       expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
         expect.objectContaining({ workingMemory: JSON.stringify({ city: 'Toronto', budget: 50 }) }),
