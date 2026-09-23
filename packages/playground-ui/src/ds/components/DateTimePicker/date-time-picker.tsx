@@ -1,5 +1,5 @@
 import { format, formatDate, isValid } from 'date-fns';
-import { CalendarIcon, CircleAlertIcon, Check, X } from 'lucide-react';
+import { CalendarIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
@@ -11,6 +11,7 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
+import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
@@ -65,7 +66,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl bg-surface4 w-auto max-w-66 p-0!"
+        className="backdrop-blur-4xl w-auto max-w-66 bg-muted p-0!"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -223,18 +224,8 @@ export const DateTimePickerContent = ({
         onChange={handleInputChange}
         placeholder={placeholder}
         className="m-4 mb-0 w-auto!"
+        errorMsg={localErrorMsg}
       />
-
-      {localErrorMsg && (
-        <div
-          className={cn(
-            'm-4 mb-0 text-ui-md text-neutral3',
-            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-error',
-          )}
-        >
-          <CircleAlertIcon /> {localErrorMsg}
-        </div>
-      )}
 
       <DatePicker
         mode="single"
@@ -287,14 +278,19 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         ref={ref}
         variant={variant}
         size={size}
-        className={cn('justify-start', controlTriggerOpenStateFor(variant), className)}
+        className={cn(
+          'justify-start',
+          variant === 'default' && fieldTriggerStyle,
+          controlTriggerOpenStateFor(variant),
+          className,
+        )}
         icon={<CalendarIcon />}
         {...props}
       >
         {value ? (
-          <span className="text-neutral6">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-neutral3">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );

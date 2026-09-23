@@ -1,3 +1,4 @@
+import { fork } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -103,6 +104,8 @@ class AsyncCallbackPubSub extends PubSub {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #pending = new Set<Promise<void>>();
+  /** Callback rejections, which a real backend turns into a nack and redelivery. */
+  subscriptionFailures: unknown[] = [];
 
   async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
@@ -115,7 +118,9 @@ class AsyncCallbackPubSub extends PubSub {
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
         try {
-          for (const subscriber of subscribers) subscriber(envelope);
+          for (const subscriber of subscribers) {
+            void Promise.resolve(subscriber(envelope)).catch(error => this.subscriptionFailures.push(error));
+          }
         } finally {
           resolve();
         }
@@ -145,6 +150,8 @@ class RetainedAsyncCallbackPubSub extends PubSub {
   #history = new Map<string, any[]>();
   #pending = new Set<Promise<void>>();
   #index = 0;
+  /** Callback rejections, which a real backend turns into a nack and redelivery. */
+  subscriptionFailures: unknown[] = [];
 
   async publish(topic: string, event: any): Promise<void> {
     const envelope = { ...event, id: `retained-${this.#index}`, createdAt: new Date(), index: this.#index++ };
@@ -154,7 +161,9 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
-        for (const subscriber of subscribers) subscriber(envelope);
+        for (const subscriber of subscribers) {
+          void Promise.resolve(subscriber(envelope)).catch(error => this.subscriptionFailures.push(error));
+        }
         resolve();
       }, 0);
     });
@@ -166,7 +175,9 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
     subscribers.add(cb);
     this.#subscribers.set(topic, subscribers);
-    for (const event of this.#history.get(topic) ?? []) cb(event);
+    for (const event of this.#history.get(topic) ?? []) {
+      void Promise.resolve(cb(event)).catch(error => this.subscriptionFailures.push(error));
+    }
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -1588,7 +1599,7 @@ describe('Agent signals', () => {
     expect(wrapper.stream.mock.calls[0]?.[1]).toMatchObject({ untilIdle: true, runId: accepted.runId });
   });
 
-  it('delivers directly when the current runtime owns the thread claim', async () => {
+  it('wakes the claimed owner when the current runtime owns the thread claim', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({
       id: 'local-owner-agent',
@@ -1623,11 +1634,76 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for local owner run');
-    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: subscribedRun.value.runId });
+    // The claimed owner ran the turn in this process, so this is a `wake`, not a
+    // `deliver`: `deliver` means no run started locally and the signal joined a
+    // run that was already in flight.
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(subscribedRun.value.text).toBe('local owner response');
 
     claim.unsubscribe();
     subscription.unsubscribe();
+  });
+
+  it('honors the incoming request context when waking a locally claimed thread owner', async () => {
+    // A claimed owner's stream options belong to whichever run claimed the
+    // thread, so they do not carry the context of every later wake. A wake that
+    // brings its own request context — a dispatcher starting a turn on behalf of
+    // an authenticated caller — has to have it applied to the woken run, or the
+    // run starts anonymously and downstream resolution rejects the caller.
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const ownerAgent = {
+      id: 'context-owner',
+      stream: vi.fn(async () => ({})),
+    } as unknown as Agent;
+    const senderAgent = new Agent({
+      id: 'context-sender',
+      name: 'Context Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: 'context-user',
+        threadId: 'context-thread',
+        streamOptions: { memory: { resource: 'context-user', thread: 'context-thread' } },
+      },
+      pubsub,
+    );
+    expect(claim.claimed).toBe(true);
+    const requestContext = new RequestContext();
+    requestContext.set('caller', { organizationId: 'context-org' });
+
+    const signalResult = runtime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake with context' },
+      {
+        resourceId: 'context-user',
+        threadId: 'context-thread',
+        ifIdle: {
+          behavior: 'wake',
+          requireClaimedOwner: true,
+          streamOptions: { requestContext },
+        },
+      },
+      pubsub,
+    );
+
+    const accepted = await signalResult.accepted;
+    expect(accepted).toMatchObject({ action: 'wake' });
+    if (accepted.action !== 'wake') throw new Error('Expected signal wake');
+    expect(accepted.output).toBeDefined();
+    expect(ownerAgent.stream).toHaveBeenCalledTimes(1);
+    expect(ownerAgent.stream.mock.calls[0]?.[1]).toMatchObject({ requestContext });
+    // Options the claim itself contributed must survive the merge.
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.memory).toEqual({
+      resource: 'context-user',
+      thread: 'context-thread',
+    });
+
+    claim.unsubscribe();
   });
 
   it('routes idle signals to the claimed thread owner runtime', async () => {
@@ -2669,6 +2745,96 @@ describe('Agent signals', () => {
     expect(peers[0].sourceId).toBeDefined();
     expect(peers[0].discoveredAt).toBeInstanceOf(Date);
 
+    claim.unsubscribe();
+  });
+
+  it('marks the discovering agent own advertisements and leaves sibling agents discoverable', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const sessionAgent = new Agent({
+      id: 'session-peer-agent',
+      name: 'Session Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('session response'),
+      pubsub,
+    });
+    const siblingAgent = new Agent({
+      id: 'sibling-peer-agent',
+      name: 'Sibling Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sibling response'),
+      pubsub,
+    });
+
+    const sessionClaim = await sessionAgent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'session-peer-thread',
+      peer: { label: 'Session' },
+    });
+    const siblingClaim = await siblingAgent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'sibling-peer-thread',
+      peer: { label: 'Sibling' },
+    });
+
+    const peers = await sessionAgent.discoverThreadPeers({ timeoutMs: 10 });
+    const byId = new Map(peers.map(peer => [peer.id, peer]));
+
+    // Both advertisements live in one process-wide runtime, but only the caller's
+    // own thread is the caller's own — a sibling agent is a peer it can address.
+    expect(byId.get('session-peer-agent:shared-peer-resource:session-peer-thread')?.selfAdvertised).toBe(true);
+    expect(byId.get('sibling-peer-agent:shared-peer-resource:sibling-peer-thread')?.selfAdvertised).toBeUndefined();
+
+    sessionClaim.unsubscribe();
+    siblingClaim.unsubscribe();
+  });
+
+  it('keeps the own-advertisement mark when another instance answers discovery for the same thread', async () => {
+    const pubsub = new RetainedAsyncCallbackPubSub();
+    const agent = new Agent({
+      id: 'session-peer-agent',
+      name: 'Session Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('session response'),
+      pubsub,
+    });
+
+    const claim = await agent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'session-peer-thread',
+      peer: { label: 'Session' },
+    });
+
+    // A second live instance with the same thread loaded answers discovery too, and
+    // its reply replaces the local entry with one rebuilt from the wire payload — so
+    // a mark computed only from the local advertisements is lost on that path.
+    const responder: EventCallback = async event => {
+      const data = event.data as any;
+      if (data?.type !== 'thread-peer-request') return;
+      await pubsub.publish(data.replyTopic, {
+        type: 'thread-peer-response',
+        runId: data.requestId,
+        data: {
+          type: 'thread-peer-response',
+          requestId: data.requestId,
+          sourceId: 'other-instance-source',
+          peer: {
+            id: 'session-peer-agent:shared-peer-resource:session-peer-thread',
+            agentId: 'session-peer-agent',
+            resourceId: 'shared-peer-resource',
+            threadId: 'session-peer-thread',
+            label: 'Session',
+          },
+        },
+      });
+    };
+    await pubsub.subscribe('agent.thread-peer-discovery', responder);
+
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 10 });
+    const byId = new Map(peers.map(peer => [peer.id, peer]));
+
+    expect(byId.get('session-peer-agent:shared-peer-resource:session-peer-thread')?.selfAdvertised).toBe(true);
+
+    await pubsub.unsubscribe('agent.thread-peer-discovery', responder);
     claim.unsubscribe();
   });
 
@@ -5470,6 +5636,13 @@ describe('Agent signals', () => {
       await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
       expect((idleAgent as any).stream).not.toHaveBeenCalled();
       expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+
+      expect(runtime.abortThread({ resourceId, threadId }, pubsub)).toBe(true);
+      await waitForCondition(() => events.some(event => event?.type === 'run-aborted' && event.runId === runId));
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('idle');
+      expect(runtime.hasThreadRun(runId, pubsub)).toBe(false);
+      expect(runtime.abortThread({ resourceId, threadId }, pubsub)).toBe(false);
     } finally {
       finishRun();
       subscription.unsubscribe();
@@ -6131,6 +6304,40 @@ describe('Agent signals', () => {
 
     subscription.unsubscribe();
   });
+
+  it('lets a run start immediately after a persisted idle signal without starving the event loop', async () => {
+    // Runs in a child process on purpose: the regression starves the macrotask queue, so an
+    // in-process timeout would never fire. The parent bounds it with SIGKILL instead.
+    const fixture = new URL('./fixtures/persisted-signal-immediate-run.ts', import.meta.url);
+    const child = fork(fixture, { execArgv: ['--import', import.meta.resolve('tsx')], silent: true });
+    const stderr: Buffer[] = [];
+    child.stderr?.on('data', chunk => stderr.push(chunk));
+    let reachedWait = false;
+    let completed = false;
+    child.on('message', message => {
+      if (message === 'waiting') reachedWait = true;
+      if (message === 'ok') completed = true;
+    });
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      const timeout = setTimeout(() => child.kill('SIGKILL'), 10_000);
+      child.once('error', error => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.once('close', (code, signal) => {
+        clearTimeout(timeout);
+        resolve({ code, signal });
+      });
+    });
+
+    const diagnostics = `reached wait: ${reachedWait}\n${Buffer.concat(stderr).toString() || 'child produced no stderr'}`;
+    expect({ ...result, completed }, diagnostics).toEqual({
+      code: 0,
+      signal: null,
+      completed: true,
+    });
+  }, 20_000);
 
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
     let streamCount = 0;
@@ -7121,6 +7328,37 @@ describe('Agent signals', () => {
     });
   });
 
+  it('does not abort a successor run when the expected run has completed', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'conditional-abort-resource';
+    const threadId = 'conditional-abort-thread';
+    const successorRunId = 'run-b';
+    const options = runtime.prepareRunOptions(
+      { runId: successorRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+
+    runtime.registerRun(
+      { id: 'conditional-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId: successorRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+
+    expect(runtime.abortThread({ resourceId, threadId, expectedRunId: 'run-a' }, pubsub)).toBe(false);
+    expect(options.abortSignal?.aborted).toBe(false);
+    expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(successorRunId);
+
+    expect(runtime.abortThread({ resourceId, threadId, expectedRunId: successorRunId }, pubsub)).toBe(true);
+    expect(options.abortSignal?.aborted).toBe(true);
+  });
+
   it('routes remote abort requests to only the live lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
@@ -7157,7 +7395,24 @@ describe('Agent signals', () => {
     );
     await pubsub.flush();
     await waitForCondition(() => followerSubscription.activeRunId() === runId);
-    expect(followerSubscription.abort()).toBe(true);
+    const publishedBeforeMismatch = pubsub.publishedData.length;
+    expect(
+      followerRuntime.abortThread(
+        {
+          resourceId: 'remote-abort-resource',
+          threadId: 'remote-abort-thread',
+          expectedRunId: 'completed-run',
+        },
+        pubsub,
+      ),
+    ).toBe(false);
+    expect(pubsub.publishedData).toHaveLength(publishedBeforeMismatch);
+    expect(
+      followerRuntime.abortThread(
+        { resourceId: 'remote-abort-resource', threadId: 'remote-abort-thread', expectedRunId: runId },
+        pubsub,
+      ),
+    ).toBe(true);
     expect(options.abortSignal?.aborted).toBe(false);
     await pubsub.flush();
     await waitForCondition(() => options.abortSignal?.aborted === true);
@@ -7178,6 +7433,153 @@ describe('Agent signals', () => {
     expect(pubsub.publishedData.filter(data => data?.type === 'run-aborted')).toHaveLength(terminalCount);
     ownerSubscription.unsubscribe();
     followerSubscription.unsubscribe();
+  });
+
+  it('keeps a remote owner run alive when a thread teardown aborts locally', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const followerRuntime = new AgentThreadStreamRuntime();
+    const resourceId = 'local-abort-resource';
+    const threadId = 'local-abort-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const runId = 'local-abort-run';
+    pubsub.owners.set(key, runId);
+    const ownerSubscription = await ownerRuntime.subscribeToThread(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+    const followerSubscription = await followerRuntime.subscribeToThread(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    const options = ownerRuntime.prepareRunOptions(
+      { runId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    ownerRuntime.registerRun(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+    await pubsub.flush();
+    await waitForCondition(() => followerSubscription.activeRunId() === runId);
+
+    // Unbinding a thread (a follower running `/new`, or a session teardown) stops
+    // this process's own run and must not reach the owner's run over PubSub.
+    const publishedBeforeLocalAbort = pubsub.publishedData.length;
+    expect(followerSubscription.abort({ localOnly: true })).toBe(false);
+    await pubsub.flush();
+    await nextTick();
+    expect(options.abortSignal?.aborted).toBe(false);
+    expect(pubsub.publishedData).toHaveLength(publishedBeforeLocalAbort);
+    expect(pubsub.publishedData.some(data => data?.type === 'run-abort-requested')).toBe(false);
+    // The owner still holds the live lease, so a real abort from this follower
+    // would have been forwarded — the suppression above is what kept it alive.
+    expect(pubsub.owners.get(key)).toBe(runId);
+
+    ownerSubscription.unsubscribe();
+    followerSubscription.unsubscribe();
+  });
+
+  it('routes remote abort requests to a parked suspended run on the lease owner', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const followerRuntime = new AgentThreadStreamRuntime();
+    const resourceId = 'parked-remote-abort-resource';
+    const threadId = 'parked-remote-abort-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const runId = 'parked-remote-abort-run';
+    const agent = { id: 'parked-remote-abort-agent' } as Agent<any, any, any, any>;
+    pubsub.owners.set(key, runId);
+    const ownerSubscription = await ownerRuntime.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    const followerSubscription = await followerRuntime.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    const iterator = ownerSubscription.stream[Symbol.asyncIterator]();
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    try {
+      ownerRuntime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: 'parked-remote-abort-call', toolName: 'ask_user' },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+      await withTimeout(iterator.next(), 'Timed out waiting for parked remote run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for parked remote suspension chunk');
+      await pubsub.flush();
+      await waitForCondition(() => followerSubscription.activeRunId() === runId);
+
+      // Park the run for real: the completion watcher evicts it from
+      // preparedRunsById and marks its record lifecycle 'suspended'.
+      finishRun();
+      await pubsub.flush();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-suspended' && data.runId === runId),
+      );
+      expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(true);
+      expect(ownerRuntime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      // A forged request with a stale streamId is still dropped: the parked-run
+      // guard relaxation must not weaken the ownership checks.
+      await pubsub.publish(`agent.thread-stream.${encodeURIComponent(key)}`, {
+        type: 'run-abort-requested',
+        runId,
+        data: { type: 'run-abort-requested', runId, streamId: 'stale-stream' },
+      });
+      await pubsub.flush();
+      await nextTick();
+      expect(pubsub.publishedData.some(data => data?.type === 'run-aborted')).toBe(false);
+      expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(true);
+      expect(pubsub.owners.get(key)).toBe(runId);
+
+      // The real remote abort releases the parked run on the owner.
+      expect(followerSubscription.abort()).toBe(true);
+      await pubsub.flush();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-aborted' && data.runId === runId),
+      );
+      const requestIndex = pubsub.publishedData.findIndex(
+        data => data?.type === 'run-abort-requested' && data.streamId !== 'stale-stream',
+      );
+      const terminalIndex = pubsub.publishedData.findIndex(data => data?.type === 'run-aborted');
+      expect(requestIndex).toBeGreaterThanOrEqual(0);
+      expect(terminalIndex).toBeGreaterThan(requestIndex);
+      expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(false);
+      expect(ownerRuntime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
+      expect(ownerRuntime.getThreadState({ resourceId, threadId }, pubsub)).toBe('idle');
+      expect(pubsub.owners.get(key)).toBeUndefined();
+      expect(ownerRuntime.abortThread({ resourceId, threadId }, pubsub)).toBe(false);
+    } finally {
+      finishRun();
+      ownerSubscription.unsubscribe();
+      followerSubscription.unsubscribe();
+    }
   });
 
   it('routes active-run signals across runtime instances through PubSub', async () => {

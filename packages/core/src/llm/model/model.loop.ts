@@ -307,7 +307,7 @@ export class MastraLLMVNext extends MastraBase {
             }
           },
 
-          onFinish: async props => {
+          onFinish: async (props, context) => {
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
@@ -344,7 +344,7 @@ export class MastraLLMVNext extends MastraBase {
             });
 
             try {
-              await options?.onFinish?.({ ...props, runId: runId! });
+              await options?.onFinish?.({ ...props, runId: runId! }, context);
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {

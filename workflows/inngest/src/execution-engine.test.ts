@@ -409,3 +409,105 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     expect(logger.error.mock.calls[0]?.[0]).toContain('child blew up');
   });
 });
+
+describe('InngestExecutionEngine.wrapDurableOperation', () => {
+  async function captureWrapped(fn: () => Promise<unknown>): Promise<any> {
+    const engine = createEngine();
+    try {
+      await engine.wrapDurableOperation('op', fn);
+    } catch (e) {
+      return e;
+    }
+    throw new Error('expected wrapDurableOperation to throw');
+  }
+
+  it('reports the original error stack to Inngest', async () => {
+    function readsThreadIdOfUndefined(input: any) {
+      return input.state.threadId;
+    }
+
+    const err = await captureWrapped(async () => readsThreadIdOfUndefined({}));
+
+    expect(err.stack).toMatch(/^TypeError: /);
+    expect(err).toBeInstanceOf(TypeError);
+    expect(err.name).toBe('TypeError');
+    expect(err.stack).toContain('readsThreadIdOfUndefined');
+    const serializedCause = JSON.parse(JSON.stringify(err.cause.error));
+    expect(serializedCause.name).toBe('TypeError');
+    expect(serializedCause.stack).toContain('readsThreadIdOfUndefined');
+  });
+
+  it('keeps the AggregateError type', async () => {
+    const err = await captureWrapped(async () => {
+      throw new AggregateError([new Error('a'), new Error('b')], 'all failed');
+    });
+
+    expect(err).toBeInstanceOf(AggregateError);
+    expect(err.name).toBe('AggregateError');
+    expect(err.message).toBe('all failed');
+  });
+
+  it('does not flatten subclasses of built-in errors to the built-in type', async () => {
+    class CustomTypeError extends TypeError {}
+    const err = await captureWrapped(async () => {
+      throw new CustomTypeError('custom');
+    });
+
+    expect(err).not.toBeInstanceOf(TypeError);
+    expect(err.message).toBe('custom');
+  });
+
+  it('wraps nullish thrown values with the fallback error', async () => {
+    const err = await captureWrapped(async () => {
+      throw null;
+    });
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe('Unknown step execution error');
+  });
+
+  it('keeps custom error properties in the cause', async () => {
+    const err = await captureWrapped(async () => {
+      throw Object.assign(new Error('rate limited'), { statusCode: 429 });
+    });
+
+    expect(err.message).toBe('rate limited');
+    expect(JSON.parse(JSON.stringify(err.cause.error)).statusCode).toBe(429);
+  });
+
+  it('flags non-retryable failures in the cause', async () => {
+    const err = await captureWrapped(async () => {
+      throw new NonRetriableError('permanent failure');
+    });
+
+    expect(err.cause.status).toBe('failed');
+    expect(err.cause.nonRetryable).toBe(true);
+  });
+});
+
+describe('InngestExecutionEngine span hooks without observability (#24731)', () => {
+  it('does not spend Inngest steps creating spans when observability is not configured', async () => {
+    const inngestStep = { run: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()) };
+    const engine = new InngestExecutionEngine({} as Mastra, inngestStep as any, 0, {} as any);
+    const executionContext = { tracingIds: { traceId: 't', workflowSpanId: 's' } } as any;
+
+    const stepSpan = await engine.createStepSpan({
+      parentSpan: undefined,
+      operationId: 'span.start.step',
+      options: { name: 'step', type: 'workflow_step' },
+      executionContext,
+    });
+    const childSpan = await engine.createChildSpan({
+      parentSpan: undefined,
+      operationId: 'span.start.child',
+      options: { name: 'child', type: 'workflow_loop' },
+      executionContext,
+    });
+    await engine.endStepSpan({ span: stepSpan, operationId: 'span.end.step', endOptions: {} });
+    await engine.endChildSpan({ span: childSpan, operationId: 'span.end.child' });
+
+    expect(stepSpan).toBeUndefined();
+    expect(childSpan).toBeUndefined();
+    expect(inngestStep.run).not.toHaveBeenCalled();
+  });
+});

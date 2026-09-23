@@ -24,7 +24,7 @@ function DialTick({ angle, major, className, ...props }: ComponentProps<'line'> 
       y1={inner.y}
       x2={outer.x}
       y2={outer.y}
-      className={cn(major ? 'stroke-neutral2' : 'stroke-border2', className)}
+      className={cn(major ? 'stroke-placeholder' : 'stroke-border-strong', className)}
       {...props}
     />
   );
@@ -38,7 +38,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
       y1={DIAL_CENTER}
       x2={tip.x}
       y2={tip.y}
-      className="stroke-neutral4 stroke-[1.5]"
+      className="stroke-1.5 stroke-muted-foreground"
       strokeLinecap="round"
     />
   );
@@ -46,7 +46,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
 
 function DialFace({ tickAngles, children }: { tickAngles: number[]; children: ReactNode }) {
   return (
-    <span className="text-neutral4 block size-28 shrink-0" aria-hidden>
+    <span className="block size-28 shrink-0 text-muted-foreground" aria-hidden>
       <svg viewBox="0 0 116 116" fill="none" className="block size-full overflow-visible">
         {tickAngles.map((angle, index) => (
           <DialTick key={angle} angle={angle} major={index % 5 === 0} />
@@ -75,13 +75,13 @@ export function DurationDial({ amount, unit }: { amount: number; unit: DurationU
       <DialTick
         angle={-120 + (amount / scale) * 240}
         major
-        className="stroke-neutral6 stroke-2"
+        className="stroke-foreground stroke-2"
         strokeLinecap="round"
       />
-      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-neutral3 text-ui-xs font-sans">
+      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-muted-foreground font-body text-meta">
         {scale} {unit}
       </text>
-      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-neutral2 text-ui-xs font-sans">
+      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-placeholder font-body text-meta">
         scale
       </text>
     </DialFace>

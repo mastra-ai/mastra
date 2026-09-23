@@ -6,7 +6,7 @@ import type { Intake } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
-import { IntakeRoutes, parseIntakeConfig } from './intake.js';
+import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const auditEvents: Array<Record<string, unknown>> = [];
@@ -798,6 +798,19 @@ describe('parseIntakeConfig', () => {
       gitlab: { enabled: true, sourceIds: null },
       jira: { enabled: false, sourceIds: ['board-1'] },
     });
+  });
+
+  it('accepts encoded source ids up to the shared selection and binding limit', () => {
+    const sourceId = 'gitlab-project:' + 'a'.repeat(900);
+    expect(parseIntakeConfig({ gitlab: { enabled: true, sourceIds: [sourceId] } })?.gitlab?.sourceIds).toEqual([
+      sourceId,
+    ]);
+    expect(
+      parseIntakeBinding({ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'work' }),
+    ).toMatchObject({
+      sourceId,
+    });
+    expect(parseIntakeConfig({ gitlab: { enabled: true, sourceIds: ['a'.repeat(1025)] } })).toBeNull();
   });
 
   it('rejects malformed or duplicate source ids', () => {

@@ -33,7 +33,14 @@ export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.
 export type { ObservabilityCollector } from './observability/types';
-export type { QueryTraceThreadsInput, QueryTraceThreadsResult, QueryTracesInput } from './resources/observability';
+export type {
+  QueryTraceThreadsInput,
+  QueryTraceThreadsResult,
+  QueryTracesInput,
+  QueryTracesDeltaInput,
+  QueryTracesKeysetInput,
+  QueryTracesPaginatedInput,
+} from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
@@ -42,9 +49,13 @@ export type {
   GetTraceQueryValuesArgs,
   GetTraceQueryValuesResponse,
   TraceQueryCanonicalFieldDescriptor,
+  TraceQueryGroupResponse,
+  TraceQueryKeysetTraceResponse,
   TraceQueryObservedFieldDescriptor,
   TraceQueryOperator,
   TraceQueryPredicateScope,
+  TraceQueryResponse,
+  TraceQueryTraceResponse,
   TraceQueryValueKind,
 } from './resources/observability-route-types';
 export type {

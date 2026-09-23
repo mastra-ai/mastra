@@ -44,6 +44,7 @@ import type {
   SendAgentSignalParams,
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
+  AbortAgentThreadParams,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
   GetAgentPlanResponse,
@@ -977,11 +978,15 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async abortThread(params: SubscribeAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
-    const { resourceId, threadId } = params;
+  async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
+    const { resourceId, threadId, expectedRunId } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
-      body: { resourceId, threadId },
+      body: {
+        resourceId,
+        threadId,
+        ...(expectedRunId === undefined ? {} : { expectedRunId }),
+      },
     });
   }
 

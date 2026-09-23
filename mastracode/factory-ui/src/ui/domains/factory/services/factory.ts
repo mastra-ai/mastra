@@ -13,6 +13,7 @@ export interface GithubIssue {
   url: string;
   author: string | null;
   assignee?: string | null;
+  assignees?: string[];
   labels: string[];
   comments: number;
   createdAt: string;

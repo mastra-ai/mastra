@@ -1296,6 +1296,14 @@ For a complete implementation, see the [workflow-suspend-resume example](https:/
 
 Tools can call agents internally and stream the agent's output back to the UI. This creates compact `data-tool-agent` snapshots while the nested step is still running, `data-tool-agent-step` parts when a nested step finishes, and one full `data-tool-agent` snapshot when the nested run finishes.
 
+Both part types include delegation metadata for nested supervisor chains:
+
+- `ancestry`: The delegation path in outer-to-inner order. Each entry contains a `toolCallId` and may include the `toolName` and normalized `agentId`.
+- `depth`: The number of known agent delegation boundaries. A direct subagent has depth `1`.
+- `parentAgentId`: The immediate parent agent ID for a nested agent. This field is omitted for a direct subagent because the root supervisor ID isn't part of the tool envelope.
+
+The part `id` remains the nested agent run ID, so progressive snapshots replace the same UI state as the run continues.
+
 The pattern uses:
 
 - `context.mastra.getAgent()` - Get an agent instance from within a tool
@@ -1391,10 +1399,12 @@ The pattern uses:
                   return <p key={index}>{part.text}</p>
                 }
                 if (part.type === 'data-tool-agent') {
-                  const { id, data } = part as AgentDataPart
+                  const { id, data, depth, parentAgentId } = part as AgentDataPart
                   return (
                     <div key={index} className="nested-agent">
                       <strong>Nested Agent: {id}</strong>
+                      <p>Delegation depth: {depth}</p>
+                      {parentAgentId && <p>Parent agent: {parentAgentId}</p>}
                       {data.text && <p>{data.text}</p>}
                       {data.toolErrors?.map(toolError => (
                         <p key={toolError.toolCallId} className="nested-agent-error">
@@ -1428,6 +1438,7 @@ Key points:
 
 - Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
 - Read `data-tool-agent-step` when you need the full payload for the nested step that finished
+- `AgentDataPart` and `AgentStepDataPart` include the same `ancestry`, `depth`, and optional `parentAgentId` fields
 - The `AgentDataPart` has `id` (on the part) and `data.text` (the current nested-agent text snapshot)
 - A tool that throws inside the nested agent is reported in `data.toolErrors`, each entry `{ toolCallId, toolName, args?, errorText, providerExecuted? }`. `errorText` is a JSON-safe string, so the failure survives serialization to the client instead of arriving as `{}`
 - `toolErrors` resets at each nested step boundary, like `toolCalls` and `toolResults`. For a finished step, read it from `data-tool-agent-step` (`data.step.toolErrors`) or from `data.steps[]` on the final snapshot

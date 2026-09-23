@@ -21,18 +21,6 @@ const getInput = () => {
   return input;
 };
 
-const inputGroupVariants = ['default', 'filled', 'outline'] as const;
-
-const expectOnlyGuardedHoverBorder = (className: string) => {
-  const hoverBorderTokens = className
-    .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-border2'));
-
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-border2']);
-  expect(className).toContain('focus-within:border-neutral5/50');
-  expect(className).not.toContain('hover:border-border2');
-};
-
 describe('InputGroup', () => {
   it('puts an explicit height on the root box so the group matches a same-size sibling control', () => {
     render(
@@ -46,7 +34,7 @@ describe('InputGroup', () => {
     // The root carries an explicit, border-box height. This is the fix for the group
     // rendering ~2px taller than a same-size Select trigger (previously the height lived
     // only on the inner control, so the root's own border was added on top).
-    expect(getWrapper().className).toContain('h-form-md');
+    expect(getWrapper().className).toContain('h-control-md');
     expect(getInput().className).toContain('flex-1');
   });
 
@@ -57,13 +45,13 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     // Root height for the size...
-    expect(getWrapper().className).toContain('h-form-lg');
+    expect(getWrapper().className).toContain('h-control-lg');
     // ...and the control is sized to the root's content box (token minus the 1px borders)
     // via the parent's data-size (no React context). This keeps it from shrinking to the
     // line-height when the group goes vertical, and from overflowing the root inline —
     // which would let a flex-column parent grow the group 2px past a sibling control.
-    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]');
-    expect(getInput().className).not.toContain('h-form-lg');
+    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]');
+    expect(getInput().className).not.toContain('h-control-lg');
   });
 
   it('block-start mode: control keeps a form height (no collapse) and the root height goes auto', () => {
@@ -79,20 +67,20 @@ describe('InputGroup', () => {
         <InputGroupInput placeholder="name@example.com" />
       </InputGroup>,
     );
-    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]');
+    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-control-md)-2px)]');
     expect(getWrapper().className).toContain('has-[>[data-align=block-start]]:h-auto');
   });
 
   it('the root does NOT expose a zero min-width (would let it collapse to ~0 inside a flex group)', () => {
     render(
-      <InputGroup variant="outline">
+      <InputGroup>
         <InputGroupInput placeholder="x" />
       </InputGroup>,
     );
     // Root fills via `flex-1` + `w-full` and keeps its `min-width:auto` content floor.
     const cls = getWrapper().className;
     expect(cls).toContain('flex-1');
-    expect(cls).not.toContain('min-w-0');
+    expect(cls.split(/\s+/)).not.toContain('min-w-0');
   });
 
   it('wrapper has the flex-col + flex-none + w-full overrides needed for block-start mode', () => {
@@ -151,20 +139,7 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-error');
-  });
-
-  it('supports an outline variant without an initial filled background', () => {
-    render(
-      <InputGroup variant="outline">
-        <InputGroupInput placeholder="x" />
-      </InputGroup>,
-    );
-
-    const wrapperClass = getWrapper().className;
-    expect(wrapperClass).toContain('bg-transparent');
-    expect(wrapperClass).toContain('rounded-full');
-    expect(wrapperClass).not.toContain('bg-surface-overlay-soft');
+    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:[--field-rim:var(--destructive)]');
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
@@ -179,19 +154,5 @@ describe('InputGroup', () => {
     expect(cls).toContain('[&::-webkit-inner-spin-button]:appearance-none');
     expect(cls).toContain('[&[type=number]]:[appearance:textfield]');
     expect(cls).toContain('[&::-webkit-search-cancel-button]:appearance-none');
-  });
-
-  it.each(inputGroupVariants)('prioritizes the focus border over hover for the %s variant', variant => {
-    render(
-      <InputGroup variant={variant}>
-        <InputGroupInput placeholder={variant} />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    // Focused border brightens to a neutral tone (no green accent), and the hover border
-    // is guarded so it cannot override focus when the group is focused and hovered.
-    expectOnlyGuardedHoverBorder(cls);
-    expect(cls).not.toContain('ring-accent1');
   });
 });

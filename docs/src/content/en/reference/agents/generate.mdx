@@ -798,6 +798,13 @@ const result = await agent.generate('message for agent')
                 type: 'TracingOptions',
                 parameters: [
                   {
+                    name: 'rootSpanName',
+                    type: 'string',
+                    isOptional: true,
+                    description:
+                      "Display name for the root span of this trace, replacing the default `workflow run: '<id>'` or `agent run: '<id>'` name. Use it to tell runs apart in trace lists.",
+                  },
+                  {
                     name: 'metadata',
                     type: 'Record<string, any>',
                     isOptional: true,
@@ -955,6 +962,12 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     type: 'Output | undefined',
     isOptional: true,
     description: 'The structured output object if structuredOutput was provided, validated against the schema.',
+  },
+  {
+    name: 'usedFallbackValue',
+    type: 'boolean',
+    description:
+      "True when `object` is the configured `fallbackValue`, substituted because the model output failed schema validation, or the separate structuring model failed, under `errorStrategy: 'fallback'`.",
   },
   {
     name: 'toolCalls',

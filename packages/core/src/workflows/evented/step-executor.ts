@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
@@ -11,7 +10,7 @@ import { EntityType, SpanType, createObservabilityContext } from '../../observab
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { runAgentEntry, runMappingEntry, runToolEntry } from '../entry-executors';
+import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
@@ -172,7 +171,7 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       const stepOutput = await executeWithContext({
@@ -266,6 +265,8 @@ export class StepExecutor extends MastraBase {
               return runAgentEntry(entry, executionContext, this.mastra);
             case 'tool':
               return runToolEntry(entry, executionContext, this.mastra);
+            case 'classifier':
+              return runClassifierEntry(entry, executionContext);
             case 'mapping':
               return runMappingEntry(entry, executionContext);
           }
@@ -454,7 +455,7 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     iterationCount: number;
   }): Promise<boolean> {
-    const callId = randomUUID();
+    const callId = globalThis.crypto.randomUUID();
     const outputWriter = this.createOutputWriter(runId);
 
     return condition(
@@ -528,7 +529,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       return await step.fn(
@@ -611,7 +612,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       const result = await step.fn(

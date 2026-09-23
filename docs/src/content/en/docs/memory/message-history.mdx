@@ -174,6 +174,47 @@ export const supportAgent = new Agent({
 
 Title generation runs asynchronously after the agent responds and doesn't affect response time.
 
+### Streaming the generated title
+
+By default title generation runs in the background and the run's stream doesn't wait for it, so HTTP clients only see the title on their next thread fetch. Set `emitEvent: true` to deliver the title on the run's stream instead: the stream waits for the title and emits a transient `data-thread-title` chunk before `finish`.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer customer support questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        emitEvent: true,
+      },
+    },
+  }),
+})
+```
+
+Stream consumers receive the chunk with the persisted title, so a chat UI can rename its thread list entry without polling:
+
+```typescript oxfmt:false
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'data-thread-title') {
+    renameThreadInSidebar(chunk.data.threadId, chunk.data.title)
+  }
+}
+```
+
+The chunk is transient: it's delivered to stream consumers but never persisted as part of the conversation's messages. Because the stream waits for the title, `emitEvent` delays the stream's `finish` on the turn that generates the title: the first turn of a thread, or a later turn when `minMessages` sets a higher threshold. Leave it off to keep title generation fully non-blocking.
+
+:::note
+
+`emitEvent` applies to `stream()` runs. `generate()` returns JSON and can't carry the chunk, so it keeps non-blocking title generation. [Durable and evented agents](/docs/harness/durable-agents) don't emit this chunk yet. In all of these cases the title is still generated and persisted.
+
+:::
+
 To optimize cost or behavior, provide a smaller [`model`](/models) and custom `instructions`:
 
 ```typescript title="src/mastra/agents/support-agent.ts"

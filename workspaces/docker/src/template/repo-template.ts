@@ -30,6 +30,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { normalizeSetupCommands, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 import type { DockerOptions } from 'dockerode';
+import { normalizeAbortError, throwIfAborted } from '../abort';
 import { DockerTemplate } from './template';
 
 const execFileAsync = promisify(execFile);
@@ -73,7 +74,9 @@ export interface DockerRepoTemplateOptions {
    * `template: createDockerRepoTemplate(ctx)` needs no conditional. If the
    * function resolves to `undefined` at start time, the resolver rejects.
    */
-  getRepositoryAccess: (() => Promise<RepositoryAccess | undefined>) | undefined;
+  getRepositoryAccess:
+    | ((options?: DockerRepoTemplateResolveOptions) => Promise<RepositoryAccess | undefined>)
+    | undefined;
   /**
    * Branch, tag, or commit to prepare. The current head of a branch/tag is
    * resolved at each template resolution and pinned into the identity.
@@ -88,7 +91,7 @@ export interface DockerRepoTemplateOptions {
    * so it must be non-secret; put rotating credentials in
    * {@link getRepositoryAccess} instead.
    */
-  buildEnv?: Record<string, string> | (() => Promise<Record<string, string>>);
+  buildEnv?: Record<string, string> | ((options?: DockerRepoTemplateResolveOptions) => Promise<Record<string, string>>);
   /**
    * Absolute parent for the checkout; the repo lands at
    * `<workingDirectory>/<repo>`, which becomes the build and runtime cwd.
@@ -105,8 +108,13 @@ export interface DockerRepoTemplateOptions {
   dockerOptions?: DockerOptions;
 }
 
+export interface DockerRepoTemplateResolveOptions {
+  /** Cancel repository access, build-environment resolution, or head lookup. */
+  abortSignal?: AbortSignal;
+}
+
 /** A resolver producing a fresh, head-pinned template on each call. */
-export type DockerRepoTemplateResolver = () => Promise<DockerTemplate>;
+export type DockerRepoTemplateResolver = (options?: DockerRepoTemplateResolveOptions) => Promise<DockerTemplate>;
 
 export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): DockerRepoTemplateResolver | undefined {
   if (!options.getRepositoryAccess) return undefined;
@@ -117,22 +125,38 @@ export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): Do
   if (!workingDirectory.startsWith('/')) {
     throw new Error(`workingDirectory must be an absolute path, got '${options.workingDirectory}'`);
   }
-  return () => resolveRepoTemplate(options, workingDirectory);
+  return resolveOptions => resolveRepoTemplate(options, workingDirectory, resolveOptions);
 }
 
 async function resolveRepoTemplate(
   options: DockerRepoTemplateOptions,
   workingDirectory: string,
+  resolveOptions: DockerRepoTemplateResolveOptions = {},
 ): Promise<DockerTemplate> {
-  const access = await options.getRepositoryAccess!();
+  const { abortSignal } = resolveOptions;
+  throwIfAborted(abortSignal, 'resolve Docker repository template');
+  let access: RepositoryAccess | undefined;
+  try {
+    access = await options.getRepositoryAccess!(resolveOptions);
+  } catch (error) {
+    throw normalizeAbortError(error, 'resolve Docker repository template');
+  }
+  throwIfAborted(abortSignal, 'resolve Docker repository template');
   const cloneUrl = access?.cloneUrl;
   if (!cloneUrl) {
     throw new Error('Repo template has no clone URL: repository access returned none.');
   }
   assertCloneUrl(cloneUrl);
   const token = access?.authorization?.token;
-  const buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv() : options.buildEnv;
-  const sha = await resolveHead(cloneUrl, options.ref, token);
+  let buildEnv: Record<string, string> | undefined;
+  try {
+    buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv(resolveOptions) : options.buildEnv;
+  } catch (error) {
+    throw normalizeAbortError(error, 'resolve Docker repository template');
+  }
+  throwIfAborted(abortSignal, 'resolve Docker repository template');
+  const sha = await resolveHead(cloneUrl, options.ref, token, abortSignal);
+  throwIfAborted(abortSignal, 'resolve Docker repository template');
   if (!sha) {
     throw new Error(
       `Could not resolve ${options.ref ?? 'HEAD'} of ${cloneUrl} with git ls-remote; check the ref, the credential and network access`,
@@ -219,7 +243,9 @@ export async function resolveHead(
   cloneUrl: string,
   ref: string | undefined,
   token: string | undefined,
+  abortSignal?: AbortSignal,
 ): Promise<string | undefined> {
+  throwIfAborted(abortSignal, 'resolve Docker repository template');
   if (ref && FULL_SHA_PATTERN.test(ref)) return ref.toLowerCase();
   try {
     // The credential goes through GIT_CONFIG_* (git >= 2.31) rather than `-c`
@@ -234,6 +260,7 @@ export async function resolveHead(
     // `--` keeps even a hostile URL from being read as an option.
     const { stdout } = await execFileAsync('git', ['ls-remote', '--', cloneUrl, ref ?? 'HEAD'], {
       timeout: 10_000,
+      signal: abortSignal,
       env: { ...process.env, ...authEnv, GIT_TERMINAL_PROMPT: '0' },
     });
     // Prefer the peeled tag object (`refs/tags/x^{}`) when present.
@@ -244,7 +271,8 @@ export async function resolveHead(
     const peeled = lines.find(([, name]) => name?.endsWith('^{}'));
     const sha = (peeled ?? lines[0])?.[0]?.trim();
     return sha && SHA_PATTERN.test(sha) ? sha.toLowerCase() : undefined;
-  } catch {
+  } catch (error) {
+    if (abortSignal?.aborted) throw normalizeAbortError(error, 'resolve Docker repository template');
     return undefined;
   }
 }

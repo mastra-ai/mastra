@@ -1,9 +1,15 @@
-import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
-import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
+import {
+  SpanErrorRenderer,
+  SpanInputRenderer,
+  SpanOutputRenderer,
+  SpanPayloadSection,
+  SpanProcessorAttributes,
+} from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
@@ -15,7 +21,8 @@ import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import { cn } from '@/lib/utils';
 
-const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-3';
+// Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -23,7 +30,6 @@ export interface SpanDataPanelViewProps {
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
   isLoading?: boolean;
-  onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   activeTab?: string;
@@ -50,7 +56,6 @@ export function SpanDataPanelView({
   spanId,
   span,
   isLoading,
-  onClose,
   onPrevious,
   onNext,
   activeTab,
@@ -65,7 +70,6 @@ export function SpanDataPanelView({
   return (
     <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       <DataPanel.Header>
-        <DataPanel.CloseButton onClick={onClose} />
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
             Span
@@ -234,8 +238,13 @@ function SpanDataPanelContent({
         <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
           {null}
         </SpanPayloadSection>
-        <SpanPayloadSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} hasPreview={false}>
-          {null}
+        <SpanPayloadSection
+          title="Attributes"
+          icon={<BracesIcon />}
+          raw={span.attributes}
+          hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
+        >
+          <SpanProcessorAttributes span={span} />
         </SpanPayloadSection>
       </div>
     </>
@@ -246,19 +255,27 @@ function SpanDataPanelContent({
     return <div className={BODY_CLASS}>{detailsBody}</div>;
   }
 
+  // Same chrome as the trace column: tab list in a header row, content scrolling beneath it.
   return (
-    <div className={BODY_CLASS}>
-      <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost">
+    <Tabs
+      defaultTab="details"
+      value={activeTab}
+      onValueChange={onTabChange}
+      className="grid min-h-0 flex-1 grid-rows-[auto_1fr]"
+    >
+      <DataPanel.Header>
+        <TabList variant="pill-ghost" size="sm">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
         </TabList>
+      </DataPanel.Header>
 
-        <TabContent value="details" className="pt-1">
-          {detailsBody}
-        </TabContent>
-        <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
-      </Tabs>
-    </div>
+      <TabContent value="details" flush>
+        <div className={BODY_CLASS}>{detailsBody}</div>
+      </TabContent>
+      <TabContent value="feedback" flush>
+        <div className={BODY_CLASS}>{feedbackTabSlot({ span, traceId, spanId })}</div>
+      </TabContent>
+    </Tabs>
   );
 }

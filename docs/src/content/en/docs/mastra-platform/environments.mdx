@@ -49,7 +49,7 @@ All `mastra env` commands resolve their project from `MASTRA_PROJECT_ID`, the `-
 
 An environment resolves its variables from three scopes:
 
-- **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
+- **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`) and by the platform itself. The platform defines these, and you can't edit them. See [System environment variables](/docs/mastra-platform/system-environment-variables) for the full list.
 - **Environment-scoped variables**: Stored on one environment through the dashboard. Use these for values that differ between environments, like API keys for staging and production services.
 - **Project-scoped variables**: Stored on the project and shared by all environments.
 

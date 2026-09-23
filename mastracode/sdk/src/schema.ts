@@ -62,6 +62,21 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
+  /** Explicit model-pack identity for the current thread. */
+  activeModelPackId?: string | null;
+  /**
+   * Pending pack hop written by the account-rotation processor on a cascade
+   * hop; cleared back to null once the TUI applies it. Declared here so
+   * consumers resolve it as a typed record instead of casting `unknown`.
+   */
+  mastracodePendingPackFallback?: {
+    fromPackId: string;
+    toPackId: string;
+    toModelId: string;
+    threadId?: string;
+    reason: 'pool-exhausted' | 'persistent-outage';
+    at: string;
+  } | null;
   /**
    * Session-level reasoning-effort override. When unset, the effective level is
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
@@ -111,6 +126,7 @@ export const stateSchema = z.object({
   // seeded model and leave the controller with no model selected.
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
+  activeModelPackId: z.string().nullable().optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
@@ -175,6 +191,19 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
+  // Pending pack hop written by the account-rotation processor on a cascade
+  // hop; the TUI consumes it on `state_changed` to apply thread stickiness,
+  // then clears it back to null. Must be declared — Zod strips unknown keys.
+  mastracodePendingPackFallback: z
+    .object({
+      fromPackId: z.string(),
+      toPackId: z.string(),
+      toModelId: z.string(),
+      threadId: z.string().optional(),
+      reason: z.enum(['pool-exhausted', 'persistent-outage']),
+      at: z.string(),
+    })
+    .nullish(),
   // Asset directories contributed by active plugins.
   pluginSkillPaths: z.array(z.string()).default([]),
   pluginCommandPaths: z.array(z.string()).default([]),

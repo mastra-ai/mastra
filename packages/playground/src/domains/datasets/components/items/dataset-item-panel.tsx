@@ -288,8 +288,10 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
           {!isEditing && (
             <>
               <Button
-                as={Link}
-                href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`}
+                render={
+                  <Link href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`} />
+                }
+
                 size="sm"
                 variant="ghost"
                 tooltip="Go to item versions history"

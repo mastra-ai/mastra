@@ -1,13 +1,16 @@
 import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { TemplatesList } from '@/domains/templates/templates-list';
 import { TemplatesTools } from '@/domains/templates/templates-tools';
 import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
+
+const crumbs = [{ id: 'templates', label: 'Templates' }];
 
 export default function Templates() {
   const { data, isLoading } = useMastraTemplates();
@@ -63,7 +66,8 @@ export default function Templates() {
   const isFiltered = searchTerm || selectedTag !== 'all' || selectedProvider !== 'all';
 
   return (
-    <MainContentLayout>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Templates</h1>
       <Header>
         <HeaderTitle>
           <Icon>
@@ -73,7 +77,7 @@ export default function Templates() {
         </HeaderTitle>
       </Header>
 
-      <div className={cn('overflow-y-auto w-full h-full px-5 pb-12 z-10')}>
+      <div className={cn('z-10 h-full w-full overflow-y-auto px-5 pb-12')}>
         <TemplatesTools
           selectedTag={selectedTag}
           onTagChange={value => handleFilterChange(value, 'tag')}
@@ -94,6 +98,6 @@ export default function Templates() {
           isLoading={isLoading}
         />
       </div>
-    </MainContentLayout>
+    </PageLayout>
   );
 }

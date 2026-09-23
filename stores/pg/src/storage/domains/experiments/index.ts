@@ -11,6 +11,7 @@ import {
   ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   safelyParseJSON,
   ensureDate,
 } from '@mastra/core/storage';
@@ -527,6 +528,10 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
@@ -601,7 +606,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.readClient.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 
@@ -941,6 +946,10 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
 
@@ -990,7 +999,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.readClient.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 

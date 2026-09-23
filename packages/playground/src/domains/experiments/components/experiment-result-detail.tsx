@@ -7,7 +7,6 @@ import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
@@ -121,7 +120,7 @@ export function ExperimentResultDetail({ result, scores, state, ...panelProps }:
         showUnavailableFeaturesMsg={false}
         traceHref={featuredTraceId ? `/traces?traceId=${encodeURIComponent(featuredTraceId)}` : undefined}
         anchorSpanId={anchorSpan?.spanId}
-        feedbackTabBadge={<NeedsReviewDot feedback={traceFeedback?.feedback} />}
+        feedbackTabBadge={traceFeedback?.pagination?.total ?? undefined}
         feedbackTabSlot={({ traceId }) => <TraceFeedbackTab traceId={traceId} />}
         scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId, rootSpanId }) =>
@@ -139,7 +138,7 @@ export function ExperimentResultDetail({ result, scores, state, ...panelProps }:
             />
           ) : null
         }
-        spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedback?.feedback} />}
+        spanFeedbackTabBadge={spanFeedback?.pagination?.total ?? undefined}
         spanFeedbackTabSlot={({ traceId, spanId }) =>
           traceId && spanId ? <SpanFeedbackTab key={`${traceId}:${spanId}`} traceId={traceId} spanId={spanId} /> : null
         }

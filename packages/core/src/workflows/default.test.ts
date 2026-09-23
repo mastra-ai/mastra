@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../di';
@@ -247,7 +246,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     const { result } = await runConditional({
       conditions,
       workflowId: 'test-workflow',
-      runId: randomUUID(),
+      runId: globalThis.crypto.randomUUID(),
     });
 
     // Assert: Verify error handling, truthyIndexes, and workflow continuation
@@ -260,7 +259,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     // Arrange: Set up conditions array with one throwing regular Error and one valid
     const regularError = new Error('Test regular error');
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     // Mock the logger to capture trackException calls
     const mockTrackException = vi.fn();
@@ -318,7 +317,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
   describe('conditional time-travel reconciliation', () => {
     it("rewrites a targeted-but-non-truthy arm from 'running' to 'skipped' during time travel", async () => {
       const workflowId = 'test-workflow';
-      const runId = randomUUID();
+      const runId = globalThis.crypto.randomUUID();
 
       // arm step1 (index 0) is truthy, arm step2 (index 1) is NOT truthy.
       const conditions = [async () => true, async () => false];
@@ -358,7 +357,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
 
     it("rewrites a targeted-but-non-truthy declarative arm (agent / mapping) from 'running' to 'skipped'", async () => {
       const workflowId = 'test-workflow';
-      const runId = randomUUID();
+      const runId = globalThis.crypto.randomUUID();
 
       // arm step1 (index 0) is truthy; the declarative arms (indexes 1 and 2) are NOT truthy.
       const conditions = [async () => true, async () => false, async () => false];
@@ -414,7 +413,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
 
     it("leaves a 'running' arm untouched for normal start/resume (no time travel)", async () => {
       const workflowId = 'test-workflow';
-      const runId = randomUUID();
+      const runId = globalThis.crypto.randomUUID();
 
       const conditions = [async () => true, async () => false];
 
@@ -457,7 +456,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
 
   it('should use the suspended step payload when resuming a step with stale previous output', async () => {
     const workflowId = 'resume-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const resumedStep = {
       id: 'needs-approval',
       inputSchema: z.object({ id: z.string() }),
@@ -528,7 +527,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
 
   it('should use a null suspended step payload when resuming a step with stale previous output', async () => {
     const workflowId = 'resume-null-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const resumedStep = {
       id: 'needs-approval',
       inputSchema: z.null(),
@@ -599,7 +598,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
 
   it('should use the suspended foreach payload when resuming with stale previous output', async () => {
     const workflowId = 'resume-foreach-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const foreachStep = {
       id: 'process-item',
       inputSchema: z.number(),
@@ -696,7 +695,7 @@ describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
 
   it('should use a null suspended loop payload when resuming with stale previous output', async () => {
     const workflowId = 'resume-loop-null-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const step = {
       id: 'loop-step',
       inputSchema: z.null(),
@@ -778,7 +777,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   // cancelled, even when the user's step does not observe abortSignal.
   it('should stop iterating a dountil loop when abortController is aborted between iterations', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     let iterations = 0;
     const step = {
@@ -843,7 +842,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   // must still surface 'canceled' rather than 'success'.
   it('should surface canceled when abortController is aborted during condition evaluation', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     let stepCalls = 0;
     const step = {
@@ -919,7 +918,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
   // would otherwise let the loop keep iterating.
   it('should return canceled before dispatching the next concurrency chunk', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     let callCount = 0;
     const step = {
@@ -978,7 +977,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
   // result and persist 'success' even though the run was cancelled.
   it('should return canceled when abortController is aborted during the final chunk', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     const step = {
       id: 'process-item',
@@ -1058,7 +1057,7 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
     prevOutput,
     concurrency,
     workflowId = 'test-workflow',
-    runId = randomUUID(),
+    runId = globalThis.crypto.randomUUID(),
   }: {
     step: any;
     prevOutput: any[];
@@ -1106,7 +1105,7 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
   });
 
   it('keeps concurrency slots filled and preserves ordered results while progress follows completion order', async () => {
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const firstItemGate = deferred();
     const starts: number[] = [];
     const completed: number[] = [];
@@ -2075,7 +2074,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the parallel container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-parallel';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -2108,7 +2107,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('falls back to the structural parallel name when no entry id is present', async () => {
     const workflowId = 'span-parallel-fallback';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -2134,7 +2133,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('uses one canonical trimmed id for both the parallel span name and the entryId attribute', async () => {
     const workflowId = 'span-parallel-trim';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -2161,7 +2160,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('falls back to the structural parallel name when the entry id is whitespace-only', async () => {
     const workflowId = 'span-parallel-whitespace';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -2188,7 +2187,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the conditional container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-conditional';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeConditional({
       workflowId,
@@ -2220,7 +2219,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the loop container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-loop';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const step = {
       id: 'loop-step',
       inputSchema: z.any(),
@@ -2262,7 +2261,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the foreach container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-foreach';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const step = {
       id: 'foreach-step',
       inputSchema: z.any(),
@@ -2301,7 +2300,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('attaches entry identity to the sleep span while keeping the duration name', async () => {
     const workflowId = 'span-sleep';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeSleep({
       workflowId,
@@ -2335,7 +2334,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('attaches entry identity to the sleepUntil span while keeping the date name', async () => {
     const workflowId = 'span-sleep-until';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const date = new Date(Date.now() - 1000);
 
     await engine.executeSleepUntil({
@@ -2368,7 +2367,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('forwards mapping entry metadata to the step span', async () => {
     const workflowId = 'span-mapping';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const stepSpanSpy = vi.spyOn(engine, 'createStepSpan');
 
     await engine.executeMapping({

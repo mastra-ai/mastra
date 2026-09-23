@@ -70,18 +70,18 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
     <DataKeysAndValues>
       <MetaRow label="Avg score">
         {overallAverage === undefined ? (
-          <span className="text-neutral3">—</span>
+          <span className="text-muted-foreground">—</span>
         ) : (
           <>
             <span>{overallAverage.toFixed(3)}</span>
-            {isActive && <span className="text-neutral3">· so far</span>}
+            {isActive && <span className="text-muted-foreground">· so far</span>}
           </>
         )}
       </MetaRow>
 
       <MetaRow label="Items">
         {isActive ? (
-          <span className="text-neutral3">
+          <span className="text-muted-foreground">
             {(experiment.succeededCount ?? 0) + (experiment.failedCount ?? 0)}/{experiment.totalItems} items processed
           </span>
         ) : (
@@ -114,23 +114,23 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
         <>
           <MetaRow label="Tokens">
             {metrics.data?.totalTokens == null ? (
-              <span className="text-neutral3">—</span>
+              <span className="text-muted-foreground">—</span>
             ) : (
               <>
                 <span>{formatCompact(metrics.data.totalTokens)}</span>
                 {metrics.data.estimatedCost != null && (
-                  <span className="text-neutral3">
+                  <span className="text-muted-foreground">
                     · {formatCost(metrics.data.estimatedCost, metrics.data.costUnit)}
                   </span>
                 )}
-                {isActive && <span className="text-neutral3">· so far</span>}
+                {isActive && <span className="text-muted-foreground">· so far</span>}
               </>
             )}
           </MetaRow>
 
           <MetaRow label="Latency (avg)">
             {metrics.data?.avgAgentDurationMs == null ? (
-              <span className="text-neutral3">—</span>
+              <span className="text-muted-foreground">—</span>
             ) : (
               <span>{formatDuration(Math.round(metrics.data.avgAgentDurationMs))}</span>
             )}

@@ -4,7 +4,7 @@ import type { SpanRowContext } from './span-rows';
 import { SpanRows } from './span-rows';
 import { SpanTreeRow } from './span-tree-row';
 import { SpanTypeLegend } from './span-type-legend';
-import { Spinner } from '@/ds/components/Spinner';
+import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
 import { cn } from '@/lib/utils';
 
 export type TraceSpanTreeProps = {
@@ -25,16 +25,7 @@ export type TraceSpanTreeProps = {
 };
 
 export function TraceSpanTreeLoading() {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-center gap-3 rounded-md bg-surface3/50 p-3 text-ui-sm text-neutral3',
-        '[&_svg]:size-[1.25em] [&_svg]:opacity-50',
-      )}
-    >
-      <Spinner /> Loading Trace Timeline ...
-    </div>
-  );
+  return <TraceSpanTreeSkeleton />;
 }
 
 const durationMeta = (ctx: SpanRowContext) => <>{(ctx.span.latency / 1000).toFixed(3)}&nbsp;s</>;
@@ -60,7 +51,7 @@ export function TraceSpanTree({
       {leadingSlot}
       <SpanTypeLegend spans={hierarchicalSpans} />
       <div
-        className={cn('grid content-start items-start gap-y-px overflow-hidden py-1', {
+        className={cn('grid content-start items-start gap-y-px overflow-hidden pb-1', {
           'grid-cols-[minmax(0,1fr)]': !renderTrailing,
           'grid-cols-[minmax(0,1fr)_auto]': !!renderTrailing,
         })}

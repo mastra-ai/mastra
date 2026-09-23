@@ -2,7 +2,6 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
@@ -21,7 +20,9 @@ import {
   ThreadRail,
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -44,6 +45,7 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
+import { startViewTransition } from '@/lib/routing';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -122,6 +124,8 @@ export interface ThreadProps {
    * only replaces the welcome screen; live messages that arrive earlier take precedence.
    */
   isHistoryLoading?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
+  isLoadingPrevious?: boolean;
 }
 
 export const Thread = ({
@@ -134,6 +138,8 @@ export const Thread = ({
   runOptionsSlot,
   refreshThreadList,
   isHistoryLoading,
+  onLoadPrevious,
+  isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -159,20 +165,55 @@ export const Thread = ({
     opensTurn: message => threadRailAnchorIds.has(message.id),
   });
 
+  // Before the first message the dock is unpinned and centered so the greeting,
+  // composer and prompts read as one landing. The composer keeps its tree position
+  // in both modes so the first send doesn't remount it (focus and attachments stay).
+  const showLanding = isEmpty && !isHistoryLoading;
+  // The layout follows `showLanding` one commit late so leaving the landing can be
+  // wrapped in a view transition: the named composer then glides to the dock
+  // instead of snapping. Only the exit caused by a send is animated (the chat is
+  // running then); a history load resolving on refresh or thread switch also flips
+  // `showLanding` false and must snap, or the composer visibly slides on every load.
+  const [landingShown, setLandingShown] = useState(showLanding);
+  useEffect(() => {
+    if (landingShown === showLanding) return;
+    if (showLanding || !isRunning) {
+      setLandingShown(showLanding);
+      return;
+    }
+    startViewTransition(() => setLandingShown(false));
+  }, [showLanding, landingShown, isRunning]);
+
   return (
     <ComposerAttachmentsProvider>
-      <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
+      <ChatShell
+        className="h-full"
+        scroller={{
+          defaultScrollPosition: 'last-anchor',
+          onReachStart: onLoadPrevious,
+          preserveScrollOnPrepend: Boolean(onLoadPrevious),
+        }}
+        data-testid="thread-wrapper"
+      >
         <ChatShell.Stage>
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
-            <ChatShell.Content>
+            <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
+              {isLoadingPrevious && (
+                <ChatShell.Column
+                  data-testid="thread-history-older-skeleton"
+                  aria-busy="true"
+                  aria-label="Loading older messages"
+                  className="py-3"
+                >
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              )}
               {isEmpty && isHistoryLoading ? (
                 <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
                   <ChatMessagesLoadingSkeleton />
                 </ChatShell.Column>
-              ) : isEmpty ? (
-                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
-              ) : (
+              ) : landingShown ? null : (
                 <ChatShell.Column
                   ref={messagesContainerRef}
                   data-testid="thread-message-column"
@@ -216,19 +257,31 @@ export const Thread = ({
                 </ChatShell.Column>
               )}
             </ChatShell.Content>
-            <ChatShell.Dock>
-              <ChatShell.ScrollButton />
-              <ChatShell.Column className="gap-2 px-2 md:px-2">
-                {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
-                <TaskPanel />
-                <AgentComposer
-                  agentId={agentId}
-                  threadId={threadId}
-                  hasModelList={hasModelList}
-                  hideModelSwitcher={hideModelSwitcher}
-                  runOptionsSlot={runOptionsSlot}
-                  refreshThreadList={refreshThreadList}
-                />
+            <ChatShell.Dock
+              data-testid={landingShown ? 'thread-landing' : undefined}
+              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+            >
+              {landingShown ? null : <ChatShell.ScrollButton />}
+              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+                {landingShown ? (
+                  <ThreadWelcome agentName={agentName} />
+                ) : (
+                  <>
+                    {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                    <TaskPanel />
+                  </>
+                )}
+                <div className={landingShown ? 'starter-prompt' : undefined}>
+                  <AgentComposer
+                    agentId={agentId}
+                    threadId={threadId}
+                    hasModelList={hasModelList}
+                    hideModelSwitcher={hideModelSwitcher}
+                    runOptionsSlot={runOptionsSlot}
+                    refreshThreadList={refreshThreadList}
+                  />
+                </div>
+                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
@@ -238,17 +291,23 @@ export const Thread = ({
   );
 };
 
-export interface ThreadWelcomeProps {
-  agentName?: string;
-  suggestedPrompts?: string[];
-}
-
-const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
   return (
-    <div className="flex w-full grow flex-col items-center pt-[15vh]">
-      <Avatar name={agentName || 'Agent'} size="lg" />
-      <p className="mt-4 font-medium">How can I help you today?</p>
-      <SuggestedPromptList prompts={suggestedPrompts} />
+    <div data-testid="thread-welcome" className="flex w-full flex-col items-center gap-4">
+      <div className="starter-heading">
+        <Avatar name={agentName || 'Agent'} size="lg" />
+      </div>
+      <Txt
+        as="h1"
+        variant="display"
+        tone="muted"
+        className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
+      >
+        <span className="starter-shimmer">
+          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
+          do for you today?
+        </span>
+      </Txt>
     </div>
   );
 };
@@ -369,13 +428,13 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
 
   return (
     <Button
-      variant="default"
+      variant="ghost"
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
+      {isListening ? <CircleStopIcon /> : <Mic />}
     </Button>
   );
 };
@@ -411,9 +470,7 @@ const ComposerActionRow = ({
         <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
-                <ComposerModelSwitcher />
-              </div>
+              <ComposerModelSwitcher />
               <ComposerModelSettings agentId={agentId} />
             </>
           )}
@@ -422,11 +479,11 @@ const ComposerActionRow = ({
       )}
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <ButtonsGroup spacing="close">
+        <div className="flex items-center gap-2">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
           {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </ButtonsGroup>
+        </div>
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
@@ -470,10 +527,9 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
+        <ArrowUp />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
@@ -496,7 +552,7 @@ const CircleStopIcon = () => {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
+      className={quietTextHover}
     >
       <circle cx="12" cy="12" r="10" />
       <rect width="6" height="6" x="9" y="9" rx="1" />

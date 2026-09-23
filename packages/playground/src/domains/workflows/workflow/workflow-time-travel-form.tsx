@@ -1,15 +1,17 @@
-import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import CodeMirror from '@uiw/react-codemirror';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useId, useMemo, useState } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import { WorkflowRunContext } from '../context/workflow-run-context';
@@ -17,7 +19,7 @@ import { WorkflowInputData } from './workflow-input-data';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
-const buttonClass = 'text-neutral3 hover:text-neutral6';
+const buttonClass = quietTextHover;
 
 export type WorkflowTimeTravelFormProps = {
   stepKey: string;
@@ -52,7 +54,7 @@ const JsonField = ({
   helperText?: string;
   exampleCode?: string;
 }) => {
-  const theme = useCodemirrorTheme();
+  const fieldName = useId();
   const { handleCopy } = useCopyToClipboard({ text: value });
   const { handleCopy: handleCopyExample } = useCopyToClipboard({ text: exampleCode ?? '{}' });
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -81,9 +83,9 @@ const JsonField = ({
   return (
     <>
       {isExampleOpen && (
-        <div className="border-border1 bg-surface3 space-y-2 rounded-lg border p-3">
+        <div className={cn(raisedSurfaceStyle, 'space-y-2 rounded-lg p-3')}>
           <div className="flex items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="text-neutral3">
+            <Txt as="p" variant="caption" tone="muted">
               Example {label}
             </Txt>
             <Tooltip>
@@ -102,22 +104,24 @@ const JsonField = ({
               <TooltipContent>Copy example JSON</TooltipContent>
             </Tooltip>
           </div>
-          <CodeMirror
+          <CodeEditor
             value={exampleCode}
-            theme={theme}
-            extensions={[jsonLanguage]}
-            className="bg-surface3 h-[150px] w-full overflow-scroll overflow-y-scroll rounded-lg p-3"
+            language="json"
+            editable={false}
+            showCopyButton={false}
+            aria-label={`Example ${label}`}
+            className="h-[150px] w-full"
           />
         </div>
       )}
-      <Collapsible className="border-border1 bg-surface3 rounded-lg border" open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible className={cn(raisedSurfaceStyle, 'rounded-lg')} open={isOpen} onOpenChange={setIsOpen}>
         <div className="flex w-full items-center justify-between px-3">
           <div>
-            <Txt as="label" variant="ui-md" className="text-neutral3">
+            <FieldBlock.Label name={fieldName} size="bigger">
               {label}
-            </Txt>
+            </FieldBlock.Label>
             {helperText && (
-              <Txt variant="ui-xs" className="text-neutral3">
+              <Txt variant="meta" tone="muted">
                 {helperText}
               </Txt>
             )}
@@ -173,19 +177,18 @@ const JsonField = ({
         </div>
 
         <CollapsibleContent className="space-y-2">
-          <CodeMirror
+          <CodeEditor
+            id={`input-${fieldName}`}
             value={value}
             onChange={onChange}
-            theme={theme}
-            extensions={[jsonLanguage]}
-            className="bg-surface3 h-[260px] overflow-hidden overflow-y-scroll rounded-lg p-3"
+            language="json"
+            showCopyButton={false}
+            aria-invalid={fieldError ? true : undefined}
+            aria-describedby={fieldError ? fieldErrorId(fieldName) : undefined}
+            className="h-[260px]"
           />
 
-          {fieldError && (
-            <Txt variant="ui-sm" className="text-accent2">
-              {fieldError}
-            </Txt>
-          )}
+          {fieldError && <FieldBlock.ErrorMsg name={fieldName}>{fieldError}</FieldBlock.ErrorMsg>}
         </CollapsibleContent>
       </Collapsible>
     </>
@@ -286,10 +289,10 @@ export const WorkflowTimeTravelForm = ({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Txt as="p" variant="ui-lg" className="text-neutral3">
+          <Txt as="p" variant="heading" tone="muted">
             Input data
           </Txt>
-          <Txt variant="ui-xs" className="text-neutral3">
+          <Txt variant="meta" tone="muted">
             Step: {stepKey}
           </Txt>
         </div>
@@ -349,9 +352,9 @@ export const WorkflowTimeTravelForm = ({
               </>
             )}
             {formError && (
-              <Txt variant="ui-sm" className="text-accent2">
-                {formError}
-              </Txt>
+              <div role="alert">
+                <Notice variant="destructive">{formError}</Notice>
+              </div>
             )}
           </div>
         </WorkflowInputData>
