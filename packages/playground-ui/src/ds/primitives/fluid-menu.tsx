@@ -13,17 +13,21 @@ import { cn } from '@/lib/utils';
  *
  * Usage inside a popup component:
  *
- *   const menu = useFluidMenu();
- *   <Popup {...menu.getContainerProps(props, ref)} className={cn(menuPopupClass, menu.containerClassName, className)}>
- *     <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
- *   </Popup>
+ * const menu = useFluidMenu();
+ * <Popup {...menu.getContainerProps(props, ref)} className={cn(menuPopupClass, menu.containerClassName, className)}>
+ * <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+ * </Popup>
  *
  * and on each row: `ref={useFluidMenuItemRef(forwardedRef)}`.
  *
  * The keyboard path stays honest: the library sets `activeAttr` on the row it
  * considers highlighted (Base UI: `data-highlighted`, cmdk: `data-selected`),
- * and the item hook mirrors that onto the fluid highlight, so arrow keys move
- * the same surface the mouse does.
+ * or moves focus onto it (roving-focus lists), and the item hook mirrors that
+ * onto the fluid highlight, so arrow keys move the same surface the mouse does.
+ *
+ * A row whose submenu is open (`data-popup-open`) holds the highlight once the
+ * pointer leaves for the submenu, so the path to the open submenu stays lit
+ * on the one surface instead of a second background painted by the row.
  */
 type FluidMenuContextValue = {
   registerItem: UseFluidHoverReturn['registerItem'];
@@ -31,9 +35,12 @@ type FluidMenuContextValue = {
   activeAttr: string;
   allocateIndex: () => number;
   releaseIndex: (index: number) => void;
+  setHeld: (index: number, held: boolean) => void;
 };
 
-const FluidMenuContext = React.createContext<FluidMenuContextValue | null>(null);
+const POPUP_OPEN_ATTR = 'data-popup-open';
+
+const FluidMenuContext = React.createContext<FluidMenuContextValue | undefined>(undefined);
 
 // Base UI sets a bare `data-disabled`; cmdk sets `data-disabled="true" | "false"`;
 // native controls (DataList rows) use the `disabled` property.
@@ -41,7 +48,7 @@ function isMenuItemDisabled(element: HTMLElement) {
   return (
     isAttrActive(element, 'data-disabled') ||
     element.getAttribute('aria-disabled') === 'true' ||
-    (element as HTMLButtonElement).disabled === true
+    ('disabled' in element && element.disabled === true)
   );
 }
 
@@ -81,6 +88,7 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
   const containerRef = React.useRef<T>(null);
   const hover = useFluidHover(containerRef, { isItemDisabled: isMenuItemDisabled, gapClick });
   const counterRef = React.useRef(0);
+  const heldIndexRef = React.useRef<number | undefined>(undefined);
   // Indices released by unmounted rows, reused first so virtualized lists that
   // mount/unmount rows while scrolling keep the index space bounded.
   const freeRef = React.useRef<number[]>([]);
@@ -96,6 +104,10 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
       allocateIndex: () => freeRef.current.pop() ?? counterRef.current++,
       releaseIndex: index => {
         freeRef.current.push(index);
+      },
+      setHeld: (index, held) => {
+        if (held) heldIndexRef.current = index;
+        else if (heldIndexRef.current === index) heldIndexRef.current = undefined;
       },
     }),
     [registerItem, setActiveIndex, activeAttr],
@@ -114,18 +126,19 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
       },
       onMouseEnter: e => {
         own.onMouseEnter?.(e);
-        handlers.onMouseEnter();
+        handlers.onMouseEnter(e);
       },
       onMouseLeave: e => {
         own.onMouseLeave?.(e);
-        handlers.onMouseLeave();
+        handlers.onMouseLeave(e);
+        if (heldIndexRef.current !== undefined) setActiveIndex(heldIndexRef.current);
       },
       onClick: e => {
         own.onClick?.(e);
         handlers.onClick(e);
       },
     }),
-    [handlers],
+    [handlers, setActiveIndex],
   );
 
   return { hover, context, containerClassName: 'relative isolate', getContainerProps };
@@ -148,7 +161,7 @@ export function FluidMenuItems({
 }) {
   return (
     <FluidMenuContext.Provider value={menu.context}>
-      <FluidHoverHighlight hover={menu.hover} className={cn('-z-1 rounded-lg bg-foreground/10', className)} />
+      <FluidHoverHighlight hover={menu.hover} className={cn('-z-1 rounded-lg bg-fill', className)} />
       {children}
     </FluidMenuContext.Provider>
   );
@@ -159,10 +172,10 @@ export function FluidMenuItems({
  * state and mirrors the library's highlighted attribute onto it. A no-op
  * outside a provider, so rows still render standalone.
  */
-export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef: React.ForwardedRef<T>) {
+export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef?: React.ForwardedRef<T>) {
   const ctx = React.useContext(FluidMenuContext);
-  const indexRef = React.useRef<number | null>(null);
-  const observerRef = React.useRef<MutationObserver | null>(null);
+  const indexRef = React.useRef<number | undefined>(undefined);
+  const unsubscribeRef = React.useRef<(() => void) | undefined>(undefined);
 
   return React.useCallback(
     (element: T | null) => {
@@ -170,32 +183,37 @@ export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef: React.F
       else if (forwardedRef) forwardedRef.current = element;
 
       if (!ctx) return;
-      const { registerItem, setActiveIndex, activeAttr, allocateIndex, releaseIndex } = ctx;
-      observerRef.current?.disconnect();
-      observerRef.current = null;
+      const { registerItem, setActiveIndex, activeAttr, allocateIndex, releaseIndex, setHeld } = ctx;
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = undefined;
 
       if (!element) {
-        if (indexRef.current !== null) {
+        if (indexRef.current !== undefined) {
+          setHeld(indexRef.current, false);
           registerItem(indexRef.current, null);
           releaseIndex(indexRef.current);
-          indexRef.current = null;
+          indexRef.current = undefined;
         }
         return;
       }
 
-      if (indexRef.current === null) indexRef.current = allocateIndex();
+      indexRef.current ??= allocateIndex();
       const index = indexRef.current;
       registerItem(index, element);
 
       const sync = () => {
+        setHeld(index, element.hasAttribute(POPUP_OPEN_ATTR));
         if (isAttrActive(element, activeAttr)) setActiveIndex(index);
       };
+      const light = () => setActiveIndex(index);
       sync();
-      if (typeof MutationObserver !== 'undefined') {
-        const observer = new MutationObserver(sync);
-        observer.observe(element, { attributes: true, attributeFilter: [activeAttr] });
-        observerRef.current = observer;
-      }
+      element.addEventListener('focusin', light);
+      const observer = typeof MutationObserver === 'undefined' ? undefined : new MutationObserver(sync);
+      observer?.observe(element, { attributes: true, attributeFilter: [activeAttr, POPUP_OPEN_ATTR] });
+      unsubscribeRef.current = () => {
+        observer?.disconnect();
+        element.removeEventListener('focusin', light);
+      };
     },
     [ctx, forwardedRef],
   );

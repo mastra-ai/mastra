@@ -7,6 +7,7 @@ import type {
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
+  TraceQueryTenantScope,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -367,12 +368,35 @@ function compilePostgresTraceScope(
   schema: string,
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
+  scope: TraceQueryTenantScope | undefined,
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
   const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
   const values: unknown[] = [selection.timeRange.from, selection.timeRange.to];
+  // The delta window binds fixed positions $3..$5, so it must be pushed before the
+  // dynamically numbered tenant scope values.
+  const deltaConditions: string[] = [];
+  if (deltaWindow) {
+    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
+    // Restrict candidates before materializing roots and their related records.
+    // latestRootPredicate must still see replacements outside this interval.
+    deltaConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
+  }
+  // Tenant scope is ANDed into every scan (roots and related signals) so a related
+  // row from another tenant sharing a traceId can never match.
+  const scopeConditions: string[] = [];
+  if (scope) {
+    values.push(scope.organizationId);
+    scopeConditions.push(`"organizationId" = $${values.length}`);
+    if (scope.resourceId !== undefined) {
+      values.push(scope.resourceId);
+      scopeConditions.push(`"resourceId" = $${values.length}`);
+    }
+  }
+  const scopeSql = (alias: string): string =>
+    scopeConditions.map(condition => `\n      AND ${alias}.${condition}`).join('');
   const rootConditions = [
     `r."parentSpanId" IS NULL`,
     latestRootPredicate(spanTable),
@@ -380,13 +404,9 @@ function compilePostgresTraceScope(
     `r."endedAt" IS NOT NULL`,
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
+    ...deltaConditions,
+    ...scopeConditions.map(condition => `r.${condition}`),
   ];
-  if (deltaWindow) {
-    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
-    // Restrict candidates before materializing roots and their related records.
-    // latestRootPredicate must still see replacements outside this interval.
-    rootConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
-  }
   const ctes = [
     `root_scope AS MATERIALIZED (
     SELECT *
@@ -420,7 +440,7 @@ function compilePostgresTraceScope(
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestSpanPredicate(spanTable)}
+      AND ${latestSpanPredicate(spanTable)}${scopeSql('s')}
   )`);
   }
   if (relationCollections.has('scores')) {
@@ -439,7 +459,7 @@ function compilePostgresTraceScope(
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestScorePredicate(scoreTable)}
+      AND ${latestScorePredicate(scoreTable)}${scopeSql('s')}
   )`);
   }
   if (relationCollections.has('feedback')) {
@@ -460,7 +480,7 @@ function compilePostgresTraceScope(
     FROM ${feedbackTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
-      AND ${latestFeedbackPredicate(feedbackTable)}
+      AND ${latestFeedbackPredicate(feedbackTable)}${scopeSql('s')}
   )`);
   }
 
@@ -481,7 +501,7 @@ export function compilePostgresTraceQuery(
       throw new Error('Delta query requires a cursor and safe horizon');
     deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
   }
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, deltaWindow);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, plan.scope, deltaWindow);
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -570,7 +590,7 @@ LIMIT $${values.length}`,
 export function compilePostgresThreadQuery(schema: string, plan: TrustedThreadQueryPlan): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections, plan.scope);
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -639,7 +659,7 @@ export function compilePostgresTraceQueryObservedFields(
   schema: string,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledPostgresTraceQuery {
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set());
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set(), plan.scope);
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower($${searchParameter})) > 0` : '';
   if (plan.search) values.push(plan.search);
@@ -667,7 +687,12 @@ export function compilePostgresTraceQueryValues(
   schema: string,
   plan: TrustedTraceQueryValuesPlan,
 ): CompiledPostgresTraceQuery {
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, discoveryCollections(plan.predicateScope));
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    plan,
+    discoveryCollections(plan.predicateScope),
+    plan.scope,
+  );
   let field: string;
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;

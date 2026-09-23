@@ -335,6 +335,7 @@ export interface SerializedSkill {
 
 export interface SerializedTool {
   id: string;
+  title?: string;
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
@@ -3668,7 +3669,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
-      const identifier = path ? decodeURIComponent(path) : skillName;
+      const identifier = path ?? skillName;
 
       // Get the skill from the agent (searches both inline and workspace skills)
       const skill = await agent.getSkill(identifier, { requestContext });

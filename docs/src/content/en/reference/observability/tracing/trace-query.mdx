@@ -12,6 +12,12 @@ Use `queryTraces()` or `POST /api/observability/traces/query` to find completed 
 
 Both endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query or thread-query operation.
 
+:::warning[Thread grouping is deprecated]
+
+The `group` option remains supported until the next major release. Use [`queryTraceThreads()`](/reference/client-js/observability) to retrieve matching thread identities in new code.
+
+:::
+
 ## Query traces with the client SDK
 
 Pass the query to `queryTraces()`:
@@ -244,7 +250,8 @@ Both routes require `observability:read` and use the configured observability st
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
-| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
+| `group` | No | **Deprecated.** Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. Use `queryTraceThreads()` for new code. |
+| `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group` or in delta mode. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
 | `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
 | `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
@@ -536,6 +543,28 @@ An ungrouped query returns only lightweight completed traces:
 }
 ```
 
+A grouped trace query still returns distinct non-null thread IDs in ascending order. Grouping remains supported until the next major release:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+// Deprecated
+const legacyResult = await mastraClient.queryTraces({
+  timeRange,
+  group: { by: ['threadId'] },
+})
+// { groups: [{ threadId: 'thread-123' }], page: { next: null } }
+
+// Replacement
+const result = await mastraClient.queryTraceThreads({
+  traces: { timeRange },
+})
+// { threads: [{ threadId: 'thread-123' }], page: { next: null } }
+```
+
 A thread query returns distinct non-null thread IDs in ordinal ascending order:
 
 ```json
@@ -618,6 +647,20 @@ Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-b
 Keyset cursors are bound to the operation, accepted normalized query, and ordering. Reusing a keyset cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable.
 
 Numbered-page handoff cursors and delta cursors also bind the authorization state. Changes to the caller's roles or permissions invalidate these cursors and return `409`. If a delta poll returns `409`, reload the numbered pages and resume polling with the new `deltaCursor`. A malformed cursor returns `400`.
+
+### Trusted tenant scope
+
+Hosts that serve more than one tenant supply a trusted scope outside the query document. The server reads the reserved `organizationId` request-context key, which only server-side authentication can set, and passes `{ organizationId }` to the planner. The scope is carried on the trusted plan and ANDed into every scan: current roots, related spans, scores, feedback, and both discovery routes. A related record from another tenant that shares a `traceId` never qualifies a trace.
+
+Hosts that call storage directly can pass a fuller scope to `planTraceQuery()`, `planThreadQuery()`, `planTraceQueryObservedFields()`, and `planTraceQueryValues()`:
+
+```typescript
+const plan = planTraceQuery(parseTraceQueryRequest(request), {
+  scope: { organizationId: 'org_123', resourceId: 'project_456' },
+})
+```
+
+`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `organizationId` or `projectId` in predicates. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 

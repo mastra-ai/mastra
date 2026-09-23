@@ -67,11 +67,11 @@ export function HorizontalBars({
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-ui-sm text-muted-foreground">{seg.label}</span>
+              <span className="text-caption text-muted-foreground">{seg.label}</span>
             </div>
           ))}
         </div>
-        <span className="text-ui-sm text-placeholder shrink-0 pr-2">Total</span>
+        <span className="shrink-0 pr-2 text-caption text-placeholder">Total</span>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
@@ -148,7 +148,7 @@ export function HorizontalBars({
                     darkLabelOnFill && 'dark:[clip-path:inset(0_0_0_var(--bar-width))]',
                   )}
                 >
-                  <span className="text-ui-sm text-muted-foreground absolute inset-y-0 left-2.5 flex items-center truncate">
+                  <span className="absolute inset-y-0 left-2.5 flex items-center truncate text-caption text-muted-foreground">
                     {d.name}
                   </span>
                 </div>
@@ -157,13 +157,13 @@ export function HorizontalBars({
                     aria-hidden
                     className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-(--bar-width) overflow-hidden dark:block"
                   >
-                    <span className="text-ui-sm text-placeholder absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap">
+                    <span className="absolute inset-y-0 left-2.5 flex items-center text-caption whitespace-nowrap text-placeholder">
                       {d.name}
                     </span>
                   </div>
                 )}
               </div>
-              <span className="text-ui-md text-muted-foreground shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
+              <span className="shrink-0 pr-3 text-body text-muted-foreground tabular-nums">{fmt(total)}</span>
             </>
           );
 
@@ -172,7 +172,7 @@ export function HorizontalBars({
               <LinkComponent
                 key={d.name}
                 href={d.href}
-                className="hover:bg-surface3 focus-visible:bg-surface3 flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
+                className="flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none hover:bg-fill-subtle focus-visible:bg-fill-subtle"
               >
                 {rowBody}
               </LinkComponent>

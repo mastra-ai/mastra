@@ -245,6 +245,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
+        'trace-query-tenant-scope',
       ] as const;
     }
 
@@ -256,6 +257,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
+      'trace-query-tenant-scope',
     ] as const;
   }
 

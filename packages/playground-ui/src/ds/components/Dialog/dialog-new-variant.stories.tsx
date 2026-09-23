@@ -64,7 +64,7 @@ function ConfirmationExample({
 
   return (
     <div className="flex max-w-sm flex-col gap-4">
-      <p className="text-ui-sm text-muted-foreground">Factory confirmation preview. No data is deleted.</p>
+      <p className="text-caption text-muted-foreground">Factory confirmation preview. No data is deleted.</p>
       <Dialog variant="new" intent={intent} pending={pending} open={open} onOpenChange={setOpen}>
         <DialogTrigger render={<Button>Open dialog</Button>} />
         <DialogContent>
@@ -97,7 +97,7 @@ function ConfirmationExample({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <p role="status" className="text-ui-sm text-muted-foreground">
+      <p role="status" className="text-caption text-muted-foreground">
         {confirmed ? 'Confirmed. Preview complete.' : 'Waiting for confirmation.'}
       </p>
     </div>
@@ -118,7 +118,7 @@ const meta = {
   },
   argTypes: {
     holdSeconds: { control: { type: 'number', min: 0.1, step: 0.1 } },
-    buttonSize: { control: 'inline-radio', options: ['xs', 'sm', 'md', 'lg'] },
+    buttonSize: { control: 'inline-radio', options: ['sm', 'md', 'lg'] },
     intent: { control: 'inline-radio', options: ['default', 'destructive'] },
     confirmation: { control: 'inline-radio', options: ['click', 'hold'] },
   },
@@ -241,7 +241,7 @@ function FactoryForm() {
           </form>
         </DialogContent>
       </Dialog>
-      <p role="status" className="text-ui-sm text-muted-foreground">
+      <p role="status" className="text-caption text-muted-foreground">
         {saved ? `Factory renamed to ${saved}.` : 'No changes saved.'}
       </p>
     </div>

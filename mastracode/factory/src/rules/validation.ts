@@ -236,9 +236,24 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'upsertLinkedWorkItem': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'claimKey', 'title', 'url', 'stage', 'metadata'],
+        [
+          'type',
+          'idempotencyKey',
+          'board',
+          'source',
+          'sourceKey',
+          'claimKey',
+          'title',
+          'url',
+          'stage',
+          'skipRules',
+          'metadata',
+        ],
         'Factory linked work item decision',
       );
+      if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
+      }
       const claimKey = optionalBoundedString(
         value.claimKey,
         'Factory linked work item claimKey',
@@ -259,6 +274,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
+        ...(value.skipRules === true ? { skipRules: true } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }

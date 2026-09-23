@@ -354,25 +354,34 @@ export function createSourceControlTools({
       id: 'source_control_create_diff_comment',
       description:
         'Create a line-anchored review comment or reply to an existing diff discussion. Use replyToId alone for a reply; otherwise provide commitId, path, line, and side.',
-      inputSchema: z.union([
-        changeRequestSchema.extend({
+      // A root-level union is not representable as provider function parameters, which must be
+      // an object schema, so both modes share one object shape and a refinement.
+      inputSchema: changeRequestSchema
+        .extend({
           body: z.string().trim().min(1),
-          replyToId: z.string().trim().min(1),
-        }),
-        changeRequestSchema
-          .extend({
-            body: z.string().trim().min(1),
-            commitId: z.string().trim().min(1),
-            path: z.string().trim().min(1),
-            line: z.number().int().positive(),
-            side: z.enum(['left', 'right']),
-            startLine: z.number().int().positive().optional(),
-            startSide: z.enum(['left', 'right']).optional(),
-          })
-          .refine(input => (input.startLine === undefined) === (input.startSide === undefined), {
-            message: 'startLine and startSide must be provided together.',
-          }),
-      ]),
+          replyToId: z.string().trim().min(1).optional(),
+          commitId: z.string().trim().min(1).optional(),
+          path: z.string().trim().min(1).optional(),
+          line: z.number().int().positive().optional(),
+          side: z.enum(['left', 'right']).optional(),
+          startLine: z.number().int().positive().optional(),
+          startSide: z.enum(['left', 'right']).optional(),
+        })
+        .refine(
+          input => {
+            const anchorFields = [input.commitId, input.path, input.line, input.side];
+            const anchor = anchorFields.every(field => field !== undefined);
+            const reply = input.replyToId !== undefined;
+            return (
+              (reply ? anchorFields.every(field => field === undefined) : anchor) &&
+              (input.startLine === undefined) === (input.startSide === undefined)
+            );
+          },
+          {
+            message:
+              'Provide replyToId alone to reply to a diff thread, or commitId, path, line, and side to start one. startLine and startSide must be provided together.',
+          },
+        ),
       execute: async input => {
         const target = await withTarget();
         const base = {
@@ -380,8 +389,16 @@ export function createSourceControlTools({
           pullRequestId: changeRequestId(input.changeRequestId),
           body: input.body,
         };
-        if ('replyToId' in input) {
+        if (input.replyToId !== undefined) {
           return target.provider.versionControl.createReviewComment({ ...base, replyToId: input.replyToId });
+        }
+        if (
+          input.commitId === undefined ||
+          input.path === undefined ||
+          input.line === undefined ||
+          input.side === undefined
+        ) {
+          throw new Error('commitId, path, line, and side are required to start a new diff thread.');
         }
         return target.provider.versionControl.createReviewComment({
           ...base,

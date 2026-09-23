@@ -14,6 +14,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 interface NoiseDetailPanelProps {
   entityId: string;
@@ -67,7 +69,7 @@ export function NoiseDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-border1 border-b">
+        <DrawerHeader className="border-b border-border">
           <DrawerTitle>Noise</DrawerTitle>
           <DrawerDescription className="sr-only">Noise details for the {signalName} trace signal</DrawerDescription>
         </DrawerHeader>
@@ -80,20 +82,18 @@ export function NoiseDetailPanel({
               <section aria-labelledby="noise-summary-heading">
                 <h2
                   id="noise-summary-heading"
-                  className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                  className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
                 >
                   Summary
                 </h2>
-                <p className="text-foreground text-ui-md mt-3">
+                <p className="mt-3 text-body text-foreground">
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
                 </p>
-                {noiseQuery.isPending && (
-                  <p className="text-muted-foreground text-ui-md mt-4">Loading noise details…</p>
-                )}
-                {noiseQuery.isError && <p className="text-ui-md mt-4 text-red-500">Unable to load noise details.</p>}
+                {noiseQuery.isPending && <p className="mt-4 text-body text-muted-foreground">Loading noise details…</p>}
+                {noiseQuery.isError && <p className="mt-4 text-body text-red-500">Unable to load noise details.</p>}
                 {noiseQuery.data && (
-                  <p className="text-foreground text-ui-md mt-4 font-mono tabular-nums">
+                  <p className="mt-4 font-mono text-body text-foreground tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
@@ -105,16 +105,16 @@ export function NoiseDetailPanel({
               <section aria-labelledby="noise-examples-heading">
                 <h2
                   id="noise-examples-heading"
-                  className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                  className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
                 >
                   Example summaries
                 </h2>
-                {examplesQuery.isPending && <p className="text-muted-foreground text-ui-md mt-3">Loading examples…</p>}
-                {examplesQuery.isError && <p className="text-ui-md mt-3 text-red-500">Unable to load examples.</p>}
+                {examplesQuery.isPending && <p className="mt-3 text-body text-muted-foreground">Loading examples…</p>}
+                {examplesQuery.isError && <p className="mt-3 text-body text-red-500">Unable to load examples.</p>}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (
-                      <p className="text-muted-foreground text-ui-md mt-3">No noise examples in this snapshot.</p>
+                      <p className="mt-3 text-body text-muted-foreground">No noise examples in this snapshot.</p>
                     ) : (
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (
@@ -122,7 +122,10 @@ export function NoiseDetailPanel({
                             <button
                               type="button"
                               aria-label={`View trace insight for ${example.signalText}`}
-                              className="border-border1 bg-surface3 text-foreground hover:bg-surface5 text-ui-md w-full cursor-pointer rounded-md border p-3 text-left"
+                              className={cn(
+                                raisedSurfaceStyle,
+                                'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
+                              )}
                               onClick={() => setInsightTraceId(example.traceId)}
                             >
                               {example.signalText}

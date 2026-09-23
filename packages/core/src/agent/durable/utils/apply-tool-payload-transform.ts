@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../../../logger';
 import { transformToolPayloadForTargets, withToolPayloadTransformMetadata } from '../../../tools/payload-transform';
+import { withToolTitle } from '../../../tools/tool-title';
 import type { CoreTool, ToolPayloadTransformPolicy } from '../../../tools/types';
 
 /**
@@ -38,6 +39,7 @@ export async function applyToolPayloadTransformToChunk<TChunk extends { type: st
   }
 
   const tool = tools?.[toolName];
+  chunk = withToolTitle(chunk, tool);
   const source = {
     policy,
     toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,

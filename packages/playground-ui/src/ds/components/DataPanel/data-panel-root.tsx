@@ -65,8 +65,8 @@ export function DataPanelRoot({
       swipeDirection="right"
     >
       <DrawerPrimitive.Portal>
-        {/* Lighter than the shared `--overlay`: a side panel should keep the page beneath readable. */}
-        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-overlay/30 fixed inset-0 z-50" />
+        {/* Lighter than the shared `--scrim`: a side panel should keep the page beneath readable. */}
+        <DrawerPrimitive.Backdrop className="drawer-backdrop fixed inset-0 z-50 bg-scrim/30" />
         <DrawerPrimitive.Viewport className="fixed inset-0 z-50">
           <DrawerPrimitive.Popup
             data-slot="data-panel-popup"
@@ -97,7 +97,7 @@ export function DataPanelRoot({
               <DrawerPrimitive.Content
                 render={<section />}
                 className={cn(
-                  'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border1 bg-surface2',
+                  'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-background',
                   className,
                 )}
               >

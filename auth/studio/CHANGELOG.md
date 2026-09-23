@@ -1,5 +1,17 @@
 # @mastra/auth-studio
 
+## 1.3.7
+
+### Patch Changes
+
+- Improved Studio authentication portability by hashing credential cache keys with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 1.3.7-alpha.0
+
+### Patch Changes
+
+- Improved Studio authentication portability by hashing credential cache keys with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
 ## 1.3.6
 
 ### Patch Changes

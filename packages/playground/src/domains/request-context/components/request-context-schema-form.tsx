@@ -44,7 +44,7 @@ export const RequestContextSchemaForm = ({ labelTooltip, requestContextSchema }:
   if (!zodSchema) {
     return (
       <div className="text-muted-foreground">
-        <Txt variant="ui-sm">Failed to parse request context schema</Txt>
+        <Txt variant="caption">Failed to parse request context schema</Txt>
       </div>
     );
   }

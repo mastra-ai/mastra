@@ -13,12 +13,12 @@ export function DataListNoMatch({
   return (
     <div
       className={cn(
-        'col-span-full flex flex-col items-center justify-center gap-2 rounded-lg bg-surface2 py-8 text-muted-foreground',
+        'col-span-full flex flex-col items-center justify-center gap-2 rounded-lg bg-background py-8 text-muted-foreground',
         className,
       )}
       {...props}
     >
-      <p className="text-ui-md">{message}</p>
+      <p className="text-body">{message}</p>
     </div>
   );
 }

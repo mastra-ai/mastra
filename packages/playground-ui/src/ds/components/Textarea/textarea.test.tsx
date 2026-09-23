@@ -10,28 +10,10 @@ afterEach(() => {
 });
 
 describe('Textarea', () => {
-  it('supports an outline variant without an initial filled background', () => {
-    render(<Textarea variant="outline" placeholder="Description" />);
-
-    const textarea = screen.getByPlaceholderText('Description');
-    expect(textarea.className).toContain('bg-transparent');
-    expect(textarea.className).toContain('rounded-xl');
-    expect(textarea.className).not.toContain('bg-foreground/10');
-  });
-
-  it('uses the shared foreground text color at rest', () => {
-    render(<Textarea placeholder="Description" />);
-
-    const cls = screen.getByPlaceholderText('Description').className;
-    expect(cls).toContain('text-foreground');
-    expect(cls).not.toContain('text-neutral');
-  });
-
   it.each([
-    ['xs', 'text-ui-xs'],
-    ['sm', 'text-ui-sm'],
-    ['md', 'text-ui-smd'],
-    ['lg', 'text-ui-md'],
+    ['sm', 'text-caption'],
+    ['md', 'text-body-sm'],
+    ['lg', 'text-body'],
   ] as const)('reads at the %s size', (size, expected) => {
     render(<Textarea size={size} placeholder="Description" />);
 
@@ -41,7 +23,7 @@ describe('Textarea', () => {
   it('reads at the medium size by default', () => {
     render(<Textarea placeholder="Description" />);
 
-    expect(screen.getByPlaceholderText('Description').className).toContain('text-ui-smd');
+    expect(screen.getByPlaceholderText('Description').className).toContain('text-body-sm');
   });
 
   it('drops its own chrome in the unstyled variant', () => {
@@ -50,18 +32,11 @@ describe('Textarea', () => {
     expect(screen.getByPlaceholderText('Description').className).not.toContain('rounded-xl');
   });
 
-  it('marks itself invalid and outlines the error', () => {
+  it('marks itself invalid', () => {
     render(<Textarea error placeholder="Description" />);
 
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.className).toContain('border-destructive');
-  });
-
-  it('carries no error outline when it is valid', () => {
-    render(<Textarea placeholder="Description" />);
-
-    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-destructive');
   });
 
   it('keeps a caller class alongside its own', () => {

@@ -1,17 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { DatasetReview, type ReviewListFilters } from '@/domains/review/components/dataset-review';
 import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
 import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
 import { useLinkComponent } from '@/lib/framework';
+
+const crumbs = [navCrumb('/experiments'), navCrumb('/experiments/review-queue')];
 
 const EXPERIMENT_PARAM = 'experiment';
 const REVIEW_PARAM = 'review';
@@ -61,57 +65,64 @@ function ReviewQueuePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Review Queue</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="experiments" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Review Queue</h1>
+        <PermissionDenied variant="fill" resource="experiments" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load experiments" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Review Queue</h1>
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load experiments"
+          descriptionSlot={error.message}
+        />
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
-      <DatasetReview
-        datasetId={selected?.datasetId ?? undefined}
-        experimentId={selectedId ?? undefined}
-        targetType={targetType}
-        targetId={targetId}
-        featuredItemId={featuredResultId}
-        renderFilters={list => (
-          <ReviewQueueFilterBar
-            targetType={targetType}
-            targetId={targetId}
-            experimentId={selectedId ?? ''}
-            status={list.status}
-            tag={list.tag}
-            experiments={data?.experiments ?? []}
-            tagOptions={list.tagOptions}
-            onChange={next => handleFiltersChange(next, list)}
-          />
-        )}
-        toolbarEnd={
-          selectedId ? (
-            <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
-              See experiment
-            </Button>
-          ) : undefined
-        }
-      />
-    </PageLayout>
+    <DatasetReview
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      datasetId={selected?.datasetId ?? undefined}
+      experimentId={selectedId ?? undefined}
+      targetType={targetType}
+      targetId={targetId}
+      featuredItemId={featuredResultId}
+      renderFilters={list => (
+        <ReviewQueueFilterBar
+          targetType={targetType}
+          targetId={targetId}
+          experimentId={selectedId ?? ''}
+          status={list.status}
+          tag={list.tag}
+          experiments={data?.experiments ?? []}
+          tagOptions={list.tagOptions}
+          onChange={next => handleFiltersChange(next, list)}
+        />
+      )}
+      toolbarEnd={
+        selectedId ? (
+          <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
+            See experiment
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }
 

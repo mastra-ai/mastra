@@ -40,7 +40,6 @@ export function MemoryPage() {
         {!isEnabled && (
           <div className="py-8">
             <EmptyState
-              iconSlot={<MemoryIcon height={40} width={40} />}
               titleSlot="Memory is not enabled"
               descriptionSlot="Enable memory to store conversation history, add semantic recall for relevant retrieval, or observational memory for long-term learning."
               actionSlot={
@@ -107,7 +106,7 @@ function LastMessagesEntity() {
       </div>
 
       {lastMessagesEnabled && (
-        <div className="bg-surface2 border-border1 border-t p-4">
+        <div className="border-t border-border bg-background p-4">
           <Controller
             name="memory.lastMessages"
             control={control}
@@ -123,7 +122,7 @@ function LastMessagesEntity() {
                   field.onChange(value === '' ? false : parseInt(value, 10));
                 }}
                 placeholder="40"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             )}
@@ -162,7 +161,7 @@ function SemanticRecallEntity() {
       </div>
 
       {semanticRecallEnabled && (
-        <div className="bg-surface2 border-border1 grid grid-cols-2 gap-4 border-t p-4">
+        <div className="grid grid-cols-2 gap-4 border-t border-border bg-background p-4">
           <Controller
             name="memory.vector"
             control={control}
@@ -171,9 +170,9 @@ function SemanticRecallEntity() {
                 <Label htmlFor="memory-vector" className="text-foreground">
                   Vector Store
                 </Label>
-                <span className="text-placeholder text-ui-sm">Select a vector store for semantic search</span>
+                <span className="text-caption text-placeholder">Select a vector store for semantic search</span>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                  <SelectTrigger id="memory-vector" className="bg-surface3">
+                  <SelectTrigger id="memory-vector" className="bg-card">
                     <SelectValue placeholder="Select a vector store" />
                   </SelectTrigger>
                   <SelectContent>
@@ -196,9 +195,9 @@ function SemanticRecallEntity() {
                 <Label htmlFor="memory-embedder" className="text-foreground">
                   Embedder Model
                 </Label>
-                <span className="text-placeholder text-ui-sm">Select an embedding model for semantic search</span>
+                <span className="text-caption text-placeholder">Select an embedding model for semantic search</span>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                  <SelectTrigger id="memory-embedder" className="bg-surface3">
+                  <SelectTrigger id="memory-embedder" className="bg-card">
                     <SelectValue placeholder="Select an embedder model" />
                   </SelectTrigger>
                   <SelectContent>
@@ -275,7 +274,7 @@ function ObservationalMemoryEntity() {
       </div>
 
       {observationalMemoryEnabled && (
-        <div className="bg-surface2 border-border1 border-t p-4">
+        <div className="border-t border-border bg-background p-4">
           <ObservationalMemoryFields />
         </div>
       )}
@@ -295,7 +294,7 @@ function ObservationalMemoryFields() {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Provider</Label>
-          <span className="text-placeholder text-ui-sm">Provider for the observer and reflector agents</span>
+          <span className="text-caption text-placeholder">Provider for the observer and reflector agents</span>
           <Controller
             name="memory.observationalMemory.model.provider"
             control={control}
@@ -315,7 +314,7 @@ function ObservationalMemoryFields() {
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Model</Label>
-          <span className="text-placeholder text-ui-sm">Model for the observer and reflector agents</span>
+          <span className="text-caption text-placeholder">Model for the observer and reflector agents</span>
           <Controller
             name="memory.observationalMemory.model.name"
             control={control}
@@ -335,11 +334,11 @@ function ObservationalMemoryFields() {
               <Label htmlFor="memory-om-scope" className="text-foreground">
                 Scope
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Whether observations are scoped per thread or shared across all threads for a resource
               </span>
               <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
-                <SelectTrigger id="memory-om-scope" className="bg-surface3">
+                <SelectTrigger id="memory-om-scope" className="bg-card">
                   <SelectValue placeholder="Select scope" />
                 </SelectTrigger>
                 <SelectContent>
@@ -359,7 +358,9 @@ function ObservationalMemoryFields() {
               <Label htmlFor="memory-om-share-budget" className="text-foreground">
                 Share Token Budget
               </Label>
-              <span className="text-placeholder text-ui-sm">Share token budget between observation and reflection</span>
+              <span className="text-caption text-placeholder">
+                Share token budget between observation and reflection
+              </span>
               <Switch
                 id="memory-om-share-budget"
                 checked={field.value ?? false}
@@ -371,10 +372,10 @@ function ObservationalMemoryFields() {
         />
       </div>
 
-      <div className="border-border1 mt-2 border-t pt-4">
+      <div className="mt-2 border-t border-border pt-4">
         <ObserverFields observerProvider={observerProvider} />
       </div>
-      <div className="border-border1 mt-2 border-t pt-4">
+      <div className="mt-2 border-t border-border pt-4">
         <ReflectorFields reflectorProvider={reflectorProvider} />
       </div>
     </div>
@@ -391,7 +392,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Provider Override</Label>
-          <span className="text-placeholder text-ui-sm">Override the default model provider for the observer</span>
+          <span className="text-caption text-placeholder">Override the default model provider for the observer</span>
           <Controller
             name="memory.observationalMemory.observation.model.provider"
             control={control}
@@ -411,7 +412,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Model Override</Label>
-          <span className="text-placeholder text-ui-sm">Override the default model for the observer</span>
+          <span className="text-caption text-placeholder">Override the default model for the observer</span>
           <Controller
             name="memory.observationalMemory.observation.model.name"
             control={control}
@@ -431,7 +432,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-msg-tokens" className="text-foreground">
                 Message Tokens
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Token count of unobserved messages that triggers observation (default: 30000)
               </span>
               <Input
@@ -445,7 +446,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseInt(v, 10));
                 }}
                 placeholder="30000"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -460,7 +461,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-batch" className="text-foreground">
                 Max Tokens Per Batch
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Maximum tokens per batch when observing multiple threads (default: 10000)
               </span>
               <Input
@@ -474,7 +475,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseInt(v, 10));
                 }}
                 placeholder="10000"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -489,7 +490,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-buffer" className="text-foreground">
                 Buffer Tokens
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Token interval for async buffering (fraction of messageTokens or absolute count, empty to use default
                 0.2, set 0 to disable)
               </span>
@@ -509,7 +510,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   }
                 }}
                 placeholder="0.2"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -524,7 +525,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-buf-act" className="text-foreground">
                 Buffer Activation
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Ratio (0-1) of buffered observations to activate (default: 0.8)
               </span>
               <Input
@@ -539,7 +540,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="0.8"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -554,7 +555,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
               <Label htmlFor="memory-om-obs-block" className="text-foreground">
                 Block After
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Multiplier or absolute token count for synchronous blocking (default: 1.2)
               </span>
               <Input
@@ -568,7 +569,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="1.2"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -589,7 +590,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Provider Override</Label>
-          <span className="text-placeholder text-ui-sm">Override the default model provider for the reflector</span>
+          <span className="text-caption text-placeholder">Override the default model provider for the reflector</span>
           <Controller
             name="memory.observationalMemory.reflection.model.provider"
             control={control}
@@ -609,7 +610,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
 
         <div className="flex flex-col gap-1.5">
           <Label className="text-foreground">Model Override</Label>
-          <span className="text-placeholder text-ui-sm">Override the default model for the reflector</span>
+          <span className="text-caption text-placeholder">Override the default model for the reflector</span>
           <Controller
             name="memory.observationalMemory.reflection.model.name"
             control={control}
@@ -629,7 +630,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-obs-tokens" className="text-foreground">
                 Observation Tokens
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Token count of observations that triggers reflection (default: 40000)
               </span>
               <Input
@@ -643,7 +644,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   field.onChange(v === '' ? undefined : parseInt(v, 10));
                 }}
                 placeholder="40000"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -658,7 +659,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-block" className="text-foreground">
                 Block After
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Multiplier or absolute token count for synchronous blocking (default: 1.2)
               </span>
               <Input
@@ -672,7 +673,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="1.2"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -687,7 +688,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-buf-act" className="text-foreground">
                 Buffer Activation
               </Label>
-              <span className="text-placeholder text-ui-sm">
+              <span className="text-caption text-placeholder">
                 Ratio (0-1) controlling when async reflection buffering starts
               </span>
               <Input
@@ -702,7 +703,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="0.8"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>

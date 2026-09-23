@@ -122,6 +122,8 @@ import {
   DELTA_MV_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
+  MV_SCORE_EVENTS_DELTA,
+  buildScoreEventsDeltaMvQuery,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
   RETENTION_MANAGED_TABLES,
@@ -519,6 +521,61 @@ async function queryNamesByTable(
   return out;
 }
 
+/**
+ * Upgrades a score delta MV created before per-scoreId deduplication with
+ * `ALTER TABLE ... MODIFY QUERY`. The view is changed in place, so there is no
+ * window without a view in which score writes would miss their delta row (a
+ * drop-and-recreate would leave such writes out of delta polling for good).
+ *
+ * With a cluster configured the definition is read from every replica via
+ * `clusterAllReplicas`, since each host stores its own copy of the view; a
+ * single legacy copy is enough to alter `ON CLUSTER`.
+ *
+ * Introspection failures are logged and skipped, like the other schema checks
+ * in init(): the existing view keeps working and the next boot retries.
+ */
+export async function reconcileScoreDeltaMv(
+  client: ClickHouseClient,
+  replication: ClickhouseReplicationConfig | undefined,
+  strategy: ClickHouseDeltaCursorStrategy,
+  logger?: IMastraLogger,
+): Promise<void> {
+  const cluster = replication?.cluster?.trim();
+  let createQueries: string[];
+  try {
+    const result = await client.query({
+      query: cluster
+        ? `SELECT create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name = {name:String}`
+        : `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+      query_params: cluster ? { cluster, name: MV_SCORE_EVENTS_DELTA } : { name: MV_SCORE_EVENTS_DELTA },
+      format: 'JSONEachRow',
+    });
+    createQueries = ((await result.json()) as Array<{ create_table_query?: string | null }>).map(
+      row => row.create_table_query ?? '',
+    );
+  } catch (error) {
+    logger?.warn?.(
+      `Could not verify the ${MV_SCORE_EVENTS_DELTA} definition; leaving the existing view in place: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+
+  // One-shot legacy marker, not version detection: it only finds views created
+  // before per-scoreId dedup. A later revision that keeps `NOT IN` would be
+  // skipped, so switch to a version marker row (as mastra_score_events_current_backfill
+  // does) when this query changes again.
+  if (createQueries.some(createQuery => createQuery.length > 0 && !/NOT IN/i.test(createQuery))) {
+    await client.command({
+      query: addOnClusterToDDL(
+        `ALTER TABLE ${MV_SCORE_EVENTS_DELTA} MODIFY QUERY ${buildScoreEventsDeltaMvQuery(strategy)}`,
+        replication,
+      ),
+    });
+  }
+}
+
 async function detectDeltaCursorStrategy(
   client: ClickHouseClient,
   override?: ClickHouseDeltaCursorStrategy,
@@ -720,6 +777,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
       }
 
+      // Runs after the CREATE ... IF NOT EXISTS pass so every replica has a
+      // view before ALTER ... MODIFY QUERY is sent ON CLUSTER; only legacy
+      // copies are left to upgrade. Skipped when delta polling is disabled
+      // (mixed cursor schemas): there is no single strategy to build from.
+      if (this.#deltaCursorStrategy !== null) {
+        await reconcileScoreDeltaMv(this.#client, this.#replication, this.#deltaCursorStrategy, this.logger);
+      }
+
       // The current-state MV is live before this one-time backfill, so writes
       // arriving during initialization are captured. ReplacingMergeTree uses
       // writeVersion to prevent an older backfill row from replacing them.
@@ -877,6 +942,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
+        'trace-query-tenant-scope',
       ] as const;
     }
 
@@ -888,6 +954,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
+      'trace-query-tenant-scope',
     ] as const;
   }
 

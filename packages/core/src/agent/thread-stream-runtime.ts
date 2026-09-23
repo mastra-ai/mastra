@@ -102,14 +102,26 @@ export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
  * local caller via `output.request`/`output.steps` — and broadcasting them
  * multiplies the largest object in the system ≥5× per step, persists it in
  * durable pubsub backends, and exposes prompt contents to every subscriber.
- * Only the broadcast copy is rewritten; the caller's MastraModelOutput is
- * untouched.
+ * Delegated agent chunks are wrapped in `tool-output.payload.output`, so known
+ * agent-stream wrappers are sanitized recursively. Only broadcast copies are
+ * rewritten; the caller's MastraModelOutput is untouched.
  */
 function sanitizeBroadcastPart(part: unknown): unknown {
   if (!part || typeof part !== 'object' || !('type' in part)) return part;
   const typed = part as { type?: string; payload?: Record<string, unknown> };
   const payload = typed.payload;
   if (!payload || typeof payload !== 'object') return part;
+
+  if (typed.type === 'tool-output') {
+    const output = payload.output;
+    if (output && typeof output === 'object' && 'type' in output && 'from' in output && output.from === 'AGENT') {
+      const sanitizedOutput = sanitizeBroadcastPart(output);
+      if (sanitizedOutput !== output) {
+        return { ...typed, payload: { ...payload, output: sanitizedOutput } };
+      }
+    }
+    return part;
+  }
 
   if (typed.type === 'step-start') {
     if (!('request' in payload) && !('inputMessages' in payload)) return part;
@@ -2863,6 +2875,13 @@ export class AgentThreadStreamRuntime {
           return;
         }
         await activeRecord.output._waitUntilFinished().catch(() => {});
+        // Awaiting a record that is already settled but still blocking (a persisted-signal
+        // broadcast, a suspended run) does not yield the macrotask queue, so re-checking here would
+        // spin on microtasks and starve the timers that end the wait. Force a macrotask whenever the
+        // same run is still active after the await.
+        if (state.activeThreadRunIds.get(key) === activeRunId) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
         continue;
       }
 

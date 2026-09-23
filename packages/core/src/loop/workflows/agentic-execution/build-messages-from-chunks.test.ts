@@ -281,6 +281,28 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should copy the tool title from the tools map onto a call part', () => {
+    const result = parts(
+      [{ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } }],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+  });
+
+  it('should keep the tool title on a merged call + result part', () => {
+    const result = parts(
+      [
+        { type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } },
+        {
+          type: 'tool-result',
+          payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' }, result: { hits: 1 } },
+        },
+      ],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ title: 'Search the web', toolInvocation: { state: 'result' } });
+  });
+
   it('should preserve both call and result itemIds when a Responses provider assigns each side its own id', () => {
     // OpenAI hosted tool_search (Responses API) emits a tool-call chunk carrying
     // the call item id (tsc_…) and a tool-result chunk carrying the output item

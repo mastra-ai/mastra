@@ -19,6 +19,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
+  'trace-query-tenant-scope',
 ] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
@@ -28,6 +29,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
+  'trace-query-tenant-scope',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {

@@ -31,7 +31,8 @@ interface PlatformGitLabContext {
 type PlatformGitLabCredential =
   { type: 'oauth2'; accessToken: string; expiresAt: string | null } | { type: 'api_key'; apiKey: string };
 
-const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
+/** The Platform's GitLab (OAuth) integration. It is the only GitLab credential flow Factory discovers. */
+const GITLAB_INTEGRATION_ID = 'gitlab';
 
 export interface PlatformGitLabIntegrationConfig {
   rules?: GitLabRuleOverrides;
@@ -71,29 +72,17 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    // Platform's providerKey filter matches a single integration ID, so query
-    // each supported GitLab credential flow before applying the exact ID filter.
-    const pages = await Promise.all(
-      [...GITLAB_INTEGRATION_IDS].map(async integrationId => {
-        const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
-          'GET',
-          `/v2/connections?providerKey=${encodeURIComponent(integrationId)}`,
-        );
-        return result.connections;
-      }),
+    const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
+      'GET',
+      `/v2/connections?providerKey=${encodeURIComponent(GITLAB_INTEGRATION_ID)}`,
     );
-    const seen = new Set<string>();
-    return pages.flat().filter(connection => {
-      if (
-        (this.#connectionId && connection.id !== this.#connectionId) ||
-        !GITLAB_INTEGRATION_IDS.has(connection.integrationId) ||
-        seen.has(connection.id)
-      ) {
-        return false;
-      }
-      seen.add(connection.id);
-      return true;
-    });
+    // The providerKey filter is applied server side; the exact ID check guards
+    // against a server that answers more loosely than asked.
+    return result.connections.filter(
+      connection =>
+        connection.integrationId === GITLAB_INTEGRATION_ID &&
+        (!this.#connectionId || connection.id === this.#connectionId),
+    );
   }
 
   override async statusConnections(): Promise<GitLabStatusConnection[]> {

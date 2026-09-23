@@ -49,10 +49,10 @@ export const WithGroup: Story = {
     <Header>
       <HeaderGroup>
         <HeaderTitle>Workflows</HeaderTitle>
-        <span className="text-muted-foreground text-ui-md">12 total</span>
+        <span className="text-body text-muted-foreground">12 total</span>
       </HeaderGroup>
       <HeaderAction>
-        <Button variant="outline" size="md">
+        <Button size="md">
           <Settings className="size-4" />
         </Button>
       </HeaderAction>

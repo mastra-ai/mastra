@@ -1,8 +1,6 @@
 import { DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { CircleSlashIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
@@ -40,13 +38,12 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
   }
 
   if (error) {
-    return <ErrorState title="Failed to load dataset items" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load dataset items" descriptionSlot={error.message} />;
   }
 
   if (items.length === 0) {
     return (
       <EmptyState
-        iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
         titleSlot="Nothing to review"
         descriptionSlot="Experiment results that need review will show up here."
       />

@@ -103,11 +103,11 @@ export function SlackConnectionSettings() {
       description="Start and continue Factory sessions from Slack."
     >
       {accountsQuery.isPending ? (
-        <Txt as="p" variant="ui-sm" role="status" className="text-icon3">
+        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
           Loading Slack connection…
         </Txt>
       ) : accountsQuery.error ? (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
         </Txt>
       ) : accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable ? (
@@ -121,13 +121,13 @@ export function SlackConnectionSettings() {
               type="button"
               disabled={!canConnect}
               onClick={connectSlack}
-              className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="group hover:bg-fill focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <SettingsRow
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
-                <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+                <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
                   Connect Slack
                   <ChevronRight aria-hidden="true" />
                 </span>
@@ -158,7 +158,7 @@ export function SlackConnectionSettings() {
                       </span>
                     }
                     description={
-                      <Txt as="span" variant="ui-xs" className="text-icon2">
+                      <Txt as="span" variant="meta" className="text-placeholder">
                         Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
                       </Txt>
                     }
@@ -186,12 +186,11 @@ export function SlackConnectionSettings() {
                     onValueChange={factoryProjectId => setDefaultFactory(account, factoryProjectId)}
                   >
                     <SelectTrigger
-                      variant="outline"
                       size="sm"
                       aria-label={`Default factory for ${account.externalUserName ?? account.externalUserId}`}
                       className="w-auto"
                     >
-                      <Txt as="span" variant="ui-sm">
+                      <Txt as="span" variant="caption">
                         {factories.find(factory => factory.id === account.defaultFactoryProjectId)?.name ??
                           'Set default factory'}
                       </Txt>
@@ -252,7 +251,6 @@ export function SlackConnectionSettings() {
                   }
                 >
                   <Button
-                    variant="outline"
                     size="sm"
                     aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
                     disabled={disconnectMutation.isPending}

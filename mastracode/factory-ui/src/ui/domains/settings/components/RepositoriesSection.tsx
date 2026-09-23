@@ -38,12 +38,12 @@ export function RepositoriesSection() {
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {githubConnected && (
-              <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
+              <Button size="sm" onClick={() => manageGithubConnection(baseUrl)}>
                 Manage GitHub connection
               </Button>
             )}
             {gitlabStatus?.mode === 'platform' && (
-              <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" variant="outline" size="sm">
+              <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" size="sm">
                 {gitlabStatus.reauthRequired
                   ? 'Reconnect GitLab'
                   : gitlabStatus.configured
@@ -52,7 +52,9 @@ export function RepositoriesSection() {
               </Button>
             )}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
-              <span className="text-ui-xs text-icon3">GitLab managed by deployment environment variables</span>
+              <span className="text-meta text-muted-foreground">
+                GitLab managed by deployment environment variables
+              </span>
             )}
           </div>
         }
