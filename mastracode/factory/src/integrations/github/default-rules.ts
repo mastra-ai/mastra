@@ -134,6 +134,11 @@ function materializePullRequestIntake(
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
+  // Opening a pull request is evaluated once per card it concerns. This rule
+  // files the pull request's own Review card, which is the arrival — the
+  // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
+  // evaluation has nothing to file.
+  if (context.item && context.pullRequestIntake !== true) return;
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
   const autoStartCandidate =

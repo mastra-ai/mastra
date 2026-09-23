@@ -1100,6 +1100,35 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
+  it('files the pull request card only on the arrival, not on the item that authored it', async () => {
+    // Opening a pull request is evaluated once per card it concerns. Only the
+    // arrival — flagged `pullRequestIntake` — files the card; the authoring
+    // item's own evaluation must leave the card alone.
+    const authored = {
+      ...githubContext('pullRequestOpened'),
+      item: {
+        id: 'item-1',
+        source: 'github-issue' as const,
+        sourceKey: 'github-issue:42',
+        parentWorkItemId: null,
+        title: 'Issue 42',
+        url: 'https://github.test/acme/repo/issues/42',
+        stages: ['execute'],
+        acceptedAt: null,
+        metadata: {},
+      },
+      board: 'work',
+      itemRevision: 1,
+    };
+
+    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      source: 'github-pr',
+      sourceKey: 'github-pr:17',
+    });
+  });
+
   it('records PR branches, status, assignments, and review requests on Review intake', async () => {
     const context = githubContext('pullRequestOpened');
     context.pullRequest = { ...context.pullRequest!, draft: true };
