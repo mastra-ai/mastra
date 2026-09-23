@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { AGENT_RESPONSE_RECOVERY_CONTINUATION } from '../../../agent/merge-execution-options';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
@@ -103,7 +104,22 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
-      const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+      const typedInputData = inputData as LLMIterationData<Tools, OUTPUT> | undefined;
+      // A nested run that settles non-success can resolve this workflow's
+      // output as undefined (PF-4386): the parent executor then miscasts it
+      // as { status: 'success', output: undefined } and this condition would
+      // dereference typedInputData.messages inside consumeStream — killing
+      // the loop with a TypeError and leaving the turn a silent zombie.
+      // Reject malformed iteration output as a workflow error instead so the
+      // turn surfaces a truthful failure.
+      if (typedInputData?.messages === undefined || typedInputData?.output === undefined) {
+        throw new MastraError({
+          id: 'MASTRA_AGENTIC_LOOP_ITERATION_OUTPUT_MISSING',
+          text: `Agentic execution workflow resolved an iteration for run '${runId}' without iteration output`,
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+        });
+      }
       const abortWon = rest.options?.abortSignal?.aborted === true;
       if (abortWon) {
         typedInputData.terminalToolResult = undefined;

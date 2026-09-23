@@ -3397,7 +3397,37 @@ export class Workflow<
       );
     }
 
-    return res.status === 'success' ? res.result : undefined;
+    if (res.status === 'success') {
+      return res.result;
+    }
+
+    if (res.status === 'suspended' && suspendedSteps?.length) {
+      // Suspension was already propagated through suspend() above — the
+      // engine recorded this step as suspended and ignores the return value.
+      return undefined;
+    }
+
+    if (res.status === 'paused' && perStep) {
+      // Per-step durable mode resolves the nested run 'paused' at every step
+      // boundary; the step handler marks this step paused
+      // (nestedWflowStepPaused) and ignores the return value.
+      return undefined;
+    }
+
+    // Every other status (canceled, paused without perStep, suspended with no
+    // propagatable step, or an engine-specific status like bailed on a
+    // snapshot re-read)
+    // yields no step output. Returning undefined here previously let the
+    // parent miscast the nested run as { status: 'success', output:
+    // undefined } — the agentic dowhile then crashed inside consumeStream
+    // and left the turn a silent zombie. Surface the real status as a step
+    // failure instead.
+    throw new MastraError({
+      id: 'MASTRA_WORKFLOW_NESTED_RUN_NON_SUCCESS_RESULT',
+      text: `Nested workflow run '${run.runId}' for workflow '${this.id}' resolved with status '${res.status}' and cannot produce step output`,
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.SYSTEM,
+    });
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
