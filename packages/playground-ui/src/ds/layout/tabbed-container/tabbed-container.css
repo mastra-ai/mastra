@@ -66,7 +66,7 @@
 }
 
 [data-slot='tabbed-container-query']:focus-within {
-  border-color: color-mix(in oklab, var(--neutral5) 50%, transparent);
+  border-color: color-mix(in oklab, var(--foreground) 50%, transparent);
 }
 
 [data-slot='tabs'].tabbed-container
@@ -125,12 +125,12 @@
   height: 12px;
   translate: -50% -50%;
   pointer-events: none;
-  color: var(--neutral3);
+  color: var(--muted-foreground);
 }
 
 [data-slot='tabbed-container-filter'][data-active] > svg {
   left: 9px;
-  color: var(--neutral5);
+  color: var(--foreground);
 }
 
 [data-slot='tabbed-container-filter-count'] {
@@ -140,7 +140,7 @@
   z-index: 1;
   translate: 0 -50%;
   pointer-events: none;
-  color: var(--neutral4);
+  color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 

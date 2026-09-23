@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.7.10-alpha.11",
+  "version": "1.7.11",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -54,7 +54,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.50.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
     "hono": "^4.13.5"
   },
   "engines": {

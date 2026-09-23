@@ -26,7 +26,7 @@ export interface EventHandlerContext {
   fireMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => void;
   startGoal: (objective: string, cancelMessage?: string) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
-  renderExistingMessages: () => Promise<void>;
+  renderExistingMessages: (isCurrent?: () => boolean) => Promise<void>;
   renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   renderCompletedTasksInline: (completedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   renderTaskDeltaInline: (

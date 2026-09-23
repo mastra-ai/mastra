@@ -335,6 +335,7 @@ describe('Combobox', () => {
     const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
     expect(trigger.className).toContain('w-control-sm');
     expect(trigger.className).not.toContain('w-full');
+    expect(trigger.dataset.shape).toBe('icon');
     expect(screen.getByText('OpenAI').className).toContain('sr-only');
 
     fireEvent.click(trigger);

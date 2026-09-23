@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
@@ -32,17 +33,17 @@ export function ScorersToolbar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
-        <ListSearch
-          key={searchKey}
-          label="Search scorers"
-          placeholder="Filter by scorer name"
-          value={search}
-          onSearch={onSearchChange}
-        />
-      </div>
-      <div className="flex items-center gap-2">
+    <ActionRow>
+      <ActionRow.Start>
+        <div className="max-w-120 flex-1">
+          <ListSearch
+            key={searchKey}
+            label="Search scorers"
+            placeholder="Filter by scorer name"
+            value={search}
+            onSearch={onSearchChange}
+          />
+        </div>
         <SelectFieldBlock
           label="Source"
           labelIsHidden
@@ -57,7 +58,7 @@ export function ScorersToolbar({
             Reset
           </Button>
         )}
-      </div>
-    </div>
+      </ActionRow.Start>
+    </ActionRow>
   );
 }

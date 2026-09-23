@@ -139,6 +139,7 @@ export function Combobox(props: ComboboxProps) {
         aria-label={ariaLabel ?? (id ? undefined : multiple ? 'Select options' : 'Select option')}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
+        data-shape={iconOnly ? 'icon' : undefined}
         className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
       >
         {iconOnly ? (

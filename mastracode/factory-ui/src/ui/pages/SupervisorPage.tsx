@@ -60,7 +60,7 @@ function ResolvingSupervisorMain() {
           <ChatHeader />
         </ChatShell.Bar>
         <div className="grid min-h-0 flex-1 place-items-center">
-          <Spinner aria-label="Loading supervisor" className="text-icon3" />
+          <Spinner aria-label="Loading supervisor" className="text-muted-foreground" />
         </div>
       </ChatShell>
     </>
@@ -92,14 +92,14 @@ function SupervisorMain({
         <nav className="text-caption flex min-w-0 items-center gap-2" aria-label="Supervisor session breadcrumb">
           <Link
             to={`/factories/${factoryProjectId}/overview`}
-            className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline"
+            className="text-muted-foreground hover:text-foreground shrink-0 font-medium hover:underline"
           >
             {factoryName ?? 'Factory'}
           </Link>
-          <span className="text-icon3" aria-hidden>
+          <span className="text-muted-foreground" aria-hidden>
             /
           </span>
-          <span className="text-icon6 truncate">Supervisor</span>
+          <span className="text-foreground truncate">Supervisor</span>
         </nav>
         <div className="ml-auto shrink-0">
           <SupervisorFindingsToggle
@@ -171,10 +171,10 @@ function SupervisorEmptyState() {
       aria-labelledby="supervisor-empty-title"
     >
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="supervisor-empty-title" className="text-display text-icon6 mt-7 tracking-tight text-balance">
+      <h1 id="supervisor-empty-title" className="text-display text-foreground mt-7 tracking-tight text-balance">
         What needs your attention?
       </h1>
-      <p className="text-body text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
+      <p className="text-body text-muted-foreground mt-2 max-w-lg leading-relaxed text-pretty">
         Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.
       </p>
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">

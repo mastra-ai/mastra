@@ -20,7 +20,7 @@ const singleData = [
 ];
 
 const statusSegments = [
-  { label: 'Completed', color: 'var(--neutral3)' },
+  { label: 'Completed', color: 'var(--muted-foreground)' },
   { label: 'Running', color: '#facc15' },
   { label: 'Pending', color: '#fb923c' },
   { label: 'Failed', color: '#f87171' },

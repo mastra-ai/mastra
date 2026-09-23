@@ -107,8 +107,8 @@ export function SkillsTable({
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div className="text-body">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
-            <p className="text-muted-foreground mt-1">
-              You have skills in <code className="bg-muted text-caption rounded px-1 py-0.5">.agents/skills</code> that
+            <p className="mt-1 text-muted-foreground">
+              You have skills in <code className="rounded bg-muted px-1 py-0.5 text-caption">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
           </div>
@@ -149,7 +149,7 @@ export function SkillsTable({
 
             const rowContent = (
               <>
-                <DataList.Cell className="text-foreground font-medium">{skill.name}</DataList.Cell>
+                <DataList.Cell className="font-medium text-foreground">{skill.name}</DataList.Cell>
                 <DataList.TextCell font="mono">{skill.path}</DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate">{skill.description || '—'}</span>
@@ -214,11 +214,11 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
   return (
     <div className="grid place-items-center py-16">
       <div className="flex max-w-md flex-col items-center text-center">
-        <div className="bg-muted mb-4 rounded-full p-4">
-          <CircleSlashIcon className="text-muted-foreground h-8 w-8" />
+        <div className="mb-4 rounded-full bg-muted p-4">
+          <CircleSlashIcon className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h2 className="text-foreground text-heading mb-2">Skills Not Configured</h2>
-        <p className="text-muted-foreground text-body mb-6">
+        <h2 className="mb-2 text-heading text-foreground">Skills Not Configured</h2>
+        <p className="mb-6 text-body text-muted-foreground">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>

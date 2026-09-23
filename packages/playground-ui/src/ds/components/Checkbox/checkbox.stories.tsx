@@ -11,8 +11,8 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
-    <div className={`border-border rounded-2xl border p-5 ${className}`}>
-      <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`rounded-2xl border border-border p-5 ${className}`}>
+      <p className="mb-4 text-meta tracking-wide text-muted-foreground uppercase">{label}</p>
       {children}
     </div>
   );
@@ -20,7 +20,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function CheckboxStateGrid({ idPrefix }: { idPrefix: string }) {
   return (
-    <div className="text-caption text-muted-foreground grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-caption text-muted-foreground">
       <span />
       <span>Default</span>
       <span>Checked</span>
@@ -92,8 +92,8 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="border-border bg-background grid min-w-104 gap-4 rounded-lg border p-4">
-      <div className="text-caption text-muted-foreground grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
+    <div className="grid min-w-104 gap-4 rounded-lg border border-border bg-background p-4">
+      <div className="grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-caption text-muted-foreground">
         <span />
         <span>Default</span>
         <span>Checked</span>
@@ -108,7 +108,7 @@ export const AllStates: Story = {
           aria-label="focused checked"
           checked
           onCheckedChange={() => {}}
-          className="border-neutral5/60 outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
+          className="border-border-focus outline-1 outline-offset-2 outline-border-focus outline-solid"
         />
 
         <span className="text-foreground">Disabled</span>
@@ -120,7 +120,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="border-neutral5/60 outline-neutral5/35 outline-1 outline-offset-2 outline-solid"
+          className="border-border-focus outline-1 outline-offset-2 outline-border-focus outline-solid"
         />
       </div>
     </div>

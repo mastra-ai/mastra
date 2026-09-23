@@ -15,8 +15,8 @@
    * boundary ladder takes its alphas from the same tint, `--border` sitting a
    * notch above `--fill` so its rim survives on a filled control.
    *
-   * fill         rest of a filled control (input, button, trigger, chip) and of
-   *              a raised container; also press on a transparent base
+   * fill         press on a raised control, its open rung, and press on a transparent
+   *              base; also the rest fill of a raised container
    * fill-hover   hover on a rest fill; rest of a selection control (checkbox,
    *              switch, radio), which sits one rung up from field-sized surfaces
    * fill-active  press / open / selected; selection-control hover
@@ -30,6 +30,33 @@
   --fill-hover: oklch(var(--fill-tint) 0 0 / 9%);
   --fill-active: oklch(var(--fill-tint) 0 0 / 12%);
   --fill-strong: oklch(var(--fill-tint) 0 0 / 18%);
+
+  /*
+   * Opaque ladder — the states of a control that IS a colour rather than a rung
+   * layered on the surface behind it: the primary and destructive buttons.
+   * The ladder above cannot serve them. Its rungs are alphas, and a filled
+   * control that answers a pointer by thinning its own fill lets the card text,
+   * the list row or the image it covers read through it — the one thing a
+   * filled control promises not to do, and the louder the state the wider the
+   * window. Each rung is instead the opaque twin of the alpha it replaces: the
+   * same colour mixed toward `--background` by the same amount, in sRGB
+   * because that is the space a browser composites alpha in. The canvas is the
+   * reference surface, so the match is exact there and drifts on a card,
+   * sidebar or popover by the few levels those surfaces sit apart — measured
+   * at most 4 of 255, below a perceptible step.
+   *
+   * Both tones resolve from the semantic roles in `theme.css`, so a theme flip
+   * carries the whole ladder with it.
+   */
+  --fill-inverse: var(--foreground);
+  --fill-inverse-hover: color-mix(in srgb, var(--foreground) 75%, var(--background));
+  --fill-inverse-active: color-mix(in srgb, var(--foreground) 60%, var(--background));
+  --fill-inverse-disabled: color-mix(in srgb, var(--foreground) 45%, var(--background));
+
+  --fill-destructive: var(--destructive);
+  --fill-destructive-hover: color-mix(in srgb, var(--destructive) 80%, var(--background));
+  --fill-destructive-active: color-mix(in srgb, var(--destructive) 70%, var(--background));
+  --fill-destructive-disabled: color-mix(in srgb, var(--destructive) 45%, var(--background));
 
   /*
    * Boundary ladder — the four states of a control's 1px edge, as alphas of
@@ -158,6 +185,14 @@ html.light {
   --color-fill-hover: var(--fill-hover);
   --color-fill-active: var(--fill-active);
   --color-fill-strong: var(--fill-strong);
+  --color-fill-inverse: var(--fill-inverse);
+  --color-fill-inverse-hover: var(--fill-inverse-hover);
+  --color-fill-inverse-active: var(--fill-inverse-active);
+  --color-fill-inverse-disabled: var(--fill-inverse-disabled);
+  --color-fill-destructive: var(--fill-destructive);
+  --color-fill-destructive-hover: var(--fill-destructive-hover);
+  --color-fill-destructive-active: var(--fill-destructive-active);
+  --color-fill-destructive-disabled: var(--fill-destructive-disabled);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);

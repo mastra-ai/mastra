@@ -49,24 +49,26 @@ function AuditEventRow({
   const mobileSummary = [actor, targetLabel, detail].filter(Boolean).join(' · ');
   const cells = (
     <>
-      <AuditCell className="text-meta text-neutral2 self-start tabular-nums lg:self-auto" title={event.occurredAt}>
+      <AuditCell className="text-meta text-placeholder self-start tabular-nums lg:self-auto" title={event.occurredAt}>
         {relativeTime(event.occurredAt)}
       </AuditCell>
-      <AuditCell className={cn('hidden lg:block', event.actorType === 'agent' ? 'text-accent6' : 'text-neutral3')}>
+      <AuditCell
+        className={cn('hidden lg:block', event.actorType === 'agent' ? 'text-accent6' : 'text-muted-foreground')}
+      >
         {actor}
       </AuditCell>
-      <AuditCell className="text-neutral5">
+      <AuditCell className="text-foreground">
         <span className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className={cn('size-1.5 shrink-0 rounded-full', category?.dotClass ?? 'bg-neutral2')}
+            className={cn('size-1.5 shrink-0 rounded-full', category?.dotClass ?? 'bg-placeholder')}
           />
           <span className="truncate">{auditActionLabel(event.action)}</span>
         </span>
       </AuditCell>
-      <AuditCell className="text-neutral4 hidden lg:block">{targetLabel}</AuditCell>
-      <AuditCell className="text-meta text-neutral2 hidden lg:block">{detail}</AuditCell>
-      <span className="text-neutral2 flex justify-end">
+      <AuditCell className="text-muted-foreground hidden lg:block">{targetLabel}</AuditCell>
+      <AuditCell className="text-meta text-placeholder hidden lg:block">{detail}</AuditCell>
+      <span className="text-placeholder flex justify-end">
         {hasMetadata ? (
           <span
             aria-hidden="true"
@@ -79,7 +81,7 @@ function AuditEventRow({
           </span>
         ) : null}
       </span>
-      <span className="text-meta text-neutral2 col-start-2 col-end-3 row-start-2 min-w-0 truncate lg:hidden">
+      <span className="text-meta text-placeholder col-start-2 col-end-3 row-start-2 min-w-0 truncate lg:hidden">
         {mobileSummary}
       </span>
     </>
@@ -98,7 +100,7 @@ function AuditEventRow({
           aria-expanded={expanded}
           onClick={onToggle}
           className={cn(
-            'grid w-full cursor-pointer items-start gap-x-3 gap-y-0.5 rounded-md px-3 py-2 text-left outline-none focus-visible:bg-neutral6/10 lg:items-center lg:gap-4',
+            'grid w-full cursor-pointer items-start gap-x-3 gap-y-0.5 rounded-md px-3 py-2 text-left outline-none focus-visible:bg-fill-hover lg:items-center lg:gap-4',
             AUDIT_GRID_CLASS,
           )}
         >
@@ -114,7 +116,7 @@ function AuditEventRow({
         <Code
           code={JSON.stringify(visibleMetadata, null, 2)}
           lang="json"
-          className="text-meta text-neutral4 m-0 mx-3 mb-3 px-2 py-1 font-sans break-all whitespace-pre-wrap"
+          className="text-meta text-muted-foreground m-0 mx-3 mb-3 px-2 py-1 font-sans break-all whitespace-pre-wrap"
         />
       ) : null}
     </li>
@@ -147,7 +149,7 @@ export function AuditLogList({
     <div className="min-w-0 lg:min-w-[57rem] lg:pr-1">
       <div
         className={cn(
-          'sticky top-(--page-sticky-top) z-20 hidden items-center gap-4 rounded-lg bg-fill px-3 py-2 text-column font-semibold tracking-tight text-neutral2 lg:grid',
+          'sticky top-(--page-sticky-top) z-20 hidden items-center gap-4 rounded-lg bg-fill px-3 py-2 text-column font-semibold tracking-tight text-placeholder lg:grid',
           AUDIT_GRID_CLASS,
         )}
       >

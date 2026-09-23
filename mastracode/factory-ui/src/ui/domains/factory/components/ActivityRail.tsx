@@ -131,7 +131,7 @@ function Actor({ by, avatarUrl, name }: { by: string | undefined; avatarUrl?: st
   const Glyph = ACTOR_GLYPHS.find(([prefix]) => by?.startsWith(prefix))?.[1] ?? User;
 
   return (
-    <span className="border-border bg-card text-icon3 h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
+    <span className="border-border bg-card text-muted-foreground h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
       <Glyph className="size-[13px]" aria-hidden />
     </span>
   );
@@ -143,10 +143,12 @@ function StageChain({ stages }: { stages: string[] }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {folded > 0 ? <span className="text-meta text-icon3 tabular-nums">+{folded}</span> : null}
+      {folded > 0 ? <span className="text-meta text-muted-foreground tabular-nums">+{folded}</span> : null}
       {shown.map((stage, index) => (
         <span key={`${stage}-${index}`} className="flex items-center gap-1">
-          {index > 0 || folded > 0 ? <ChevronRight size={11} className="text-icon2 shrink-0" aria-hidden /> : null}
+          {index > 0 || folded > 0 ? (
+            <ChevronRight size={11} className="text-placeholder shrink-0" aria-hidden />
+          ) : null}
           <StageBadge stage={stage} />
         </span>
       ))}
@@ -161,7 +163,7 @@ function entryTarget(entry: ActivityEntry): { id: string; board: string } | unde
 /** Only a card the board still holds opens. */
 function EntryTitle({ entry, factoryProjectId }: { entry: ActivityEntry; factoryProjectId: string | undefined }) {
   const target = entryTarget(entry);
-  const shape = 'text-icon6 min-w-0 truncate font-medium';
+  const shape = 'text-foreground min-w-0 truncate font-medium';
 
   if (target === undefined) return <span className={shape}>{entry.title}</span>;
 
@@ -187,8 +189,8 @@ function EntryPanel({ entries, factoryProjectId }: { entries: ActivityEntry[]; f
         const target = entryTarget(entry);
         const body = (
           <>
-            <Txt as="span" variant="caption" className="text-icon4 min-w-0 flex-1 truncate">
-              {entry.title === '' ? <span className="text-icon2">—</span> : entry.title}
+            <Txt as="span" variant="caption" className="text-muted-foreground min-w-0 flex-1 truncate">
+              {entry.title === '' ? <span className="text-placeholder">—</span> : entry.title}
             </Txt>
             <Time at={entry.at} />
           </>
@@ -229,23 +231,23 @@ function Block({
     <RailRow mark={<Node entry={first} />} connected={connected}>
       <Txt as="div" variant="caption" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
         <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
-        <span className="text-icon6 shrink-0 font-medium">{name}</span>
-        <span className="text-icon3 shrink-0">
+        <span className="text-foreground shrink-0 font-medium">{name}</span>
+        <span className="text-muted-foreground shrink-0">
           {first.kind === 'move' ? 'moved' : deedPhrase(first.action, first.title !== '')}
         </span>
         {grouped && first.kind === 'move' ? (
-          <span className="text-icon6 shrink-0 font-medium">{block.entries.length} cards</span>
+          <span className="text-foreground shrink-0 font-medium">{block.entries.length} cards</span>
         ) : (
           <>
             {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}
             {grouped ? (
-              <span className="text-meta text-icon3 shrink-0 tabular-nums">+{block.entries.length - 1}</span>
+              <span className="text-meta text-muted-foreground shrink-0 tabular-nums">+{block.entries.length - 1}</span>
             ) : null}
           </>
         )}
         {first.kind === 'move' ? (
           <>
-            <span className="text-icon3 shrink-0">to</span>
+            <span className="text-muted-foreground shrink-0">to</span>
             <StageChain stages={first.stages} />
           </>
         ) : null}

@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -21,8 +22,8 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getToolTitle } from '../../../tools/tool-title';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -44,6 +45,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
+  TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
@@ -51,6 +53,7 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -418,58 +421,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Match the nullish fallback above: null/undefined use framework identity, while other falsy values are valid model payloads.
         const isResumeToolCall = resumeDataFromArgs != null;
 
-        // Check if approval is required.
-        //
-        // The global `requireToolApproval` option (boolean, or — new — a function evaluated per
-        // call so policies can inspect the tool name and args, e.g. regex allowlists) and the
-        // tool's own boolean `requireApproval` flag seed the decision: the call requires approval
-        // if either is truthy.
-        //
-        // A per-tool `needsApprovalFn` (from `createTool({ requireApproval: fn })` or an
-        // MCP-derived tool) is authoritative when present and OVERRIDES the seed — it may return
-        // `false` to allow a call the global policy/flag would otherwise gate. This preserves the
-        // long-standing precedence; the only new behavior is that the global may now be a function.
-        // Any policy that throws defaults to requiring approval, to be safe.
-        const buildApprovalContext = (): ToolApprovalContext => ({
-          toolName: inputData.toolName,
-          args,
-          // Exclude the internal approval hook so policies only see public request-context entries.
-          requestContext: requestContext
-            ? Object.fromEntries(
-                [...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
-              )
-            : {},
-          workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
-        });
-
-        let globalRequiresApproval: boolean;
-        if (typeof requireToolApproval === 'function') {
-          try {
-            globalRequiresApproval = !!(await requireToolApproval(buildApprovalContext()));
-          } catch (error) {
-            logger?.error(`Error evaluating global requireToolApproval for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe.
-            globalRequiresApproval = true;
-          }
-        } else {
-          globalRequiresApproval = !!requireToolApproval;
-        }
-
-        let toolRequiresApproval: boolean = globalRequiresApproval || !!(tool as any).requireApproval;
-
-        const needsApprovalFn = getNeedsApprovalFn(tool);
-        if (needsApprovalFn) {
-          // Per-tool needsApprovalFn overrides the seed (matches prior behavior).
-          try {
-            const { toolName: _toolName, ...needsApprovalCtx } = buildApprovalContext();
-            toolRequiresApproval = !!(await needsApprovalFn(args, needsApprovalCtx));
-          } catch (error) {
-            // Log error to help developers debug faulty needsApprovalFn implementations
-            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe
-            toolRequiresApproval = true;
-          }
-        }
+        // Reuse the called-strategy scheduling verdict when available so approval policies
+        // are evaluated exactly once per call. Other paths retain execution-time evaluation.
+        const approvalVerdicts = readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts');
+        const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
+        approvalVerdicts?.delete(inputData.toolCallId);
+        const toolRequiresApproval =
+          cachedApprovalVerdict ??
+          (await resolveToolApprovalVerdict({
+            tool,
+            requireToolApproval,
+            context: buildToolApprovalContext({
+              toolName: inputData.toolName,
+              args,
+              requestContext,
+              workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
+            }),
+            logger,
+          }));
 
         // On resume, the live `requireToolApproval` policy may be gone: function-form
         // policies do not survive RequestContext serialization, and decline/approve
@@ -951,28 +920,48 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    const rawResult = await resolvedTool.execute!(bgArgs, {
-                      ...toolOptions,
-                      isBackgroundTask: true,
-                      [BACKGROUND_WORK_CONTEXT]: {
-                        originRunId: runId,
-                        originToolCallId: inputData.toolCallId,
-                        taskId: bgTask.task.id,
-                        invocationKind: isAgentTool ? 'agent' : 'tool',
-                        disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
-                      },
-                      ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
-                      suspendedToolRunId: opts?.suspendedToolRunId,
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return opts?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await opts?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
+                    const execution = await executeAdoptedBackgroundOperation({
+                      taskId: bgTask.task.id,
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       abortSignal: opts?.abortSignal,
-                    } as any);
+                      onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                      execute: background =>
+                        resolvedTool.execute!(bgArgs, {
+                          ...toolOptions,
+                          isBackgroundTask: true,
+                          background,
+                          [BACKGROUND_WORK_CONTEXT]: {
+                            originRunId: runId,
+                            originToolCallId: inputData.toolCallId,
+                            taskId: bgTask.task.id,
+                            invocationKind: isAgentTool ? 'agent' : 'tool',
+                            disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                          },
+                          ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                          suspendedToolRunId: opts?.suspendedToolRunId,
+                          suspend: async (data?: unknown, options?: SuspendOptions) => {
+                            await toolOptions.suspend?.(data, options);
+                            return opts?.suspend?.(data, options);
+                          },
+                          outputWriter: async (chunk: any) => {
+                            await opts?.onProgress?.(chunk);
+                            return toolOptions.outputWriter?.(chunk);
+                          },
+                          abortSignal: opts?.abortSignal,
+                        } as any),
+                    });
+                    let rawResult = execution.result;
+
+                    if (execution.adopted) {
+                      const outputValidation = validateToolOutput(
+                        resolveToolOutputValidationSchema(resolvedTool),
+                        rawResult,
+                        inputData.toolName,
+                        false,
+                      );
+                      rawResult = outputValidation.error ?? outputValidation.data;
+                    }
+
                     const result = ensureSerializable(rawResult);
 
                     if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
@@ -1329,16 +1318,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             const awaitAuthoritativeBackgroundResult = async () => {
               const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+              if (completedTask.status !== 'cancelled') {
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
+                }
+              }
+
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
                     `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
                 );
-              }
-
-              const reconciliation = await reconciliationComplete;
-              if (reconciliation.error) {
-                throw reconciliation.error;
               }
 
               return ensureSerializable(completedTask.result);

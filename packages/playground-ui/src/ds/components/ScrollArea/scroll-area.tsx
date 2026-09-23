@@ -128,7 +128,7 @@ const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onK
         'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent hover:bg-fill-subtle active:bg-fill',
         quietTextHover,
         controlStateColorTransition,
-        'outline-hidden focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
+        'outline-hidden focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid',
         direction === 'left'
           ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'
           : 'right-1 group-data-[overflow-x-end]/scroll-area:flex',
@@ -331,7 +331,7 @@ const ScrollBar = React.forwardRef<
     )}
     {...props}
   >
-    <ScrollAreaPrimitive.Thumb className="bg-neutral4/30 hover:bg-neutral4/60 relative flex-1 rounded-full" />
+    <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-muted-foreground/30 hover:bg-muted-foreground/60" />
   </ScrollAreaPrimitive.Scrollbar>
 ));
 ScrollBar.displayName = 'ScrollBar';

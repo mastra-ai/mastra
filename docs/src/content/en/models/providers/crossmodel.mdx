@@ -7,7 +7,7 @@ description: "Browse CrossModel model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/crossmodel.svg" alt="CrossModel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CrossModel
 
-Access 60 CrossModel models through Mastra's model router. Authentication is handled automatically using the `CROSSMODEL_API_KEY` environment variable.
+Access 66 CrossModel models through Mastra's model router. Authentication is handled automatically using the `CROSSMODEL_API_KEY` environment variable.
 
 Learn more in the [CrossModel documentation](https://www.crossmodel.ai/docs).
 
@@ -116,6 +116,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 5,
     "outputCost": 25
+  },
+  {
+    "model": "crossmodel/anthropic/claude-opus-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "crossmodel/anthropic/claude-sonnet-4-6",
@@ -490,6 +502,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
+    "model": "crossmodel/openai/gpt-6-luna",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
+    "model": "crossmodel/openai/gpt-6-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "crossmodel/qwen/qwen3.6-flash",
     "imageInput": true,
     "audioInput": false,
@@ -646,6 +682,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
+    "model": "crossmodel/x-ai/grok-4.7",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
     "model": "crossmodel/x-ai/grok-build-0.1",
     "imageInput": true,
     "audioInput": false,
@@ -678,6 +726,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
+    "inputCost": 0.47,
+    "outputCost": 0.94
+  },
+  {
+    "model": "crossmodel/xiaomi/mimo-v2.6-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.16,
+    "outputCost": 0.32
+  },
+  {
+    "model": "crossmodel/xiaomi/mimo-v2.6-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
     "inputCost": 0.47,
     "outputCost": 0.94
   },

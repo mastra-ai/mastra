@@ -88,7 +88,7 @@ export function ReviewItemCard({
   return (
     <div
       className={cn(
-        'border border-border rounded-lg p-3 transition-colors',
+        'rounded-lg border border-border p-3 transition-colors',
         isSelected && 'ring-1 ring-accent1',
         item.tags.length > 0 && 'border-l-2 border-l-accent1',
       )}
@@ -96,7 +96,7 @@ export function ReviewItemCard({
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isCompleted ? (
-          <Icon size="xs" className="text-positive1 shrink-0">
+          <Icon size="xs" className="shrink-0 text-positive1">
             <CheckCircle />
           </Icon>
         ) : (
@@ -104,7 +104,7 @@ export function ReviewItemCard({
             type="checkbox"
             checked={isSelected}
             onChange={onToggleSelect}
-            className="border-border accent-accent1 h-3.5 w-3.5 rounded"
+            className="h-3.5 w-3.5 rounded border-border accent-accent1"
           />
         )}
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
@@ -116,7 +116,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="meta" className="text-negative1 mt-1 block truncate">
+        <Txt variant="meta" className="mt-1 block truncate text-negative1">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -205,13 +205,13 @@ export function ReviewItemCard({
 
       {/* Expanded: full input/output + comment */}
       {isExpanded && (
-        <div className="border-border mt-3 space-y-3 border-t pt-3">
+        <div className="mt-3 space-y-3 border-t border-border pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
               <Txt variant="meta" tone="muted">
                 Experiment:
               </Txt>
-              <code className="text-muted-foreground bg-background text-meta rounded px-1.5 py-0.5 font-mono">
+              <code className="rounded bg-background px-1.5 py-0.5 font-mono text-meta text-muted-foreground">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
@@ -220,7 +220,7 @@ export function ReviewItemCard({
             <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
-            <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+            <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -229,7 +229,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
-              <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
                 {formatUnknown(item.output)}
               </pre>
             </div>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-background text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-negative1">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -268,7 +268,7 @@ export function ReviewItemCard({
                 className="text-caption"
               />
               {commentSaved && (
-                <Txt variant="meta" className="text-positive1 mt-0.5">
+                <Txt variant="meta" className="mt-0.5 text-positive1">
                   Saved
                 </Txt>
               )}

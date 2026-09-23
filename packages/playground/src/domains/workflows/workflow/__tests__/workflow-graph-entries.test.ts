@@ -6,6 +6,7 @@ const entryByType = {
   step: { type: 'step', step: { id: 'operation' } },
   agent: { type: 'agent', id: 'operation', agentId: 'support' },
   tool: { type: 'tool', id: 'operation', toolId: 'lookup' },
+  classifier: { type: 'classifier', id: 'operation', classifierId: 'router' },
   mapping: { type: 'mapping', id: 'operation', mapConfig: 'inputData' },
   workflow: { type: 'workflow', id: 'operation', workflowId: 'child' },
   sleep: { type: 'sleep', id: 'operation', duration: 0 },

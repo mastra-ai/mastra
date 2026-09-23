@@ -37,7 +37,7 @@ export function ChatEvent({ label, detail, icon, children, defaultOpen, ...props
       <span aria-hidden className="min-w-2 flex-1" />
       <span aria-hidden className="flex size-4 shrink-0 items-center justify-center">
         {children && (
-          <span className="text-muted-foreground flex opacity-0 group-hover/event:opacity-100 group-focus-visible/event:opacity-100 group-data-[panel-open]/event:rotate-90 group-data-[panel-open]/event:opacity-100 motion-safe:transition motion-safe:duration-150">
+          <span className="flex text-muted-foreground opacity-0 group-hover/event:opacity-100 group-focus-visible/event:opacity-100 group-data-[panel-open]/event:rotate-90 group-data-[panel-open]/event:opacity-100 motion-safe:transition motion-safe:duration-150">
             <ChevronRight size={13} />
           </span>
         )}
@@ -55,11 +55,11 @@ export function ChatEvent({ label, detail, icon, children, defaultOpen, ...props
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="max-w-full min-w-0" role="group" {...props}>
-      <CollapsibleTrigger className="group/event hover:bg-neutral6/5 w-full cursor-pointer rounded-md text-left motion-safe:transition-colors">
+      <CollapsibleTrigger className="group/event w-full cursor-pointer rounded-md text-left hover:bg-fill motion-safe:transition-colors">
         {header}
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="before:bg-border relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']">
+        <div className="relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']">
           {children}
         </div>
       </CollapsibleContent>

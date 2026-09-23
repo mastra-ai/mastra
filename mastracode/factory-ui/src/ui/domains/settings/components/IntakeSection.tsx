@@ -7,6 +7,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
@@ -23,6 +24,7 @@ import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../fa
 import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import type { GithubStatus } from '../../workspaces/services/github';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
@@ -42,26 +44,61 @@ interface SourceSectionProps {
   update: (next: IntakeConfig) => void;
 }
 
-function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
+function GithubIntakeSection({
+  config,
+  busy,
+  update,
+  slugs,
+  status,
+  statusPending,
+  statusRefetching,
+  onRetryStatus,
+}: SourceSectionProps & {
+  slugs: string[];
+  status: GithubStatus | undefined;
+  statusPending: boolean;
+  statusRefetching: boolean;
+  onRetryStatus: () => void;
+}) {
+  const connected = status?.connected === true;
+  // 'unavailable' is set by the browser when the status request failed, not
+  // by the server, so it must not read as "not configured".
+  const statusUnavailable = status?.reason === 'unavailable';
+  const description = statusPending
+    ? 'Checking the GitHub connection…'
+    : statusUnavailable
+      ? 'GitHub status could not be loaded.'
+      : status?.reason === 'auth_required'
+        ? 'Sign in again to manage GitHub issue syncing.'
+        : status?.reason === 'organization_required'
+          ? 'Select an organization to manage GitHub issue syncing.'
+          : status?.enabled !== true
+            ? 'GitHub is not configured on this server.'
+            : !connected
+              ? 'Connect GitHub to sync issues from this organization.'
+              : "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.";
+  const action = statusUnavailable ? (
+    <Button size="xs" variant="ghost" disabled={statusRefetching} onClick={onRetryStatus}>
+      Retry
+    </Button>
+  ) : undefined;
+
   return (
-    <SettingsSubsection
-      scope="org"
-      title="GitHub issues"
-      description="Open issues from the selected repositories feed every member's board. Pull requests always appear in Review."
-    >
+    <SettingsSubsection scope="org" title="GitHub issues" description={description} action={action}>
       <SettingsContainer>
         <SettingsRow label="Sync GitHub issues">
           <Switch
             aria-label="Sync GitHub issues"
             checked={config.github.enabled}
-            disabled={busy}
+            disabled={busy || !connected}
             onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
           />
         </SettingsRow>
 
-        {config.github.enabled &&
+        {connected &&
+          config.github.enabled &&
           (slugs.length === 0 ? (
-            <Txt as="p" variant="caption" className="text-icon3 px-4 py-3">
+            <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -120,7 +157,7 @@ function GitLabIntakeSection({
         : "Open issues from the selected projects feed every member's board.";
   const accounts = status?.accounts ?? [];
   const action = configured ? (
-    <Txt as="span" variant="caption" className="text-icon3">
+    <Txt as="span" variant="caption" className="text-muted-foreground">
       {accounts.length === 1 ? `Connected to ${accounts[0]}` : `${accounts.length} GitLab accounts connected`}
     </Txt>
   ) : undefined;
@@ -197,7 +234,7 @@ function LinearIntakeSection({
     </Button>
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
       <Button size="sm" variant="ghost" onClick={() => connectLinear(baseUrl)}>
@@ -299,7 +336,7 @@ function JiraIntakeSection({
   );
   const action = configured ? (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         {connectionLabel}
       </Txt>
       {actionButton}
@@ -383,7 +420,7 @@ function IncidentioIntakeSection({
       <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
     ) : (
       <span className="flex items-center gap-2">
-        <Txt as="span" variant="caption" className="text-icon3">
+        <Txt as="span" variant="caption" className="text-muted-foreground">
           {active.length === 1
             ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
             : `${active.length} ${meta.displayName} accounts connected`}
@@ -483,6 +520,8 @@ export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const githubStatusQuery = useGithubStatusQuery();
+  const githubConnected = githubStatusQuery.data?.connected === true;
   const gitlabStatusQuery = useGitLabStatusQuery();
   const gitlabStatus = gitlabStatusQuery.data;
   const gitlabConfigured = Boolean(gitlabStatus?.enabled && gitlabStatus.configured);
@@ -514,7 +553,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <Txt as="p" variant="caption" className="text-icon3">
+      <Txt as="p" variant="caption" className="text-muted-foreground">
         Intake configuration is unavailable. Connect GitHub, GitLab, Linear, Jira, or incident.io first.
       </Txt>
     );
@@ -548,8 +587,17 @@ export function IntakeSection() {
 
   return (
     <div className="flex flex-col gap-8">
-      <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
-      {config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
+      <GithubIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        slugs={linkedSlugs}
+        status={githubStatusQuery.data}
+        statusPending={githubStatusQuery.isPending}
+        statusRefetching={githubStatusQuery.isFetching}
+        onRetryStatus={() => void githubStatusQuery.refetch()}
+      />
+      {githubConnected && config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
         <SettingsSubsection
           scope="org"
           title="GitHub routing"

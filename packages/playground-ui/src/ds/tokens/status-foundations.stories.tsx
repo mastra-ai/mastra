@@ -61,7 +61,6 @@ const badgeHues: BadgeVariant[] = ['green', 'red', 'blue', 'yellow', 'purple', '
 const greenSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 
 const statusAliases: { token: ColorToken; aliasOf?: ColorToken; note: string }[] = [
-  { token: 'text1', aliasOf: 'foreground', note: 'Alias of --foreground — body ink' },
   { token: 'warning1', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
   { token: 'positive1', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
   { token: 'negative1', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },
@@ -111,7 +110,7 @@ export const StatusFoundations: Story = {
       >
         <SpecimenGroup label="Neutral">
           <div className="max-w-80">
-            <Specimen name="--badge-neutral-fg" note="Ink only — the fill is --neutral6 at 5%, no hue to pair with">
+            <Specimen name="--badge-neutral-fg" note="Ink only — the fill is --fill, no hue to pair with">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>Draft</Badge>
                 <Badge emphasis="muted">Draft</Badge>
@@ -149,7 +148,7 @@ export const StatusFoundations: Story = {
               <div
                 role="img"
                 aria-label={`brand green ${step} swatch`}
-                className="border-border h-16 border"
+                className="h-16 border border-border"
                 style={{ background: Colors[`green-${step}`] }}
               />
             </Specimen>
@@ -170,7 +169,7 @@ export const StatusFoundations: Story = {
               <div
                 role="img"
                 aria-label={`${alias.token} swatch`}
-                className="border-border flex h-16 overflow-hidden border"
+                className="flex h-16 overflow-hidden border border-border"
               >
                 <div className="flex-1" style={{ background: Colors[alias.token] }} />
                 {alias.aliasOf && <div className="flex-1" style={{ background: Colors[alias.aliasOf] }} />}

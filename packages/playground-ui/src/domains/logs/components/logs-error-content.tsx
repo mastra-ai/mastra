@@ -1,4 +1,3 @@
-import { CircleSlashIcon } from 'lucide-react';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
@@ -30,7 +29,6 @@ export function LogsErrorContent({ error, resource, errorTitle }: LogsErrorConte
   if (isObservabilityUnavailableError(error)) {
     return (
       <EmptyState
-        iconSlot={<CircleSlashIcon />}
         titleSlot="Observability storage is not available"
         descriptionSlot="The observability storage domain is disabled or not configured. Enable it in your storage configuration to view logs in Studio."
       />
@@ -39,7 +37,6 @@ export function LogsErrorContent({ error, resource, errorTitle }: LogsErrorConte
   if (isUnsupportedObservabilityOperationError(error, 'logs')) {
     return (
       <EmptyState
-        iconSlot={<CircleSlashIcon />}
         titleSlot="Logs are not available with your current storage"
         descriptionSlot="The configured observability storage provider does not support listing logs. Switch to a storage provider with logs support to view runtime logs in Studio."
       />

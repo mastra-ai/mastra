@@ -6,7 +6,7 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  cn(raisedSurfaceStyle, 'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none'),
+  cn(raisedSurfaceStyle, 'rounded-lg transition-all duration-normal ease-out-custom motion-reduce:transition-none'),
   {
     variants: {
       elevation: {
@@ -16,7 +16,7 @@ const cardVariants = cva(
       interactive: {
         true: cn(
           surfaceStateLayerStyle,
-          'cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring active:scale-99',
+          'cursor-pointer focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-99',
         ),
         false: '',
       },

@@ -44,7 +44,7 @@ describe('ReasoningPartRenderer', () => {
     const { container } = render(<ReasoningPartRenderer part={part} />);
 
     expect(container.textContent).toContain('Reasoning...');
-    expect(screen.queryByRole('button', { name: /reasoning/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /reasoning/i })).toBeNull();
   });
 
   it('renders the collapsible panel once streaming reasoning has text', () => {
@@ -57,7 +57,7 @@ describe('ReasoningPartRenderer', () => {
     const { container } = render(<ReasoningPartRenderer part={part} />);
 
     expect(container.textContent).toContain('partial thought');
-    expect(screen.getByRole('button', { name: 'Hide reasoning' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
     expect(container.textContent).not.toContain('Reasoning...');
   });
 

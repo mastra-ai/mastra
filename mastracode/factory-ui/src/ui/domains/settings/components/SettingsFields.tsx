@@ -49,7 +49,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
   const pending = dragged ?? held?.stop;
   const shown = pending ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
-  const tone = shown >= last - 1 ? 'text-warning1' : shown === 0 ? 'text-neutral2' : 'text-neutral5';
+  const tone = shown >= last - 1 ? 'text-warning1' : shown === 0 ? 'text-placeholder' : 'text-foreground';
   const valueText = `${label}${inheriting && pending === undefined ? ' \u00b7 follows base' : ''}`;
   const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
 
@@ -75,7 +75,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
       <span className="flex w-32 shrink-0 justify-end">
         {inherited !== undefined &&
           (inheriting ? (
-            <span className="text-neutral2 text-meta">Follows base</span>
+            <span className="text-placeholder text-meta">Follows base</span>
           ) : (
             <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange()}>
               Reset to base
@@ -148,9 +148,9 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         aria-checked={!muted}
         aria-label="Play a sound"
         className={cn(
-          'bg-fill text-neutral3 -mr-6 flex h-7 items-center rounded-full py-1 pr-8 pl-2.5',
+          'bg-fill text-muted-foreground -mr-6 flex h-7 items-center rounded-full py-1 pr-8 pl-2.5',
           'transition-colors duration-150 motion-reduce:transition-none',
-          'hover:text-neutral6 focus-visible:ring-neutral6/60 focus-visible:ring-2 focus-visible:outline-none',
+          'hover:text-foreground focus-visible:ring-border-focus focus-visible:ring-2 focus-visible:outline-none',
         )}
         onClick={() => onChange(muted ? lastAudible : 'none')}
       >
@@ -173,7 +173,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
             'bg-card relative z-10 w-32',
             // Opaque even when muted: the mute button is tucked underneath.
             'disabled:opacity-100',
-            muted && 'text-neutral1 hover:text-neutral1 border-border/60 hover:bg-card [&_svg]:opacity-25',
+            muted && 'text-placeholder hover:text-placeholder border-border/60 hover:bg-card [&_svg]:opacity-25',
           )}
         >
           {AUDIBLE_SOUNDS.find(option => option.value === lastAudible)?.label}
@@ -201,12 +201,11 @@ interface SegmentedProps<T extends string> {
 /** For choices that are alternatives rather than a ramp: policies, modes, delivery. */
 export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
   return (
-    <ButtonsGroup role="group" aria-label={ariaLabel}>
+    <ButtonsGroup size="sm" role="group" aria-label={ariaLabel}>
       {options.map(o => (
         <Button
           key={o.value}
           variant={value === o.value ? 'primary' : 'outline'}
-          size="sm"
           aria-pressed={value === o.value}
           disabled={disabled}
           onClick={() => onChange(o.value)}

@@ -94,10 +94,10 @@ export function AddApiKeyDialog({
           />
           {authEnabled && !fixedScope && (
             <div className="flex items-center justify-between gap-4">
-              <Txt as="span" variant="caption" className="text-icon4">
+              <Txt as="span" variant="caption" className="text-muted-foreground">
                 Who can use this key
               </Txt>
-              <ButtonsGroup role="group" aria-label="API key access">
+              <ButtonsGroup size="sm" role="group" aria-label="API key access">
                 {(
                   [
                     { value: 'user', label: 'Just me' },
@@ -107,7 +107,6 @@ export function AddApiKeyDialog({
                   <Button
                     key={option.value}
                     variant={scope === option.value ? 'primary' : 'outline'}
-                    size="sm"
                     aria-pressed={scope === option.value}
                     disabled={saveKeyMutation.isPending || (option.value === 'org' && !canWriteOrgKey)}
                     title={
@@ -124,7 +123,7 @@ export function AddApiKeyDialog({
             </div>
           )}
           {personalOnlyWarning && (
-            <Txt as="p" variant="caption" className="text-icon4" role="note">
+            <Txt as="p" variant="caption" className="text-muted-foreground" role="note">
               Only you will be able to use this key. Ask an org admin to add a shared {displayName} key so teammates can
               use it too.
             </Txt>

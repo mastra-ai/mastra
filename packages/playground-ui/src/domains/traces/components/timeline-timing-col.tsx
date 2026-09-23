@@ -33,7 +33,7 @@ export function TimelineTimingCol({
           chartWidth === 'wide' ? 'min-w-72' : 'min-w-32',
           '[&:hover>div]:bg-fill',
           {
-            'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+            'opacity-40 dark:opacity-30 [&:hover]:opacity-70 dark:[&:hover]:opacity-60': isFaded,
             'bg-fill-hover': selectedSpanId === span.id,
           },
         )}
@@ -41,7 +41,7 @@ export function TimelineTimingCol({
         <div className={cn('w-full rounded-md bg-muted p-1.5')}>
           <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
-              className={cn('absolute top-0 h-1.5 rounded-sm bg-neutral1')}
+              className={cn('absolute top-0 h-1.5 rounded-sm bg-placeholder')}
               style={{
                 width: widthPercent ? `${widthPercent}%` : '2px',
                 left: `${leftPercent}%`,

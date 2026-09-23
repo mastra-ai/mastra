@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/oxfmt/configuration_schema.json",
+  "endOfLine": "lf",
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "printWidth": 120,
+  "arrowParens": "avoid",
+  "sortPackageJson": false,
+  "sortTailwindcss": {
+    "stylesheet": "./src/index.css",
+    "functions": ["cn", "clsx", "cva"]
+  },
+  "ignorePatterns": [
+    "**/.turbo",
+    "**/dist",
+    "**/node_modules/**",
+    "**/coverage/**",
+    "e2e/**/*.aria.yml",
+    "**/test-results/**"
+  ]
+}

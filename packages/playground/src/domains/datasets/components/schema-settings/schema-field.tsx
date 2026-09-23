@@ -113,7 +113,7 @@ export function SchemaField({
             value={jsonText}
             onChange={handleJsonChange}
             showCopyButton={false}
-            className={cn('h-48 border rounded-md', errorMessage && 'border-destructive')}
+            className={cn('h-48 rounded-md border', errorMessage && 'border-destructive')}
           />
           {errorMessage && <FieldBlock.ErrorMsg name={fieldName}>{errorMessage}</FieldBlock.ErrorMsg>}
         </div>

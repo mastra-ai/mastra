@@ -1,6 +1,6 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
@@ -80,9 +80,9 @@ export function renderSidebar(initialPath = '/agents') {
           <LinkComponentProvider Link={'a' as never} navigate={() => {}} paths={noopPaths}>
             <MemoryRouter initialEntries={[initialPath]}>
               <TooltipProvider>
-                <MainSidebarProvider>
+                <SidebarNew.Provider LinkComponent={'a' as never}>
                   <AppSidebar />
-                </MainSidebarProvider>
+                </SidebarNew.Provider>
               </TooltipProvider>
             </MemoryRouter>
           </LinkComponentProvider>

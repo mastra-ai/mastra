@@ -45,9 +45,9 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             <span className="block">
               {`Tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`}
             </span>
-            <span className="text-caption mt-1 block font-mono">Called with: {formatArgs(failure.args)}</span>
+            <span className="mt-1 block font-mono text-caption">Called with: {formatArgs(failure.args)}</span>
             {unconsumed.length > 0 && (
-              <span className="text-caption mt-1 block font-mono">
+              <span className="mt-1 block font-mono text-caption">
                 Unconsumed mocks: {unconsumed.map(u => formatArgs(u.args)).join(', ')}
               </span>
             )}
@@ -55,17 +55,17 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
         </Notice>
       )}
 
-      <div className="border-border divide-border text-body divide-y rounded border">
+      <div className="divide-y divide-border rounded border border-border text-body">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}
             className="flex items-center justify-between gap-2 px-3 py-1.5"
           >
             <span className="min-w-0 truncate">
-              <span className="text-muted-foreground font-mono">{row.toolName}</span>
-              <span className="text-muted-foreground text-caption ml-2 font-mono">{formatArgs(row.args)}</span>
+              <span className="font-mono text-muted-foreground">{row.toolName}</span>
+              <span className="ml-2 font-mono text-caption text-muted-foreground">{formatArgs(row.args)}</span>
             </span>
-            <span className={`text-caption shrink-0 rounded px-2 py-0.5 ${outcomeClass(row.outcome)}`}>
+            <span className={`shrink-0 rounded px-2 py-0.5 text-caption ${outcomeClass(row.outcome)}`}>
               {row.outcome}
             </span>
           </div>
@@ -82,6 +82,6 @@ function outcomeClass(outcome: ReportRow['outcome']): string {
     case 'live':
       return 'bg-orange-500/10 text-orange-400';
     case 'unconsumed':
-      return 'bg-neutral3/10 text-muted-foreground';
+      return 'bg-muted-foreground/10 text-muted-foreground';
   }
 }

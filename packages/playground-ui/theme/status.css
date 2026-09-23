@@ -14,7 +14,7 @@
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
 
-  --badge-neutral-fg: var(--neutral5);
+  --badge-neutral-fg: var(--foreground);
   --badge-green: oklch(80% 0.105 160deg);
   --badge-green-fg: oklch(92% 0.05 160deg);
   --badge-red: oklch(69% 0.24 22deg);
@@ -46,7 +46,7 @@ html.light {
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
 
-  --badge-neutral-fg: var(--neutral3);
+  --badge-neutral-fg: var(--muted-foreground);
   --badge-green: oklch(40% 0.095 160deg);
   --badge-green-fg: oklch(35% 0.085 160deg);
   --badge-red: oklch(55% 0.22 22deg);
