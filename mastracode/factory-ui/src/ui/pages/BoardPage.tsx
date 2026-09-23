@@ -166,7 +166,7 @@ function BoardContent({
   const filters = boardFiltersFromParams(searchParams, kind);
 
   const auth = useFactoryAuth();
-  const items = useBoardItems({ factoryProjectId, kind });
+  const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
   const intake = useBoardIntake({
     factoryProjectId,
     repository,
@@ -182,7 +182,7 @@ function BoardContent({
     items: items.all,
   });
   const decisions = useBoardDecisions(factoryProjectId);
-  const composer = useBoardComposer(factoryProjectId, definition);
+  const composer = useBoardComposer(factoryProjectId, definition, auth.data?.user?.userId);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
   const activity = useRecentAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
   const activityPage = activity.data;

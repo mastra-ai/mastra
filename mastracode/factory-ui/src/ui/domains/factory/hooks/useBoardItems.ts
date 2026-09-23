@@ -29,10 +29,12 @@ interface MoveOptions {
 export function useBoardItems({
   factoryProjectId,
   kind,
+  currentUserId,
   onFailure,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
+  currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
@@ -41,7 +43,7 @@ export function useBoardItems({
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
-  const transition = useTransitionWorkItemMutation(factoryProjectId);
+  const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const [dropError, setDropError] = useState<Error>();
