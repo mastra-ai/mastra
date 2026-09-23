@@ -228,12 +228,13 @@ Not every topic reaches a `clearTopic` call. Topics without a defined end of lif
 await pubsub.clearTopic('workflow.events.run-123')
 ```
 
-### `trimTopic(topic, options?)`
+### `trimTopic(topic, entryIds)`
 
-Runs `XTRIM MINID` to drop stream entries older than `options.before`, or `XTRIM MAXLEN 0` to drop every current entry when `before` is omitted. Mastra calls it on thread topics after a run's messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Best-effort; failures are logged at warn level.
+Runs `XDEL` for the given entry IDs. `publish` returns each entry's stream ID, and Mastra deletes a thread run's entries once its messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Entries from other runs, including those from other processes, are never touched. Best-effort; failures are logged at warn level.
 
 ```typescript
-await pubsub.trimTopic('agent.thread.thread-abc')
+const id = await pubsub.publish('agent.thread.thread-abc', event)
+await pubsub.trimTopic('agent.thread.thread-abc', [id!])
 ```
 
 ### `close()`

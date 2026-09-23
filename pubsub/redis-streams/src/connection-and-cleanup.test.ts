@@ -161,21 +161,19 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   });
 
   describe('trimTopic', () => {
-    it('drops entries published before the cutoff and keeps later ones for subscribers', async () => {
+    it('deletes exactly the entries whose publish IDs it is given', async () => {
       const ps = createPubSub();
       const topic = `trim-${randomUUID()}`;
-      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      const first = await ps.publish(topic, makeEvent({ data: { n: 1 } }));
       await ps.publish(topic, makeEvent({ data: { n: 2 } }));
-      await new Promise(r => setTimeout(r, 20));
-      const cutoff = new Date();
-      await new Promise(r => setTimeout(r, 20));
-      await ps.publish(topic, makeEvent({ data: { n: 3 } }));
+      const third = await ps.publish(topic, makeEvent({ data: { n: 3 } }));
+      expect(first).toMatch(/^\d+-\d+$/);
 
       const inspector = await createInspector();
       const streamKey = `mastra:topic:${topic}`;
       expect(await inspector.xLen(streamKey)).toBe(3);
 
-      await ps.trimTopic(topic, { before: cutoff });
+      await ps.trimTopic(topic, [first!, third!]);
       expect(await inspector.xLen(streamKey)).toBe(1);
 
       const received: number[] = [];
@@ -183,26 +181,21 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
         received.push((event.data as { n: number }).n);
         void ack?.();
       });
-      await expect.poll(() => received, { timeout: 5000 }).toEqual([3]);
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([2]);
     }, 15_000);
 
-    it('drops every retained entry without a cutoff and keeps later publishes', async () => {
-      const ps = createPubSub();
-      const topic = `trim-all-${randomUUID()}`;
-      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
-      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+    it('returns entry IDs when publishing with an idle TTL', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `trim-ttl-${randomUUID()}`;
+      const id = await ps.publish(topic, makeEvent());
+      await ps.trimTopic(topic, [id!]);
       const inspector = await createInspector();
-      const streamKey = `mastra:topic:${topic}`;
-
-      await ps.trimTopic(topic);
-      expect(await inspector.xLen(streamKey)).toBe(0);
-      await ps.publish(topic, makeEvent({ data: { n: 3 } }));
-      expect(await inspector.xLen(streamKey)).toBe(1);
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(0);
     }, 15_000);
 
     it('is a no-op for a topic that was never published to', async () => {
       const ps = createPubSub();
-      await expect(ps.trimTopic(`never-${randomUUID()}`, { before: new Date() })).resolves.toBeUndefined();
+      await expect(ps.trimTopic(`never-${randomUUID()}`, ['1-0'])).resolves.toBeUndefined();
     }, 15_000);
   });
 

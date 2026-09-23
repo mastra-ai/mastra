@@ -122,13 +122,13 @@ The default implementation is a no-op because transports that retain nothing per
 await pubsub.clearTopic('workflow.events.v2.run-123')
 ```
 
-#### `trimTopic(topic, options?)`
+#### `trimTopic(topic, entryIds)`
 
-Removes retained entries published strictly before `options.before` (a `Date`), keeping the rest of the topic. Without `before`, it removes every entry retained at the time of the call. Mastra calls this on a thread topic once a run completes and its messages are saved to storage: it trims the whole topic when the thread is idle, otherwise it keeps everything from the oldest active or suspended run onward. The default implementation is a no-op; [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) overrides it. Same best-effort contract as `clearTopic`.
+Deletes exactly the retained entries identified by `entryIds`, the IDs returned from earlier `publish` calls on the topic. Other entries are untouched. Mastra records the entry IDs of each thread run and calls this once a run completes successfully and its messages are saved to storage, so finished runs leave the topic while runs still in progress or waiting for approval stay. The default implementation is a no-op; [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) overrides it. Same best-effort contract as `clearTopic`.
 
 ```typescript
-await pubsub.trimTopic('agent.thread.thread-abc', { before: new Date(startedAt) })
-await pubsub.trimTopic('agent.thread.thread-abc')
+const id = await pubsub.publish('agent.thread.thread-abc', event)
+await pubsub.trimTopic('agent.thread.thread-abc', [id!])
 ```
 
 ### Replay methods

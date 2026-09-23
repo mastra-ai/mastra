@@ -351,7 +351,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     topic: string,
     event: Omit<Event, 'id' | 'createdAt'>,
     options?: { localOnly?: boolean },
-  ): Promise<void> {
+  ): Promise<string | void> {
     if (this.#closed) throw new Error('RedisStreamsPubSub: cannot publish on closed client');
 
     // `localOnly` events stay entirely within the publishing process. They are
@@ -374,13 +374,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const promise = this.#publishRemote(topic, event);
     this.#pendingPublishes.add(promise);
     try {
-      await promise;
+      return await promise;
     } finally {
       this.#pendingPublishes.delete(promise);
     }
   }
 
-  async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<string> {
     await this.#ensureWriterConnected();
 
     const id = randomUUID();
@@ -405,26 +405,23 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // after a successful XADD — and on the *last* write before a topic is
     // abandoned there is no "next write" to self-heal, leaving an immortal
     // stream despite the TTL. Atomicity closes that window.
-    const promise =
-      this.#streamIdleTtlMs > 0
-        ? this.#writeClient
-            .multi()
-            .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
-            .pExpire(streamKey, this.#streamIdleTtlMs)
-            .exec()
-            .then(replies => {
-              // XADD in the same transaction guarantees the key exists, so
-              // PEXPIRE must reply 1; anything else means the TTL backstop is
-              // not actually armed for this stream.
-              if (Number(replies[1]) !== 1) {
-                this.#logger?.warn?.('redis-streams: PEXPIRE inside publish MULTI did not apply', {
-                  streamKey,
-                  reply: String(replies[1]),
-                });
-              }
-            })
-        : this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
-    await promise;
+    if (this.#streamIdleTtlMs <= 0) {
+      return this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
+    }
+    const replies = await this.#writeClient
+      .multi()
+      .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
+      .pExpire(streamKey, this.#streamIdleTtlMs)
+      .exec();
+    // XADD in the same transaction guarantees the key exists, so PEXPIRE must
+    // reply 1; anything else means the TTL backstop is not actually armed.
+    if (Number(replies[1]) !== 1) {
+      this.#logger?.warn?.('redis-streams: PEXPIRE inside publish MULTI did not apply', {
+        streamKey,
+        reply: String(replies[1]),
+      });
+    }
+    return String(replies[0]);
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -753,21 +750,14 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * Remove entries published before `options.before` via `XTRIM MINID`. Stream
-   * IDs are Redis-server publish times, so the cutoff maps directly onto them.
-   * Consumer groups stay intact; readers simply never see the trimmed prefix.
+   * Delete specific entries (the IDs `publish` returned) via `XDEL`. Consumer
+   * groups tolerate the gaps; readers simply never see the deleted entries.
    */
-  async trimTopic(topic: string, options?: { before?: Date }): Promise<void> {
-    if (this.#closed) return;
+  async trimTopic(topic: string, entryIds: string[]): Promise<void> {
+    if (this.#closed || entryIds.length === 0) return;
     try {
       await this.#ensureWriterConnected();
-      const key = this.#streamKey(topic);
-      if (options?.before) {
-        await this.#writeClient.xTrim(key, 'MINID', `${Math.max(0, Math.floor(options.before.getTime()))}-0`);
-      } else {
-        // Trim exactly what exists now; no clock comparison against Redis-assigned IDs.
-        await this.#writeClient.xTrim(key, 'MAXLEN', 0);
-      }
+      await this.#writeClient.xDel(this.#streamKey(topic), entryIds);
     } catch (err) {
       this.#logger?.warn?.('redis-streams: trimTopic failed', {
         topic,

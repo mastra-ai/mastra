@@ -21,7 +21,7 @@ export abstract class PubSub {
     topic: string,
     event: Omit<Event, 'id' | 'createdAt'>,
     options?: { localOnly?: boolean },
-  ): Promise<void>;
+  ): Promise<string | void>;
   abstract subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void>;
   abstract unsubscribe(topic: string, cb: EventCallback): Promise<void>;
   /**
@@ -56,18 +56,19 @@ export abstract class PubSub {
   }
 
   /**
-   * Drop retained entries published to a topic before `options.before`, keeping
-   * everything published at or after it. Without `before`, drop every entry
-   * currently retained (entries published afterwards are kept). Used to trim thread-stream history
-   * once storage holds it, so retained transports (e.g. Redis Streams) stay bounded.
+   * Delete specific retained entries from a topic. `entryIds` are the values
+   * `publish` resolved with; transports that retain entries return one per
+   * publish. Used to drop a thread run's entries once storage holds it, so
+   * retained transports (e.g. Redis Streams) stay bounded without touching
+   * entries of other runs.
    *
    * Default implementation is a no-op: transports that don't retain anything
    * per topic have nothing to trim. Same best-effort contract as `clearTopic`.
    *
    * @param topic - The topic to trim
-   * @param options.before - Entries published strictly before this time are removed
+   * @param entryIds - Entry IDs returned by `publish` to delete
    */
-  trimTopic(_topic: string, _options?: { before?: Date }): Promise<void> {
+  trimTopic(_topic: string, _entryIds: string[]): Promise<void> {
     return Promise.resolve();
   }
 

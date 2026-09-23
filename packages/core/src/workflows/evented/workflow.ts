@@ -450,7 +450,7 @@ function createStepFromParams<
 async function processAgentStream(params: {
   fullStream: AsyncIterable<unknown>;
   isV2Model: boolean;
-  pubsub: { publish: (channel: string, data: any) => Promise<void> };
+  pubsub: { publish: (channel: string, data: any) => Promise<unknown> };
   runId: string;
   toolData: { name: string; args: unknown };
   writer?: StreamChunkWriter;

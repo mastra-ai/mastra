@@ -50,7 +50,6 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /** Safety margin when trimming up to a retained run, covering clock skew between us and the pubsub backend. */
-const TRIM_CLOCK_SKEW_MS = 5_000;
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
@@ -236,8 +235,6 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   streamSeq: number;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
-  /** When the run first registered on the thread (ms epoch); bounds topic trimming. */
-  startedAt: number;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
   suspendedAt?: number;
   threadId: string;
@@ -333,6 +330,8 @@ type AgentThreadRuntimeState = {
   streamSeqByRunId: Map<string, number>;
   approvalSuspendedRunIds: Set<string>;
   suspendedRunIds: Set<string>;
+  /** Topic entry IDs each run published, so a saved run's entries can be deleted exactly. */
+  topicEntryIdsByRunId: Map<string, string[]>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
   // Signals queued for a run that is starting but has not made its first model
@@ -488,6 +487,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     streamSeqByRunId: new Map(),
     approvalSuspendedRunIds: new Set(),
     suspendedRunIds: new Set(),
+    topicEntryIdsByRunId: new Map(),
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
@@ -1471,12 +1471,18 @@ export class AgentThreadStreamRuntime {
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
-    await resolvedPubSub.publish(topic, {
+    const entryId = await resolvedPubSub.publish(topic, {
       type: event.type,
       // Thread-scoped control events use the thread key as their envelope correlation ID.
       runId: 'runId' in event ? event.runId : key,
       data: event,
     });
+    if (entryId && 'runId' in event && event.runId) {
+      const entryIds = this.#getState(resolvedPubSub).topicEntryIdsByRunId;
+      const ids = entryIds.get(event.runId);
+      if (ids) ids.push(entryId);
+      else entryIds.set(event.runId, [entryId]);
+    }
   }
 
   async #deliverToClaimedThreadOwner(
@@ -2133,6 +2139,7 @@ export class AgentThreadStreamRuntime {
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
+    state.topicEntryIdsByRunId.clear();
   }
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
@@ -2227,7 +2234,6 @@ export class AgentThreadStreamRuntime {
       resourceId,
       streamOptions: {},
       createSubscriberStream,
-      startedAt: Date.now(),
     };
 
     state.threadRunsById.set(runId, record);
@@ -2433,7 +2439,6 @@ export class AgentThreadStreamRuntime {
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
-      startedAt: state.threadRunsById.get(output.runId)?.startedAt ?? Date.now(),
       broadcastFinished,
       continuation:
         registrationOptions?.continuation === 'across-suspension'
@@ -2541,7 +2546,6 @@ export class AgentThreadStreamRuntime {
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
-      startedAt: state.threadRunsById.get(output.runId)?.startedAt ?? Date.now(),
       broadcastFinished,
       continuation:
         registrationOptions.continuation === 'across-suspension'
@@ -2712,7 +2716,6 @@ export class AgentThreadStreamRuntime {
         // storage; only a successful run leaves nothing actionable to trim.
         const persisted = record.output.status === 'success' || record.output.status === 'suspended';
         const trimmable = record.output.status === 'success';
-        const trimBefore = trimmable ? this.#retainedThreadHistoryStart(state, key) : undefined;
         void this.#publishAndWait(pubsub, key, {
           type: 'run-completed',
           runId: record.runId,
@@ -2723,7 +2726,7 @@ export class AgentThreadStreamRuntime {
           persisted,
           status: record.output.status,
         })
-          .then(() => (trimmable ? this.#trimPersistedThreadHistory(pubsub, key, record, trimBefore) : undefined))
+          .then(() => this.#settleRunTopicEntries(state, pubsub, key, record, trimmable))
           .catch(() => {});
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
@@ -2734,35 +2737,27 @@ export class AgentThreadStreamRuntime {
     });
   }
 
-  /** Start of the oldest run on the thread that still has to stay in the topic, if any. */
-  #retainedThreadHistoryStart(state: AgentThreadRuntimeState, key: string): number | undefined {
-    let oldest: number | undefined;
-    for (const [runId, record] of state.threadRunsById) {
-      if (state.threadKeysByRunId.get(runId) !== key) continue;
-      oldest = oldest === undefined ? record.startedAt : Math.min(oldest, record.startedAt);
-    }
-    return oldest;
-  }
-
   /**
-   * Trim a thread topic once a run's messages are in storage: everything before
-   * the oldest still-retained (active or suspended) run, or the whole backlog
-   * when the thread is idle. Without storage the topic is the only copy, so it stays.
+   * Once a run is terminal, forget the topic entries it published and, when it
+   * saved successfully and the agent has storage, delete exactly those entries.
+   * Other runs' entries (in progress, suspended, or owned by another instance)
+   * are never touched. Suspended runs keep their entries until answered.
    */
-  async #trimPersistedThreadHistory(
+  async #settleRunTopicEntries(
+    state: AgentThreadRuntimeState,
     pubsub: PubSub | undefined,
     key: string,
-    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>,
-    retainedStart: number | undefined,
+    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId' | 'output'>,
+    trimmable: boolean,
   ) {
+    if (record.output.status === 'suspended') return;
+    const entryIds = state.topicEntryIdsByRunId.get(record.runId);
+    state.topicEntryIdsByRunId.delete(record.runId);
+    if (!trimmable || !entryIds?.length) return;
+    // Without storage the topic is the only copy, so it stays.
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
     if (!memory) return;
-    // Idle: trim everything retained. Otherwise back off from the retained run's
-    // start: Redis stamps entry IDs with its own clock, which can skew from ours.
-    await this.#getPubSub(pubsub).trimTopic(
-      this.#threadTopic(key),
-      retainedStart === undefined ? undefined : { before: new Date(retainedStart - TRIM_CLOCK_SKEW_MS) },
-    );
+    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), entryIds);
   }
 
   async #drainPendingSignals(
@@ -3533,7 +3528,6 @@ export class AgentThreadStreamRuntime {
         runId,
         streamId,
         streamSeq,
-        startedAt: Date.now(),
         lifecycle: 'running',
         threadId: options.threadId,
         resourceId: options.resourceId,
