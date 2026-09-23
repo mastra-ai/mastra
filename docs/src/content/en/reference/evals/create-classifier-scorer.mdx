@@ -54,7 +54,7 @@ export const qualityScorer = createClassifierScorer({
 })
 ```
 
-For a score question, `result.score` is the numeric classifier answer. The adapter doesn't normalize or clamp the value.
+For a score question, `result.score` is the numeric classifier answer without normalization or clamping.
 
 ## Choice questions
 
@@ -78,7 +78,7 @@ The selected choice and its optional probability distribution remain available i
 
 ## Boolean questions
 
-For a boolean question, `result.score` is the classifier's estimated `P(true)`. The adapter doesn't apply a threshold or convert the probability to `0` or `1`.
+For a boolean question, `result.score` is the classifier's estimated `P(true)` without applying a threshold or converting the probability to `0` or `1`.
 
 ```typescript
 const factualityScorer = createClassifierScorer({
@@ -173,6 +173,18 @@ Running an ID-backed scorer before registering it with Mastra throws an error th
 />
 
 The factory also accepts `name` and `description` from `createScorer()`.
+
+## Errors
+
+`createClassifierScorer()` throws a `TypeError` for these configuration and evaluation errors:
+
+- An inline classifier has no configured questions.
+- The selected question doesn't exist.
+- A choice mapping omits a configured choice, contains an unknown choice, or has a non-finite value.
+- A score or boolean question receives a `scores` mapping.
+- Classifier evaluation doesn't return an answer for the selected question.
+
+When using a classifier ID, the scorer throws an `Error` at run time if it hasn't been registered with Mastra or the ID isn't present in `classifiers`.
 
 ## Result evidence
 
