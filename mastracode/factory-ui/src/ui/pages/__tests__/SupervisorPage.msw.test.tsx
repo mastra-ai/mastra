@@ -90,12 +90,9 @@ describe('SupervisorPage', () => {
       renderSupervisor();
 
       expect(await screen.findByRole('region', { name: 'Supervisor composer' })).toBeInTheDocument();
-      const header = screen.getByRole('region', { name: 'Supervisor session' });
-      expect(within(header).getByRole('link', { name: 'Acme Factory' })).toHaveAttribute(
-        'href',
-        `/factories/${FACTORY_ID}/overview`,
-      );
-      expect(within(header).getByText('Supervisor')).toBeInTheDocument();
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(within(breadcrumb).queryByRole('link')).not.toBeInTheDocument();
+      expect(within(breadcrumb).getByText('Supervisor')).toBeInTheDocument();
       await waitFor(() => expect(sessionCreates).toContain(SUPERVISOR_ID));
     });
 

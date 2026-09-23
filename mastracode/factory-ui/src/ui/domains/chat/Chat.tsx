@@ -1,30 +1,15 @@
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import type { ReactNode } from 'react';
-import { Outlet, useMatch } from 'react-router';
+import { useMatch } from 'react-router';
 
-import { OverlaysProvider } from '../../lib/overlays';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 import { supervisorSessionAddress } from '../supervisor/services/supervisor';
 
 /**
- * Shared chat app providers. Route leaves render their own pages so `/new` is a
- * real page boundary instead of a branch inside the thread transcript.
+ * Shared chat session providers, mounted once by `AppLayout` so the sidebar
+ * and every routed page (chat or not) share the same session context.
  */
-export default function Chat() {
-  return (
-    <SidebarNew.Provider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
-      <ChatSessionRouteProvider>
-        <OverlaysProvider>
-          <ChatShell />
-        </OverlaysProvider>
-      </ChatSessionRouteProvider>
-    </SidebarNew.Provider>
-  );
-}
-
-function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
+export function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
   // `useParams` in a layout can't see descendant params, so match the thread
   // routes explicitly (params come back already decoded).
   const userDraftMatch = useMatch('/factories/:factoryId/user/new/:draftSessionId');
@@ -47,14 +32,5 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
     >
       <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
     </ChatSessionConfigProvider>
-  );
-}
-
-function ChatShell() {
-  return (
-    <>
-      <Outlet />
-      <ChatOverlays />
-    </>
   );
 }

@@ -23,7 +23,9 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { TIMESTAMP } from '../domains/factory/components/panel';
@@ -60,7 +62,15 @@ const STATUS_STYLE: Record<
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
-  return <FactoryPageShell>{project => <RulesContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout variant="fit" {...slots}>
+      <div className="flex min-h-0 flex-col p-4">
+        <RulesContent factoryProjectId={factory.id} />
+      </div>
+    </PageLayout>
+  );
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
