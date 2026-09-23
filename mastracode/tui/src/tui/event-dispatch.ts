@@ -68,6 +68,30 @@ function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): b
   return !message.threadId || message.threadId === state.session.thread.getId();
 }
 
+const threadLifecycleGenerations = new WeakMap<TUIState, number>();
+
+export function getThreadLifecycleGeneration(state: TUIState): number {
+  return threadLifecycleGenerations.get(state) ?? 0;
+}
+
+function beginThreadLifecycle(state: TUIState, threadId: string): (() => boolean) | undefined {
+  if (threadId !== state.session.thread.getId()) return undefined;
+
+  const generation = (threadLifecycleGenerations.get(state) ?? 0) + 1;
+  threadLifecycleGenerations.set(state, generation);
+  return () => threadLifecycleGenerations.get(state) === generation && state.session.thread.getId() === threadId;
+}
+
+async function clearThreadState(state: TUIState, isCurrent: () => boolean): Promise<boolean> {
+  const updates = { tasks: [], activePlan: null, sandboxAllowedPaths: [] };
+  if (state.session.state.setIf) {
+    return state.session.state.setIf(updates, isCurrent);
+  }
+  if (!isCurrent()) return false;
+  await state.session.state.set(updates);
+  return isCurrent();
+}
+
 function applyMessageUpdate(
   message: MastraDBMessage,
   update: Extract<AgentControllerEvent, { type: 'message_update' }>['event'],
@@ -279,29 +303,35 @@ export async function dispatchEvent(
       break;
 
     case 'thread_changed': {
+      const isCurrent = beginThreadLifecycle(state, event.threadId);
+      if (!isCurrent) break;
+
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
       state.backgroundToolContexts?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (!(await clearThreadState(state, isCurrent))) break;
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         flushRender(state);
       }
       state.taskToolInsertIndex = -1;
-      await ectx.renderExistingMessages();
-      await state.controller.loadOMProgress(state.session);
+      await ectx.renderExistingMessages(isCurrent);
+      if (!isCurrent()) break;
+      await state.controller.loadOMProgress(state.session, isCurrent);
+      if (!isCurrent()) break;
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
-        if (freshBranch) {
+        if (freshBranch && isCurrent()) {
           state.projectInfo.gitBranch = freshBranch;
           ectx.updateStatusLine();
         }
       });
       // Update current thread title for status line display
       const threads = await state.session.thread.list();
+      if (!isCurrent()) break;
       const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
         setCurrentThreadTitle(state, currentThread.title);
@@ -311,7 +341,8 @@ export async function dispatchEvent(
         state.githubPrGradientAnimator?.stop();
         // Load the objective from the durable ThreadState slot, falling back to
         // the legacy thread-metadata goal for pre-migration threads.
-        await state.goalManager.loadFromThread(state);
+        await state.goalManager.loadFromThread(state, isCurrent);
+        if (!isCurrent()) break;
         if (!state.goalManager.getGoal()) {
           state.goalManager.loadFromThreadMetadata(metadata);
         }
@@ -320,6 +351,9 @@ export async function dispatchEvent(
     }
 
     case 'thread_created': {
+      const isCurrent = beginThreadLifecycle(state, event.thread.id);
+      if (!isCurrent) break;
+
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
       state.backgroundToolContexts?.clear();
@@ -345,7 +379,7 @@ export async function dispatchEvent(
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (!(await clearThreadState(state, isCurrent))) break;
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);

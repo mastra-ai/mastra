@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
@@ -17,6 +18,7 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -924,30 +926,50 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // would suspend the AGENT run via tool-call-approval) with
                   // the bg-task workflow's, so calling `suspend()` from the
                   // tool pauses the bg-task run instead.
-                  const rawResult = await resolvedTool.execute!(bgArgs, {
-                    ...toolOptions,
-                    isBackgroundTask: true,
-                    [BACKGROUND_WORK_CONTEXT]: {
-                      originRunId: runId,
-                      originToolCallId: inputData.toolCallId,
-                      taskId: info.getTaskId(),
-                      invocationKind: isAgentTool ? 'agent' : 'tool',
-                      disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
-                    },
-                    ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
-                    // Framework-resolved delegated run id recovered from persisted
-                    // suspension state (#23739) — never the model-authored one.
-                    suspendedToolRunId: opts?.suspendedToolRunId,
-                    suspend: async (data?: unknown, options?: SuspendOptions) => {
-                      await toolOptions.suspend?.(data, options);
-                      return opts?.suspend?.(data, options);
-                    },
-                    outputWriter: async (chunk: any) => {
-                      await opts?.onProgress?.(chunk);
-                      return toolOptions.outputWriter?.(chunk);
-                    },
-                    abortSignal: opts?.abortSignal,
-                  } as any);
+                  const taskId = info.getTaskId()!;
+                  const execution = await executeAdoptedBackgroundOperation({
+                    taskId,
+                    disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                    abortSignal: opts?.abortSignal ?? options?.abortSignal,
+                    execute: background =>
+                      resolvedTool.execute!(bgArgs, {
+                        ...toolOptions,
+                        isBackgroundTask: true,
+                        background,
+                        [BACKGROUND_WORK_CONTEXT]: {
+                          originRunId: runId,
+                          originToolCallId: inputData.toolCallId,
+                          taskId,
+                          invocationKind: isAgentTool ? 'agent' : 'tool',
+                          disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                        },
+                        ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                        // Framework-resolved delegated run id recovered from persisted
+                        // suspension state (#23739) — never the model-authored one.
+                        suspendedToolRunId: opts?.suspendedToolRunId,
+                        suspend: async (data?: unknown, options?: SuspendOptions) => {
+                          await toolOptions.suspend?.(data, options);
+                          return opts?.suspend?.(data, options);
+                        },
+                        outputWriter: async (chunk: any) => {
+                          await opts?.onProgress?.(chunk);
+                          return toolOptions.outputWriter?.(chunk);
+                        },
+                        abortSignal: opts?.abortSignal ?? options?.abortSignal,
+                      } as any),
+                    onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                  });
+
+                  let rawResult = execution.result;
+                  if (execution.adopted) {
+                    const outputValidation = validateToolOutput(
+                      resolveToolOutputValidationSchema(resolvedTool),
+                      rawResult,
+                      inputData.toolName,
+                      false,
+                    );
+                    rawResult = outputValidation.error ?? outputValidation.data;
+                  }
                   const result = ensureSerializable(rawResult);
 
                   if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
@@ -1174,16 +1196,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // a replayed awaited call still owes the model the real result.
           if (bgOutcome.disposition === 'awaited') {
             const completedTask = await bgOutcome.waitForCompletion({ abortSignal: options?.abortSignal });
+            // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+            if (completedTask.status !== 'cancelled') {
+              const reconciliation = await reconciliationComplete;
+              if (reconciliation.error) {
+                throw reconciliation.error;
+              }
+            }
+
             if (completedTask.status !== 'completed') {
               throw new Error(
                 completedTask.error?.message ??
                   `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
               );
-            }
-
-            const reconciliation = await reconciliationComplete;
-            if (reconciliation.error) {
-              throw reconciliation.error;
             }
 
             return {

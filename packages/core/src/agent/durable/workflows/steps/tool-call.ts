@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
@@ -28,6 +29,7 @@ import {
 } from '../../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -1239,29 +1241,51 @@ export function createDurableToolCallStep() {
         taskContext: info => ({
           executor: {
             execute: async (taskArgs: any, taskContext: any) => {
-              return tool.execute!(taskArgs, {
-                ...toolOptions,
-                isBackgroundTask: true,
-                [BACKGROUND_WORK_CONTEXT]: {
-                  originRunId: runId,
-                  originToolCallId: toolCallId,
-                  taskId: info.getTaskId(),
-                  invocationKind: isAgentTool ? 'agent' : 'tool',
-                  disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
-                },
-                ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
-                // Framework-resolved delegated run id recovered from persisted
-                // suspension state (#23739) — never the model-authored one.
-                suspendedToolRunId: taskContext?.suspendedToolRunId,
-                suspend: async (data?: unknown, options?: SuspendOptions) => {
-                  await toolOptions.suspend?.(data, options);
-                  return taskContext?.suspend?.(data, options);
-                },
-                outputWriter: async (chunk: any) => {
-                  await taskContext?.onProgress?.(chunk);
-                  return toolOptions.outputWriter?.(chunk);
-                },
-              } as any);
+              const taskId = info.getTaskId()!;
+              const execution = await executeAdoptedBackgroundOperation({
+                taskId,
+                disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                abortSignal: taskContext?.abortSignal ?? toolAbortSignal,
+                execute: background =>
+                  tool.execute!(taskArgs, {
+                    ...toolOptions,
+                    isBackgroundTask: true,
+                    abortSignal: taskContext?.abortSignal ?? toolAbortSignal,
+                    background,
+                    [BACKGROUND_WORK_CONTEXT]: {
+                      originRunId: runId,
+                      originToolCallId: toolCallId,
+                      taskId,
+                      invocationKind: isAgentTool ? 'agent' : 'tool',
+                      disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                    },
+                    ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                    // Framework-resolved delegated run id recovered from persisted
+                    // suspension state (#23739) — never the model-authored one.
+                    suspendedToolRunId: taskContext?.suspendedToolRunId,
+                    suspend: async (data?: unknown, options?: SuspendOptions) => {
+                      await toolOptions.suspend?.(data, options);
+                      return taskContext?.suspend?.(data, options);
+                    },
+                    outputWriter: async (chunk: any) => {
+                      await taskContext?.onProgress?.(chunk);
+                      return toolOptions.outputWriter?.(chunk);
+                    },
+                  } as any),
+                onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+              });
+
+              if (!execution.adopted) {
+                return execution.result;
+              }
+
+              const outputValidation = validateToolOutput(
+                resolveToolOutputValidationSchema(tool),
+                execution.result,
+                toolName,
+                false,
+              );
+              return outputValidation.error ?? outputValidation.data;
             },
           },
           onChunk: (chunk: any) => {
@@ -1440,16 +1464,19 @@ export function createDurableToolCallStep() {
       if (bgOutcome.status !== 'sync') {
         if (bgOutcome.disposition === 'awaited') {
           const completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+          if (completedTask.status !== 'cancelled') {
+            const reconciliation = await reconciliationComplete;
+            if (reconciliation.error) {
+              throw reconciliation.error;
+            }
+          }
+
           if (completedTask.status !== 'completed') {
             throw new Error(
               completedTask.error?.message ??
                 `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
             );
-          }
-
-          const reconciliation = await reconciliationComplete;
-          if (reconciliation.error) {
-            throw reconciliation.error;
           }
 
           return {
