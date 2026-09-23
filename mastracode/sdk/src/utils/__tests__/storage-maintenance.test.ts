@@ -183,7 +183,7 @@ describe('runStorageMaintenance', () => {
     await runStorageMaintenance({ maintenance, vacuum: false, log: line => lines.push(line) });
 
     expect(lines.join('\n')).toContain('Nothing to prune');
-    expect(lines.join('\n')).toContain('Run /prune vacuum to reclaim disk space.');
+    expect(lines.join('\n')).toContain('Run /prune vacuum (or mastracode prune --vacuum) to reclaim disk space.');
     expect(maintenance.reclaimDisk).not.toHaveBeenCalled();
   });
 
