@@ -199,6 +199,23 @@ for (const meta of allSkills) {
 
 Visit [`.getSkill()` reference](/reference/agents/getSkill) and [`.listSkills()` reference](/reference/agents/listSkills) for the full API.
 
+## Validating skills before saving
+
+If your app writes `SKILL.md` files (from a tool, an upload, or a shell command), validate the content first with `validateSkillContent()`. It applies the same rules used when skills are loaded, including the check that `name` matches the directory name, and returns structured results instead of throwing:
+
+```typescript
+import { validateSkillContent } from '@mastra/core/skills'
+
+const result = validateSkillContent(skillMarkdown, 'code-review')
+
+if (!result.valid) {
+  throw new Error(`Invalid skill:\n${result.errors.join('\n')}`)
+}
+// result.warnings lists non-blocking issues, such as very long instructions
+```
+
+To validate an already-parsed frontmatter object, use `validateSkillMetadata(metadata, directoryName)`.
+
 ## Related
 
 - [Workspace skills](/docs/sandbox/skills)

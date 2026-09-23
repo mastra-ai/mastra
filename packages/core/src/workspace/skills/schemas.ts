@@ -6,6 +6,8 @@
  * version compatibility issues between Zod 3 and Zod 4.
  */
 
+import matter from 'gray-matter';
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -320,5 +322,67 @@ export function validateSkillMetadata(
     valid: errors.length === 0,
     errors,
     warnings,
+  };
+}
+
+/**
+ * Result of validating raw SKILL.md content
+ */
+export interface SkillContentValidationResult extends SkillValidationResult {
+  /** Parsed frontmatter fields (present when frontmatter could be parsed) */
+  metadata?: SkillMetadataInput;
+  /** Markdown body after the frontmatter, trimmed */
+  instructions?: string;
+}
+
+/**
+ * Parse SKILL.md content into frontmatter fields and body.
+ * Throws if the frontmatter is not valid YAML.
+ * @internal
+ */
+export function extractSkillFrontmatter(content: string): { metadata: SkillMetadataInput; instructions: string } {
+  const parsed = matter(content);
+  const data = parsed.data;
+  return {
+    metadata: {
+      name: data.name,
+      description: data.description,
+      license: data.license,
+      compatibility: data.compatibility,
+      'user-invocable': data['user-invocable'],
+      metadata: data.metadata,
+    },
+    instructions: parsed.content.trim(),
+  };
+}
+
+/**
+ * Validate raw SKILL.md content (frontmatter + body) using the same rules
+ * applied when skills are loaded. Pure: no filesystem access or logging.
+ *
+ * @param content - Full SKILL.md file content
+ * @param directoryName - Name of the directory the skill will live in (name must match)
+ *
+ * @example
+ * ```typescript
+ * const result = validateSkillContent(skillMd, 'my-skill');
+ * if (!result.valid) throw new Error(result.errors.join('\n'));
+ * ```
+ */
+export function validateSkillContent(content: string, directoryName?: string): SkillContentValidationResult {
+  let extracted: ReturnType<typeof extractSkillFrontmatter>;
+  try {
+    extracted = extractSkillFrontmatter(content);
+  } catch (error) {
+    return {
+      valid: false,
+      errors: [`Invalid frontmatter: ${error instanceof Error ? error.message : String(error)}`],
+      warnings: [],
+    };
+  }
+  return {
+    ...validateSkillMetadata(extracted.metadata, directoryName, extracted.instructions),
+    metadata: extracted.metadata,
+    instructions: extracted.instructions,
   };
 }

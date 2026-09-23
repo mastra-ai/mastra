@@ -5,12 +5,10 @@
  * in skills paths. All operations are async.
  */
 
-import matter from 'gray-matter';
-
 import { isGlobPattern, resolvePathPattern } from '../glob';
 import type { ReaddirEntry } from '../glob';
 import type { IndexDocument, SearchResult } from '../search';
-import { validateSkillMetadata } from './schemas';
+import { extractSkillFrontmatter, validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
 import type {
   ContentSource,
@@ -1303,22 +1301,15 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const rawContent = await this.#source.readFile(filePath);
     const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
 
-    const parsed = matter(content);
-    const frontmatter = parsed.data;
-    const body = parsed.content.trim();
+    const { metadata: frontmatter, instructions: body } = extractSkillFrontmatter(content);
 
     // Extract required fields
     // Get skill directory path (parent of SKILL.md) - needed for SkillMetadata
     const skillPath = this.#getParentPath(filePath);
 
     const metadata: SkillMetadata = {
-      name: frontmatter.name,
+      ...frontmatter,
       path: skillPath,
-      description: frontmatter.description,
-      license: frontmatter.license,
-      compatibility: frontmatter.compatibility,
-      'user-invocable': frontmatter['user-invocable'],
-      metadata: frontmatter.metadata,
     };
 
     // Validate if enabled (includes token/line count warnings)
