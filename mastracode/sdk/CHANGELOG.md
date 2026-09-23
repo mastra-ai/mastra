@@ -1,5 +1,32 @@
 # @mastra/code-sdk
 
+## 1.8.1-alpha.3
+
+### Patch Changes
+
+- Fixed hooks running twice for sessions started in your home directory. There, the project hooks file (`~/.mastracode/hooks.json`) is the same file as the global one, and it was loaded as both. It is now loaded once, including when the project directory is a symlink to your home directory. ([#24744](https://github.com/mastra-ai/mastra/pull/24744))
+
+- Fixed plugin tools so background execution is enabled only when the tool declares support; `mastra_expert` is no longer opted in by name. Removed global plugin-call serialization, allowing independently declared tools to run concurrently. ([#24418](https://github.com/mastra-ai/mastra/pull/24418))
+
+- Updated dependencies [[`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c)]:
+  - @mastra/core@1.69.0-alpha.3
+
+## 1.8.1-alpha.2
+
+### Patch Changes
+
+- Missing provider credentials for signed-in Factory accounts now throw `ProviderAuthRequiredError` instead of a plain `Error`, so hosts can classify the failure as an authentication error without matching on the message text. ([#24737](https://github.com/mastra-ai/mastra/pull/24737))
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+
+## 1.8.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
 ## 1.8.1-alpha.0
 
 ### Patch Changes

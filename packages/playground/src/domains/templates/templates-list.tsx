@@ -7,7 +7,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { NetworkIcon, WorkflowIcon } from 'lucide-react';
-import { getRepoName } from './shared';
+import { getRepoName } from './get-repo-name';
 
 type Template = {
   slug: string;

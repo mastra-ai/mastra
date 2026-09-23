@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -22,6 +23,7 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -950,28 +952,48 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    const rawResult = await resolvedTool.execute!(bgArgs, {
-                      ...toolOptions,
-                      isBackgroundTask: true,
-                      [BACKGROUND_WORK_CONTEXT]: {
-                        originRunId: runId,
-                        originToolCallId: inputData.toolCallId,
-                        taskId: bgTask.task.id,
-                        invocationKind: isAgentTool ? 'agent' : 'tool',
-                        disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
-                      },
-                      ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
-                      suspendedToolRunId: opts?.suspendedToolRunId,
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return opts?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await opts?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
+                    const execution = await executeAdoptedBackgroundOperation({
+                      taskId: bgTask.task.id,
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       abortSignal: opts?.abortSignal,
-                    } as any);
+                      onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                      execute: background =>
+                        resolvedTool.execute!(bgArgs, {
+                          ...toolOptions,
+                          isBackgroundTask: true,
+                          background,
+                          [BACKGROUND_WORK_CONTEXT]: {
+                            originRunId: runId,
+                            originToolCallId: inputData.toolCallId,
+                            taskId: bgTask.task.id,
+                            invocationKind: isAgentTool ? 'agent' : 'tool',
+                            disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                          },
+                          ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                          suspendedToolRunId: opts?.suspendedToolRunId,
+                          suspend: async (data?: unknown, options?: SuspendOptions) => {
+                            await toolOptions.suspend?.(data, options);
+                            return opts?.suspend?.(data, options);
+                          },
+                          outputWriter: async (chunk: any) => {
+                            await opts?.onProgress?.(chunk);
+                            return toolOptions.outputWriter?.(chunk);
+                          },
+                          abortSignal: opts?.abortSignal,
+                        } as any),
+                    });
+                    let rawResult = execution.result;
+
+                    if (execution.adopted) {
+                      const outputValidation = validateToolOutput(
+                        resolveToolOutputValidationSchema(resolvedTool),
+                        rawResult,
+                        inputData.toolName,
+                        false,
+                      );
+                      rawResult = outputValidation.error ?? outputValidation.data;
+                    }
+
                     const result = ensureSerializable(rawResult);
 
                     if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
@@ -1327,16 +1349,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             const awaitAuthoritativeBackgroundResult = async () => {
               const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+              if (completedTask.status !== 'cancelled') {
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
+                }
+              }
+
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
                     `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
                 );
-              }
-
-              const reconciliation = await reconciliationComplete;
-              if (reconciliation.error) {
-                throw reconciliation.error;
               }
 
               return ensureSerializable(completedTask.result);

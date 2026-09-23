@@ -338,6 +338,31 @@ describe('RequestContext', () => {
       expect(json).toHaveProperty('smallBuffer');
     });
 
+    it('should skip primitive BigInts so JSON.stringify(context) does not throw', () => {
+      const ctx = new RequestContext();
+      ctx.set('locale', 'en');
+      ctx.set('databaseId', 42n);
+
+      expect(ctx.toJSON()).toEqual({ locale: 'en' });
+      expect(JSON.stringify(ctx)).toBe('{"locale":"en"}');
+      expect(ctx.get('databaseId')).toBe(42n);
+    });
+
+    it('should keep primitive BigInts when BigInt.prototype.toJSON is defined', () => {
+      const proto = BigInt.prototype as unknown as { toJSON?: () => string };
+      proto.toJSON = function (this: bigint) {
+        return this.toString();
+      };
+      try {
+        const ctx = new RequestContext();
+        ctx.set('databaseId', 42n);
+
+        expect(JSON.stringify(ctx)).toBe('{"databaseId":"42"}');
+      } finally {
+        delete proto.toJSON;
+      }
+    });
+
     it('should still skip BigInt-element typed arrays like the unbudgeted probe did', () => {
       const ctx = new RequestContext();
       ctx.set('bigIntArray', new BigInt64Array([1n]));

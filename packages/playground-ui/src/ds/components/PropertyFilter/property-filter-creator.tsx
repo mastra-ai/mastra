@@ -7,20 +7,27 @@ import {
   ListFilterPlus,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ButtonHTMLAttributes } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-// Plain <button>s navigated with roving focus (not Base UI), so the highlight rides on `:focus`.
-const filterItemFocusClass = 'focus:bg-fill-subtle focus:text-foreground';
+// Plain <button>s navigated with roving focus (not Base UI): the fluid highlight follows focus.
+const filterItemClass = cn(menuItemClass, 'focus:text-foreground');
+
+const FilterMenuButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => (
+  <button type="button" role="menuitem" data-filter-item="" ref={useFluidMenuItemRef(ref)} {...props} />
+));
+FilterMenuButton.displayName = 'FilterMenuButton';
 
 export type PropertyFilterCreatorProps = {
   fields: PropertyFilterField[];
@@ -68,6 +75,7 @@ export function PropertyFilterCreator({
     return fields.filter(f => !hidden.has(f.id));
   }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
+  const menu = useFluidMenu<HTMLDivElement>();
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();
@@ -196,7 +204,8 @@ export function PropertyFilterCreator({
           {!selectedField && (
             <div
               role="menu"
-              className="max-h-[80dvh] overflow-auto"
+              className={cn('max-h-[80dvh] overflow-auto', menu.containerClassName)}
+              {...menu.getContainerProps({})}
               onKeyDown={e => {
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
                 const buttons = Array.from(
@@ -214,61 +223,60 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              {visibleFields.length > 0 ? (
-                visibleFields.map(f => {
-                  const used = singleUseFieldIds.has(f.id);
-                  if (f.kind === 'pick-multi') {
+              <FluidMenuItems menu={menu}>
+                {visibleFields.length > 0 ? (
+                  visibleFields.map(f => {
+                    const used = singleUseFieldIds.has(f.id);
+                    if (f.kind === 'pick-multi') {
+                      return (
+                        <PickMultiMenuItem
+                          key={f.id}
+                          field={f}
+                          tokens={tokens}
+                          onChange={replacePickMultiToken}
+                          open={openPickMultiFieldId === f.id}
+                          onToggle={togglePickMulti}
+                          onClose={closePickMulti}
+                        />
+                      );
+                    }
                     return (
-                      <PickMultiMenuItem
+                      <FilterMenuButton
                         key={f.id}
-                        field={f}
-                        tokens={tokens}
-                        onChange={replacePickMultiToken}
-                        open={openPickMultiFieldId === f.id}
-                        onToggle={togglePickMulti}
-                        onClose={closePickMulti}
-                      />
+                        className={cn(filterItemClass, 'group')}
+                        disabled={used}
+                        onClick={() => {
+                          setError(undefined);
+                          if (f.kind === 'text') {
+                            onTokensChange([...tokens, { fieldId: f.id, value: '' }]);
+                            onStartTextFilter?.(f.id);
+                            skipCloseFocusRef.current = true;
+                            setOpen(false);
+                            return;
+                          }
+                          setFieldId(f.id);
+                        }}
+                      >
+                        <span className="truncate">{f.label}</span>
+                        {used ? (
+                          <span className="ml-auto text-muted-foreground">In use</span>
+                        ) : (
+                          <span
+                            className={cn(
+                              menuItemTrailingIconClass,
+                              'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                            )}
+                          >
+                            <PlusIcon />
+                          </span>
+                        )}
+                      </FilterMenuButton>
                     );
-                  }
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      role="menuitem"
-                      data-filter-item=""
-                      className={cn(menuItemClass, 'group', filterItemFocusClass)}
-                      disabled={used}
-                      onClick={() => {
-                        setError(undefined);
-                        if (f.kind === 'text') {
-                          onTokensChange([...tokens, { fieldId: f.id, value: '' }]);
-                          onStartTextFilter?.(f.id);
-                          skipCloseFocusRef.current = true;
-                          setOpen(false);
-                          return;
-                        }
-                        setFieldId(f.id);
-                      }}
-                    >
-                      <span className="truncate">{f.label}</span>
-                      {used ? (
-                        <span className="ml-auto text-muted-foreground">In use</span>
-                      ) : (
-                        <span
-                          className={cn(
-                            menuItemTrailingIconClass,
-                            'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
-                          )}
-                        >
-                          <PlusIcon />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })
-              ) : (
-                <div className={menuEmptyClass}>No matching property.</div>
-              )}
+                  })
+                ) : (
+                  <div className={menuEmptyClass}>No matching property.</div>
+                )}
+              </FluidMenuItems>
             </div>
           )}
 
@@ -337,11 +345,8 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          role="menuitem"
-          data-filter-item=""
-          className={cn(menuItemClass, filterItemFocusClass)}
+        <FilterMenuButton
+          className={filterItemClass}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);
@@ -361,7 +366,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
               <ChevronRightIcon />
             </span>
           )}
-        </button>
+        </FilterMenuButton>
       </PopoverTrigger>
       <PopoverContent
         ref={contentRef}
