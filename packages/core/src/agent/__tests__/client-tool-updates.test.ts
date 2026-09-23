@@ -198,6 +198,55 @@ describe('client tool updates on an existing thread', () => {
     ]);
   });
 
+  describe('sent as UI messages', () => {
+    // The shape `useChat` sends after `addToolOutput({ state: 'output-error', ... })`.
+    const uiAssistantWithError = (id: string) => ({
+      id,
+      role: 'assistant' as const,
+      parts: [
+        {
+          type: 'tool-pickColor' as const,
+          toolCallId: 'call_1',
+          state: 'output-error' as const,
+          input: { hint: 'warm' },
+          errorText: 'user closed the picker',
+        },
+      ],
+    });
+
+    it('keeps a client tool error on a trailing assistant message', async () => {
+      const { assistant, stream, stored } = await setup();
+
+      const prompt = await stream([
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] },
+        uiAssistantWithError(assistant.id),
+      ]);
+
+      expect(JSON.stringify(promptToolResults(prompt))).toContain('user closed the picker');
+      expect(toolParts(await stored())).toMatchObject([
+        { toolCallId: 'call_1', state: 'output-error', errorText: 'user closed the picker' },
+      ]);
+    });
+
+    it('keeps a client tool error sent together with the next user message', async () => {
+      const { assistant, stream, stored } = await setup();
+
+      const prompt = await stream([
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] },
+        uiAssistantWithError(assistant.id),
+        { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'never mind' }] },
+      ]);
+
+      expect(JSON.stringify(promptToolResults(prompt))).toContain('user closed the picker');
+      expect(promptUserText(prompt)).toEqual(['pick one', 'never mind']);
+      const messages = await stored();
+      expect(toolParts(messages)).toMatchObject([
+        { toolCallId: 'call_1', state: 'output-error', errorText: 'user closed the picker' },
+      ]);
+      expect(messages.some(message => message.id === 'u2')).toBe(true);
+    });
+  });
+
   it('seeds an empty thread with the full input, including client tool results', async () => {
     const prompts: any[] = [];
     const memory = new MockMemory();
