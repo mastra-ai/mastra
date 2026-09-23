@@ -156,7 +156,6 @@ export const TxtEntry = ({ data, name }: TxtEntryProps) => {
     <>
       <Button
         onClick={() => setOpen(true)}
-        variant="outline"
         size="sm"
         className="max-w-64 min-w-0 pointer-coarse:min-h-11"
         type="button"

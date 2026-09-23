@@ -9,7 +9,7 @@ interface WorkspaceOverviewStatusProps {
 
 export function WorkspaceOverviewStatus({ loading, error, children }: WorkspaceOverviewStatusProps) {
   if (loading) return <Spinner size="sm" />;
-  if (error) return <span className="text-icon3">Unavailable</span>;
+  if (error) return <span className="text-muted-foreground">Unavailable</span>;
 
   return children;
 }

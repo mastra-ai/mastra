@@ -13,7 +13,7 @@ export function ItemListRow({ isSelected, children, columns }: ItemListRowProps)
   return (
     <li
       className={cn(
-        'flex overflow-hidden rounded-lg border border-transparent border-t-border1 py-[3px] pb-[2px] text-ui-md text-foreground first:border-t-transparent',
+        'flex overflow-hidden rounded-lg border border-transparent border-t-border py-[3px] pb-[2px] text-body text-foreground first:border-t-transparent',
         '[&:last-child>button]:rounded-b-lg',
         '[&.selected-row]:border [&.selected-row]:border-dashed [&.selected-row]:border-white/50 [&.selected-row]:pr-[3px] [&.selected-row]:first:border-t',
         '[&:has(+.selected-row)]:rounded-b-none [&:has(+.selected-row)]:border-b-transparent',
@@ -21,7 +21,7 @@ export function ItemListRow({ isSelected, children, columns }: ItemListRowProps)
         transitions.colors,
         {
           'selected-row': isSelected,
-          'grid px-3 gap-3': columns,
+          'grid gap-3 px-3': columns,
         },
       )}
       style={{ gridTemplateColumns: getItemListColumnTemplate(columns) }}

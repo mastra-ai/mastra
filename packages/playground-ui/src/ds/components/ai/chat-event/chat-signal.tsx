@@ -15,26 +15,26 @@ export interface ChatSignalProps {
 const rowIcons = {
   state: <Layers size={13} className="text-purple-400" aria-hidden />,
   reminder: <Info size={13} className="text-accent3" aria-hidden />,
-  reactive: <Info size={13} className="text-icon3" aria-hidden />,
+  reactive: <Info size={13} className="text-muted-foreground" aria-hidden />,
 };
 
 export function ChatSignal({ kind, label, message, mode, variant = 'row', defaultOpen }: ChatSignalProps) {
   if (variant === 'card') {
     const Icon = kind === 'state' ? Database : Radio;
     return (
-      <div className="border-border1 bg-surface2 text-foreground my-2 max-w-[80%] rounded-lg border px-4 py-3">
+      <div className="my-2 max-w-[80%] rounded-lg border border-border bg-background px-4 py-3 text-foreground">
         <div className="flex items-start gap-3">
-          <Icon className="text-icon3 mt-0.5 size-4 shrink-0" aria-hidden />
+          <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-ui-sm leading-ui-sm text-foreground font-medium">{label}</p>
+              <p className="text-column text-foreground">{label}</p>
               {mode && (
-                <span className="border-border1 text-ui-sm text-muted-foreground inline-flex items-center rounded-full border px-1.5 py-0.5 leading-none">
+                <span className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-caption leading-none text-muted-foreground">
                   {mode}
                 </span>
               )}
             </div>
-            {message && <p className="text-ui-sm leading-ui-md mt-2 break-words whitespace-pre-wrap">{message}</p>}
+            {message && <p className="mt-2 text-caption break-words whitespace-pre-wrap">{message}</p>}
           </div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function ChatSignal({ kind, label, message, mode, variant = 'row', defaul
       aria-label={`Signal: ${label}`}
     >
       {message && (
-        <Txt variant="ui-sm" className="break-words whitespace-pre-wrap">
+        <Txt variant="caption" className="break-words whitespace-pre-wrap">
           {message}
         </Txt>
       )}

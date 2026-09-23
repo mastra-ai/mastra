@@ -29,6 +29,7 @@ import type { Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
+import type { InngestFlowControlConfig } from '../types';
 
 /**
  * Input schema for the durable agentic workflow.
@@ -64,6 +65,8 @@ export interface InngestDurableAgenticWorkflowOptions {
   inngest: Inngest;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
+  /** Inngest function-level retries for the agentic loop and iteration functions (defaults to 0) */
+  retries?: InngestFlowControlConfig['retries'];
 }
 
 /**
@@ -110,7 +113,7 @@ export const InngestDurableStepIds = {
 } as const;
 
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
-  const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS } = options;
+  const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
@@ -128,6 +131,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   const singleIterationWorkflow = createWorkflow({
     id: InngestDurableStepIds.AGENTIC_EXECUTION,
+    retries,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
@@ -137,7 +141,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
+      emitStepEvents: false,
     },
     steps: [],
   })
@@ -257,6 +263,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   return (
     createWorkflow({
       id: InngestDurableStepIds.AGENTIC_LOOP,
+      retries,
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
       options: {
@@ -266,7 +273,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
+        emitStepEvents: false,
       },
       steps: [],
     })

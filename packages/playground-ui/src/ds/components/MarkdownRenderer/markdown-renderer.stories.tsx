@@ -204,7 +204,7 @@ function StreamCadence() {
       <button
         type="button"
         onClick={() => setRun(count => count + 1)}
-        className="text-icon5 border-border1 text-ui-sm self-start rounded-md border px-3 py-1"
+        className="self-start rounded-md border border-border px-3 py-1 text-caption text-foreground"
       >
         Replay
       </button>

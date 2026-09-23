@@ -13,6 +13,7 @@ import {
   SESSION_ID,
   createdDraftSession,
   renderDraft,
+  renderThread,
   stubPreparingSession,
 } from './composer-session-test-fixture';
 
@@ -25,11 +26,14 @@ describe('Composer on a lazy user-session draft', () => {
     });
     const createBodies: unknown[] = [];
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
-        createBodies.push(await request.json());
-        await createFinished;
-        return HttpResponse.json({ session: createdDraftSession('fix the login bug') });
-      }),
+      http.post(
+        `${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`,
+        async ({ request }) => {
+          createBodies.push(await request.json());
+          await createFinished;
+          return HttpResponse.json({ session: createdDraftSession('fix the login bug') });
+        },
+      ),
     );
     const user = userEvent.setup();
     const { client, container } = renderDraft();
@@ -73,10 +77,37 @@ describe('Composer on a lazy user-session draft', () => {
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
   });
 
+  it('restores an interrupted first prompt as a draft without sending it twice', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'recover this prompt' });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('recover this prompt') }),
+      ),
+    );
+    const user = userEvent.setup();
+    const firstPage = renderDraft();
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'recover this prompt');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(preparation.posted).toEqual(['recover this prompt']));
+
+    // The server accepted the request but is still preparing the workspace.
+    // A page reload must not automatically send it a second time.
+    firstPage.unmount();
+    const recoveredPage = renderThread();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
+    expect(await screen.findByText(/Check the transcript before retrying/)).toBeInTheDocument();
+    recoveredPage.unmount();
+    renderThread();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
+    expect(preparation.posted).toEqual(['recover this prompt']);
+  });
+
   it('applies a draft-selected pack before dispatching the first prompt', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'use my pack' });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('use my pack') }),
       ),
     );
@@ -108,7 +139,7 @@ describe('Composer on a lazy user-session draft', () => {
   it('still dispatches the first prompt when draft pack activation fails', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'keep my prompt' });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
       http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, () =>
@@ -143,12 +174,15 @@ describe('Composer on a lazy user-session draft', () => {
     const createBodies: unknown[] = [];
     let attempts = 0;
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
-        createBodies.push(await request.json());
-        attempts += 1;
-        if (attempts === 1) return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
-        return HttpResponse.json({ session: createdDraftSession('retry this prompt') });
-      }),
+      http.post(
+        `${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`,
+        async ({ request }) => {
+          createBodies.push(await request.json());
+          attempts += 1;
+          if (attempts === 1) return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
+          return HttpResponse.json({ session: createdDraftSession('retry this prompt') });
+        },
+      ),
     );
     const user = userEvent.setup();
     const { client } = renderDraft();
@@ -183,7 +217,7 @@ describe('Composer on a lazy user-session draft', () => {
     const preparation = stubPreparingSession();
     let sessionPosts = 0;
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () => {
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () => {
         sessionPosts += 1;
         return HttpResponse.json({ session: createdDraftSession('unused') });
       }),

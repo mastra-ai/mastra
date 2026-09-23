@@ -17,7 +17,7 @@ export function TraceMessagesSkeleton({ className }: TraceMessagesSkeletonProps)
     <div
       role="status"
       aria-label="Loading messages"
-      className={cn('animate-in fade-in-0 fill-mode-backwards p-4 delay-500 duration-200', className)}
+      className={cn('animate-in p-4 delay-500 duration-200 fade-in-0 fill-mode-backwards', className)}
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <Skeleton className="ml-auto h-9 w-[60%] rounded-xl" />

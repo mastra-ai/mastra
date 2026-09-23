@@ -83,8 +83,8 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="flex flex-1 flex-col lg:px-5 lg:pb-5">
-      <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)] py-3">
+    <section aria-label="Settings" className="flex flex-1 flex-col">
+      <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)]">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'account' && <AccountSettingsSection />}
         {section === 'preferences' && <GeneralSettings />}
@@ -151,7 +151,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
     return (
       <EmptyState
         as="h2"
-        iconSlot={<Brain size={40} className="text-icon3" />}
+        iconSlot={<Brain />}
         titleSlot="No models configured"
         descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
         actionSlot={

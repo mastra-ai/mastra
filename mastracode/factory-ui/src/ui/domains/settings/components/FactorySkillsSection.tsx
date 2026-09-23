@@ -42,9 +42,9 @@ function SkillContent({ content }: { content: string }) {
     <div className="group/content relative">
       <ScrollArea maxHeight="24rem" viewPortClassName="px-4 pb-4" revealScrollbarOnHover={false}>
         {raw ? (
-          <pre className="text-ui-sm text-icon4 m-0 font-mono whitespace-pre-wrap">{content}</pre>
+          <pre className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap">{content}</pre>
         ) : (
-          <MarkdownRenderer className="text-ui-sm text-icon4">{content}</MarkdownRenderer>
+          <MarkdownRenderer className="text-caption text-muted-foreground">{content}</MarkdownRenderer>
         )}
       </ScrollArea>
       <Button
@@ -65,19 +65,19 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
       <Collapsible>
         <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <Txt as="span" variant="ui-md" className="text-icon5">
+            <Txt as="span" variant="body" className="text-foreground">
               {title}
-              <Txt as="span" variant="ui-sm" className="text-icon3 ml-2 font-mono">
+              <Txt as="span" variant="caption" className="text-muted-foreground ml-2 font-mono">
                 {skill.name}
               </Txt>
             </Txt>
-            <Txt as="span" variant="ui-sm" className="text-icon3">
+            <Txt as="span" variant="caption" className="text-muted-foreground">
               {skill.description}
             </Txt>
           </div>
           <ChevronRight
             aria-hidden="true"
-            className="text-icon3 size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
+            className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -105,21 +105,21 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
     <SettingsContainer>
       <div className="flex flex-col gap-2 px-4 py-3">
         {roles.length === 0 ? (
-          <Txt as="p" variant="ui-sm" className="text-icon3">
+          <Txt as="p" variant="caption" className="text-muted-foreground">
             This board declares no working roles.
           </Txt>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {roles.map(role => (
               <li key={role}>
-                <Txt as="span" variant="ui-sm" className="text-icon4 font-mono">
+                <Txt as="span" variant="caption" className="text-muted-foreground font-mono">
                   {role}
                 </Txt>
               </li>
             ))}
           </ul>
         )}
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-muted-foreground">
           Kickoff instructions for this board are defined in code by its board definition; there is no skill to show
           here.
         </Txt>
@@ -131,7 +131,7 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
 function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
   return (
     <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
-      <Txt as="h4" variant="ui-md" className="text-icon5 m-0">
+      <Txt as="h4" variant="body" className="text-foreground m-0">
         {board.title}
       </Txt>
       {isBuiltInBoard(board.id) ? (
@@ -156,24 +156,24 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       description="The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives."
     >
       {skillsQuery.isPending && (
-        <Txt as="p" variant="ui-sm" role="status" className="text-icon3">
+        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
           Loading skills…
         </Txt>
       )}
       {skillsQuery.error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
           {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
         </Txt>
       )}
       {catalog.error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
           Installed boards could not be loaded; showing built-in skills ungrouped.
         </Txt>
       )}
       {boards === undefined ? (
         <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : boards.length === 0 ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-muted-foreground">
           No boards are installed, so no board skills apply.
         </Txt>
       ) : (

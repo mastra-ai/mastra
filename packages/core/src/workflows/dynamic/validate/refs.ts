@@ -41,6 +41,16 @@ export function validateWorkflowRefs(
         });
         return;
       }
+      case 'classifier': {
+        if (!index.classifiers || index.classifiers[entry.classifierId]) return;
+        const available = Object.keys(index.classifiers);
+        issues.push({
+          code: 'missing-reference',
+          path: `${path}.classifierId`,
+          message: `Step "${entry.id}" declares classifierId "${entry.classifierId}" which is not a registered classifier.${available.length ? ` Available classifiers: ${available.join(', ')}.` : ''}`,
+        });
+        return;
+      }
       case 'workflow': {
         // Self-references are a structural issue (`self-reference`), and the
         // registry may well contain a previous version of this very workflow

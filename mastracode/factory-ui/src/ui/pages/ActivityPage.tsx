@@ -10,7 +10,9 @@ import { collapseRuns, factoryActivity, factoryDeeds } from '../domains/factory/
 import type { ActivityEntry } from '../domains/factory/activity';
 import { itemBoard } from '../domains/factory/boardStages';
 import { ActivityRail } from '../domains/factory/components/ActivityRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import type { FactoryMentionMember } from '../domains/factory/services/members';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -20,7 +22,13 @@ const PAGE_SIZE = 60;
 const AUDIT_PAGE_SIZE = 100;
 
 export function ActivityPage() {
-  return <DocumentFactoryPageShell>{factory => <ActivityContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout {...slots}>
+      <ActivityContent factoryId={factory.id} />
+    </PageLayout>
+  );
 }
 
 export function ActivityContent({ factoryId }: { factoryId: string }) {
@@ -53,10 +61,10 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="activity-heading">
       <div>
-        <h1 id="activity-heading" className="text-ui-lg text-icon6 m-0 font-semibold">
+        <h1 id="activity-heading" className="text-heading text-foreground m-0 font-semibold">
           Activity
         </h1>
-        <Txt as="p" variant="ui-sm" className="text-icon3 mt-1 mb-0">
+        <Txt as="p" variant="caption" className="text-muted-foreground mt-1 mb-0">
           Everything the Factory did, newest first.
         </Txt>
       </div>
@@ -79,7 +87,9 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
           </Button>
         </Notice>
       ) : entries.length === 0 ? (
-        <div className="text-ui-sm text-icon2 flex min-h-40 items-center justify-center">Nothing has happened yet.</div>
+        <div className="text-caption text-placeholder flex min-h-40 items-center justify-center">
+          Nothing has happened yet.
+        </div>
       ) : (
         <>
           <ActivityRail entries={entries.slice(0, shown)} members={roster} factoryProjectId={factoryId} />

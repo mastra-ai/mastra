@@ -98,7 +98,7 @@ export const AgentBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+      <ToolCallMono copyText={suspendPayload} className="text-muted-foreground">
         {suspendPayload}
       </ToolCallMono>
     ) : (
@@ -126,7 +126,7 @@ export const AgentBadge = ({
       {onLoadPrevious && (
         <Button
           variant="ghost"
-          size="xs"
+          size="sm"
           onClick={onLoadPrevious}
           disabled={isLoadingPrevious}
           data-testid="agent-badge-load-previous"
