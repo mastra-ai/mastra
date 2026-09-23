@@ -1613,6 +1613,29 @@ describe('DockerSandbox', () => {
       }
     });
 
+    it('should settle wait() when the stream closes without an end event', async () => {
+      // 'close' can fire without a preceding 'end' if the stream is torn down by
+      // other means. It must still settle wait() from exec inspect rather than
+      // returning early and leaving the promise pending forever.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('echo hi');
+      const waitPromise = handle.wait();
+
+      mockExec.inspect.mockResolvedValueOnce({ Running: false, ExitCode: 0 });
+
+      const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => Promise<void>;
+      await closeHandler();
+
+      const result = await waitPromise;
+
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.killed).toBeUndefined();
+      expect(result.timedOut).toBeUndefined();
+    });
+
     it('should preserve killed metadata when the stream errors while kill is still confirming', async () => {
       // Tearing the hijacked exec socket down can surface as ECONNRESET instead of
       // 'end'; the error path must await the in-flight confirmation for the same

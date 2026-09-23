@@ -488,21 +488,33 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       });
 
-      // 'close' fires when stream.destroy() is called (e.g., from kill or timeout).
-      // Natural stream close should be handled by the 'end' event above.
-      // Note: Docker multiplexed streams always emit 'end' before 'close' for
-      // natural exits, so the !_killed guard won't silently drop natural closes.
+      // 'close' fires both on a natural stream end and when kill()/timeout tears the
+      // stream down. Wait for any in-flight termination confirmation first — the
+      // timeout path records `_killed` before kill() confirms, so settling here
+      // without waiting would publish the result while the helper is still running.
+      // The wait is unconditional (like 'end'/'error') rather than gated on
+      // `_killed`, so a close that races an unconfirmed kill still observes the
+      // final state instead of returning while the confirmation is pending.
       stream.on('close', async () => {
-        if (!handle._killed) return; // Natural close — 'end' handles it
-        // The timeout path records `_killed` before kill() confirms, so 'close' can
-        // arrive while the confirmation is still in flight (e.g., the target exits
-        // as the timeout fires). Take the same bounded wait as 'end'/'error' before
-        // settling so every path confirms termination before publishing the result.
         if (handle._terminationPromise) {
           await waitForTermination(handle._terminationPromise);
         }
         if (settled) return;
-        settleTerminated();
+
+        if (handle._killed) {
+          settleTerminated();
+          return;
+        }
+
+        // Docker multiplexed streams normally emit 'end' before 'close' for natural
+        // exits, but a stream torn down by other means may close without one. Fall
+        // back to exec inspect so wait() cannot hang once the stream has closed.
+        try {
+          const info = await exec.inspect();
+          settle(info.ExitCode ?? 1);
+        } catch {
+          settle(1);
+        }
       });
 
       stream.on('error', async () => {
