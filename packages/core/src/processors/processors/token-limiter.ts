@@ -269,7 +269,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Messages from the current run (the triggering prompt, tool calls/results, partial answers) are never
     // trimmed: removing them mid-run hides the prompt or tool data from the next step and makes the model loop.
     const sources = messageList.makeMessageSourceChecker();
-    const currentRunIds = new Set([...sources.input, ...sources.output]);
+    const currentRunIds = new Set([...sources.input, ...sources.output, ...sources.context]);
     let responseTokens = 0;
     for (const message of messages) {
       if (!currentRunIds.has(message.id)) continue;
@@ -334,12 +334,15 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       const mastraMeta = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
       if (mastraMeta?.modelOutput != null) continue;
       const result = part.toolInvocation.result;
-      if (result === undefined || isMediaPayload(result)) continue;
+      const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);
+      if (result === undefined || isMediaPayload(result) || isMediaArray) continue;
       const text = typeof result === 'string' ? result : JSON.stringify(result);
       if (text === undefined) continue;
       const total = this.countTokens(text);
       if (total <= maxTokens) continue;
-      const value = `${sliceByTokensSafe(text, 0, maxTokens)}\n[truncated: showing ${maxTokens.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
+      const suffix = `\n[truncated: showing ${maxTokens.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
+      const sliceBudget = Math.max(0, maxTokens - this.countTokens(suffix));
+      const value = `${sliceByTokensSafe(text, 0, sliceBudget)}${suffix}`;
       part.providerMetadata = {
         ...part.providerMetadata,
         mastra: { ...mastraMeta, modelOutput: { type: 'text', value } },
