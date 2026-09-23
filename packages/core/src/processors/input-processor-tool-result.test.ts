@@ -580,6 +580,37 @@ describe('TokenLimiter maxToolResultTokens', () => {
     expect(secondPrompt.length).toBeLessThan(JSON.stringify(bigResult).length);
   });
 
+  // The agent wraps even a single plain output processor in a processor workflow, so an
+  // output-registered limiter reaches `processToolResult` through the workflow step rather
+  // than the direct call. The replacement has to survive that route as well.
+  it('truncates an oversized tool result for an output-registered limiter', async () => {
+    let executions = 0;
+    const { model, prompts } = makeCountingModel('You have 200 rules.');
+
+    const agent = new Agent({
+      id: 'token-limiter-tr-output-agent',
+      name: 'Test Agent',
+      instructions: 'tr',
+      model: model as any,
+      tools: { listRules: makeRulesTool(() => executions++) },
+      outputProcessors: [new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 50 })],
+    });
+
+    const stream = await agent.stream('how many rules do I have?', { maxSteps: 5 });
+    let toolResultChunkValue: unknown;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-result') {
+        toolResultChunkValue = (chunk as any).payload?.result ?? (chunk as any).result;
+      }
+    }
+
+    expect(typeof toolResultChunkValue).toBe('string');
+    expect(toolResultChunkValue as string).toMatch(/\[truncated: showing 50 of \d+ tokens\]$/);
+
+    expect(executions).toBe(1);
+    expect(JSON.stringify(prompts[1])).toContain('[truncated: showing 50 of');
+  });
+
   /**
    * #24110: TokenLimiter evicted the current run's tool call/result, so the model
    * never saw what the tool returned and kept calling it again instead of

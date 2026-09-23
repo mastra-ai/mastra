@@ -1604,6 +1604,13 @@ function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
+                // A processor replaces the tool return value through `setResult`. Carry the
+                // replacement out on `toolResultValue` so the next step in the chain and the
+                // runner — which applies it to the emitted chunk — both see it. Every return
+                // below spreads `passThrough`, so assigning here covers all of them.
+                setResult: (value: unknown) => {
+                  passThrough.toolResultValue = value;
+                },
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],

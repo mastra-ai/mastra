@@ -2338,7 +2338,7 @@ export class ProcessorRunner {
       // Handle workflow as processor with toolResult phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
         const currentSystemMessages = messageList.getAllSystemMessages();
-        await this.executeWorkflowAsProcessor(
+        const workflowOutput = await this.executeWorkflowAsProcessor(
           processorOrWorkflow,
           {
             phase: 'toolResult',
@@ -2361,6 +2361,11 @@ export class ProcessorRunner {
           writer,
           abortSignal,
         );
+        // A processor inside the workflow may have replaced the value via `setResult`;
+        // the step carries the replacement back on `toolResultValue`.
+        if (workflowOutput && 'toolResultValue' in workflowOutput) {
+          currentResult = workflowOutput.toolResultValue;
+        }
         continue;
       }
 
