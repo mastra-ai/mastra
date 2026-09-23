@@ -96,8 +96,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      // Parse request context from query params (GET)
-      if (request.method === 'GET') {
+      // Parse request context from query params.
+      if (request.method === 'GET' || request.method === 'POST') {
         try {
           const query = request.query as Record<string, string>;
           const encodedRequestContext = query.requestContext;

@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import type { AgentCard, AgentCardSignature } from '@mastra/core/a2a';
+import type { AgentCardSignature } from '@mastra/core/a2a';
 import type { A2AAgentCardSigningConfig } from '@mastra/core/server';
 import canonicalize from 'canonicalize';
 
@@ -15,8 +15,8 @@ const SUPPORTED_JWS_ALGORITHMS = new Set<string>([
   'PS512',
 ]);
 
-function stripAgentCardSignatures(agentCard: AgentCard): AgentCard {
-  const unsignedCard = structuredClone(agentCard) as AgentCard & { signatures?: AgentCardSignature[] };
+function stripAgentCardSignatures<T extends { signatures?: AgentCardSignature[] }>(agentCard: T): T {
+  const unsignedCard = structuredClone(agentCard);
   delete unsignedCard.signatures;
   return unsignedCard;
 }
@@ -71,13 +71,13 @@ function getDigestAlgorithm(algorithm: string): string {
   throw new Error(`Unsupported JWS algorithm for A2A Agent Card signing: ${algorithm}`);
 }
 
-export async function signAgentCard({
+export async function signAgentCard<T extends { signatures?: AgentCardSignature[] }>({
   agentCard,
   signing,
 }: {
-  agentCard: AgentCard;
+  agentCard: T;
   signing: A2AAgentCardSigningConfig;
-}): Promise<AgentCard> {
+}): Promise<T & { signatures: AgentCardSignature[] }> {
   const canonicalPayload = canonicalize(stripAgentCardSignatures(agentCard));
 
   if (!canonicalPayload) {

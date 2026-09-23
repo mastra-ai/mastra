@@ -17,13 +17,15 @@ export function getWorkflowRunErrors(result: unknown, workflowError?: Error | nu
     if (message) errors.push(message);
   }
 
+  const stepErrors: Array<{ stepId: string; message: string }> = [];
   if ('steps' in result && result.steps && typeof result.steps === 'object') {
     for (const [stepId, step] of Object.entries(result.steps)) {
       if (!step || typeof step !== 'object' || !('error' in step)) continue;
       const message = getErrorMessage(step.error);
-      if (message) errors.push(`${stepId}: ${message}`);
+      if (message) stepErrors.push({ stepId, message });
     }
   }
 
-  return [...new Set(errors)];
+  const uniqueRunErrors = [...new Set(errors)].filter(error => !stepErrors.some(step => step.message === error));
+  return [...uniqueRunErrors, ...stepErrors.map(({ stepId, message }) => `${stepId}: ${message}`)];
 }

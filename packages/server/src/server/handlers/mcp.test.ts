@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
@@ -12,6 +13,8 @@ import {
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
   LIST_MCP_SERVER_RESOURCES_ROUTE,
   READ_MCP_SERVER_RESOURCE_ROUTE,
+  MCP_HTTP_TRANSPORT_ROUTE,
+  MCP_SSE_TRANSPORT_ROUTE,
 } from './mcp';
 import { createTestServerContext } from './test-utils';
 
@@ -131,8 +134,8 @@ describe('MCP Registry Handlers', () => {
       expect(result.servers).toHaveLength(2);
       expect(result.total_count).toBe(2);
       expect(result.next).toBeNull();
-      expect(result.servers[0]).toEqual(server1Info);
-      expect(result.servers[1]).toEqual(server2Info);
+      expect(result.servers[0]).toEqual({ ...server1Info, transports: ['streamable-http', 'sse'] });
+      expect(result.servers[1]).toEqual({ ...server2Info, transports: ['streamable-http', 'sse'] });
     });
 
     it('should paginate servers when perPage is provided', async () => {
@@ -146,7 +149,7 @@ describe('MCP Registry Handlers', () => {
       expect(result.total_count).toBe(2);
       expect(result.next).toContain('perPage=1');
       expect(result.next).toContain('page=1');
-      expect(result.servers[0]).toEqual(server1Info);
+      expect(result.servers[0]).toEqual({ ...server1Info, transports: ['streamable-http', 'sse'] });
     });
 
     it('should paginate servers when legacy limit/offset is provided', async () => {
@@ -161,7 +164,7 @@ describe('MCP Registry Handlers', () => {
       // Next URL mirrors request format (legacy limit/offset)
       expect(result.next).toContain('limit=1');
       expect(result.next).toContain('offset=1');
-      expect(result.servers[0]).toEqual(server1Info);
+      expect(result.servers[0]).toEqual({ ...server1Info, transports: ['streamable-http', 'sse'] });
     });
 
     it('should calculate next URL correctly', async () => {
@@ -192,7 +195,7 @@ describe('MCP Registry Handlers', () => {
       });
 
       expect(result.servers).toHaveLength(1);
-      expect(result.servers[0]).toEqual(server2Info);
+      expect(result.servers[0]).toEqual({ ...server2Info, transports: ['streamable-http', 'sse'] });
       expect(result.next).toBeNull(); // No more results
     });
 
@@ -204,7 +207,7 @@ describe('MCP Registry Handlers', () => {
       });
 
       expect(result.servers).toHaveLength(1);
-      expect(result.servers[0]).toEqual(server2Info);
+      expect(result.servers[0]).toEqual({ ...server2Info, transports: ['streamable-http', 'sse'] });
       expect(result.next).toBeNull(); // No more results
     });
 
@@ -242,7 +245,7 @@ describe('MCP Registry Handlers', () => {
         id: 'server1',
       });
 
-      expect(result).toEqual(serverDetail);
+      expect(result).toEqual({ ...serverDetail, transports: ['streamable-http', 'sse'] });
       expect(mockMCPServer.getServerDetail).toHaveBeenCalledTimes(1);
     });
 
@@ -253,7 +256,7 @@ describe('MCP Registry Handlers', () => {
         version: '1.0.0',
       });
 
-      expect(result).toEqual(serverDetail);
+      expect(result).toEqual({ ...serverDetail, transports: ['streamable-http', 'sse'] });
     });
 
     it('should throw 404 when version does not match', async () => {
@@ -507,6 +510,83 @@ describe('MCP Registry Handlers', () => {
       );
     });
 
+    it('unwraps completed output and reports suspension for a 2026-07-28 server', async () => {
+      const executeTool = vi
+        .fn()
+        .mockResolvedValueOnce({ status: 'completed', output: { charged: 1 } })
+        .mockResolvedValueOnce({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+        });
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      const completed = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: {},
+      });
+      expect(completed).toEqual({ result: { charged: 1 } });
+
+      const suspended = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: {},
+      });
+      expect(suspended).toEqual({
+        status: 'suspended',
+        suspendPayload: { phase: 'confirm' },
+        resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+      });
+    });
+
+    it('forwards resumeData and suspendPayload so a REST caller can answer a suspension', async () => {
+      const executeTool = vi.fn().mockResolvedValue({ status: 'completed', output: { charged: 990 } });
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      const resumed = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
+
+      expect(resumed).toEqual({ result: { charged: 990 } });
+      expect(executeTool).toHaveBeenCalledWith(
+        'confirm',
+        { amount: 990 },
+        expect.objectContaining({ resumeData: { confirmed: true }, suspendPayload: { phase: 'confirm', amount: 990 } }),
+      );
+    });
+
+    it('reports invalid input to a 2026-07-28 tool as a 400, not a server failure', async () => {
+      const executeTool = vi.fn().mockRejectedValue(
+        new MastraError({
+          id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: 'Tool input validation failed for confirm',
+        }),
+      );
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      await expect(
+        EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'server1',
+          toolId: 'confirm',
+          data: {},
+        }),
+      ).rejects.toMatchObject({ status: 400, message: 'Tool input validation failed for confirm' });
+    });
+
     it('should handle tool execution errors', async () => {
       const mockError = new Error('Tool execution failed');
       mockMCPServer.executeTool = vi.fn().mockRejectedValue(mockError);
@@ -667,6 +747,71 @@ describe('MCP Registry Handlers', () => {
           uri: 'ui://nonexistent/resource',
         }),
       ).rejects.toThrow(HTTPException);
+    });
+  });
+
+  describe('MCP v2 servers', () => {
+    const v2Info: ServerInfo = {
+      id: 'v2',
+      name: 'V2 Server',
+      version_detail: { version: '2.0.0', release_date: '2026-07-28T00:00:00Z', is_latest: true },
+    };
+
+    let v2Server: Partial<MCPServerBase>;
+    let v2Mastra: Mastra;
+
+    beforeEach(() => {
+      v2Server = {
+        id: 'v2',
+        name: 'V2 Server',
+        mcpVersion: 2,
+        getServerInfo: vi.fn(() => v2Info),
+        getServerDetail: vi.fn(() => ({ ...v2Info, packages: [], remotes: [] })),
+      };
+      v2Mastra = {
+        listMCPServers: vi.fn(() => ({ v2: v2Server as MCPServerBase, server1: mockMCPServer as MCPServerBase })),
+        getMCPServerById: vi.fn((id: string) => {
+          if (id === 'v2') return v2Server as MCPServerBase;
+          if (id === 'server1') return mockMCPServer as MCPServerBase;
+          return undefined;
+        }),
+      } as unknown as Mastra;
+    });
+
+    it('lists coexisting v1 and v2 servers with their transports', async () => {
+      const result = await LIST_MCP_SERVERS_ROUTE.handler({ ...createTestServerContext({ mastra: v2Mastra }) });
+
+      expect(result.servers).toEqual([
+        { ...v2Info, transports: ['streamable-http'] },
+        { ...server1Info, transports: ['streamable-http', 'sse'] },
+      ]);
+    });
+
+    it('reports Streamable HTTP as the only transport on the v2 detail', async () => {
+      const result = await GET_MCP_SERVER_DETAIL_ROUTE.handler({
+        ...createTestServerContext({ mastra: v2Mastra }),
+        id: 'v2',
+      });
+
+      expect(result.transports).toEqual(['streamable-http']);
+    });
+
+    it('routes v2 servers to the Streamable HTTP transport but never to SSE', async () => {
+      const http = await MCP_HTTP_TRANSPORT_ROUTE.handler({
+        ...createTestServerContext({ mastra: v2Mastra }),
+        serverId: 'v2',
+      });
+      expect(http).toEqual({ server: v2Server, httpPath: '/mcp/v2/mcp' });
+
+      await expect(
+        MCP_SSE_TRANSPORT_ROUTE.handler({ ...createTestServerContext({ mastra: v2Mastra }), serverId: 'v2' }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const legacySse = await MCP_SSE_TRANSPORT_ROUTE.handler({
+        ...createTestServerContext({ mastra: v2Mastra }),
+        serverId: 'server1',
+      });
+      expect(legacySse).toMatchObject({ ssePath: '/mcp/server1/sse', messagePath: '/mcp/server1/messages' });
     });
   });
 });

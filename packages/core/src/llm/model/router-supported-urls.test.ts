@@ -65,24 +65,34 @@ describe('ModelRouterLanguageModel - supportedUrls propagation (Issue #12152)', 
     expect(resolvedUrls).toEqual(mockMistralSupportedUrls);
   });
 
-  it('should return empty object when API key resolution fails', async () => {
-    mockGateway.getApiKey.mockRejectedValueOnce(new Error('API key not found'));
+  it('should warn and return empty object when API key resolution fails', async () => {
+    const error = new Error('API key not found');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGateway.getApiKey.mockRejectedValueOnce(error);
 
     const model = new ModelRouterLanguageModel('unknown/unknown-model');
     const resolvedUrls = await model.supportedUrls;
 
-    // Should gracefully degrade, not throw
     expect(resolvedUrls).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ModelRouter] Failed to resolve supportedUrls for "unknown/unknown-model". Retrying on next access.',
+      error,
+    );
   });
 
-  it('should return empty object when model resolution fails', async () => {
-    mockGateway.resolveLanguageModel.mockRejectedValueOnce(new Error('Model not found'));
+  it('should warn and return empty object when model resolution fails', async () => {
+    const error = new Error('Model not found');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGateway.resolveLanguageModel.mockRejectedValueOnce(error);
 
     const model = new ModelRouterLanguageModel('unknown/unknown-model');
     const resolvedUrls = await model.supportedUrls;
 
-    // Should gracefully degrade, not throw
     expect(resolvedUrls).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ModelRouter] Failed to resolve supportedUrls for "unknown/unknown-model". Retrying on next access.',
+      error,
+    );
   });
 
   it('should return empty object when model has no supportedUrls', async () => {
@@ -112,6 +122,20 @@ describe('ModelRouterLanguageModel - supportedUrls propagation (Issue #12152)', 
     const resolvedUrls = await model.supportedUrls;
 
     expect(resolvedUrls).toEqual(mockMistralSupportedUrls);
+  });
+
+  it('should retry after a failed resolution and cache the subsequent success', async () => {
+    const error = new Error('Temporary model resolution failure');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGateway.resolveLanguageModel.mockRejectedValueOnce(error).mockResolvedValueOnce(mockMistralModel);
+
+    const callCountBefore = mockGateway.resolveLanguageModel.mock.calls.length;
+    const model = new ModelRouterLanguageModel('mistral/mistral-large-latest');
+
+    expect(await model.supportedUrls).toEqual({});
+    expect(await model.supportedUrls).toEqual(mockMistralSupportedUrls);
+    expect(await model.supportedUrls).toEqual(mockMistralSupportedUrls);
+    expect(mockGateway.resolveLanguageModel.mock.calls.length - callCountBefore).toBe(2);
   });
 
   it('should only resolve the underlying model once (caching)', async () => {

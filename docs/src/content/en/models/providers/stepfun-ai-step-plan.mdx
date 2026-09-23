@@ -7,7 +7,7 @@ description: "Browse StepFun Step Plan (Global) model IDs, capabilities, and con
 
 # <img src="https://models.dev/logos/stepfun-ai-step-plan.svg" alt="StepFun Step Plan (Global) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />StepFun Step Plan (Global)
 
-Access 3 StepFun Step Plan (Global) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
+Access 4 StepFun Step Plan (Global) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
 
 Learn more in the [StepFun Step Plan (Global) documentation](https://platform.stepfun.ai/docs/en/step-plan/integrations/reasoning-api).
 
@@ -80,6 +80,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "stepfun-ai-step-plan/step-5-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -114,7 +126,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "stepfun-ai-step-plan/step-3.7-flash"
+      ? "stepfun-ai-step-plan/step-5-preview"
       : "stepfun-ai-step-plan/step-3.5-flash";
   }
 });

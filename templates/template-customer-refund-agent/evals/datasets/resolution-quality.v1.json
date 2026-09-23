@@ -1,0 +1,18 @@
+{
+  "axis": "resolution-quality",
+  "version": 1,
+  "cases": [
+    {
+      "id": "clear-resolution",
+      "critical": false,
+      "input": "where is my order",
+      "assertions": { "customerFacing": true }
+    },
+    {
+      "id": "insufficient-evidence",
+      "critical": false,
+      "input": "mystery claim",
+      "assertions": { "requiresEscalation": true }
+    }
+  ]
+}

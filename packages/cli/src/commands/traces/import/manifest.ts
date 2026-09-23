@@ -5,9 +5,10 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { PreparedTraceBatch, TraceImportManifest, TraceImportSourceIdentity, TraceImportWindow } from './types.js';
 
-export const TRACE_IMPORT_SCHEMA_VERSION = 1;
+export const TRACE_IMPORT_SCHEMA_VERSION = 2;
 export const TRACE_IMPORT_MANIFEST_FILE = 'manifest.json';
 export const MAX_RECORDED_SOURCE_SPAN_IDS = 50;
+export const MAX_RECORDED_VERIFICATION_DIFFERENCES = 50;
 
 const timestampSchema = z.string().datetime({ offset: true });
 const countSchema = z.number().int().nonnegative();
@@ -32,6 +33,27 @@ const skippedTraceSchema = z
   })
   .strict();
 
+const verificationSchema = z
+  .object({
+    status: z.enum(['not-performed', 'verified', 'timed-out', 'unavailable', 'mismatch']),
+    sampledTraces: countSchema,
+    verifiedTraces: countSchema,
+    queryAttempts: countSchema,
+    differences: z
+      .array(
+        z
+          .object({
+            traceId: z.string().min(1),
+            spanId: z.string().min(1).optional(),
+            fields: z.array(z.string().min(1)).min(1),
+          })
+          .strict(),
+      )
+      .max(MAX_RECORDED_VERIFICATION_DIFFERENCES),
+    reason: z.string().min(1).optional(),
+  })
+  .strict();
+
 const manifestSchema = z
   .object({
     schemaVersion: z.literal(TRACE_IMPORT_SCHEMA_VERSION),
@@ -47,7 +69,7 @@ const manifestSchema = z
       })
       .strict()
       .refine(window => Date.parse(window.cutoffAt) < Date.parse(window.snapshotAt), 'Invalid import window.'),
-    phase: z.enum(['preparing', 'prepared', 'uploading', 'complete']),
+    phase: z.enum(['preparing', 'prepared', 'uploading', 'verifying', 'paused', 'complete']),
     counts: z.object({
       readSpans: countSchema,
       preparedTraces: countSchema,
@@ -62,6 +84,7 @@ const manifestSchema = z
     acknowledgedSpans: countSchema,
     warnings: z.array(z.string()).max(50),
     skippedTraceSamples: z.array(skippedTraceSchema).max(50),
+    verification: verificationSchema,
     completedAt: timestampSchema.optional(),
   })
   .strict()
@@ -83,12 +106,31 @@ const manifestSchema = z
       context.addIssue({ code: 'custom', message: 'A preparing import cannot contain acknowledged progress.' });
     }
     if (
+      manifest.verification.sampledTraces > manifest.counts.preparedTraces ||
+      manifest.verification.verifiedTraces > manifest.verification.sampledTraces
+    ) {
+      context.addIssue({ code: 'custom', message: 'Verification progress exceeds the prepared trace counts.' });
+    }
+    if (
+      manifest.verification.status === 'verified' &&
+      (manifest.verification.verifiedTraces !== manifest.verification.sampledTraces ||
+        (manifest.counts.preparedTraces > 0 && manifest.verification.sampledTraces === 0) ||
+        manifest.verification.queryAttempts < manifest.verification.sampledTraces ||
+        manifest.verification.differences.length > 0)
+    ) {
+      context.addIssue({ code: 'custom', message: 'Verified status requires every sampled trace to match.' });
+    }
+    if (
       manifest.phase === 'complete' &&
       (manifest.acknowledgedTraces !== manifest.counts.preparedTraces ||
         manifest.acknowledgedSpans !== manifest.counts.preparedSpans ||
+        manifest.verification.status !== 'verified' ||
         !manifest.completedAt)
     ) {
-      context.addIssue({ code: 'custom', message: 'A completed import must acknowledge every prepared trace.' });
+      context.addIssue({
+        code: 'custom',
+        message: 'A completed import must acknowledge and verify its prepared traces.',
+      });
     }
   });
 
@@ -151,6 +193,13 @@ export async function initializeTraceImport(options: {
     acknowledgedSpans: 0,
     warnings: [],
     skippedTraceSamples: [],
+    verification: {
+      status: 'not-performed',
+      sampledTraces: 0,
+      verifiedTraces: 0,
+      queryAttempts: 0,
+      differences: [],
+    },
   }) as TraceImportManifest;
 
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -215,7 +264,12 @@ export async function acknowledgeTraceBatch(
   const endTraceIndex = batch.firstTraceIndex + batch.traces.length;
 
   if (manifest.acknowledgedTraces === endTraceIndex) return manifest;
-  if (manifest.phase === 'preparing' || manifest.phase === 'complete') {
+  if (
+    manifest.phase === 'preparing' ||
+    manifest.phase === 'verifying' ||
+    manifest.phase === 'paused' ||
+    manifest.phase === 'complete'
+  ) {
     throw new Error(`Cannot acknowledge a batch while the import is ${manifest.phase}.`);
   }
   if (manifest.acknowledgedTraces !== batch.firstTraceIndex) {

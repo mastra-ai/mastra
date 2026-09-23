@@ -10,3 +10,4 @@ export * from './seed-datasets';
 export * from './seed-dataset-items';
 export * from './select-fixture';
 export * from './workflow-edges';
+export * from './workflow-nodes';

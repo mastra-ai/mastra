@@ -133,6 +133,14 @@ export abstract class TextTransformer implements Transformer {
               overlapSize += pieceLen + (overlapContent.length > 1 ? separatorLen : 0);
             }
 
+            // Drop from the front of the overlap window until the incoming
+            // split fits under maxSize, so the next chunk never exceeds it.
+            while (overlapContent.length > 0 && overlapSize + len + separatorLen > this.maxSize) {
+              const removed = overlapContent.shift()!;
+              const removedLen = this.lengthFunction(removed);
+              overlapSize -= removedLen + (overlapContent.length > 0 ? separatorLen : 0);
+            }
+
             currentDoc = overlapContent;
             total = overlapSize;
           } else {

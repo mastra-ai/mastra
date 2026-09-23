@@ -13,6 +13,8 @@ import { theme } from '../theme.js';
 export interface AuthProviderSource {
   getOAuthProviders(): OAuthProviderInterface[];
   isLoggedIn(providerId: string): boolean;
+  /** Number of registered accounts for the provider, when the source tracks them. */
+  countAccounts?(providerId: string): number;
 }
 
 export class LoginSelectorComponent extends Box {
@@ -72,7 +74,11 @@ export class LoginSelectorComponent extends Box {
 
       // Check if user has stored OAuth credentials for this provider.
       const isLoggedIn = this.authSource.isLoggedIn(provider.id);
-      const statusIndicator = isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured');
+      const accountCount = this.authSource.countAccounts?.(provider.id) ?? 0;
+      const accountSuffix =
+        accountCount > 0 ? theme.fg('muted', ` (${accountCount} account${accountCount === 1 ? '' : 's'})`) : '';
+      const statusIndicator =
+        (isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured')) + accountSuffix;
 
       let line = '';
       if (isSelected) {

@@ -10,7 +10,9 @@ type MockStorage = {
     observability?: {
       constructor?: { name?: string };
       runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
-      getFeatures?: () => readonly ('delta-polling' | 'metrics' | 'logs')[] | undefined;
+      getFeatures?: () =>
+        | readonly ('delta-polling' | 'metrics' | 'logs' | 'trace-query' | 'trace-query-discovery')[]
+        | undefined;
     };
   };
 };
@@ -439,7 +441,7 @@ describe('System Handlers', () => {
             observability: {
               constructor: { name: '_ObservabilityStoragePostgresVNext' },
               runtimeTracingStrategy: 'insert-only',
-              getFeatures: () => ['metrics', 'logs'],
+              getFeatures: () => ['metrics', 'logs', 'trace-query', 'trace-query-discovery'],
             },
           },
         }),
@@ -450,6 +452,29 @@ describe('System Handlers', () => {
         observabilityStorageCapabilities: {
           metrics: true,
           logs: true,
+          traceQueryDiscovery: true,
+        },
+      });
+    });
+
+    it('should not infer discovery support from trace-query support', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: {
+              constructor: { name: 'MockObservabilityStore' },
+              getFeatures: () => ['metrics', 'logs', 'trace-query'],
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toMatchObject({
+        observabilityStorageCapabilities: {
+          metrics: true,
+          logs: true,
+          traceQueryDiscovery: false,
         },
       });
     });

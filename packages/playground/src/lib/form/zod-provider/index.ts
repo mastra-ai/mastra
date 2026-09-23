@@ -1,5 +1,5 @@
 import type { FieldConfig, ParsedField, ParsedSchema, SchemaProvider, SchemaValidation } from '@autoform/core';
-import { removeEmptyValues } from '../utils';
+import { isPlainObject } from '../utils';
 import {
   getDef,
   getBaseSchema,
@@ -9,6 +9,7 @@ import {
   getLiteralValues,
   getUnionOptions,
   getIntersection,
+  getRecordValueSchema,
   isOptional,
 } from './compat';
 import { getDefaultValues, getDefaultValueInZodStack } from './default-values';
@@ -152,6 +153,57 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   return { fields };
 }
 
+function getMemberSchemas(baseSchema: AnySchema): AnySchema[] | undefined {
+  const intersection = getIntersection(baseSchema);
+  return intersection ? [intersection.left, intersection.right] : getUnionOptions(baseSchema);
+}
+
+function normalizeEntries(value: Record<string, unknown>, schemaOf: (key: string) => AnySchema | undefined) {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    const schema = schemaOf(key);
+    const childValue = schema ? normalizeFormValues(child, schema) : child;
+    if (childValue !== undefined) normalized[key] = childValue;
+  }
+  return normalized;
+}
+
+function omitsBlankGroup(schema: AnySchema, group: Record<string, unknown>) {
+  const isBlankGroup = Object.values(group).every(child => child === '' || child === undefined);
+  if (!isBlankGroup || schema.safeParse(group).success) return false;
+  const omitted = schema.safeParse(undefined);
+  return omitted.success && omitted.data === undefined;
+}
+
+function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
+  const baseSchema = getBaseSchema(schema);
+  const members = getMemberSchemas(baseSchema);
+  if (members) {
+    // Union options and intersection sides all render at one path, so each member normalizes its own keys.
+    const group = members.reduce<unknown>((current, member) => normalizeFormValues(current, member), value);
+    return isPlainObject(group) && omitsBlankGroup(schema, group) ? undefined : group;
+  }
+
+  const shape = getShape(baseSchema);
+  if (shape && isPlainObject(value)) {
+    const group = normalizeEntries(value, key => shape[key]);
+    return omitsBlankGroup(schema, group) ? undefined : group;
+  }
+
+  const recordValueSchema = getRecordValueSchema(baseSchema);
+  if (recordValueSchema && isPlainObject(value)) return normalizeEntries(value, () => recordValueSchema);
+
+  if (Array.isArray(value)) {
+    const element = getArrayElement(baseSchema);
+    return element && typeof element === 'object' ? value.map(item => normalizeFormValues(item, element)) : value;
+  }
+
+  const blankControl = value === '' || (value === null && !schema.safeParse(null).success);
+  if (blankControl && getDefaultValueInZodStack(schema) === undefined) return undefined;
+
+  return value;
+}
+
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   private _schema: T;
   constructor(schema: T) {
@@ -166,26 +218,23 @@ export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   }
 
   validateSchema(values: any): SchemaValidation {
-    const cleanedValues = removeEmptyValues(values);
-    try {
-      const validationResult = (this._schema as any).safeParse(cleanedValues);
-      if (validationResult.success) {
-        return { success: true, data: validationResult.data } as const;
-      } else {
-        const error = validationResult.error;
-        // v3: error.errors, v4: error.issues
-        const issues = error.issues ?? error.errors ?? [];
-        return {
-          success: false,
-          errors: issues.map((err: any) => ({
-            path: err.path as string[],
-            message: err.message,
-          })),
-        } as const;
-      }
-    } catch (error) {
-      throw error;
+    const cleanedValues = normalizeFormValues(values, this._schema);
+    const schema: AnySchema = this._schema;
+    const validationResult = schema.safeParse(cleanedValues);
+    if (validationResult.success) {
+      return { success: true, data: validationResult.data } as const;
     }
+
+    const error = validationResult.error;
+    // v3: error.errors, v4: error.issues
+    const issues = error.issues ?? error.errors ?? [];
+    return {
+      success: false,
+      errors: issues.map((err: any) => ({
+        path: err.path as string[],
+        message: err.message,
+      })),
+    } as const;
   }
 
   parseSchema(): ParsedSchema {

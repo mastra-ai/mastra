@@ -16,7 +16,7 @@ export const integrationsCatalog: IntegrationDialogItem[] = [
   item('clerk', 'Clerk', 'API Key'),
   item('cloudflare', 'Cloudflare', 'API Key'),
   item('elevenlabs', 'Eleven Labs', 'API Key'),
-  item('gitlab-group-token', 'GitLab', 'API Key'),
+  item('gitlab', 'GitLab', 'OAuth'),
   item('hubspot', 'HubSpot', 'OAuth'),
   item('jira', 'Jira', 'OAuth'),
   item('linear', 'Linear', 'OAuth'),

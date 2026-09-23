@@ -78,14 +78,14 @@ function TokenRow({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            <Txt variant="ui-md" className="text-icon5">
+            <Txt variant="body" className="text-foreground">
               {title}
             </Txt>
             <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
-          <Txt variant="ui-sm" className="text-icon3">
+          <Txt variant="caption" className="text-muted-foreground">
             {description}
           </Txt>
         </div>
@@ -102,7 +102,7 @@ function TokenRow({
               {configured ? 'Update token' : 'Add token'}
             </Button>
             {configured && (
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
+              <Button size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
                 {removeMutation.isPending ? 'Removing…' : 'Remove'}
               </Button>
             )}
@@ -145,7 +145,7 @@ function TokenRow({
       )}
 
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
           {error}
         </Txt>
       )}

@@ -1,4 +1,4 @@
-import type { TextPart } from '@mastra/react';
+import type { TextPart } from '@mastra/react/ui';
 
 import type { MessageMetadata } from '../message-metadata';
 import { SystemReminderBadge } from '../system-reminder-badge';

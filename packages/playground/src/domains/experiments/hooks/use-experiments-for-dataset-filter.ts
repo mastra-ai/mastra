@@ -15,13 +15,18 @@ export interface ExperimentTargetFilter {
  * A dataset's runs may not be in the first page of the global list, so filtering client-side is not enough.
  * The optional target filter is applied server-side for the same reason.
  */
-export function useExperimentsForDatasetFilter(datasetId: string | undefined, target?: ExperimentTargetFilter) {
+export function useExperimentsForDatasetFilter(
+  datasetId: string | undefined,
+  target?: ExperimentTargetFilter,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const client = useMastraClient();
   const params: ListExperimentsParams = { perPage: EXPERIMENTS_PAGE_SIZE };
   if (target?.targetType) params.targetType = target.targetType;
   if (target?.targetId) params.targetId = target.targetId;
 
   return useQuery({
+    enabled,
     // Prefixes match the keys invalidated by dataset/experiment mutations.
     queryKey: datasetId ? ['dataset-experiments', datasetId, params] : ['experiments', params],
     queryFn: () => (datasetId ? client.listDatasetExperiments(datasetId, params) : client.listExperiments(params)),

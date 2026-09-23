@@ -6,6 +6,8 @@ import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } fro
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
+import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
+import { getBackgroundToolMetadata } from './background-tool-result.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -14,6 +16,7 @@ import {
   handleGoalEvaluation,
   handleMessageStart,
   handleMessageUpdate,
+  handlePackFallbackState,
   handleMessageEnd,
   handleOMObservationStart,
   handleOMObservationEnd,
@@ -60,6 +63,35 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
+function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): boolean {
+  if (state.pendingNewThread) return !message.threadId;
+  return !message.threadId || message.threadId === state.session.thread.getId();
+}
+
+const threadLifecycleGenerations = new WeakMap<TUIState, number>();
+
+export function getThreadLifecycleGeneration(state: TUIState): number {
+  return threadLifecycleGenerations.get(state) ?? 0;
+}
+
+function beginThreadLifecycle(state: TUIState, threadId: string): (() => boolean) | undefined {
+  if (threadId !== state.session.thread.getId()) return undefined;
+
+  const generation = (threadLifecycleGenerations.get(state) ?? 0) + 1;
+  threadLifecycleGenerations.set(state, generation);
+  return () => threadLifecycleGenerations.get(state) === generation && state.session.thread.getId() === threadId;
+}
+
+async function clearThreadState(state: TUIState, isCurrent: () => boolean): Promise<boolean> {
+  const updates = { tasks: [], activePlan: null, sandboxAllowedPaths: [] };
+  if (state.session.state.setIf) {
+    return state.session.state.setIf(updates, isCurrent);
+  }
+  if (!isCurrent()) return false;
+  await state.session.state.set(updates);
+  return isCurrent();
+}
+
 function applyMessageUpdate(
   message: MastraDBMessage,
   update: Extract<AgentControllerEvent, { type: 'message_update' }>['event'],
@@ -89,6 +121,15 @@ export async function dispatchEvent(
   ectx: EventHandlerContext,
   state: TUIState,
 ): Promise<void> {
+  if (
+    'toolCallId' in event &&
+    'threadId' in event &&
+    event.threadId &&
+    (state.pendingNewThread || event.threadId !== state.session.thread.getId())
+  ) {
+    return;
+  }
+
   switch (event.type) {
     case 'agent_start':
       clearToolInputParsers();
@@ -132,16 +173,21 @@ export async function dispatchEvent(
       break;
 
     case 'message_start':
-      handleMessageStart(ectx, event.message);
+      if (isMessageForCurrentThread(event.message, state)) {
+        handleMessageStart(ectx, event.message);
+      }
       break;
 
     case 'message_update': {
       const message = state.streamingMessage;
-      if (!message || message.id !== event.id) break;
+      if (!message || message.id !== event.id || !isMessageForCurrentThread(message, state)) break;
 
       const updated = applyMessageUpdate(message, event.event);
       if (!updated) break;
 
+      // Only open the decode window when an assistant message carries actual
+      // streamed text. Tool-result-only updates and user/system messages must
+      // not count toward tokens/sec.
       if (event.event.type === 'text-delta') {
         state.agentRunLastStreamPartAt = Date.now();
         if (state.decodeStartedAt === 0) {
@@ -154,13 +200,24 @@ export async function dispatchEvent(
     }
 
     case 'message_end':
-      if (state.streamingMessage?.id === event.id) {
+      if (state.streamingMessage?.id === event.id && isMessageForCurrentThread(state.streamingMessage, state)) {
         handleMessageEnd(ectx, state.streamingMessage);
       }
       break;
 
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
+      if (state.options.backgroundToolsEnabled) {
+        const threadId = event.threadId ?? state.session.thread.getId();
+        if (threadId) {
+          state.backgroundToolContexts.set(event.toolCallId, {
+            toolName: event.toolName,
+            resourceId: state.session.identity.getResourceId(),
+            threadId,
+            createdAt: Date.now(),
+          });
+        }
+      }
       handleToolStart(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -205,10 +262,29 @@ export async function dispatchEvent(
       handleToolInputEnd(ectx, event.toolCallId);
       break;
 
-    case 'tool_end':
+    case 'tool_end': {
       state.agentRunLastStreamPartAt = Date.now();
-      handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
+      if (state.options.backgroundToolsEnabled) {
+        const background = getBackgroundToolMetadata(event.providerMetadata);
+        const taskId = !event.isError && background?.status === 'running' ? background.taskId : undefined;
+        const context = state.backgroundToolContexts.get(event.toolCallId);
+        if (taskId && context) {
+          acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+          state.backgroundToolContexts.delete(event.toolCallId);
+          state.globalBackgroundNotice.setActivities(
+            getBackgroundActivitiesForTarget(
+              state.backgroundActivities,
+              state.session.identity.getResourceId(),
+              state.pendingNewThread ? null : state.session.thread.getId(),
+            ),
+          );
+          flushRender(state);
+        }
+        if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
+      }
+      handleToolEnd(ectx, event.toolCallId, event.result, event.isError, event.providerMetadata);
       break;
+    }
 
     case 'info':
       ectx.showInfo(event.message);
@@ -227,28 +303,35 @@ export async function dispatchEvent(
       break;
 
     case 'thread_changed': {
+      const isCurrent = beginThreadLifecycle(state, event.threadId);
+      if (!isCurrent) break;
+
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
+      state.backgroundToolContexts?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (!(await clearThreadState(state, isCurrent))) break;
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         flushRender(state);
       }
       state.taskToolInsertIndex = -1;
-      await ectx.renderExistingMessages();
-      await state.controller.loadOMProgress(state.session);
+      await ectx.renderExistingMessages(isCurrent);
+      if (!isCurrent()) break;
+      await state.controller.loadOMProgress(state.session, isCurrent);
+      if (!isCurrent()) break;
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
-        if (freshBranch) {
+        if (freshBranch && isCurrent()) {
           state.projectInfo.gitBranch = freshBranch;
           ectx.updateStatusLine();
         }
       });
       // Update current thread title for status line display
       const threads = await state.session.thread.list();
+      if (!isCurrent()) break;
       const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
         setCurrentThreadTitle(state, currentThread.title);
@@ -258,7 +341,8 @@ export async function dispatchEvent(
         state.githubPrGradientAnimator?.stop();
         // Load the objective from the durable ThreadState slot, falling back to
         // the legacy thread-metadata goal for pre-migration threads.
-        await state.goalManager.loadFromThread(state);
+        await state.goalManager.loadFromThread(state, isCurrent);
+        if (!isCurrent()) break;
         if (!state.goalManager.getGoal()) {
           state.goalManager.loadFromThreadMetadata(metadata);
         }
@@ -267,8 +351,12 @@ export async function dispatchEvent(
     }
 
     case 'thread_created': {
+      const isCurrent = beginThreadLifecycle(state, event.thread.id);
+      if (!isCurrent) break;
+
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
+      state.backgroundToolContexts?.clear();
       // Update current thread title for status line display
       setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
@@ -291,7 +379,7 @@ export async function dispatchEvent(
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (!(await clearThreadState(state, isCurrent))) break;
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
@@ -521,6 +609,10 @@ export async function dispatchEvent(
       }
       break;
     }
+
+    case 'state_changed':
+      await handlePackFallbackState(ectx, event);
+      break;
 
     case 'display_state_changed':
       // The AgentController emits this after every event with the updated display state.

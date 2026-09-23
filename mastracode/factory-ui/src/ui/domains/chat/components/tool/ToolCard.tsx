@@ -1,9 +1,9 @@
 import {
   ToolCall as ToolCallRoot,
+  ToolCallArguments,
   ToolCallCommand,
   ToolCallContent,
-  ToolCallEdit,
-  ToolCallMono,
+  ToolCallOutput,
   ToolCallPresentedHeader,
   ToolCallTrigger,
   presentTool,
@@ -16,10 +16,6 @@ import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
 import { ToolTime } from '../ToolTime';
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max) + '…' : s;
-}
-
 function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   const edit = toolEdit(tool.toolName, tool.args);
   const resultText =
@@ -30,11 +26,9 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   if (edit) {
     return (
       <>
-        <ToolCallEdit edit={edit} />
+        <ToolCallArguments toolName={tool.toolName} args={tool.args} />
         {tool.status === 'error' && resultText !== undefined && (
-          <ToolCallMono copyText={resultText} className="text-error/90">
-            {truncate(resultText, 800)}
-          </ToolCallMono>
+          <ToolCallOutput text={resultText} maxLength={800} error />
         )}
       </>
     );
@@ -45,38 +39,19 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
       <>
         <ToolCallCommand command={command} />
         {tool.output ? (
-          <ToolCallMono copyText={tool.output} className="text-icon3">
-            {tool.output}
-          </ToolCallMono>
+          <ToolCallOutput text={tool.output} />
         ) : (
-          resultText !== undefined && (
-            <ToolCallMono copyText={resultText} className="text-icon3">
-              {truncate(resultText, 800)}
-            </ToolCallMono>
-          )
+          resultText !== undefined && <ToolCallOutput text={resultText} maxLength={800} />
         )}
       </>
     );
   }
 
-  const argsPretty = tool.args !== undefined ? stringifyToolValue(tool.args) : tool.argsText;
   return (
     <>
-      {argsPretty && (
-        <ToolCallMono copyText={argsPretty} className="text-icon5">
-          {argsPretty}
-        </ToolCallMono>
-      )}
-      {tool.output && (
-        <ToolCallMono copyText={tool.output} className="text-icon3">
-          {tool.output}
-        </ToolCallMono>
-      )}
-      {resultText !== undefined && (
-        <ToolCallMono copyText={resultText} className="text-icon3">
-          {truncate(resultText, 800)}
-        </ToolCallMono>
-      )}
+      <ToolCallArguments toolName={tool.toolName} args={tool.args} argsText={tool.argsText} />
+      {tool.output && <ToolCallOutput text={tool.output} />}
+      {resultText !== undefined && <ToolCallOutput text={resultText} maxLength={800} />}
     </>
   );
 }

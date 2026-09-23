@@ -1,6 +1,10 @@
+import { coreFeatures } from '@mastra/core/features';
 import {
   compareTraceQueryStrings,
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
+  TraceQueryCursorError,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
@@ -10,6 +14,7 @@ import {
   type QueryThreadsInput,
   type QueryThreadsResult,
   type TraceQueryGroupResponse,
+  type TraceQueryPaginatedTraceResponse,
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
@@ -17,9 +22,11 @@ import {
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
   type TrustedThreadQueryPlan,
+  type TrustedTraceQueryKeysetTracesPlan,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
   type TrustedTraceQueryScalarPredicate,
+  type TraceQueryTenantScope,
 } from '@mastra/core/storage';
 
 export interface RawTraceQuerySpan {
@@ -44,6 +51,7 @@ export interface RawTraceQuerySpan {
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
   environment: string | null;
+  organizationId: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -59,6 +67,8 @@ export interface RawTraceQueryScore {
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
 }
 
 export interface RawTraceQueryFeedback {
@@ -75,6 +85,8 @@ export interface RawTraceQueryFeedback {
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
 }
 
 export interface TraceQueryFixtureData {
@@ -110,6 +122,7 @@ const span = (
   parentEntityVersionId: null,
   rootEntityVersionId: null,
   environment: 'production',
+  organizationId: null,
   ...overrides,
 });
 
@@ -777,6 +790,44 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       attributes: { model: 'uncorrelated-model', provider: 'uncorrelated-provider' },
       error: { message: 'must not correlate' },
     }),
+    // Tenant-scoped roots live in September so the unscoped August cases stay untouched.
+    span(70, 'trace-org-a', 'root-org-a', {
+      threadId: 'thread-org-a',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+      startedAt: '2026-09-02T10:00:00.000Z',
+      endedAt: '2026-09-02T10:00:01.000Z',
+    }),
+    span(71, 'trace-org-a', 'span-org-a-tool', {
+      parentSpanId: 'root-org-a',
+      name: 'scoped-tool',
+      spanType: 'tool_call',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+      startedAt: '2026-09-02T10:00:00.100Z',
+      endedAt: '2026-09-02T10:00:00.500Z',
+    }),
+    // Same traceId, other tenant: must never qualify trace-org-a under scope org-a.
+    span(72, 'trace-org-a', 'span-leaked', {
+      parentSpanId: 'root-org-a',
+      name: 'leaked-span',
+      spanType: 'tool_call',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+      startedAt: '2026-09-02T10:00:00.200Z',
+      endedAt: '2026-09-02T10:00:00.600Z',
+    }),
+    span(80, 'trace-org-b', 'root-org-b', {
+      threadId: 'thread-org-b',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+      startedAt: '2026-09-03T10:00:00.000Z',
+      endedAt: '2026-09-03T10:00:01.000Z',
+    }),
+    span(90, 'trace-org-none', 'root-org-none', {
+      startedAt: '2026-09-04T10:00:00.000Z',
+      endedAt: '2026-09-04T10:00:01.000Z',
+    }),
   ],
   scores: [
     scoreRecord(1, 'score-a-factuality', 'trace-a', 'factuality', 0.9, {
@@ -833,6 +884,16 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       scorerVersion: 'v2',
       scoreSource: 'automated',
     }),
+    scoreRecord(70, 'score-org-a-quality', 'trace-org-a', 'scoped-quality', 0.8, {
+      timestamp: '2026-09-02T10:00:02.000Z',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    }),
+    scoreRecord(71, 'score-leaked', 'trace-org-a', 'leaked', 0.1, {
+      timestamp: '2026-09-02T10:00:03.000Z',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+    }),
   ],
   feedback: [
     feedbackRecord(1, 'feedback-a-rating', 'trace-a', 'rating', 'superseded-patient', -1, {
@@ -868,7 +929,84 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
+    feedbackRecord(70, 'feedback-org-a', 'trace-org-a', 'scoped-thumbs', 'user', 'up', {
+      timestamp: '2026-09-02T10:00:04.000Z',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    }),
+    feedbackRecord(71, 'feedback-leaked', 'trace-org-a', 'leaked', 'user', 'down', {
+      timestamp: '2026-09-02T10:00:05.000Z',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+    }),
   ],
+};
+
+const scoreReplacementRoot = (traceId: string): RawTraceQuerySpan =>
+  span(1, traceId, `root-${traceId}`, {
+    startedAt: '2026-08-15T00:00:00.000Z',
+    endedAt: '2026-08-15T00:00:01.000Z',
+  });
+
+const scoreReplacementTimestamp = '2026-08-15T00:00:02.000Z';
+
+/**
+ * Current-score contract fixture. Array order models accepted write order via
+ * cursorId; caller-controlled timestamps intentionally do not distinguish
+ * rewrites.
+ */
+export const TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    scoreReplacementRoot('score-current-a'),
+    scoreReplacementRoot('score-current-b'),
+    scoreReplacementRoot('score-move-a'),
+    scoreReplacementRoot('score-move-b'),
+  ],
+  scores: [
+    scoreRecord(1, 'score-rewritten', 'score-current-a', 'quality', 0.2, {
+      timestamp: scoreReplacementTimestamp,
+      scorerVersion: 'stale',
+      scoreSource: 'manual',
+    }),
+    scoreRecord(2, 'score-low-a', 'score-current-a', 'quality', 0.1, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(3, 'score-rewritten', 'score-current-a', 'quality', 0.8, {
+      timestamp: scoreReplacementTimestamp,
+      scorerVersion: 'current',
+      scoreSource: 'automated',
+    }),
+    scoreRecord(4, 'score-low-b', 'score-current-b', 'quality', 0.1, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(5, 'score-moved', 'score-move-a', 'old-target', 0.9, {
+      spanId: 'old-span',
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(6, 'score-moved', 'score-move-b', 'current-target', 0.4, {
+      spanId: 'current-span',
+      timestamp: scoreReplacementTimestamp,
+    }),
+  ],
+  feedback: [],
+};
+
+/**
+ * Malformed/equal fixture cursors use an evaluator-only deterministic fallback.
+ * Storage adapters may resolve rows without distinct durable recency according
+ * to their physical engine; supported sequential writes must not tie.
+ */
+export const TRACE_QUERY_SCORE_TIE_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [scoreReplacementRoot('score-tie')],
+  scores: [
+    scoreRecord(1, 'score-equal-cursor', 'score-tie', 'quality', 0.2, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+    scoreRecord(1, 'score-equal-cursor', 'score-tie', 'quality', 0.8, {
+      timestamp: scoreReplacementTimestamp,
+    }),
+  ],
+  feedback: [],
 };
 
 export const THREAD_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
@@ -948,6 +1086,9 @@ const fullRange = {
   from: '2026-08-01T00:00:00Z',
   to: '2026-09-01T00:00:00Z',
 };
+/** Window holding only the tenant-scoped fixture roots. */
+const scopedRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+const orgA: TraceQueryTenantScope = { organizationId: 'org-a' };
 
 const lowFactualityTracePredicate: TraceQueryPredicate = {
   scores: {
@@ -995,6 +1136,7 @@ const clinicalReviewPredicate = {
 export interface ThreadQueryConformanceCase {
   name: string;
   request: QueryThreadsInput;
+  scope?: TraceQueryTenantScope;
   expected: Array<{ threadId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
 }
@@ -1205,14 +1347,120 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     },
     expected: [{ threadId: 'thread-2' }],
   },
+  {
+    name: 'scoped thread queries only qualify tenant traces',
+    request: {
+      traces: { timeRange: scopedRange },
+      where: {
+        traces: { some: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'scoped-tool' } } } } },
+      },
+    },
+    scope: orgA,
+    expected: [{ threadId: 'thread-org-a' }],
+  },
+  {
+    name: 'scoped thread queries ignore leaked related rows',
+    request: {
+      traces: { timeRange: scopedRange },
+      where: {
+        traces: { some: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'leaked-span' } } } } },
+      },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'unscoped thread queries read every tenant',
+    request: { traces: { timeRange: scopedRange } },
+    expected: [{ threadId: 'thread-org-a' }, { threadId: 'thread-org-b' }],
+  },
 ];
 
 export interface TraceQueryConformanceCase {
   name: string;
   request: TraceQueryRequest;
-  expected: Array<{ traceId: string } | { threadId: string }>;
+  /** Trusted tenant scope supplied to the planner, never part of the request document. */
+  scope?: TraceQueryTenantScope;
+  expected: Array<{ traceId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
 }
+
+const scoreReplacementRequest = (
+  traceId: string,
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryPredicate,
+): TraceQueryRequest => ({
+  timeRange: fullRange,
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
+      { scores: { [quantifier]: predicate } },
+    ],
+  },
+});
+
+const scoreAboveHalf: TraceQueryPredicate = {
+  op: 'gt',
+  left: { path: 'score' },
+  right: { literal: 0.5 },
+};
+
+export const TRACE_QUERY_SCORE_REPLACEMENT_CASES: TraceQueryConformanceCase[] = [
+  {
+    name: 'current rewritten score satisfies some',
+    request: scoreReplacementRequest('score-current-a', 'some', scoreAboveHalf),
+    expected: [{ traceId: 'score-current-a' }],
+  },
+  {
+    name: 'current rewritten score does not satisfy none',
+    request: scoreReplacementRequest('score-current-a', 'none', scoreAboveHalf),
+    expected: [],
+  },
+  {
+    name: 'trace containing only a low score does not satisfy some',
+    request: scoreReplacementRequest('score-current-b', 'some', scoreAboveHalf),
+    expected: [],
+  },
+  {
+    name: 'trace containing only a low score satisfies none',
+    request: scoreReplacementRequest('score-current-b', 'none', scoreAboveHalf),
+    expected: [{ traceId: 'score-current-b' }],
+  },
+  {
+    name: 'stale scorer fields do not satisfy score predicates',
+    request: scoreReplacementRequest('score-current-a', 'some', {
+      op: 'eq',
+      left: { path: 'scorerVersion' },
+      right: { literal: 'stale' },
+    }),
+    expected: [],
+  },
+  {
+    name: 'moved score is absent from its stale target',
+    request: scoreReplacementRequest('score-move-a', 'some', {
+      op: 'eq',
+      left: { path: 'scorerId' },
+      right: { literal: 'old-target' },
+    }),
+    expected: [],
+  },
+  {
+    name: 'moved score is visible on its current target',
+    request: scoreReplacementRequest('score-move-b', 'some', {
+      op: 'eq',
+      left: { path: 'scorerId' },
+      right: { literal: 'current-target' },
+    }),
+    expected: [{ traceId: 'score-move-b' }],
+  },
+];
+
+export const TRACE_QUERY_SCORE_TIE_CASE: TraceQueryConformanceCase = {
+  name: 'breaks malformed equal score cursors deterministically in the evaluator',
+  request: scoreReplacementRequest('score-tie', 'some', scoreAboveHalf),
+  expected: [{ traceId: 'score-tie' }],
+};
 
 export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
   {
@@ -1934,17 +2182,118 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-a' }],
   },
   {
-    name: 'returns distinct non-null thread groups',
-    request: { timeRange: fullRange, group: { by: ['threadId'] } },
-    expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
+    name: 'unscoped queries still read every tenant',
+    request: { timeRange: scopedRange },
+    expected: [{ traceId: 'trace-org-none' }, { traceId: 'trace-org-b' }, { traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries return only the tenant roots',
+    request: { timeRange: scopedRange },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries narrow to the resource when it is set',
+    request: { timeRange: scopedRange },
+    scope: { organizationId: 'org-a', resourceId: 'project-1' },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries exclude other resources of the same tenant',
+    request: { timeRange: scopedRange },
+    scope: { organizationId: 'org-a', resourceId: 'project-2' },
+    expected: [],
+  },
+  {
+    name: 'scoped queries never match roots without a tenant',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-org-none' } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries cannot widen through caller predicates',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-org-b' } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries see related spans of the tenant',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'scoped-tool' } } } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries ignore related spans from another tenant on the same trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'leaked-span' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries see related scores of the tenant',
+    request: {
+      timeRange: scopedRange,
+      where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'scoped-quality' } } } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries ignore related scores from another tenant on the same trace',
+    request: {
+      timeRange: scopedRange,
+      where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'leaked' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries ignore related feedback from another tenant on the same trace',
+    request: {
+      timeRange: scopedRange,
+      where: { feedback: { some: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'leaked' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries apply to related-record absence checks',
+    request: {
+      timeRange: scopedRange,
+      where: { feedback: { none: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'leaked' } } } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
   },
 ];
 
+/** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
+function matchesScope(
+  record: { organizationId?: string | null; resourceId?: string | null },
+  scope: TraceQueryTenantScope | undefined,
+): boolean {
+  if (!scope) return true;
+  if (record.organizationId !== scope.organizationId) return false;
+  return scope.resourceId === undefined || record.resourceId === scope.resourceId;
+}
+
 export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
-  const spans = currentSpans(data.spans);
-  const scores = currentScores(data.scores);
-  const feedback = currentFeedback(data.feedback);
+  const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
+  const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
+  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
   const roots = currentRoots(data.spans)
+    .filter(root => matchesScope(root, plan.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
     .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
@@ -1961,7 +2310,43 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     return { groups: page.map(threadId => ({ threadId })), page: { next } } satisfies TraceQueryGroupResponse;
   }
 
+  const head = data.spans.reduce((max, row) => (row.parentSpanId === null ? Math.max(max, row.cursorId) : max), 0);
+  if (plan.paginationMode === 'delta') {
+    const watermark = getTraceQueryDeltaWatermark(plan, 'reference');
+    if (watermark !== undefined && (!/^\d+$/.test(watermark) || !Number.isSafeInteger(Number(watermark)))) {
+      throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    }
+    const after = watermark === undefined ? head : Number(watermark);
+    const candidates = roots.filter(root => root.cursorId > after).sort((a, b) => a.cursorId - b.cursorId);
+    const visible = candidates.slice(0, plan.limit);
+    return {
+      traces: visible.map(toTraceQueryTrace),
+      delta: { limit: plan.limit, hasMore: candidates.length > plan.limit },
+      deltaCursor: encodeTraceQueryDeltaCursor(
+        plan,
+        'reference',
+        String(visible.at(-1)?.cursorId ?? Math.max(after, head)),
+      ),
+    };
+  }
   let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
+  if (plan.paginationMode === 'page') {
+    const total = traces.length;
+    const start = plan.page * plan.perPage;
+    return {
+      traces: traces.slice(start, start + plan.perPage),
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+      ...(coreFeatures.has('observability-delta-polling')
+        ? { deltaCursor: encodeTraceQueryDeltaCursor(plan, 'reference', String(head)) }
+        : {}),
+    } satisfies TraceQueryPaginatedTraceResponse;
+  }
+
   if (plan.cursor) traces = traces.filter(trace => isTraceAfterCursor(trace, plan));
   const visible = traces.slice(0, plan.limit + 1);
   const hasNext = visible.length > plan.limit;
@@ -1979,10 +2364,11 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
 }
 
 export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedThreadQueryPlan): QueryThreadsResult {
-  const spans = currentSpans(data.spans);
-  const scores = currentScores(data.scores);
-  const feedback = currentFeedback(data.feedback);
+  const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
+  const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
+  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
   const eligibleRoots = currentRoots(data.spans)
+    .filter(root => matchesScope(root, plan.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.traces.timeRange.from && root.startedAt < plan.traces.timeRange.to)
     .filter(root => !plan.traces.where || evaluateTracePredicate(plan.traces.where, root, spans, scores, feedback));
@@ -2013,8 +2399,9 @@ export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedTh
 export function evaluateThreadQueryRequest(
   data: TraceQueryFixtureData,
   request: QueryThreadsInput,
+  scope?: TraceQueryTenantScope,
 ): QueryThreadsResult {
-  return evaluateThreadQuery(data, planThreadQuery(parseQueryThreadsInput(request)));
+  return evaluateThreadQuery(data, planThreadQuery(parseQueryThreadsInput(request), { scope }));
 }
 
 export async function collectThreadQueryPages(
@@ -2035,8 +2422,12 @@ export async function collectThreadQueryPages(
   return results;
 }
 
-export function evaluateTraceQueryRequest(data: TraceQueryFixtureData, request: TraceQueryRequest): TraceQueryResponse {
-  return evaluateTraceQuery(data, planTraceQuery(parseTraceQueryRequest(request)));
+export function evaluateTraceQueryRequest(
+  data: TraceQueryFixtureData,
+  request: TraceQueryRequest,
+  scope?: TraceQueryTenantScope,
+): TraceQueryResponse {
+  return evaluateTraceQuery(data, planTraceQuery(parseTraceQueryRequest(request), { scope }));
 }
 
 export function normalizeTraceQueryResponse(
@@ -2060,7 +2451,7 @@ export async function collectTraceQueryPages(
     });
     const response = await execute(normalized);
     results.push(...normalizeTraceQueryResponse(response));
-    after = response.page.next;
+    after = 'page' in response ? response.page.next : undefined;
   } while (after);
   return results;
 }
@@ -2092,11 +2483,33 @@ function currentSpans(spans: RawTraceQuerySpan[]): RawTraceQuerySpan[] {
   return [...records.values()];
 }
 
+function scoreTieBreakKey(score: RawTraceQueryScore): string {
+  return JSON.stringify([
+    score.timestamp,
+    score.traceId,
+    score.spanId,
+    score.scorerId,
+    score.scorerVersion,
+    score.scoreSource,
+    score.score,
+    score.entityVersionId,
+    score.parentEntityVersionId,
+    score.rootEntityVersionId,
+  ]);
+}
+
+function compareCurrentScores(left: RawTraceQueryScore, right: RawTraceQueryScore): number {
+  if (left.cursorId !== right.cursorId) return left.cursorId - right.cursorId;
+  const timestampComparison = compareTraceQueryStrings(left.timestamp, right.timestamp);
+  if (timestampComparison !== 0) return timestampComparison;
+  return compareTraceQueryStrings(scoreTieBreakKey(left), scoreTieBreakKey(right));
+}
+
 function currentScores(scores: RawTraceQueryScore[]): RawTraceQueryScore[] {
   const records = new Map<string, RawTraceQueryScore>();
   for (const candidate of scores) {
     const current = records.get(candidate.scoreId);
-    if (!current || candidate.cursorId > current.cursorId) records.set(candidate.scoreId, candidate);
+    if (!current || compareCurrentScores(candidate, current) > 0) records.set(candidate.scoreId, candidate);
   }
   return [...records.values()];
 }
@@ -2241,6 +2654,12 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   return {
     traceId: root.traceId!,
     rootSpanId: root.spanId,
+    name: root.name,
+    entityId: root.entityId,
+    parentSpanId: root.parentSpanId,
+    createdAt: root.startedAt,
+    metadata: root.metadata,
+    inputPreview: null,
     threadId: root.threadId,
     resourceId: root.resourceId,
     startedAt: root.startedAt,
@@ -2262,10 +2681,7 @@ function compareTraces(
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
-function isTraceAfterCursor(
-  trace: TraceQueryTrace,
-  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
-): boolean {
+function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
   const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;

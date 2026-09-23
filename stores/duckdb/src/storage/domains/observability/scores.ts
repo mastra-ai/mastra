@@ -337,7 +337,14 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
 export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateScoresArgs): Promise<void> {
   if (args.scores.length === 0) return;
 
-  const tuples = args.scores.map(s => {
+  const currentScores = new Map<string | symbol, (typeof args.scores)[number]>();
+  for (const score of args.scores) {
+    const key = score.scoreId ?? Symbol();
+    currentScores.delete(key);
+    currentScores.set(key, score);
+  }
+
+  const tuples = [...currentScores.values()].map(s => {
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[

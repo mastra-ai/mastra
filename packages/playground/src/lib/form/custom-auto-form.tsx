@@ -5,21 +5,19 @@ import { useEffect, useMemo, useCallback } from 'react';
 import type { DefaultValues } from 'react-hook-form';
 import { useForm, FormProvider } from 'react-hook-form';
 import { CustomAutoFormField } from './components/custom-auto-form-field';
-import { removeEmptyValues } from './utils';
 
 export function CustomAutoForm<T extends Record<string, any>>({
   schema,
-  onSubmit = () => {},
+  onSubmit,
   defaultValues,
   values,
   children,
   uiComponents,
   formComponents,
   withSubmit = false,
-  onFormInit = () => {},
+  onFormInit,
   formProps = {},
 }: AutoFormProps<T>) {
-  // Memoize parsed schema to prevent re-parsing on every render
   const parsedSchema = useMemo(() => parseSchema(schema), [schema]);
   const methods = useForm<T>({
     defaultValues: {
@@ -37,10 +35,9 @@ export function CustomAutoForm<T extends Record<string, any>>({
 
   const handleSubmit = useCallback(
     async (dataRaw: T) => {
-      const data = removeEmptyValues(dataRaw);
-      const validationResult = schema.validateSchema(data as T);
+      const validationResult = schema.validateSchema(dataRaw);
       if (validationResult.success) {
-        await onSubmit(validationResult.data, methods);
+        await onSubmit?.(validationResult.data, methods);
       } else {
         methods.clearErrors();
         let isFocused: boolean = false;
@@ -71,7 +68,6 @@ export function CustomAutoForm<T extends Record<string, any>>({
     [schema, onSubmit, methods],
   );
 
-  // Memoize the provider value to prevent unnecessary re-renders of form fields
   const providerValue = useMemo(
     () => ({
       schema: parsedSchema,

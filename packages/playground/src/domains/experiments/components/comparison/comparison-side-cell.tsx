@@ -1,6 +1,8 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ClockIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
@@ -26,8 +28,10 @@ function formatDuration(side: ComparisonSide): string | null {
   return Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)}s` : null;
 }
 
-const codeBoxClass =
-  'border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-y-auto rounded-xl border p-4 font-mono break-all whitespace-pre-wrap dark:border-white/10 dark:bg-black/20';
+const codeBoxClass = cn(
+  raisedSurfaceStyle,
+  'max-h-[30vh] overflow-y-auto rounded-xl p-4 font-mono text-body break-all whitespace-pre-wrap text-muted-foreground',
+);
 
 /**
  * One side of a single item row. Baseline and contender render the exact same
@@ -46,7 +50,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="text-neutral3 text-ui-md py-5 text-center">Not present in this experiment</p>;
+    return <p className="py-5 text-center text-body text-muted-foreground">Not present in this experiment</p>;
   }
 
   const outputStr = formatValue(data.output);
@@ -57,7 +61,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <Tooltip>
           <TooltipTrigger
             render={
-              <p className="text-neutral3 text-ui-md flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
+              <p className="flex items-center justify-end gap-1.5 text-body text-muted-foreground [&>svg]:size-3.5">
                 <ClockIcon />
                 {duration}
               </p>
@@ -69,7 +73,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.error ? (
         <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <p className="border-negative1/40 bg-negative1/5 text-ui-md text-neutral4 rounded-xl border p-4 break-words">
+          <p className="rounded-xl border border-negative1/40 bg-negative1/5 p-4 text-body break-words text-muted-foreground">
             {data.error.message}
           </p>
         </ComparisonSection>
@@ -97,7 +101,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.comment && (
         <ComparisonSection title="Comment" defaultOpen={false}>
-          <p className="text-neutral3 text-ui-md">{data.comment}</p>
+          <p className="text-body text-muted-foreground">{data.comment}</p>
         </ComparisonSection>
       )}
 
@@ -105,9 +109,9 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="text-ui-md flex items-start justify-between gap-4">
-                <dt className="text-neutral3">{key}</dt>
-                <dd className="text-neutral5 font-mono break-all">{formatValue(value)}</dd>
+              <div key={key} className="flex items-start justify-between gap-4 text-body">
+                <dt className="text-muted-foreground">{key}</dt>
+                <dd className="font-mono break-all text-foreground">{formatValue(value)}</dd>
               </div>
             ))}
           </dl>

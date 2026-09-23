@@ -66,6 +66,30 @@ describe('ClickhouseStoreVNext', () => {
       }
     });
 
+    it('forwards nested observability trace-query configuration', async () => {
+      const client = createClient({
+        url: TEST_CONFIG.url,
+        username: TEST_CONFIG.username,
+        password: TEST_CONFIG.password,
+      });
+
+      try {
+        expect(
+          () =>
+            new ClickhouseStoreVNext({
+              id: 'vnext-observability-config',
+              client,
+              observability: {
+                retention: { tracing: 30 },
+                traceQuery: { discovery: { memoryLimitBytes: 0 } },
+              },
+            }),
+        ).toThrow('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
+      } finally {
+        await client.close();
+      }
+    });
+
     it('rejects empty url like ClickhouseStore does', () => {
       expect(
         () =>

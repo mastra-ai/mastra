@@ -1,10 +1,9 @@
-import type { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Label } from '@mastra/playground-ui/components/Label';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
@@ -131,7 +130,7 @@ export function ItemDetailDialog({
     }
 
     // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
-    let parsedTrajectory: unknown | null = null;
+    let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'] = null;
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);
@@ -226,10 +225,10 @@ export function ItemDetailDialog({
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleEdit} icon={<Pencil />}>
+            <Button size="sm" onClick={handleEdit} icon={<Pencil />}>
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDelete} icon={<Trash2 />}>
+            <Button size="sm" onClick={handleDelete} icon={<Trash2 />}>
               Delete
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
@@ -329,7 +328,7 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
         </TextAndIcon>
       </SideDialog.Header>
 
-      <Sections>
+      <div className="grid gap-6">
         <KeyValueList
           data={[
             {
@@ -368,7 +367,7 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
         )}
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-      </Sections>
+      </div>
     </>
   );
 }

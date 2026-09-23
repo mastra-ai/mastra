@@ -345,10 +345,71 @@ describe('WorkItemsStorage', () => {
     expect(adopted.item).toMatchObject({ id: legacy.item.id, claimKey: 'linear:issue:2' });
   });
 
+  it('mints a fresh binding when re-entered after the prior binding is revoked', async () => {
+    const storage = await makeStorage();
+    const start = (kickoffKey: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'work',
+        session: { sessionId: `session-${kickoffKey}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+
+    const first = await start('kickoff-1');
+    expect(first.replayed).toBe(false);
+    expect(first.binding.status).toBe('active');
+
+    // Abort recovery: revoke the item's bindings, then re-enter with the same key.
+    await storage.revokeRunBindingsForWorkItem({
+      orgId: 'org1',
+      factoryProjectId: 'project1',
+      workItemId: first.item.id,
+      revokedAt: new Date(),
+    });
+
+    const second = await start('kickoff-1');
+    expect(second.replayed).toBe(false);
+    expect(second.binding.id).not.toBe(first.binding.id);
+    expect(second.binding.status).toBe('active');
+    expect(second.pendingStart.bindingId).toBe(second.binding.id);
+  });
+
+  it('replays the same binding when re-entered while it is still live', async () => {
+    const storage = await makeStorage();
+    const start = (kickoffKey: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'work',
+        session: { sessionId: `session-${kickoffKey}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+
+    const first = await start('kickoff-1');
+    expect(first.replayed).toBe(false);
+
+    const second = await start('kickoff-1');
+    expect(second.replayed).toBe(true);
+    expect(second.binding.id).toBe(first.binding.id);
+  });
+
   it('purges replay state when a linked work item is deleted', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
-    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const created = await storage.upsert({
+      ...scope,
+      userId: 'u',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: 'github-issue:42' } },
+    });
     const commit = () =>
       storage.commitRuleEvaluation({
         ...scope,
@@ -361,7 +422,8 @@ describe('WorkItemsStorage', () => {
         decisions: [
           {
             type: 'upsertLinkedWorkItem',
-            sourceKey: 'github:issue:42',
+            source: 'github-issue',
+            sourceKey: 'github-issue:42',
             idempotencyKey: 'decision-1',
             board: 'work',
             stage: 'triage',
@@ -372,7 +434,24 @@ describe('WorkItemsStorage', () => {
       });
 
     expect((await commit()).status).toBe('committed');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a claimable decision');
+    await storage.completeDeferredDecision(
+      { orgId: 'org1', factoryProjectId: 'p1', id: claimed.id, ownerId: 'worker-1' },
+      now,
+    );
+
+    // The card still exists, so the replayed ingress leaves the spent decision alone
+    // instead of re-leasing work that already happened.
     expect((await commit()).status).toBe('replayed');
+    const [spent] = await storage.listDeferredDecisions('org1', 'p1');
+    expect(spent).toMatchObject({ idempotencyKey: 'decision-1', status: 'succeeded' });
 
     await storage.delete({ orgId: 'org1', id: created.item.id });
 

@@ -15,7 +15,7 @@ const meta: Meta<typeof Combobox> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['default', 'outline', 'ghost'],
+      options: ['default', 'ghost'],
     },
   },
 };
@@ -23,8 +23,8 @@ const meta: Meta<typeof Combobox> = {
 export default meta;
 type Story = StoryObj<typeof Combobox>;
 
-const iconClassName = 'h-4 w-4 shrink-0 text-neutral3';
-const badgeClassName = 'rounded-full border border-border1 px-2 py-0.5 text-ui-xs text-neutral3';
+const iconClassName = 'h-4 w-4 shrink-0 text-muted-foreground';
+const badgeClassName = 'rounded-full border border-border px-2 py-0.5 text-meta text-muted-foreground';
 
 const frameworkOptions = [
   { label: 'React', value: 'react' },
@@ -104,6 +104,17 @@ export const Default: Story = {
   },
 };
 
+export const WithError: Story = {
+  args: {
+    options: frameworkOptions,
+    placeholder: 'Select a framework...',
+    name: 'framework',
+    error: 'Choose a framework.',
+    'aria-label': 'Framework',
+    className: 'w-[200px]',
+  },
+};
+
 export const WithValue: Story = {
   args: {
     options: frameworkOptions,
@@ -164,7 +175,7 @@ export const ManyOptions: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['default', 'outline', 'ghost'] as const).map(variant => (
+      {(['default', 'ghost'] as const).map(variant => (
         <Fragment key={variant}>
           <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-50" />
         </Fragment>
@@ -190,7 +201,7 @@ export const WithDescriptions: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-50" />
         </Fragment>
@@ -220,7 +231,7 @@ export const Multiple: Story = {
           {selectedCapabilities.map(option => (
             <span
               key={option.value}
-              className="border-border1 bg-surface3 text-ui-xs text-neutral4 rounded-full border px-2.5 py-1"
+              className="rounded-full border border-border bg-card px-2.5 py-1 text-meta text-muted-foreground"
             >
               {option.label}
             </span>

@@ -28,7 +28,7 @@ export function BaseThinkingSection() {
       description={
         <>
           <span>Used by every run without a session or mode override</span>
-          {readOnly && <span className="text-neutral2">{READ_ONLY_REASON}</span>}
+          {readOnly && <span className="text-placeholder">{READ_ONLY_REASON}</span>}
           <RowError error={writeError ?? loadError} />
         </>
       }

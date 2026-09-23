@@ -228,7 +228,7 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ getInitData, inputData, mastra }) => {
-    const { city } = getInitData();
+    const { city } = getInitData<typeof weatherWorkflow>();
     const forecast = inputData;
 
     const prompt = `Based on the following weather forecast for ${city}, suggest appropriate activities:
@@ -293,11 +293,13 @@ export const travelAgent = new Agent({
   `,
 });
 
+const travelInputSchema = z.object({
+  vacationDescription: z.string().describe('The description of the vacation'),
+});
+
 const generateSuggestionsStep = createStep({
   id: 'generate-suggestions',
-  inputSchema: z.object({
-    vacationDescription: z.string().describe('The description of the vacation'),
-  }),
+  inputSchema: travelInputSchema,
   outputSchema: z.object({
     suggestions: z.array(
       z.object({
@@ -376,7 +378,7 @@ const travelPlannerStep = createStep({
     travelPlan: z.string(),
   }),
   execute: async ({ inputData, mastra, getInitData }) => {
-    const { vacationDescription } = getInitData();
+    const { vacationDescription } = getInitData<z.infer<typeof travelInputSchema>>();
 
     const travelAgent = mastra.getAgent('travelAgent');
 
@@ -391,9 +393,7 @@ const travelPlannerStep = createStep({
 
 const travelAgentWorkflow = createWorkflow({
   id: 'travel-agent-workflow-step4-suspend-resume',
-  inputSchema: z.object({
-    vacationDescription: z.string().describe('The description of the vacation'),
-  }),
+  inputSchema: travelInputSchema,
   outputSchema: z.object({
     travelPlan: z.string(),
   }),

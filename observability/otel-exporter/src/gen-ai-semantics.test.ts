@@ -87,6 +87,28 @@ describe('getAttributes - tool attributes', () => {
     expect(attrs).not.toHaveProperty('gen_ai.tool.type');
   });
 
+  it('exports MCP server request metadata', () => {
+    const span = createSpan(SpanType.MCP_SERVER_REQUEST);
+    span.attributes = {
+      mcpMethod: 'tools/call',
+      targetName: 'lookup',
+      mcpServer: 'roster',
+      serverVersion: '1.0.0',
+      mcpProtocolVersion: '2026-07-28',
+      clientName: 'claude-desktop',
+      clientVersion: '2.1.0',
+    };
+    expect(getAttributes(span)).toMatchObject({
+      'mcp.method.name': 'tools/call',
+      'mcp.protocol.version': '2026-07-28',
+      'mastra.mcp_server_request.server_name': 'roster',
+      'mastra.mcp_server_request.server_version': '1.0.0',
+      'mastra.mcp_server_request.target_name': 'lookup',
+      'mastra.mcp_server_request.client_name': 'claude-desktop',
+      'mastra.mcp_server_request.client_version': '2.1.0',
+    });
+  });
+
   it.each([SpanType.TOOL_CALL, SpanType.PROVIDER_TOOL_CALL])('does not export MCP metadata for %s', type => {
     const attrs = getAttributes(createSpan(type));
     expect(attrs).not.toHaveProperty('server.address');
@@ -411,6 +433,75 @@ describe('getAttributes - workflow attributes', () => {
 
     expect(attrs).not.toHaveProperty('mastra.workflow_parallel.branch_count');
     expect(attrs).not.toHaveProperty('mastra.workflow_parallel.parallel_steps');
+  });
+
+  describe('authored entry identity', () => {
+    const entryMetadata = { phase: 'processing', enabled: false, count: 0, nested: { deep: true } };
+    const entryFields = {
+      entryId: 'parallel-group',
+      entryDescription: 'Run two tasks in parallel',
+      entryMetadata,
+    };
+
+    it('preserves parallel entry fields from attributes without relying on span.metadata', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, {
+        name: "parallel: '2 branches'",
+        metadata: {},
+        attributes: { branchCount: 2, parallelSteps: ['first', 'second'], ...entryFields },
+      });
+      const attrs = getAttributes(span);
+
+      expect(attrs).toMatchObject({
+        'mastra.workflow_parallel.branch_count': 2,
+        'mastra.workflow_parallel.entry_id': 'parallel-group',
+        'mastra.workflow_parallel.entry_description': 'Run two tasks in parallel',
+        'mastra.workflow_parallel.entry_metadata': JSON.stringify(entryMetadata),
+      });
+      expect(Object.keys(attrs).some(key => key.startsWith('mastra.metadata.'))).toBe(false);
+    });
+
+    it('round-trips nested and falsy entry metadata values', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, { attributes: { entryMetadata } });
+      const serialized = getAttributes(span)['mastra.workflow_parallel.entry_metadata'];
+
+      expect(JSON.parse(serialized as string)).toEqual(entryMetadata);
+    });
+
+    it.each([
+      [SpanType.WORKFLOW_CONDITIONAL, 'workflow_conditional'],
+      [SpanType.WORKFLOW_LOOP, 'workflow_loop'],
+      [SpanType.WORKFLOW_SLEEP, 'workflow_sleep'],
+    ])('preserves entry fields for %s spans', (type, prefix) => {
+      const span = createWorkflowSpan(type, { attributes: entryFields });
+
+      expect(getAttributes(span)).toMatchObject({
+        [`mastra.${prefix}.entry_id`]: 'parallel-group',
+        [`mastra.${prefix}.entry_description`]: 'Run two tasks in parallel',
+        [`mastra.${prefix}.entry_metadata`]: JSON.stringify(entryMetadata),
+      });
+    });
+
+    it('preserves step entry description and metadata', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_STEP, {
+        entityId: 'left',
+        attributes: { status: 'success', entryDescription: 'Left branch', entryMetadata: { retries: 0 } },
+      });
+
+      expect(getAttributes(span)).toMatchObject({
+        'mastra.workflow_step.step_id': 'left',
+        'mastra.workflow_step.entry_description': 'Left branch',
+        'mastra.workflow_step.entry_metadata': '{"retries":0}',
+      });
+    });
+
+    it('adds no entry keys when entry fields are absent', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_LOOP, { attributes: { loopType: 'foreach' } });
+      const attrs = getAttributes(span);
+
+      expect(attrs).not.toHaveProperty('mastra.workflow_loop.entry_id');
+      expect(attrs).not.toHaveProperty('mastra.workflow_loop.entry_description');
+      expect(attrs).not.toHaveProperty('mastra.workflow_loop.entry_metadata');
+    });
   });
 });
 

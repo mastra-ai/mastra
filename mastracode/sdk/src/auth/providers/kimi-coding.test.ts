@@ -71,6 +71,25 @@ describe('Kimi For Coding OAuth', () => {
     },
   );
 
+  it('does not expose upstream response bodies in device-flow errors', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error_description: 'sensitive-device-detail' }, 400));
+    const error = await startKimiCodingDeviceLogin().catch(cause => cause as Error);
+    expect(error.message).toBe('Kimi For Coding device authorization failed: 400');
+    expect(error.message).not.toContain('sensitive-device-detail');
+  });
+
+  it('does not expose unknown token error details', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(deviceCodeBody))
+      .mockResolvedValueOnce(jsonResponse({ error: 'private_code', error_description: 'sensitive-token-detail' }, 400));
+    const pending = await startKimiCodingDeviceLogin();
+
+    await expect(pollKimiCodingDeviceLogin(pending)).resolves.toEqual({
+      status: 'failed',
+      error: 'Kimi For Coding token request failed: 400',
+    });
+  });
+
   it('completes device polling with OAuth credentials', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(deviceCodeBody))

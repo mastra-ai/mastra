@@ -13,6 +13,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   hasErrorCode,
 } from '@mastra/core/storage';
 import type {
@@ -553,6 +554,10 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const filterParts: string[] = [];
@@ -607,7 +612,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const rows = await this.operations.loadMany<Record<string, any>>({
         tableName: TABLE_DATASETS,
         whereClause,
-        orderBy: `${quoteIdentifier('createdAt', 'column name')} DESC, \`id\` ASC`,
+        orderBy: `${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC`,
         offset,
         limit: limitValue,
       });
@@ -1087,6 +1092,10 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
 
@@ -1140,7 +1149,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName}${whereSql} ORDER BY \`createdAt\` DESC, \`id\` ASC LIMIT ${limitValue} OFFSET ${offset}`,
+        `SELECT * FROM ${tableItemsName}${whereSql} ORDER BY ${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC LIMIT ${limitValue} OFFSET ${offset}`,
         params,
       );
 

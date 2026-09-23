@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Plus, Settings, Trash } from 'lucide-react';
+import { Fragment } from 'react';
 import { TooltipProvider } from '../Tooltip';
+import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'outline', 'ghost'];
+const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost'];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -26,7 +28,7 @@ const meta: Meta<typeof Button> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['xs', 'sm', 'md', 'lg', 'icon-xs', 'icon-sm', 'icon-md', 'icon-lg'],
+      options: ['sm', 'md', 'lg', 'icon-sm', 'icon-md', 'icon-lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -59,7 +61,6 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      <Button size="xs">Extra Small</Button>
       <Button size="sm">Small</Button>
       <Button size="md">Medium</Button>
       <Button size="lg">Large</Button>
@@ -89,7 +90,7 @@ export const WithIcon: Story = {
 export const WithIconSizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Button key={size} size={size} icon={<Plus />}>
           Add Item
         </Button>
@@ -108,7 +109,7 @@ export const WithTooltip: Story = {
 export const IconAutoDetect: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <Button key={size} size={size}>
           <Settings />
         </Button>
@@ -141,9 +142,6 @@ export const IconButtonVariants: Story = {
 export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Button size="icon-xs" tooltip="Extra Small">
-        <Settings />
-      </Button>
       <Button size="icon-sm" tooltip="Small">
         <Settings />
       </Button>
@@ -168,13 +166,18 @@ export const IconButtonDisabled: Story = {
 
 export const VariantSizeMatrix: Story = {
   render: () => (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-[6rem_repeat(3,max-content)_max-content] items-center gap-3">
+      <span />
+      {['sm', 'default', 'lg', 'with icon'].map(label => (
+        <Txt key={label} as="span" variant="meta" tone="muted" className="text-center">
+          {label}
+        </Txt>
+      ))}
       {ALL_VARIANTS.map(variant => (
-        <div key={variant} className="flex flex-wrap items-center gap-3">
-          <span className="text-ui-sm text-neutral3 w-24">{variant}</span>
-          <Button variant={variant} size="xs">
-            xs
-          </Button>
+        <Fragment key={variant}>
+          <Txt as="span" variant="meta" tone="muted">
+            {variant}
+          </Txt>
           <Button variant={variant} size="sm">
             sm
           </Button>
@@ -188,7 +191,7 @@ export const VariantSizeMatrix: Story = {
             <Trash />
             with icon
           </Button>
-        </div>
+        </Fragment>
       ))}
     </div>
   ),

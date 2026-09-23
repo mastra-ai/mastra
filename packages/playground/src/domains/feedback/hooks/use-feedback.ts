@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getFeedbackRefetchInterval } from '../utils/feedback-refetch-interval';
@@ -5,17 +6,27 @@ import { getFeedbackRefetchInterval } from '../utils/feedback-refetch-interval';
 const FEEDBACK_PER_PAGE = 20;
 
 export type FeedbackReviewStatus = 'needs-review' | 'reviewed';
+type ListFeedbackArgs = NonNullable<Parameters<MastraClient['listFeedback']>[0]>;
+export type FeedbackOrderBy = NonNullable<ListFeedbackArgs['orderBy']>;
 
-export function useFeedback({ reviewStatus }: { reviewStatus?: FeedbackReviewStatus }) {
+const DEFAULT_FEEDBACK_ORDER_BY: FeedbackOrderBy = { field: 'timestamp', direction: 'DESC' };
+
+export function useFeedback({
+  reviewStatus,
+  orderBy = DEFAULT_FEEDBACK_ORDER_BY,
+}: {
+  reviewStatus?: FeedbackReviewStatus;
+  orderBy?: FeedbackOrderBy;
+}) {
   const client = useMastraClient();
 
   const query = useInfiniteQuery({
-    queryKey: ['feedback', 'list', reviewStatus ?? 'all'],
+    queryKey: ['feedback', 'list', reviewStatus ?? 'all', orderBy],
     queryFn: ({ pageParam }) =>
       client.listFeedback({
         filters: reviewStatus ? { reviewStatus } : undefined,
         pagination: { page: pageParam, perPage: FEEDBACK_PER_PAGE },
-        orderBy: { field: 'timestamp', direction: 'DESC' },
+        orderBy,
       }),
     initialPageParam: 0,
     getNextPageParam: lastPage => (lastPage.pagination?.hasMore ? lastPage.pagination.page + 1 : undefined),

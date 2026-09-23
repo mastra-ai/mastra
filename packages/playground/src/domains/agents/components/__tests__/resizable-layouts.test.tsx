@@ -3,7 +3,6 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { createRef, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
 import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
 import { AgentLayout } from '../agent-layout';
 
@@ -241,18 +240,5 @@ describe('resizable service layouts', () => {
     const rightPanel = screen.getByTestId('panel-right-slot');
     expect(rightPanel.className).toContain('min-w-0');
     expect(rightPanel.textContent).toContain('memory studio');
-  });
-
-  it('keeps the workflow panel group shrinkable when side slots are present', () => {
-    render(
-      <WorkflowLayout workflowId="workflow-id" leftSlot={<div>runs</div>} rightSlot={<div>workflow information</div>}>
-        <div>workflow run</div>
-      </WorkflowLayout>,
-    );
-
-    expectPanelGroupsShrinkable();
-    expect(screen.getByTestId('collapsible-left-slot').className).toContain('min-w-0');
-    expect(screen.getByTestId('collapsible-right-slot').className).toContain('min-w-0');
-    expect(screen.getByText('workflow run').parentElement?.className).toContain('overflow-y-auto');
   });
 });

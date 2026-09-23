@@ -1,12 +1,13 @@
 import { DurableAgentDefaults } from '@mastra/core/agent/durable';
 
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
@@ -205,12 +206,12 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
 });
 
 /**
- * `map-final-output` runs the finish side effects through `engine.step.run`. These tests
- * only care about how the spans are ended, so the fake engine returns the step's result
- * without invoking the callback. Mocking the module instead would leak across files,
- * because this package runs vitest with `--no-isolate`.
+ * `map-final-output` calls `runDurableFinishSideEffects` directly (no step tooling — the
+ * mapping already runs inside the engine's durable boundary). These tests only care about
+ * how spans are ended, so they pass an empty serialized MessageList; with no registry
+ * entry the helper's side-effect blocks (processors, persistence, title) are no-ops.
  */
-const skipFinishSideEffects = async () => ({ messageListState: undefined, outputText: undefined });
+const emptyMessageListState = () => new MessageList().serialize();
 
 describe('createInngestDurableAgenticWorkflow final span ends', () => {
   it('ends the model span with usage on attributes and the agent span with text only', async () => {
@@ -256,10 +257,10 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
         modelSpanData: modelSpan.exportSpan(),
         agentSpanData: agentSpan.exportSpan(),
+        messageListState: emptyMessageListState(),
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: skipFinishSideEffects } },
       mastra: { observability, getLogger: () => undefined },
     });
 
@@ -300,13 +301,26 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         accumulatedSteps,
         accumulatedUsage: usage,
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        messageListState: emptyMessageListState(),
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: skipFinishSideEffects } },
       mastra: { getLogger: () => undefined },
     });
 
     expect(result.output).toEqual({ text: 'final answer', usage, steps: accumulatedSteps });
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow bookkeeping (#24731)', () => {
+  it('configures both workflows to skip no-op durable bookkeeping', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-events-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    expect(workflow.options.emitStepEvents).toBe(false);
+    expect(iterationWorkflow.options.emitStepEvents).toBe(false);
+    expect(workflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+    expect(iterationWorkflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
   });
 });

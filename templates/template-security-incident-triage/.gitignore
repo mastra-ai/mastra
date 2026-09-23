@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.mastra/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+coverage/
+.cache/
+.DS_Store
+.vscode/
+
+# Templates install current dependencies; lockfiles stay local.
+package-lock.json
+pnpm-lock.yaml

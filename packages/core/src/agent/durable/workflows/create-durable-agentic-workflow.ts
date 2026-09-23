@@ -219,6 +219,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           messageId: state.messageId,
           requestContextEntries: state.requestContextEntries,
           stepIndex: state.iterationCount,
+          accumulatedSteps: state.accumulatedSteps,
           agentSpanData: state.agentSpanData,
           modelSpanData: state.modelSpanData,
         };
@@ -681,6 +682,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             });
           }
 
+          // Keep title generation inside the workflow lifecycle so durable workers do not
+          // abandon it, but wait only after FINISH has released stream/generate callers.
+          await finishResult.titleGeneration;
+
           // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
           // originals were ended as `suspended`, so end the *resume* spans (registry override).
           try {
@@ -695,8 +700,17 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 const modelSpan = observability.rebuildSpan(
                   modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
                 ) as AIModelGenerationSpan | undefined;
+                // Surface every tool call made during the run so exporters (e.g. PostHog)
+                // see the same { toolCallId, toolName, args } shape as the in-process loop.
+                const toolCalls = state.accumulatedSteps.flatMap(step =>
+                  ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                    toolCallId: tc.toolCallId,
+                    toolName: tc.toolName,
+                    args: tc.args,
+                  })),
+                );
                 modelSpan?.createTracker()?.endGeneration({
-                  output: { text: finalText },
+                  output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                   attributes: { finishReason: finalOutput.stepResult?.reason },
                   usage: state.accumulatedUsage,
                 });

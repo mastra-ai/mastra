@@ -93,6 +93,17 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('getEntry', () => {
+    it('recovers active workflow runs during production startup', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const entry = (new BuildBundler() as any).getEntry();
+
+      expect(entry).toContain('await mastra.restartAllActiveWorkflowRuns()');
+      expect(entry).toContain("mastra.recoveryConfig?.durableAgents === 'auto'");
+      expect(entry).toContain('await mastra.recoverAllDurableAgents()');
+    });
+  });
+
   describe('bundle', () => {
     it('does not execute worker introspection outside environment deploys', async () => {
       const { BuildBundler } = await import('./BuildBundler');
@@ -146,11 +157,11 @@ describe('BuildBundler', () => {
       });
     });
 
-    it('keeps configured externals as runtime dependencies while preserving externals true', async () => {
+    it('preserves an explicit externals list and dynamic packages', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
         externals: ['@duckdb/node-bindings', 'existing-package'],
-        dynamicPackages: ['existing-package', 'dynamic-package'],
+        dynamicPackages: ['dynamic-package'],
       });
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler();
@@ -158,8 +169,23 @@ describe('BuildBundler', () => {
       const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
 
       expect(options).toEqual({
-        externals: true,
-        dynamicPackages: ['existing-package', 'dynamic-package', '@duckdb/node-bindings'],
+        externals: ['@duckdb/node-bindings', 'existing-package'],
+        dynamicPackages: ['dynamic-package'],
+      });
+    });
+
+    it('preserves an explicit workspace external', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: ['@repro/database'],
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        externals: ['@repro/database'],
       });
     });
 

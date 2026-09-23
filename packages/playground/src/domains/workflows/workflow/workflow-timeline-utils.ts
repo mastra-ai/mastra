@@ -1,64 +1,55 @@
 import type { Step } from '../context/use-current-run';
+import { isAwaitingInput, resolveStepSpan } from '../context/workflow-step-timing';
 
 export interface TimelineRow {
   stepId: string;
   step: Step;
   status: Step['status'];
-  /** Bar left position, 0–100. */
-  offsetPct: number;
-  /** Bar width, 0–100. */
-  widthPct: number;
-  durationMs: number;
+  timing?: { offsetPct: number; widthPct: number; durationMs: number };
+  spansSuspension: boolean;
   isRunning: boolean;
   isNestedEntry: boolean;
 }
 
-export const isNestedTimelineEntry = (stepId: string) => stepId.includes('.');
+const isNestedTimelineEntry = (stepId: string) => stepId.includes('.');
 
 const isInputKey = (key: string) => key === 'input' || key.endsWith('.input');
-
-/** Smallest bar width (in %) so near-zero durations stay visible. */
 const MIN_WIDTH_PCT = 1;
 
-export function formatTimelineDuration(durationMs: number) {
-  return `${Number((durationMs / 1000).toPrecision(3))}s`;
+type StepSpan = { start: number; end: number };
+
+function measureStep(step: Step, now: number) {
+  const span = resolveStepSpan(step);
+  const end = span?.isLive ? Math.max(now, span.start) : span?.end;
+  const measured: StepSpan | undefined = span && end !== undefined ? { start: span.start, end } : undefined;
+  return { span: measured, isLive: span?.isLive ?? false, spansSuspension: span?.spansSuspension ?? false };
 }
 
-/**
- * Build positioned timeline rows from the current run's steps.
- *
- * `now` is injected (not read from `Date.now()`) so callers control the clock
- * and tests stay deterministic. Running steps (no `endedAt`) are measured
- * against `now`, so their bars grow as `now` advances.
- */
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
   const entries = Object.entries(steps)
     .filter(([key]) => !isInputKey(key))
-    .sort(([aId, a], [bId, b]) => a.startedAt - b.startedAt || aId.localeCompare(bId));
-
-  if (entries.length === 0) {
-    return [];
-  }
-
-  const runStart = Math.min(...entries.map(([, step]) => step.startedAt));
-  const runEnd = Math.max(...entries.map(([, step]) => step.endedAt ?? now));
+    .map(([stepId, step]) => ({ stepId, step, ...measureStep(step, now) }))
+    .sort((a, b) => (a.span?.start ?? Infinity) - (b.span?.start ?? Infinity) || a.stepId.localeCompare(b.stepId));
+  const spans = entries.flatMap(entry => (entry.span ? [entry.span] : []));
+  const runStart = Math.min(...spans.map(span => span.start));
+  const runEnd = Math.max(runStart, ...spans.map(span => span.end));
   const totalMs = Math.max(runEnd - runStart, 1);
 
-  return entries.map(([stepId, step]) => {
-    const isRunning = step.endedAt === undefined;
-    const end = step.endedAt ?? now;
-    const durationMs = end - step.startedAt;
-    const offsetPct = ((step.startedAt - runStart) / totalMs) * 100;
-    const widthPct = Math.max((durationMs / totalMs) * 100, MIN_WIDTH_PCT);
-
+  return entries.map(({ stepId, step, span, isLive, spansSuspension }) => {
+    let timing: TimelineRow['timing'];
+    if (span) {
+      const durationMs = span.end - span.start;
+      const offsetPct = Math.min(((span.start - runStart) / totalMs) * 100, 100 - MIN_WIDTH_PCT);
+      const widthPct = Math.min(Math.max((durationMs / totalMs) * 100, MIN_WIDTH_PCT), 100 - offsetPct);
+      timing = { durationMs, offsetPct, widthPct };
+    }
     return {
       stepId,
       step,
-      status: step.status,
-      offsetPct,
-      widthPct,
-      durationMs,
-      isRunning,
+      status: isAwaitingInput(step) ? 'suspended' : step.status,
+      timing,
+      spansSuspension,
+      isRunning: isLive,
       isNestedEntry: isNestedTimelineEntry(stepId),
     };
   });

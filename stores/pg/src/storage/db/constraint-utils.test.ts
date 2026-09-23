@@ -88,6 +88,98 @@ describe('buildConstraintName', () => {
     expect(result.length).toBeLessThanOrEqual(10);
     expect(result).toBe('schema_con');
   });
+
+  describe('hashWhenTruncated', () => {
+    it('leaves names that fit within the limit unchanged', () => {
+      const result = buildConstraintName({
+        baseName: 'my_constraint',
+        schemaName: 'myschema',
+        hashWhenTruncated: true,
+      });
+      expect(result).toBe('myschema_my_constraint');
+    });
+
+    it('appends a deterministic hash suffix when the name is truncated', () => {
+      const longSchema = 'a'.repeat(40);
+      const first = buildConstraintName({ baseName: 'b'.repeat(30), schemaName: longSchema, hashWhenTruncated: true });
+      const second = buildConstraintName({ baseName: 'b'.repeat(30), schemaName: longSchema, hashWhenTruncated: true });
+
+      expect(first).toBe(second);
+      expect(Buffer.byteLength(first, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+      expect(first).toMatch(/_[0-9a-f]{8}$/);
+    });
+
+    it('keeps names sharing a long common prefix distinct after truncation', () => {
+      const longSchema = 'a'.repeat(40);
+      const shared = 'mastra_workflow_snapshot_';
+      const one = buildConstraintName({
+        baseName: `${shared}first_idx`,
+        schemaName: longSchema,
+        hashWhenTruncated: true,
+      });
+      const two = buildConstraintName({
+        baseName: `${shared}second_idx`,
+        schemaName: longSchema,
+        hashWhenTruncated: true,
+      });
+
+      // Plain truncation would collapse both to the same 63-byte identifier.
+      expect(one).not.toBe(two);
+    });
+
+    it('returns an empty string for maxLength 0 (plain-truncation fallback)', () => {
+      const result = buildConstraintName({
+        baseName: 'b'.repeat(30),
+        schemaName: 'a'.repeat(40),
+        maxLength: 0,
+        hashWhenTruncated: true,
+      });
+      expect(result).toBe('');
+    });
+
+    it('falls back to plain truncation when maxLength cannot fit a hash suffix', () => {
+      const result = buildConstraintName({
+        baseName: 'b'.repeat(30),
+        schemaName: 'a'.repeat(40),
+        maxLength: 1,
+        hashWhenTruncated: true,
+      });
+      expect(Buffer.byteLength(result, 'utf-8')).toBeLessThanOrEqual(1);
+      expect(result).toBe('a');
+    });
+
+    it('respects maxLength 8 by shrinking the hash suffix', () => {
+      const result = buildConstraintName({
+        baseName: 'b'.repeat(30),
+        schemaName: 'a'.repeat(40),
+        maxLength: 8,
+        hashWhenTruncated: true,
+      });
+      expect(Buffer.byteLength(result, 'utf-8')).toBeLessThanOrEqual(8);
+      expect(result).toMatch(/^_[0-9a-f]{7}$/);
+    });
+
+    it('respects maxLength 9 with the full 8-char hash suffix', () => {
+      const result = buildConstraintName({
+        baseName: 'b'.repeat(30),
+        schemaName: 'a'.repeat(40),
+        maxLength: 9,
+        hashWhenTruncated: true,
+      });
+      expect(Buffer.byteLength(result, 'utf-8')).toBeLessThanOrEqual(9);
+      expect(result).toMatch(/^_[0-9a-f]{8}$/);
+    });
+
+    it('is deterministic at small maxLength values', () => {
+      const opts = {
+        baseName: 'b'.repeat(30),
+        schemaName: 'a'.repeat(40),
+        maxLength: 8,
+        hashWhenTruncated: true,
+      };
+      expect(buildConstraintName(opts)).toBe(buildConstraintName(opts));
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

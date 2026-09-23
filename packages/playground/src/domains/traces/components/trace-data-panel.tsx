@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import {
   TraceDataPanelView,
-  type TraceDataPanelTab,
+  type TraceSideView,
 } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useState, type ComponentProps } from 'react';
 import { SpanScoring } from './span-scoring';
@@ -9,22 +9,15 @@ import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type TraceDataPanelProps = Omit<
   ComponentProps<typeof TraceDataPanelView>,
-  'activeTab' | 'onTabChange' | 'onEvaluateTrace'
-> & {
-  /** Notified after the active tab changes (user click or post-scoring switch). */
-  onTabChange?: (tab: TraceDataPanelTab) => void;
-};
+  'sideView' | 'onSideViewChange' | 'onEvaluateTrace'
+>;
 
 /**
- * Owns the trace panel's active tab. Mount it with a `key` on the trace (and anchor span)
- * so a tab selected on a previous trace never leaks into the next one.
+ * Owns the trace panel's side column view so scoring can land on "Scores". Mount it with a
+ * `key` on the trace (and anchor span) so a view picked on a previous trace never leaks into the next one.
  */
-export function TraceDataPanel({ onTabChange, ...props }: TraceDataPanelProps) {
-  const [activeTab, setActiveTabState] = useState<TraceDataPanelTab>('details');
-  const setActiveTab = (tab: TraceDataPanelTab) => {
-    setActiveTabState(tab);
-    onTabChange?.(tab);
-  };
+export function TraceDataPanel(props: TraceDataPanelProps) {
+  const [sideView, setSideView] = useState<TraceSideView>();
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
   const rootSpan = props.anchorSpanId
@@ -36,8 +29,8 @@ export function TraceDataPanel({ onTabChange, ...props }: TraceDataPanelProps) {
       <TraceDataPanelView
         {...props}
         onEvaluateTrace={() => setIsScoringOpen(true)}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+        sideView={sideView}
+        onSideViewChange={setSideView}
       />
       <Dialog variant="new" open={isScoringOpen} onOpenChange={setIsScoringOpen}>
         <DialogContent className="max-w-xl">
@@ -55,7 +48,7 @@ export function TraceDataPanel({ onTabChange, ...props }: TraceDataPanelProps) {
               isLoadingScorers={isLoadingScorers}
               onSuccess={() => {
                 setIsScoringOpen(false);
-                setActiveTab('scores');
+                setSideView('scores');
               }}
             />
           )}
