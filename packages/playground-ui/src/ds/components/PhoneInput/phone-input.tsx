@@ -4,7 +4,6 @@ import * as React from 'react';
 import PhoneNumberInput, {
   getCountryCallingCode,
   isSupportedCountry,
-  parsePhoneNumber,
   type Country,
   type FlagProps,
   type Props as BasePhoneInputProps,
@@ -153,17 +152,12 @@ const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
       autoComplete = 'tel',
       defaultCountry,
       limitMaxLength = true,
-      onPaste,
       onValueChange,
       ...props
     },
     ref,
   ) => {
     const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue);
-    const [pastedCountry, setPastedCountry] = React.useState<Country>();
-    const [pasteVersion, setPasteVersion] = React.useState(0);
-    const inputRef = React.useRef<HTMLInputElement>(null);
-    const restoreFocus = React.useRef(false);
     const resolvedValue = value ?? uncontrolledValue;
     const resolvedSize = size ?? 'md';
     const commitValue = (nextValue: string) => {
@@ -171,53 +165,27 @@ const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
       onValueChange?.(nextValue);
     };
 
-    React.useImperativeHandle(ref, () => {
-      const input = inputRef.current;
-      if (!input) throw new Error('Phone input ref is unavailable');
-      return input;
-    }, []);
-
-    React.useLayoutEffect(() => {
-      if (!restoreFocus.current) return;
-      restoreFocus.current = false;
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
-    }, [pasteVersion]);
-
     return (
       <PhoneInputContext.Provider value={{ size: resolvedSize, error, testId, countryAriaLabel }}>
         <PhoneNumberInput
           {...props}
-          key={pasteVersion}
+          ref={ref}
           value={resolvedValue || undefined}
-          defaultCountry={pastedCountry ?? defaultCountry}
+          defaultCountry={defaultCountry}
           onChange={(nextValue: string | undefined) => {
             const normalizedValue = nextValue ?? '';
             commitValue(limitMaxLength ? normalizedValue.slice(0, 16) : normalizedValue);
-          }}
-          onPaste={(event: React.ClipboardEvent<HTMLInputElement>) => {
-            onPaste?.(event);
-            if (event.defaultPrevented) return;
-            const pastedValue = event.clipboardData.getData('text').trim();
-            if (!pastedValue.startsWith('+')) return;
-            const phoneNumber = parsePhoneNumber(pastedValue);
-            if (!phoneNumber?.country || !phoneNumber.isPossible()) return;
-            event.preventDefault();
-            restoreFocus.current = true;
-            setPastedCountry(phoneNumber.country);
-            setPasteVersion(version => version + 1);
-            commitValue(phoneNumber.number);
           }}
           className={className}
           placeholder={placeholder}
           autoComplete={autoComplete}
           aria-invalid={error || undefined}
-          initialValueFormat="national"
           limitMaxLength={limitMaxLength}
+          international
+          withCountryCallingCode
           countrySelectComponent={CountrySelect}
           inputComponent={PhoneNumberField}
           containerComponent={PhoneInputContainer}
-          numberInputProps={{ ref: inputRef }}
         />
         {name ? <input type="hidden" name={name} value={resolvedValue} /> : null}
       </PhoneInputContext.Provider>
