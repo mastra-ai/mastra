@@ -188,7 +188,7 @@
   /* The ring colour above ties a segment's own `focus-visible:` border on specificity and
      wins on source order, so the group repaints the focus edge itself — at the weight the
      segment focuses at alone: a raised surface moves its rim to `--surface-rim-focus`,
-     not the `--border-focus` a bare outline needs. */
+     not the `--border-focus` a bare border needs. */
   [data-slot='buttons-group'] {
     --segment-focus-edge: var(--border-focus);
   }
@@ -202,7 +202,7 @@
   }
 
   /* A segment's leading edge is its neighbour's border, so a state that recolours the
-     segment's own border (focus everywhere, hover on `outline`) lights three sides only.
+     segment's own border (focus) lights three sides only.
      The neighbour that owns the seam takes the state colour for it. */
   [data-slot='buttons-group'][data-orientation='horizontal'] > :has(+ :focus-visible, + * :focus-visible) {
     border-right-color: var(--segment-focus-edge);
@@ -210,17 +210,5 @@
 
   [data-slot='buttons-group'][data-orientation='vertical'] > :has(+ :focus-visible, + * :focus-visible) {
     border-bottom-color: var(--segment-focus-edge);
-  }
-
-  @media (hover: hover) {
-    [data-slot='buttons-group'][data-orientation='horizontal']
-      > :has(+ [data-variant='outline']:not(:disabled, :focus-visible):hover) {
-      border-right-color: var(--border-hover);
-    }
-
-    [data-slot='buttons-group'][data-orientation='vertical']
-      > :has(+ [data-variant='outline']:not(:disabled, :focus-visible):hover) {
-      border-bottom-color: var(--border-hover);
-    }
   }
 }

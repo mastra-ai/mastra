@@ -285,14 +285,14 @@ export function SkillEditDialog({
         </span>
         <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
+            <Button size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
               Edit
             </Button>
           )}
           {isViewMode && !isOwner && onCopy && skill && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => onCopy(skill)} icon={<CopyIcon />}>
+                <Button size="sm" onClick={() => onCopy(skill)} icon={<CopyIcon />}>
                   Copy
                 </Button>
               </TooltipTrigger>

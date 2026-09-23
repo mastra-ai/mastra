@@ -166,7 +166,6 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         }}
       >
         <SelectTrigger
-          variant="outline"
           size="sm"
           aria-label="Completion sound"
           className={cn(
@@ -205,7 +204,7 @@ export function Segmented<T extends string>({ value, options, ariaLabel, disable
       {options.map(o => (
         <Button
           key={o.value}
-          variant={value === o.value ? 'primary' : 'outline'}
+          variant={value === o.value ? 'primary' : 'default'}
           aria-pressed={value === o.value}
           disabled={disabled}
           onClick={() => onChange(o.value)}

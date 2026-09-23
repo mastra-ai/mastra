@@ -68,7 +68,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
           <Txt as="p" variant="caption" className="text-muted-foreground">
             {session.instructions}
           </Txt>
-          <Button variant="outline" onClick={() => openAuthorizationUrl(session.url)}>
+          <Button onClick={() => openAuthorizationUrl(session.url)}>
             <ExternalLink />
             Open authorization page
           </Button>
@@ -164,7 +164,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
-          <Button variant="outline" className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
+          <Button className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
             <ExternalLink />
             Open authorization page
           </Button>

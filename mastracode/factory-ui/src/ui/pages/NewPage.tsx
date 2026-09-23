@@ -167,7 +167,7 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot size={40} className="text-muted-foreground" />}
+      iconSlot={<Bot />}
       titleSlot={`You don't have access to ${providerName}`}
       descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
       actionSlot={
@@ -183,7 +183,7 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot size={40} className="text-muted-foreground" />}
+      iconSlot={<Bot />}
       titleSlot="No default model configured for this Factory"
       descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
       actionSlot={

@@ -314,7 +314,6 @@ export const SignalsEmptyState = ({
                   rel="noopener noreferrer"
                 />
               }
-              variant="outline"
               size="sm"
             >
               Read the docs<span className="sr-only"> (opens in new tab)</span>

@@ -35,7 +35,7 @@ function RecursiveFieldRenderer({
             <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
-            <JSONSchemaForm.FieldRemove variant="outline" />
+            <JSONSchemaForm.FieldRemove />
           </div>
         </div>
 

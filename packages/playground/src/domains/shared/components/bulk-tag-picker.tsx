@@ -29,7 +29,7 @@ export function BulkTagPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size} icon={<Tag />}>
+        <Button size={size} icon={<Tag />}>
           Tag {selectedCount} items
         </Button>
       </PopoverTrigger>

@@ -77,7 +77,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
             {visibleKeyProviders.map(provider => (
               <Button
                 key={provider.provider}
-                variant={connection.provider?.provider === provider.provider ? 'primary' : 'outline'}
+                variant={connection.provider?.provider === provider.provider ? 'primary' : 'default'}
                 aria-label={providerDisplayName(provider.provider)}
                 disabled={connection.pending}
                 onClick={() => connection.chooseKeyProvider(provider)}

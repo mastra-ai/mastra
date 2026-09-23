@@ -43,29 +43,22 @@ export function EmptyThreadState() {
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">
         <Button
           type="button"
-          variant="outline"
           size="md"
           onClick={() => prefillComposer('Help me understand how this codebase is structured.')}
         >
           Explore this codebase
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="md"
-          onClick={() => prefillComposer('Help me plan a new feature.')}
-        >
+        <Button type="button" size="md" onClick={() => prefillComposer('Help me plan a new feature.')}>
           Plan a feature
         </Button>
         <Button
           type="button"
-          variant="outline"
           size="md"
           onClick={() => prefillComposer('Review the recent changes and suggest improvements.')}
         >
           Review recent changes
         </Button>
-        <Button type="button" variant="outline" size="md" onClick={() => prefillComposer('Help me debug an issue.')}>
+        <Button type="button" size="md" onClick={() => prefillComposer('Help me debug an issue.')}>
           Debug an issue
         </Button>
       </div>

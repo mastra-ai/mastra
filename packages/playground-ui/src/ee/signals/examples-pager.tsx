@@ -21,7 +21,6 @@ export function ExamplesPager({
     <nav aria-label="Example pages" className="mt-3 flex items-center gap-3">
       <Button
         icon={<ChevronLeft />}
-        variant="outline"
         size="sm"
         disabled={page <= 1}
         onClick={() => onOffsetChange((page - 2) * EXAMPLES_PAGE_SIZE)}
@@ -33,7 +32,6 @@ export function ExamplesPager({
       </span>
       <Button
         icon={<ChevronRight />}
-        variant="outline"
         size="sm"
         disabled={page >= totalPages}
         onClick={() => onOffsetChange(page * EXAMPLES_PAGE_SIZE)}

@@ -1,10 +1,10 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
@@ -72,7 +72,7 @@ export default function SchedulePage() {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
-        <ErrorState variant="fill" title="Failed to load schedule" message={error.message} />
+        <EmptyState tone="error" variant="fill" titleSlot="Failed to load schedule" descriptionSlot={error.message} />
       </PageLayout>
     );
   }
@@ -155,7 +155,11 @@ export default function SchedulePage() {
               Trigger history
             </Txt>
             {triggersError ? (
-              <ErrorState title="Failed to load trigger history" message={triggersError.message} />
+              <EmptyState
+                tone="error"
+                titleSlot="Failed to load trigger history"
+                descriptionSlot={triggersError.message}
+              />
             ) : (
               <ScheduleTriggersList
                 triggers={triggers ?? []}

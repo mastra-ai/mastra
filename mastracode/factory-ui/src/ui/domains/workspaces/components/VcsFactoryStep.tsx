@@ -107,7 +107,7 @@ export function VcsFactoryStep({
                 provider="github"
                 onSelectRepository={onSelectRepository}
               />
-              <Button variant="outline" size="sm" className="self-start" onClick={onManageConnection}>
+              <Button size="sm" className="self-start" onClick={onManageConnection}>
                 Manage GitHub connection
               </Button>
             </>
@@ -145,7 +145,7 @@ function ProviderChoice({
       <ProviderConnection
         provider="GitHub"
         message="Connect GitHub to choose a repository."
-        icon={<GithubIcon className="size-10" />}
+        icon={<GithubIcon />}
         buttonIcon={<GithubIcon className="size-4" />}
         isConnecting={githubRedirecting}
         onConnect={onChooseGithub}
@@ -154,7 +154,7 @@ function ProviderChoice({
       <ProviderConnection
         provider="GitLab"
         message="Connect GitLab to choose a repository."
-        icon={<GitLabIcon className="size-10" />}
+        icon={<GitLabIcon />}
         buttonIcon={<GitLabIcon className="size-4" />}
         onConnect={onChooseGitlab}
       />
@@ -180,7 +180,7 @@ function ProviderConnection({
   return (
     <EmptyState
       className="min-w-0 py-8"
-      iconSlot={<span className="text-muted-foreground">{icon}</span>}
+      iconSlot={icon}
       titleSlot={`Connect ${provider}`}
       descriptionSlot={message}
       actionSlot={

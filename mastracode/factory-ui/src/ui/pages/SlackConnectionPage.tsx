@@ -186,7 +186,6 @@ export function SlackConnectionSettings() {
                     onValueChange={factoryProjectId => setDefaultFactory(account, factoryProjectId)}
                   >
                     <SelectTrigger
-                      variant="outline"
                       size="sm"
                       aria-label={`Default factory for ${account.externalUserName ?? account.externalUserId}`}
                       className="w-auto"
@@ -252,7 +251,6 @@ export function SlackConnectionSettings() {
                   }
                 >
                   <Button
-                    variant="outline"
                     size="sm"
                     aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
                     disabled={disconnectMutation.isPending}

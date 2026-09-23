@@ -35,7 +35,7 @@ describe('Dialog', () => {
             <DialogBody>Body content</DialogBody>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button>Cancel</Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -140,7 +140,7 @@ describe('Dialog', () => {
           <DialogTitle>Title</DialogTitle>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button>Cancel</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>

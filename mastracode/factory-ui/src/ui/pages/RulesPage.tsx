@@ -106,7 +106,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             value={decisionGroup}
             onValueChange={group => setSearchParams(group === 'all' ? {} : { group }, { replace: true })}
           >
-            <SelectTrigger variant="outline" size="sm" aria-label="Rule decision filter" className="w-full">
+            <SelectTrigger size="sm" aria-label="Rule decision filter" className="w-full">
               {decisionFilter?.label ?? 'All effects'}
             </SelectTrigger>
             <SelectContent>
@@ -124,7 +124,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             return (
               <Button
                 key={entry.key}
-                variant={decisionGroup === entry.key ? 'primary' : 'outline'}
+                variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
@@ -148,7 +148,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter className="text-muted-foreground size-5" aria-hidden />}
+          iconSlot={<ListFilter aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -157,7 +157,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
           actionSlot={
             hasDecisionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
+              <Button size="sm" onClick={() => setSearchParams({}, { replace: true })}>
                 Show all effects
               </Button>
             ) : undefined
@@ -284,7 +284,7 @@ function DecisionRow({
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
+          <Button size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         ) : null}

@@ -125,7 +125,6 @@ export function SnapshotTimeline({
             onClick={() => onPlayingChange(!isPlaying)}
             size="sm"
             type="button"
-            variant="outline"
             icon={isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
           >
             {isPlaying ? 'Pause' : 'Play'}
