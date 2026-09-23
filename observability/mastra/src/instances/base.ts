@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
+import { InternalSpans, SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -340,6 +340,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityType: cached.entityType,
       entityId: cached.entityId,
       entityName: cached.entityName,
+      tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
     });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)

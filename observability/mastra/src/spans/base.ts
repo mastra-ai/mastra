@@ -547,6 +547,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       requestContext: this.requestContext,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
+      ...(this.isInternal ? { isInternal: true } : {}),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       // Tags are only included for root spans

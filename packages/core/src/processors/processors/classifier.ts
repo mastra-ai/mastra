@@ -43,8 +43,8 @@ interface ClassifierProcessorBaseOptions<Q extends ClassifierQuestions> extends 
   onResult: ClassifierOnResult<Q>;
   /**
    * What to do when the classifier call fails.
-   * - 'warn' (default): log and let the content through.
-   * - 'strict': abort the request.
+   * - 'strict' (default): abort the request.
+   * - 'warn': log and let the content through.
    */
   errorStrategy?: ModelErrorStrategy;
   /**
@@ -102,7 +102,7 @@ export class ClassifierProcessor<
     this.id = options.id ?? 'classifier';
     this.classifierOrId = options.classifier;
     this.onResult = options.onResult;
-    this.errorStrategy = options.errorStrategy ?? 'warn';
+    this.errorStrategy = options.errorStrategy ?? 'strict';
     this.chunkWindow = options.chunkWindow ?? 0;
     this.maxInputLength = options.maxInputLength;
     this.providerOptions = options.providerOptions;

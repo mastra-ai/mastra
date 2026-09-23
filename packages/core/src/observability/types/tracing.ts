@@ -1399,7 +1399,10 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
+  isInternal?: boolean;
+}
 
 /**
  * Options for ending a model generation span

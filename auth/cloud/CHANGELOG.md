@@ -1,5 +1,11 @@
 # @mastra/auth-cloud
 
+## 1.2.6
+
+### Patch Changes
+
+- Improved Cloud authentication portability by generating PKCE verifier and state values with Web Crypto while preserving synchronous login APIs. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
 ## 1.2.6-alpha.0
 
 ### Patch Changes
