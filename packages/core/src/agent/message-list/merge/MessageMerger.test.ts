@@ -177,4 +177,9 @@ describe('MessageMerger tool updatedAt', () => {
     const list = merge([step, tool('c1')], [{ ...tool('c1', true), updatedAt: 42 } as Part]);
     expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(42);
   });
+
+  it('keeps the stamp when a merge repeats the same tool state', () => {
+    const list = merge([step, { ...tool('c1', true), updatedAt: 7 } as Part], [tool('c1', true)]);
+    expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(7);
+  });
 });

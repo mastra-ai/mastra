@@ -401,7 +401,14 @@ type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'cr
 type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string }
   | { type: 'stream-part'; runId: string; streamId: string; part: unknown; sourceId: string }
-  | { type: 'run-completed'; runId: string; streamId?: string; persisted?: boolean }
+  | {
+      type: 'run-completed';
+      runId: string;
+      streamId?: string;
+      persisted?: boolean;
+      /** The run's final status; `success` means storage holds all of it and nothing is left to act on. */
+      status?: string;
+    }
   | { type: 'run-suspended'; runId: string; streamId?: string }
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string; clearPendingSignals?: boolean }
@@ -2236,7 +2243,7 @@ export class AgentThreadStreamRuntime {
         }
         this.#releaseThreadLease(pubsub, key, runId);
         // The signal this run rebroadcasts is persisted by definition.
-        this.#publish(pubsub, key, { type: 'run-completed', runId, streamId, persisted: true });
+        this.#publish(pubsub, key, { type: 'run-completed', runId, streamId, persisted: true, status: 'success' });
       }, 0);
     });
   }
@@ -2691,6 +2698,7 @@ export class AgentThreadStreamRuntime {
           // its messages to storage, so only its retained chunks are backed by a
           // persisted message and safe to replay to fresh subscribers.
           persisted: record.output.status === 'success',
+          status: record.output.status,
         });
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
@@ -3734,6 +3742,15 @@ export class AgentThreadStreamRuntime {
         const eventStreamId = data.streamId ?? data.runId;
         stopRemoteRunLeaseWatch(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);
+        if (
+          options.withInitialHistory &&
+          !historyLoadStarted &&
+          data.type === 'run-completed' &&
+          data.status === 'success'
+        ) {
+          // Finished successfully before history was read, so storage holds all of it.
+          storedStreamIds.add(eventStreamId);
+        }
         if (deferredRecord) {
           deferredRunsByStreamId.delete(eventStreamId);
           const bufferedRun = remoteRuns.get(eventStreamId);
@@ -3787,6 +3804,9 @@ export class AgentThreadStreamRuntime {
       }
     };
 
+    let historyLoadStarted = false;
+    const storedStreamIds = new Set<string>();
+
     let eventTail = Promise.resolve();
     const onEvent: EventCallback = (event, ack) => {
       // Events are processed strictly in publish order, but each delivery is
@@ -3822,6 +3842,10 @@ export class AgentThreadStreamRuntime {
     let historyChunk: ChunkType | undefined;
     let historyFilter: ((part: unknown, runId: string) => boolean) | undefined;
     if (options.withInitialHistory) {
+      // Events already processed were published before this read, so any run
+      // they completed is in storage.
+      await eventTail;
+      historyLoadStarted = true;
       try {
         const history = await this.#loadThreadHistory(agent, options);
         historyChunk = {
@@ -3832,6 +3856,9 @@ export class AgentThreadStreamRuntime {
         } as ChunkType;
         historyFilter = createThreadHistoryFilter(history.messages, Date.now());
       } catch (error) {
+        control.references--;
+        control.observers--;
+        this.#releaseUnusedThreadControlSubscription(state, key);
         await resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
         throw error;
       }
@@ -3903,6 +3930,7 @@ export class AgentThreadStreamRuntime {
                     : typedPart;
                 if (
                   !isSignalChunkExcluded(partWithRunId, options.hideSignals) &&
+                  !storedStreamIds.has(run.streamId) &&
                   (!historyFilter || historyFilter(typedPart, run.runId))
                 ) {
                   yield partWithRunId;
