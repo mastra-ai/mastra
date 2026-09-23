@@ -39,7 +39,9 @@ async function crashAndRestart({
   const originalPersist = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
   let crashed = false;
   workflowsStore.persistWorkflowSnapshot = async args => {
-    if (!crashed && crashWhen(args.snapshot)) {
+    // A dead process persists nothing further, even if the engine catches the error.
+    if (crashed) throw new Error('process died');
+    if (crashWhen(args.snapshot)) {
       crashed = true;
       throw new Error('process died');
     }
@@ -238,6 +240,112 @@ describe('workflow restart at a completed entry boundary (issue #24615)', () => 
     expect(cExecute).toHaveBeenCalledTimes(1);
     expect(result.status).toBe('success');
     expect((result as any).result).toEqual({ items: [2, 4, 6] });
+  });
+
+  it('finishes the remaining iterations when the process died partway through a loop', async () => {
+    const schema = z.object({ value: z.number() });
+    const incExecute = vi.fn(async ({ inputData }: any) => ({ value: inputData.value + 1 }));
+    const cExecute = vi.fn(async ({ inputData }: any) => inputData);
+
+    const build = () => {
+      const inc = createStep({ id: 'inc', inputSchema: schema, outputSchema: schema, execute: incExecute });
+      const c = createStep({ id: 'c', inputSchema: schema, outputSchema: schema, execute: cExecute });
+      return createWorkflow({ id: 'loop-mid-iteration', inputSchema: schema, outputSchema: schema })
+        .dountil(inc, async ({ inputData }) => inputData.value >= 3)
+        .then(c)
+        .commit();
+    };
+
+    // Die on the second iteration's `start` write, after the first iteration succeeded.
+    const { result } = await crashAndRestart({
+      build,
+      inputData: { value: 0 },
+      crashWhen: snapshot => (snapshot.context as any)?.inc?.payload?.value === 1,
+      beforeRestart: snapshot => {
+        expect(snapshot.activeStepsPath).toHaveProperty('inc');
+        expect((snapshot.context as any).inc.status).toBe('running');
+      },
+    });
+
+    expect(cExecute).toHaveBeenCalledTimes(1);
+    expect(cExecute.mock.calls[0]![0].inputData).toEqual({ value: 3 });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 3 });
+  });
+
+  it('finishes the remaining items when the process died partway through a foreach', async () => {
+    const itemExecute = vi.fn(async ({ inputData }: any) => inputData * 2);
+    const cExecute = vi.fn(async ({ inputData }: any) => ({ items: inputData }));
+
+    const build = () => {
+      const item = createStep({ id: 'item', inputSchema: z.number(), outputSchema: z.number(), execute: itemExecute });
+      const c = createStep({ id: 'c', inputSchema: z.array(z.number()), outputSchema: z.any(), execute: cExecute });
+      return createWorkflow({ id: 'foreach-mid-item', inputSchema: z.array(z.number()), outputSchema: z.any() })
+        .foreach(item, { concurrency: 2 })
+        .then(c)
+        .commit();
+    };
+
+    // Die on the third item's `start` write, after earlier items succeeded.
+    const { result } = await crashAndRestart({
+      build,
+      inputData: [1, 2, 3],
+      crashWhen: snapshot => (snapshot.context as any)?.item?.payload === 3,
+      beforeRestart: snapshot => {
+        expect((snapshot.context as any).item.status).not.toBe('success');
+      },
+    });
+
+    expect(cExecute).toHaveBeenCalledTimes(1);
+    expect(cExecute.mock.calls[0]![0].inputData).toEqual([2, 4, 6]);
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ items: [2, 4, 6] });
+  });
+
+  it('only persists a completed loop or foreach result with no active steps once the entry finished', async () => {
+    const schema = z.object({ value: z.number() });
+    const storage = new MockStore();
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const originalPersist = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
+    const snapshots: WorkflowRunState[] = [];
+    workflowsStore.persistWorkflowSnapshot = async args => {
+      snapshots.push(JSON.parse(JSON.stringify(args.snapshot)));
+      return originalPersist(args);
+    };
+
+    const inc = createStep({
+      id: 'inc',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+    });
+    const item = createStep({
+      id: 'item',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow({ id: 'boundary-shape', inputSchema: schema, outputSchema: z.any() })
+      .dountil(inc, async ({ inputData }) => inputData.value >= 3)
+      .map(async () => [1, 2, 3, 4])
+      .foreach(item, { concurrency: 2 })
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: { value: 0 } });
+    expect(result.status).toBe('success');
+
+    const looksCompleted = (stepId: string) => (snapshot: WorkflowRunState) =>
+      snapshot.status === 'running' &&
+      Object.keys(snapshot.activeStepsPath ?? {}).length === 0 &&
+      (snapshot.context as any)?.[stepId]?.status === 'success';
+
+    // Each looks-completed snapshot must be written after the entry finished: the loop at
+    // index 0 after its last iteration, the foreach at index 2 after its last item.
+    const loopBoundaries = snapshots.filter(looksCompleted('inc')).filter(s => s.activePaths[0] === 0);
+    expect(loopBoundaries.map(s => (s.context as any).inc.output)).toEqual([{ value: 3 }]);
+    const foreachBoundaries = snapshots.filter(looksCompleted('item'));
+    expect(foreachBoundaries.map(s => (s.context as any).item.output)).toEqual([[1, 2, 3, 4]]);
   });
 
   it('does not sleep again after a completed sleep', async () => {
