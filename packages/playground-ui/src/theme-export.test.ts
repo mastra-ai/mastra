@@ -306,6 +306,15 @@ describe('theme.css export', () => {
     expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
+  it('generates the field and dialog fill utilities', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);
+
+    for (const token of ['field', 'field-disabled', 'dialog']) {
+      expect(output).toContain(`.bg-${token} {`);
+    }
+  });
+
   // The rim has to be assembled by the utility, on the element. A custom property
   // holding `var(--surface-rim)` is substituted once where it is declared — the
   // root — so every descendant inherits a finished string and a focused field

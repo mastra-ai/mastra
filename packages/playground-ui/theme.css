@@ -80,6 +80,7 @@ html.light {
   --color-sidebar: var(--sidebar);
   --color-card: var(--card);
   --color-field: var(--field);
+  --color-field-disabled: var(--field-disabled);
   --color-dialog: var(--dialog);
   --color-popover: var(--popover);
   --color-muted: var(--muted);
