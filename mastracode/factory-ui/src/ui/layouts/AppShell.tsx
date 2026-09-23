@@ -29,7 +29,12 @@ export function AppShell({ sidebar, header, children, scroll }: AppShellProps) {
 
   return (
     <div className={cn('bg-sidebar relative z-1 flex', documentScroll ? 'min-h-dvh' : 'h-dvh')}>
-      <aside className={cn('min-h-0 shrink-0 py-2', documentScroll ? 'sticky top-0 h-dvh' : 'h-full')}>{sidebar}</aside>
+      <div
+        data-slot="app-shell-sidebar"
+        className={cn('min-h-0 shrink-0 py-2', documentScroll ? 'sticky top-0 h-dvh' : 'h-full')}
+      >
+        {sidebar}
+      </div>
       <div
         className={cn(
           HEADER_HEIGHT_CLASS,

@@ -1,5 +1,44 @@
 # @mastra/server
 
+## 1.69.0-alpha.3
+
+### Patch Changes
+
+- Preserve literal percent-encoded sequences in workspace filesystem paths. Read, write, create, and delete operations now target the exact requested file instead of decoding query and body values a second time. Closes #24620. ([#24637](https://github.com/mastra-ai/mastra/pull/24637))
+
+- Updated dependencies [[`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c)]:
+  - @mastra/core@1.69.0-alpha.3
+
+## 1.69.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+
+## 1.69.0-alpha.1
+
+### Patch Changes
+
+- Fixed @mastra/server compatibility by requiring @mastra/core 1.58.0 or newer. Older versions of @mastra/core are missing functionality that @mastra/server depends on, so installing them together resulted in a broken setup rather than a clear version conflict. ([#24692](https://github.com/mastra-ai/mastra/pull/24692))
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
+## 1.69.0-alpha.0
+
+### Patch Changes
+
+- MCP server listings and details now report which transports a server offers (`streamable-http`, plus `sse` for MCP 1.x servers), so clients can tell MCP v2 servers apart without probing routes. The `transports` field is optional on the response types so clients keep working against older servers that do not send it. The MCP tool info response type also declares the optional `id` that MCP v2 servers include. ([#24388](https://github.com/mastra-ai/mastra/pull/24388))
+
+  ```bash
+  curl http://localhost:4111/api/mcp/v0/servers
+  # { "servers": [{ "id": "notes", "name": "notes", "version_detail": { ... }, "transports": ["streamable-http"] }], ... }
+  ```
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed)]:
+  - @mastra/core@1.69.0-alpha.0
+
 ## 1.68.0
 
 ### Minor Changes

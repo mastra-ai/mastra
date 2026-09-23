@@ -83,13 +83,13 @@ function VariablesRequestContextForm({
 
 function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (mode: InputMode) => void }) {
   return (
-    <div className="border-border flex items-center gap-1 rounded-md border p-0.5">
+    <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
       <button
         type="button"
         aria-pressed={mode === 'form'}
         onClick={() => onModeChange('form')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded text-caption',
+          'flex items-center gap-1.5 rounded px-2 py-1 text-caption',
           controlStateColorTransition,
           mode === 'form' ? 'bg-fill-hover text-foreground' : quietTextHover,
         )}
@@ -104,7 +104,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
         aria-pressed={mode === 'json'}
         onClick={() => onModeChange('json')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded text-caption',
+          'flex items-center gap-1.5 rounded px-2 py-1 text-caption',
           controlStateColorTransition,
           mode === 'json' ? 'bg-fill-hover text-foreground' : quietTextHover,
         )}

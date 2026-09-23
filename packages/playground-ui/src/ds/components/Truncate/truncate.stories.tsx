@@ -116,31 +116,31 @@ export const AllVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground text-body w-32">No truncation:</span>
+        <span className="w-32 text-body text-muted-foreground">No truncation:</span>
         <Truncate>Short text</Truncate>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground text-body w-32">By char count:</span>
+        <span className="w-32 text-body text-muted-foreground">By char count:</span>
         <Truncate charCount={20}>This is a very long text that needs truncation</Truncate>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground text-body w-32">By delimiter:</span>
+        <span className="w-32 text-body text-muted-foreground">By delimiter:</span>
         <Truncate untilChar="-">workflow-run-12345</Truncate>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground text-body w-32">With copy:</span>
+        <span className="w-32 text-body text-muted-foreground">With copy:</span>
         <Truncate charCount={10} copy>
           Copy this long text
         </Truncate>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground text-body w-32">Mono font:</span>
+        <span className="w-32 text-body text-muted-foreground">Mono font:</span>
         <Truncate charCount={8} font="mono" copy>
           550e8400-e29b-41d4
         </Truncate>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground text-body w-32">Header variant:</span>
+        <span className="w-32 text-body text-muted-foreground">Header variant:</span>
         <Truncate charCount={15} variant="heading">
           Large header text truncated
         </Truncate>

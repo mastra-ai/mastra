@@ -129,7 +129,7 @@ describe('TraceKeysAndValues', () => {
       />,
     );
 
-    expect(screen.getByText('12.4K')).not.toBeNull();
+    expect(screen.getByText('12.4k')).not.toBeNull();
     expect(screen.getByText('800')).not.toBeNull();
     expect(screen.getByText('0.0123 eur')).not.toBeNull();
   });

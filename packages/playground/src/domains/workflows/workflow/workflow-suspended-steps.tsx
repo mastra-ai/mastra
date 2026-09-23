@@ -71,7 +71,7 @@ export function WorkflowSuspendedSteps({
       aria-label="Step suspended"
     >
       <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
-        <div className="border-border/50 bg-background flex items-center justify-between gap-3 border-b px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-background px-5 py-4">
           <Txt as="h2" variant="column" tone="ink" className="flex items-center gap-2">
             <Icon>
               <CirclePause />
@@ -130,7 +130,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   };
 
   return (
-    <div className="[&+&]:border-border/50 space-y-5 p-5 [&+&]:border-t">
+    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border/50">
       <div className="space-y-2">
         <Txt as="p" variant="subheading" tone="ink" className="break-words">
           {step.stepId}
@@ -161,8 +161,8 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
               <span className="flex min-w-0 items-center gap-2">
                 <Icon>
                   <ChevronRight
-                    className={cn('transition-transform text-muted-foreground', {
-                      'transform rotate-90': isPayloadOpen,
+                    className={cn('text-muted-foreground transition-transform', {
+                      'rotate-90 transform': isPayloadOpen,
                     })}
                   />
                 </Icon>

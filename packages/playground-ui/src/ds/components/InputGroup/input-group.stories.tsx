@@ -247,7 +247,7 @@ export const NumberWithStepper: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
-      <div className="border-border bg-sidebar rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-sidebar p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
@@ -258,7 +258,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-background rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-background p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
@@ -280,7 +280,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-popover rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-popover p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>

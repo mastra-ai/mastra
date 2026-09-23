@@ -1,5 +1,99 @@
 # @mastra/core
 
+## 1.69.0-alpha.3
+
+### Minor Changes
+
+- Added classifier registration on `Mastra`. ([#24738](https://github.com/mastra-ai/mastra/pull/24738))
+
+  Classifiers can now be passed to `new Mastra({ classifiers })` and accessed with `getClassifier`, `getClassifierById`, `listClassifiers`, `addClassifier`, and `removeClassifier`. Registered classifiers evaluated without an active trace start a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
+
+  ```ts
+  const mastra = new Mastra({ classifiers: { router } });
+  const classifier = mastra.getClassifier('router');
+  ```
+
+- Added `context.background.adopt()` so tools can return an acknowledgement while native background tasks track their existing operation through completion and cancellation. ([#24418](https://github.com/mastra-ai/mastra/pull/24418))
+
+  Previously, background tools had to keep `execute()` pending:
+
+  ```ts
+  execute: async (input, context) => {
+    const operation = startResearch(input, context.abortSignal);
+    return await operation.finished;
+  };
+  ```
+
+  Tools can now adopt their operation during native background execution:
+
+  ```ts
+  execute: async (input, context) => {
+    const operation = startResearch(input, context.abortSignal);
+    if (context.background) {
+      context.background.adopt({
+        completion: operation.finished,
+        cancel: reason => operation.cancel(reason),
+      });
+      return { answer: 'Research started' };
+    }
+    return await operation.finished;
+  };
+  ```
+
+  `startResearch` represents the tool's operation API. Its `finished` promise must resolve with the final tool result after cleanup, or reject on failure. Adopt once, before `execute()` returns. The handle stays in memory and cannot resume after a process restart.
+
+- Added `validateSkillContent()` and exported `validateSkillMetadata()` from `@mastra/core/skills`, so apps can validate a `SKILL.md` before saving it using the same rules applied at load time. ([#24766](https://github.com/mastra-ai/mastra/pull/24766))
+
+  ```typescript
+  import { validateSkillContent } from '@mastra/core/skills';
+
+  const result = validateSkillContent({ content: skillMarkdown, directoryName: 'my-skill' });
+  if (!result.valid) console.error(result.errors);
+  ```
+
+### Patch Changes
+
+- Fixed deferred aborts for paused tool calls and tool approvals. They no longer stop a new run started after switching threads or running `/new`. ([#24743](https://github.com/mastra-ai/mastra/pull/24743))
+
+- Fixed `JSON.stringify(requestContext)` throwing `TypeError: Do not know how to serialize a BigInt` when a BigInt was stored directly in `RequestContext`. Such values are now left out of `toJSON()` output, matching how nested BigInts were already handled. BigInts are still included when `BigInt.prototype.toJSON` returns a JSON-serializable value, and `requestContext.get()` still returns the original value. ([#24751](https://github.com/mastra-ai/mastra/pull/24751))
+
+- Fixed `runEvals` saving `mastra__authToken` and values that cannot be stored in score rows. Saved scores keep string, number and boolean request context values, and nested object values use dotted keys. ([#24753](https://github.com/mastra-ai/mastra/pull/24753))
+
+## 1.69.0-alpha.2
+
+### Minor Changes
+
+- Added a typed Classifier primitive for fixed-option evaluation with AI SDK evaluation models. ([#24458](https://github.com/mastra-ai/mastra/pull/24458))
+
+  ```ts
+  import { Classifier } from '@mastra/core/classifier';
+
+  const classifier = new Classifier({ id: 'router', model });
+  const result = await classifier.evaluate({
+    state: request,
+    questions: {
+      route: {
+        type: 'choice',
+        criteria: { support: 'Support request', sales: 'Sales request' },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a crash where a background process started with the `execute_command` workspace tool could terminate the host process. If the exit callback threw or the process could not be observed after the PID was returned, the failure escaped as an unhandled promise rejection. These failures are now caught and logged instead. ([#24638](https://github.com/mastra-ai/mastra/pull/24638))
+
+## 1.69.0-alpha.1
+
+## 1.69.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf))
+
+- Fixed chat channel messages (Slack, Discord, etc.) silently disappearing when the agent failed during setup. If workspace, instructions, tools, or model resolution throws before the run starts, the error is now posted back to the chat thread instead of being dropped with no reply. ([#24300](https://github.com/mastra-ai/mastra/pull/24300))
+
 ## 1.68.0
 
 ### Minor Changes
