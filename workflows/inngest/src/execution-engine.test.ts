@@ -429,6 +429,8 @@ describe('InngestExecutionEngine.wrapDurableOperation', () => {
     const err = await captureWrapped(async () => readsThreadIdOfUndefined({}));
 
     expect(err.stack).toMatch(/^TypeError: /);
+    expect(err).toBeInstanceOf(TypeError);
+    expect(err.name).toBe('TypeError');
     expect(err.stack).toContain('readsThreadIdOfUndefined');
     const serializedCause = JSON.parse(JSON.stringify(err.cause.error));
     expect(serializedCause.name).toBe('TypeError');

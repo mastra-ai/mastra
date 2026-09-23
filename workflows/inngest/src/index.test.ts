@@ -3563,6 +3563,7 @@ describe('MastraInngestWorkflow', () => {
       expect(reported).toBeDefined();
       expect(reported.error.message).toContain("reading 'threadId'");
       expect(reported.error.stack).toMatch(/^TypeError: /);
+      expect(reported.error.name).toBe('TypeError');
       expect(reported.error.stack).toContain('readsThreadIdOfUndefined');
       expect(reported.error.cause.error.stack).toContain('readsThreadIdOfUndefined');
 

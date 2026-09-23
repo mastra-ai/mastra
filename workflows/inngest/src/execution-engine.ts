@@ -57,6 +57,8 @@ function isNonRetryableStepFailure(error: unknown): boolean {
 
 const retryCountStorage = new AsyncLocalStorage<number>();
 
+const BUILTIN_ERROR_TYPES = [TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError];
+
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
@@ -235,10 +237,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             ...(isNonRetryable && { nonRetryable: true as const }),
           },
         });
-        // Report the original failure site to Inngest instead of this wrapper frame. The stack's first
-        // line also carries the original error type, since Inngest derives `name` from the prototype.
+        // Report the original failure site to Inngest instead of this wrapper frame.
         if (errorInstance.stack) {
           wrapped.stack = errorInstance.stack;
+        }
+        // Inngest derives the reported `name` from the prototype, so keep built-in error types (e.g. TypeError).
+        const builtinErrorType = BUILTIN_ERROR_TYPES.find(ErrorType => e instanceof ErrorType);
+        if (builtinErrorType) {
+          Object.setPrototypeOf(wrapped, builtinErrorType.prototype);
         }
         throw wrapped;
       }
