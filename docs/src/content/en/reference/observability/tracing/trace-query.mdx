@@ -307,7 +307,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Feedback | `comment` | `exists`, `notExists` |
 
-Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored collection in `path` and one tag in `value`, as described in [Filter by tags](#filter-by-tags).
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags).
 
 String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
