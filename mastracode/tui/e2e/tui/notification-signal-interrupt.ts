@@ -157,7 +157,6 @@ export const notificationSignalInterruptScenario = {
                 priority: 'medium',
                 expectsReply: true,
                 messageId: requestMessageId,
-                payload: { scenario: 'notification-signal-interrupt' },
               },
               hostContext,
             );
@@ -173,7 +172,6 @@ export const notificationSignalInterruptScenario = {
                 expectsReply: false,
                 messageId: replyMessageId,
                 replyTo: requestMessageId,
-                payload: { scenario: 'notification-signal-interrupt' },
               },
               peerContext,
             );

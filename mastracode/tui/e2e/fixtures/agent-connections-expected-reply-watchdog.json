@@ -87,10 +87,7 @@
               "priority": "high",
               "expectsReply": false,
               "messageId": "expected-reply-response",
-              "replyTo": "expected-reply-request",
-              "payload": {
-                "scenario": "agent-connections-expected-reply-watchdog"
-              }
+              "replyTo": "expected-reply-request"
             }
           }
         ]

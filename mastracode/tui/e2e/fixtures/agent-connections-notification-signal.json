@@ -52,10 +52,7 @@
               "targetId": "code-agent:mc-e2e-signal-peer-resource:mc-e2e-signal-peer-thread",
               "summary": "Agent connection e2e signal: please review the handoff",
               "priority": "high",
-              "expectsReply": false,
-              "payload": {
-                "scenario": "agent-connections-notification-signal"
-              }
+              "expectsReply": false
             }
           }
         ]

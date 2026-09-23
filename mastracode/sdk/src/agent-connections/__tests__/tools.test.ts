@@ -252,6 +252,19 @@ describe('agent connection tools', () => {
     expect(sendNotificationSignal).not.toHaveBeenCalled();
   });
 
+  it('only accepts inputs that reach the peer or drive routing', () => {
+    const tools = createAgentConnectionTools({ registry: createRegistry() });
+
+    expect(Object.keys((tools.agent_signal_send as any).inputSchema.shape).sort()).toEqual([
+      'expectsReply',
+      'messageId',
+      'priority',
+      'replyTo',
+      'summary',
+      'targetId',
+    ]);
+  });
+
   it('sends to a saved and freshly advertised exact endpoint despite diagnostic metadata changes', async () => {
     const sendNotificationSignal = createSignalRuntime();
     const tools = createAgentConnectionTools({
@@ -730,7 +743,6 @@ describe('agent connection tools', () => {
       priority: 'medium',
       expectsReply: true,
       messageId: 'stable-message',
-      payload: { first: 1, second: 2 },
     };
 
     await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
@@ -738,16 +750,14 @@ describe('agent connection tools', () => {
       messageId: 'stable-message',
       routingAction: 'deliver',
     });
-    await expect(
-      (tools.agent_signal_send as any).execute({ ...input, payload: { second: 2, first: 1 } }, context),
-    ).resolves.toMatchObject({
+    await expect((tools.agent_signal_send as any).execute({ ...input }, context)).resolves.toMatchObject({
       isError: false,
       duplicate: true,
       messageId: 'stable-message',
       routingAction: 'deliver',
     });
     await expect(
-      (tools.agent_signal_send as any).execute({ ...input, summary: 'Different payload' }, context),
+      (tools.agent_signal_send as any).execute({ ...input, summary: 'Different message' }, context),
     ).resolves.toMatchObject({
       isError: true,
       messageId: 'stable-message',
