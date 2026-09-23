@@ -1,6 +1,10 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { IMastraLogger } from '../../../logger';
+import type { RequestContext } from '../../../request-context';
 import type { RequireToolApproval } from '../../../tools';
+import type { ToolApprovalContext } from '../../../tools/types';
 import type { ToolCallConcurrency, ToolCallConcurrencyStrategy } from '../../types';
+import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 
 export type ToolCallForeachOptions = {
   concurrency: number;
@@ -110,4 +114,60 @@ export function updateToolCallForeachConcurrency(
   args: Parameters<typeof resolveToolCallConcurrency>[0],
 ) {
   options.concurrency = resolveToolCallConcurrency(args);
+}
+
+/**
+ * Resolves concurrency for a step once the model's tool calls are known.
+ *
+ * Under the opt-in `'called'` strategy, each called tool's approval policy is evaluated with the
+ * call's actual arguments (the same rule the tool-call step applies), so a function policy that
+ * returns `false` no longer forces sequential execution. Tools with a suspend schema, or whose
+ * policy requires approval for this call, still force sequential execution.
+ *
+ * Other strategies keep the conservative synchronous resolution.
+ */
+export async function resolveCalledToolCallConcurrency({
+  toolCalls,
+  requestContext,
+  workspace,
+  logger,
+  ...args
+}: Parameters<typeof resolveToolCallConcurrency>[0] & {
+  toolCalls: readonly { toolName: string; args?: unknown }[];
+  requestContext?: RequestContext;
+  workspace?: ToolApprovalContext['workspace'];
+  logger?: IMastraLogger;
+}): Promise<number> {
+  if (args.strategy !== 'called') {
+    return resolveToolCallConcurrency({ ...args, calledToolNames: toolCalls.map(toolCall => toolCall.toolName) });
+  }
+
+  const verdicts = await Promise.all(
+    toolCalls.map(async toolCall => {
+      const tool = args.tools?.[toolCall.toolName];
+      if (!tool) {
+        return false;
+      }
+      if ((tool as { hasSuspendSchema?: unknown }).hasSuspendSchema) {
+        return true;
+      }
+      const toolArgs =
+        typeof toolCall.args === 'object' && toolCall.args !== null
+          ? (({ resumeData: _resumeData, ...rest }) => rest)(toolCall.args as Record<string, unknown>)
+          : (toolCall.args as ToolApprovalContext['args']);
+      return resolveToolApprovalVerdict({
+        tool,
+        requireToolApproval: args.requireToolApproval,
+        context: buildToolApprovalContext({
+          toolName: toolCall.toolName,
+          args: toolArgs,
+          requestContext,
+          workspace,
+        }),
+        logger,
+      });
+    }),
+  );
+
+  return verdicts.some(Boolean) ? 1 : args.configuredConcurrency;
 }

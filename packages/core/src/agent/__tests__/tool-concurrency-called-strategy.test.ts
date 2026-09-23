@@ -28,7 +28,11 @@ function twoParallelToolCalls(toolNames: string[]) {
   });
 }
 
-function trackedTool(id: string, tracker: ConcurrencyTracker, options: { suspendable?: boolean } = {}) {
+function trackedTool(
+  id: string,
+  tracker: ConcurrencyTracker,
+  options: { suspendable?: boolean; requireApproval?: () => Promise<boolean> } = {},
+) {
   return createTool({
     id,
     description: id,
@@ -36,6 +40,7 @@ function trackedTool(id: string, tracker: ConcurrencyTracker, options: { suspend
     ...(options.suspendable
       ? { suspendSchema: z.object({ reason: z.string() }), resumeSchema: z.object({ approved: z.boolean() }) }
       : {}),
+    ...(options.requireApproval ? { requireApproval: options.requireApproval } : {}),
     execute: async () => {
       tracker.running++;
       tracker.peak = Math.max(tracker.peak, tracker.running);
@@ -129,5 +134,50 @@ describe("toolCallConcurrency strategy: 'called'", () => {
 
     // A batch that calls a statically-suspendable tool still runs sequentially.
     expect(tracker.peak).toBe(1);
+  });
+
+  it("parallelizes calls whose function approval policy returns false under strategy 'called' (#24232)", async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const agent = new Agent({
+      id: 'repro-called-fn-policy',
+      name: 'repro-called-fn-policy',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker, { requireApproval: async () => false }),
+        'tool-2': trackedTool('tool-2', tracker, { requireApproval: async () => false }),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      toolCallConcurrency: { limit: 10, strategy: 'called' },
+    });
+    await drain(stream);
+
+    expect(tracker.peak).toBe(2);
+  });
+
+  it("parallelizes calls when a run-wide function approval policy returns false under strategy 'called'", async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const agent = new Agent({
+      id: 'repro-called-global-fn',
+      name: 'repro-called-global-fn',
+      instructions: 'x',
+      model: twoParallelToolCalls(['tool-1', 'tool-2']),
+      tools: {
+        'tool-1': trackedTool('tool-1', tracker),
+        'tool-2': trackedTool('tool-2', tracker),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 1,
+      requireToolApproval: () => false,
+      toolCallConcurrency: { limit: 10, strategy: 'called' },
+    });
+    await drain(stream);
+
+    expect(tracker.peak).toBe(2);
   });
 });

@@ -1,6 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import { createWorkflow } from '../../../workflows/create';
+import { readScoped } from '../../run-scope-access';
+import { STEP_WORKSPACE_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
@@ -11,7 +13,11 @@ import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createSignalDrainStep } from './signal-drain-step';
-import { normalizeToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
+import {
+  normalizeToolCallConcurrency,
+  resolveCalledToolCallConcurrency,
+  resolveToolCallConcurrency,
+} from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
@@ -118,7 +124,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   })
     .then(llmExecutionStep)
     .map(
-      async ({ inputData }) => {
+      async ({ inputData, requestContext }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         const toolCalls = typedInputData.output.toolCalls || [];
         // Recompute concurrency now that the model has emitted its tool calls.
@@ -133,13 +139,23 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // approval/suspend tool stays registered; a batch that calls one still
         // serializes; run-wide requireToolApproval still forces sequential.
         const stepActiveTools = _internal?.stepActiveTools;
-        toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
-          requireToolApproval: rest.requireToolApproval,
+        //
+        // Under 'called', function approval policies are evaluated with each call's args (the
+        // same rule toolCallStep applies), so a policy returning false does not serialize.
+        toolCallForeachOptions.concurrency = await resolveCalledToolCallConcurrency({
+          requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
           tools: (_internal?.stepTools as Tools | undefined) ?? rest.tools,
           activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,
           strategy: toolCallConcurrencyStrategy,
-          calledToolNames: toolCalls.map(toolCall => toolCall.toolName),
+          toolCalls,
+          requestContext,
+          workspace: readScoped(
+            { mastra: rest.mastra, runId: rest.runId, _internal },
+            STEP_WORKSPACE_KEY,
+            'stepWorkspace',
+          ),
+          logger: rest.logger,
         });
         return toolCalls;
       },
