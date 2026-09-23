@@ -16,10 +16,7 @@ export function collectInngestFunctions({
    * agent's workflow needs to be served.
    */
   const durableAgent = Object.values(mastra.listAgents()).find(agent => isInngestAgent(agent));
-  const workflows = [
-    ...Object.values(mastra.listWorkflows()),
-    ...(durableAgent?.getDurableWorkflows() ?? []),
-  ];
+  const workflows = [...Object.values(mastra.listWorkflows()), ...(durableAgent?.getDurableWorkflows() ?? [])];
   const workflowFunctions = new Map<string, InngestFunction.Like>();
 
   for (const workflow of workflows) {
