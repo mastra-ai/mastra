@@ -4363,15 +4363,24 @@ export class Session<TState = unknown> {
   /**
    * Approve a parked tool call: drive the agent to execute it. Throws when there
    * is no active run.
+   *
+   * `binding` resolves the call against the run that parked it rather than the
+   * session's current thread/run/resource. The run engine passes its stream
+   * state's own binding because the session can switch thread (or be re-scoped
+   * to another resource) while a run is still in flight, and the agent locates
+   * the suspended run by `threadId`/`resourceId` — resolving with the
+   * newly-bound identity would throw or land on the wrong thread.
    */
   async approveToolCall({
     toolCallId,
     requestContext: requestContextInput,
+    binding,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
+    binding?: { threadId?: string; runId?: string; resourceId?: string };
   }): Promise<void> {
-    const runId = this.run.getRunId();
+    const runId = binding?.runId ?? this.run.getRunId();
     if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -4379,11 +4388,11 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
+    const threadId = binding?.threadId ?? this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
-    const resourceId = this.identity.getResourceId();
+    const resourceId = binding?.resourceId ?? this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -4401,17 +4410,23 @@ export class Session<TState = unknown> {
   /**
    * Decline a parked tool call: drive the agent to reject it. Throws when there
    * is no active run.
+   *
+   * `binding` follows the same contract as {@link approveToolCall}: the run
+   * engine resolves declined calls against the run that parked them, so a
+   * thread switch mid-run cannot redirect the decline to another thread.
    */
   async declineToolCall({
     toolCallId,
     requestContext: requestContextInput,
     declineContext,
+    binding,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
+    binding?: { threadId?: string; runId?: string; resourceId?: string };
   }): Promise<void> {
-    const runId = this.run.getRunId();
+    const runId = binding?.runId ?? this.run.getRunId();
     if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -4419,11 +4434,11 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
+    const threadId = binding?.threadId ?? this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
-    const resourceId = this.identity.getResourceId();
+    const resourceId = binding?.resourceId ?? this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,

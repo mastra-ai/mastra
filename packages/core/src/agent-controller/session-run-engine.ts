@@ -769,21 +769,33 @@ export class SessionRunEngine {
 
         const policy = this.#session.resolveToolApproval(toolName);
 
+        // Resolve the call against the run that raised it, not the session's
+        // currently-bound thread/run/resource. The session can switch thread or
+        // be re-scoped to another resource while this run is still streaming,
+        // and the agent looks up the suspended run by `threadId`/`resourceId`
+        // — resolving with the newly-bound identity would fail to find this
+        // run, or resume it against the wrong thread.
+        const binding = {
+          threadId: state.threadId,
+          runId: this.#session.run.getRunId() ?? undefined,
+          resourceId: this.#session.identity.getResourceId(),
+        };
+
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext, binding });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext, binding });
           break;
         }
 
         const approvalPromise = this.#session.approval.arm({
           toolName,
           toolCallId,
-          threadId: state.threadId,
-          runId: this.#session.run.getRunId() ?? undefined,
+          threadId: binding.threadId,
+          runId: binding.runId,
         });
         this.#session.emit({
           type: 'tool_approval_required',
@@ -807,11 +819,13 @@ export class SessionRunEngine {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            binding,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            binding,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,
