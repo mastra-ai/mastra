@@ -666,6 +666,7 @@ describe('InngestAgent parity surface', () => {
     const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
       value: { retainedState: true },
       context: {},
+      status: 'suspended',
       suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
       requestContext: {
         userId: 'user-1',
@@ -765,6 +766,7 @@ describe('InngestAgent parity surface', () => {
     const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
       value: {},
       context: {},
+      status: 'suspended',
       suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
       // A stale actor persisted in storage must be ignored.
       actor: { actorKind: 'system', sourceWorkflow: 'stale-workflow' },
@@ -818,6 +820,7 @@ describe('InngestAgent parity surface', () => {
         'agentic-loop': nestedSuspension,
         'other-step': { status: 'suspended', suspendPayload: {} },
       },
+      status: 'suspended',
       suspendedPaths: { 'agentic-loop': [0], 'other-step': [1] },
       resumeLabels: {
         'tool-call-a': { stepId: 'agentic-loop' },
@@ -874,6 +877,7 @@ describe('InngestAgent parity surface', () => {
       const durableAgent = makeAgentWithSnapshot('resume-single-inferred', {
         value: {},
         context: {},
+        status: 'suspended',
         suspendedPaths: { 'agentic-loop': [0] },
         resumeLabels: { 'tool-call-a': { stepId: 'agentic-loop' } },
       });
@@ -896,6 +900,7 @@ describe('InngestAgent parity surface', () => {
       const durableAgent = makeAgentWithSnapshot('resume-dispatch-failure', {
         value: {},
         context: {},
+        status: 'suspended',
         suspendedPaths: { 'agentic-loop': [0] },
         resumeLabels: {},
       });
@@ -910,10 +915,34 @@ describe('InngestAgent parity surface', () => {
       sendSpy.mockRestore();
     });
 
+    it('rejects resume() instead of starting a fresh run when the run never becomes suspended', async () => {
+      // #24749: a missing suspended snapshot used to dispatch a start event whose input
+      // was the resume payload, crashing the loop with "reading 'threadId'".
+      vi.useFakeTimers();
+      const durableAgent = makeAgentWithSnapshot('resume-not-suspended', { value: {}, context: {}, status: 'running' });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-not-suspended-run';
+
+      try {
+        const pending = durableAgent.resume(runId, { answer: 'yes' });
+        const assertion = expect(pending).rejects.toThrow(
+          `Cannot resume run ${runId}: it is not suspended (status: running).`,
+        );
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
       const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
         value: {},
         context: {},
+        status: 'suspended',
         suspendedPaths: { 'agentic-loop': [0] },
         resumeLabels: {},
       });
