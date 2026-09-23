@@ -16,12 +16,21 @@ export type SignalDrainOutcome = { drained: false } | { drained: true; nextMessa
  * `MessageList` from serialized state only when `rotateResponseMessageId` /
  * `addSignal` are first invoked, preserving its drain-first ordering.
  *
- * Error policy (ledger L4, adjudicated): best-effort. A failure is logged
- * and reported as `{ drained: false }` rather than failing the run — the
- * drain call is inside the guard, so signals remain queued when the drain
- * itself throws. A failure after draining (rotate/append/emit) cannot roll
- * back transcript mutations already applied; the next drain site simply
- * sees an empty queue.
+ * Error policy is per-engine, matching each engine's shipped pre-unification
+ * behavior:
+ *
+ * - `'fatal'` (default engine): a drain failure rethrows and fails the run.
+ *   The released default loop had no catch around either drain site (the
+ *   signal-drain step or the inline predicate drain), so a failure surfaced
+ *   exactly once to the caller. Swallowing it here would silently drop
+ *   signals on an engine with no redelivery to retry the drain.
+ * - `'best-effort'` (durable engine): a failure is logged and reported as
+ *   `{ drained: false }` rather than failing the run. Durable redelivery
+ *   re-runs the drain site, and the drain call is inside the guard, so
+ *   signals remain queued for the next site when the drain itself throws.
+ *   A failure after draining (rotate/append/emit) cannot roll back
+ *   transcript mutations already applied; the next drain site simply sees
+ *   an empty queue.
  */
 export async function drainSignalsToTranscript(deps: {
   drainPendingSignals: ((scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]) | undefined;
@@ -30,6 +39,12 @@ export async function drainSignalsToTranscript(deps: {
   emitChunk: (chunk: unknown) => void | Promise<void>;
   /** Message id to seal; defaults to the transcript's current response message. */
   sealMessageId?: string;
+  /**
+   * How drain failures surface: `'fatal'` rethrows (default engine's released
+   * contract), `'best-effort'` logs and returns `{ drained: false }` (durable
+   * engine — redelivery re-runs the drain site).
+   */
+  errorPolicy: 'fatal' | 'best-effort';
   logger?: IMastraLogger;
 }): Promise<SignalDrainOutcome> {
   try {
@@ -45,6 +60,9 @@ export async function drainSignalsToTranscript(deps: {
     }
     return { drained: true, nextMessageId };
   } catch (error) {
+    if (deps.errorPolicy === 'fatal') {
+      throw error;
+    }
     deps.logger?.warn('Signal drain failed; continuing without drained signals', { error });
     return { drained: false };
   }

@@ -197,6 +197,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           addSignal: signal => this.params.messageList.addSignal(signal),
           emitChunk: chunk => this.emitChunk(rt, chunk),
           sealMessageId: typedInput.stepResult?.messageId ?? typedInput.messageId,
+          // Released default-loop contract: drain failures fail the run
+          // (pre-unification signalDrainStep had no catch).
+          errorPolicy: 'fatal',
           logger: rt.logger,
         });
         if (!outcome.drained) {
@@ -395,6 +398,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         addSignal: signal => messageList.addSignal(signal),
         emitChunk: chunk => this.emitChunk(rt, chunk),
         sealMessageId: typedInputData.stepResult?.messageId ?? typedInputData.messageId,
+        // Released default-loop contract: drain failures fail the run
+        // (pre-unification inline predicate drain had no catch).
+        errorPolicy: 'fatal',
         logger: rt.logger,
       });
       if (drainOutcome.drained) {

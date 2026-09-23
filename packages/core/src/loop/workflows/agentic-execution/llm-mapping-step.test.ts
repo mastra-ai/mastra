@@ -1687,13 +1687,12 @@ describe('createLLMMappingStep toModelOutput', () => {
     expect(childSpans).toHaveLength(0);
   });
 
-  it('should mark the MAPPING span as errored, warn, and keep the raw result when toModelOutput throws', async () => {
+  it('should mark the MAPPING span as errored and re-throw when toModelOutput throws', async () => {
     const { parentSpan, childSpans } = createMockParentSpan();
     const failure = new Error('transform failed');
     const toModelOutputMock = vi.fn(() => {
       throw failure;
     });
-    const warn = vi.fn();
 
     const llmMappingStep = createLLMMappingStep(
       {
@@ -1701,7 +1700,6 @@ describe('createLLMMappingStep toModelOutput', () => {
         controller,
         messageList,
         runId: 'test-run',
-        logger: { warn } as any,
         _internal: { generateId: () => 'test-message-id' },
         tools: {
           broken: {
@@ -1721,39 +1719,15 @@ describe('createLLMMappingStep toModelOutput', () => {
       { toolCallId: 'call-1', toolName: 'broken', args: {}, result: { data: 'raw' } },
     ];
 
-    // Mapping failures are non-fatal: the run continues with the raw result
-    // (matches the durable loop and the background-task result path).
-    await llmMappingStep.execute(createExecuteParams(inputData));
+    // The default engine's released contract: a toModelOutput failure fails
+    // the run. Only the durable engine supplies an onMappingError handler
+    // (warn-and-continue) — redelivery would re-run the mapper every attempt.
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).rejects.toBe(failure);
 
     expect(childSpans).toHaveLength(1);
     const [span] = childSpans;
     expect(span.ended).toBe(false);
     expect(span.errored).toBe(true);
     expect(span.errorOptions).toEqual({ error: failure, endSpan: true });
-
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('toModelOutput failed for tool "broken"'),
-      expect.objectContaining({ toolCallId: 'call-1', error: failure }),
-    );
-
-    // The raw result is still committed to the transcript without a mastra.modelOutput override.
-    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        toolInvocation: expect.objectContaining({
-          state: 'result',
-          toolCallId: 'call-1',
-          result: { data: 'raw' },
-        }),
-      }),
-    );
-    const commitArg = (messageList.updateToolInvocation as Mock).mock.calls.find(
-      ([part]) => part?.toolInvocation?.toolCallId === 'call-1',
-    )?.[0];
-    expect(commitArg?.providerMetadata?.mastra?.modelOutput).toBeUndefined();
-
-    // The tool-result chunk still reaches the stream with the raw result.
-    const toolResultChunk = controller.enqueue.mock.calls.map(([c]) => c).find(c => c?.type === 'tool-result');
-    expect(toolResultChunk?.payload?.result).toEqual({ data: 'raw' });
-    expect(toolResultChunk?.payload?.providerMetadata?.mastra?.modelOutput).toBeUndefined();
   });
 });

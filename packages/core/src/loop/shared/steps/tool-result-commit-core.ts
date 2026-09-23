@@ -27,9 +27,11 @@ export interface ToolMappingParentSpan {
  * real result with `undefined`, producing a tool message with no output.
  *
  * Mapping-failure policy is engine-supplied (PHASE3 ledger): when
- * `onMappingError` is omitted the error propagates; both engines currently
- * supply it and log a warning instead of failing the commit — the tool result
- * itself is still usable without the mapped output.
+ * `onMappingError` is omitted the error propagates. The default engine omits
+ * it — a toModelOutput failure fails the run, the released contract. The
+ * durable engine supplies a warn-and-continue handler because redelivery
+ * would re-run the mapper on every attempt; the tool result itself is still
+ * usable without the mapped output.
  *
  * Deliberately NOT consolidated with the background-task path
  * (`background-task-result-core.ts`), which always overwrites

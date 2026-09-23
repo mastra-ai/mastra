@@ -312,6 +312,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             addSignal: signal => list().addSignal(signal),
             emitChunk: chunk => this.emitChunk(rt, chunk),
             sealMessageId: execOutput.messageId,
+            // Durable's shipped contract: drain is best-effort — redelivery
+            // re-runs this site and signals stay queued on failure.
+            errorPolicy: 'best-effort',
             logger: rt.logger,
           });
           if (!outcome.drained || !drainList) return execOutput;
@@ -604,6 +607,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             rotateResponseMessageId: () => list().rotateResponseMessageId(),
             addSignal: signal => list().addSignal(signal),
             emitChunk: chunk => this.emitChunk(rt, chunk),
+            // Durable's shipped contract: drain is best-effort — redelivery
+            // re-runs this site and signals stay queued on failure.
+            errorPolicy: 'best-effort',
             logger: rt.logger,
           });
           if (drainOutcome.drained && drainList) {
