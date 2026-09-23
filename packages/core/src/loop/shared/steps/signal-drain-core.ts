@@ -4,7 +4,7 @@ import type { IMastraLogger } from '../../../logger';
 export type SignalDrainOutcome = { drained: false } | { drained: true; nextMessageId: string };
 
 /**
- * Shared signal-drain behavior (PHASE3 Step 3, ledger L11): drain signals
+ * Shared signal-drain behavior: drain signals
  * queued for the run, seal the in-progress response message and rotate to a
  * fresh one, append each signal to the transcript, and emit it to the
  * client-facing stream. All four drain sites (the signal-drain step and the

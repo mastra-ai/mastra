@@ -109,7 +109,7 @@ function formatJudgeActivityMessage(name: string | undefined, args: unknown): st
 }
 
 /**
- * Shared goal-step behavior (PHASE3 Step 3): judge a settled iteration against
+ * Shared goal-step behavior: judge a settled iteration against
  * the thread's active durable objective. Handles the skip-guards, the budget
  * guard, judge/scorer resolution, judge activity streaming, the tri-state
  * verdict (done / waiting / keep working, with judge failure → paused), record

@@ -13,7 +13,7 @@ import type { LoopOptions } from './types';
  * the durable loop declares its state type). The main loop keeps the same
  * shape as a single in-memory object owned by its continuation predicate;
  * nothing about the main loop gets serialized. Sharing the shape is what
- * lets continuation logic converge across engines (PHASE3 Step 3) instead
+ * lets continuation logic converge across engines instead
  * of operating on scattered closure variables.
  *
  * Flags are optional because each engine materializes only what it maintains
@@ -32,7 +32,7 @@ export interface LoopIterationState<TStep = unknown> {
   /**
    * A delegation hook called `ctx.bail()` — stop after this iteration.
    * Durable state today; the main loop tracks this via RunScope until the
-   * continuation core hoists (PHASE3 Step 3).
+   * continuation core hoists.
    */
   delegationBailed?: boolean;
   /** A background task dispatched this iteration is still pending (durable). */
@@ -40,7 +40,7 @@ export interface LoopIterationState<TStep = unknown> {
   /**
    * This run is a resume (e.g. after tool approval) and its first loop-back
    * must seal the already-flushed assistant message and rotate to a fresh
-   * response message (issue #19445). Main-only (ledger L10): the main loop
+   * response message (issue #19445). Main-only: the main loop
    * reuses one response message id across iterations, so it needs this
    * targeted seal; the durable loop rotates to a fresh response message on
    * every loop-back, which subsumes the resume seal.
@@ -74,8 +74,8 @@ export interface MainLoopIterationState<TStep> extends LoopIterationState<TStep>
  * here must never be written onto {@link LoopIterationState}: they are live
  * handles (closures, signals, transports) that must not cross a wire.
  *
- * The surface grows as steps hoist onto the shared builder (PHASE3 Steps
- * 3–5); only fields with live consumers are declared.
+ * The surface grows as steps hoist onto the shared builder; only fields
+ * with live consumers are declared.
  */
 export interface LoopRuntime {
   runId: string;
@@ -95,8 +95,8 @@ export interface LoopRuntime {
   stopWhen?: LoopOptions['stopWhen'];
   onIterationComplete?: OnIterationCompleteHandler;
   /**
-   * Drain signals queued for this run. Normalized across engines (ledger
-   * L13): `runId` is pre-bound by the resolving engine and the underlying
+   * Drain signals queued for this run. Normalized across engines:
+   * `runId` is pre-bound by the resolving engine and the underlying
    * runtime defaults `scope` to `'pending'`.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];

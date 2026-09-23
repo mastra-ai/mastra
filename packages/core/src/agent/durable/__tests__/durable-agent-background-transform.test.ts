@@ -1,5 +1,5 @@
 /**
- * DurableAgent background tool-result transcript transform tests (PHASE3 ledger L22).
+ * DurableAgent background tool-result transcript transform tests.
  *
  * The background `onResult` hook must wire `transformForTranscript` and
  * `generateId` into the shared `applyBackgroundToolResult` core — previously

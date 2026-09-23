@@ -10,8 +10,8 @@
  * payloads (`requestContext.toJSON()` in evented/execution-engine.ts) and
  * rehydrates a fresh RequestContext per step in the event processor, so
  * mutation-by-reference cannot survive the pubsub boundary. This matches
- * real cross-process semantics and is a documented divergence (Phase 2
- * gap ledger), not a harness limitation.
+ * real cross-process semantics and is a documented divergence, not a
+ * harness limitation.
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';

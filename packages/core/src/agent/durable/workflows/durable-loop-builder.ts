@@ -167,7 +167,7 @@ interface DurableLoopRuntime extends LoopRuntime {
  * through workflow input/output so it is durable across process restarts and
  * execution engine replays.
  *
- * Migration status (PHASE3 Step 1): every method is still a whole-method
+ * Migration status: every method is still a whole-method
  * override delegating to the durable step files. As the shared cores land,
  * these overrides shrink until only the runtime hooks remain (state
  * resolution via registry + serialized `messageListState`, pubsub chunk
@@ -245,7 +245,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       stopWhen: registryEntry?.stopWhen,
       onIterationComplete: registryEntry?.onIterationComplete,
       // runId is pre-bound at registry-entry creation; scope defaults to
-      // 'pending' in the underlying stream runtime (ledger L13).
+      // 'pending' in the underlying stream runtime.
       drainPendingSignals: registryEntry?.drainPendingSignals,
       pubsub: predicateParams[PUBSUB_SYMBOL] as PubSub | undefined,
     };
@@ -287,7 +287,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   /**
    * Mirrors the non-durable `signalDrainStep` which drains signals queued
    * during tool execution. Behavior lives in `drainSignalsToTranscript`
-   * (shared with the main loop, ledger L11); this override owns the
+   * (shared with the main loop); this override owns the
    * serialization glue: the `MessageList` is materialized lazily from
    * serialized state only once signals actually arrive (drain-first
    * ordering), and re-serialized into the projected output. Signals are
@@ -325,7 +325,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             stepResult: {
               ...execOutput.stepResult,
               messageId: outcome.nextMessageId,
-              // Aligned with the main loop's signal-drain step (ledger L3).
+              // Aligned with the main loop's signal-drain step.
               reason: 'other',
               isContinued: true,
             },

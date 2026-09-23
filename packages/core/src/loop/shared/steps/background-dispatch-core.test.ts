@@ -9,11 +9,11 @@ const mockCreate = vi.mocked(createBackgroundTask);
 
 /**
  * Pins the per-engine background-dispatch policy split:
- * - D4.1 `existingRunningTask`: `'restart'` (durable, redelivery dedup)
+ * - `existingRunningTask`: `'restart'` (durable, redelivery dedup)
  *   probes `checkIfRunning` and restarts; `'dispatch-duplicate'` (default
  *   engine, released contract) skips the probe entirely — fidelity includes
  *   NOT making the extra storage read.
- * - D4.2 `dispatchFailure`: `'propagate'` (default engine) rethrows ladder
+ * - `dispatchFailure`: `'propagate'` (default engine) rethrows ladder
  *   failures as tool errors; `'fallback-to-sync'` (durable) degrades to
  *   synchronous execution.
  * Rungs that are unconditional on both policies (concurrency fallback,
@@ -63,7 +63,7 @@ beforeEach(() => {
   mockCreate.mockReset();
 });
 
-describe('dispatchBackgroundTool — D4.1 existing-running-task policy', () => {
+describe('dispatchBackgroundTool — existing-running-task policy', () => {
   it('dispatch-duplicate (default engine): never probes checkIfRunning, goes straight to dispatch', async () => {
     const handle = makeHandle();
     mockCreate.mockReturnValue(handle);
@@ -88,7 +88,7 @@ describe('dispatchBackgroundTool — D4.1 existing-running-task policy', () => {
   });
 });
 
-describe('dispatchBackgroundTool — D4.2 dispatch-failure policy', () => {
+describe('dispatchBackgroundTool — dispatch-failure policy', () => {
   it('propagate (default engine): a dispatch failure rejects and surfaces as a tool error', async () => {
     const handle = makeHandle({
       dispatch: vi.fn(async () => {

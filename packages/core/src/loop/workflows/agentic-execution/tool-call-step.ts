@@ -818,7 +818,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           },
         });
         const bgOutcome = await dispatchBackgroundTool({
-          // D4.1/D4.2 — the in-process engine's released contract: no
+          // The in-process engine's released contract: no
           // checkIfRunning probe (dispatch here is only re-entered by caller
           // action, never redelivered), and a dispatch failure propagates as
           // a tool error instead of silently degrading to sync execution.
@@ -1165,7 +1165,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // reconciliation promise gate ensures `onResult` has patched the
           // message list before the result is returned to the model.
           // Restarted tasks are included (main only had started/resumed —
-          // restart-reattach is this branch's hoisted extension, ledger L5):
+          // restart-reattach was added during the shared-core extraction):
           // a replayed awaited call still owes the model the real result.
           if (bgOutcome.disposition === 'awaited') {
             const completedTask = await bgOutcome.waitForCompletion({ abortSignal: options?.abortSignal });

@@ -86,7 +86,7 @@ export type LoopWorkflow = Workflow<any, any, any, any, any, any, any, any>;
  * constructed through an overridable method so engine variants (the durable
  * loop) can subclass it and override behavior surgically instead of
  * maintaining a parallel copy of the topology. During the incremental
- * migration (PHASE3) the durable subclass still overrides whole methods that
+ * migration the durable subclass still overrides whole methods that
  * delegate to its own step files; the end state is that only runtime hooks
  * (state resolution, chunk transport, workflow engine) remain overridden.
  */
@@ -125,7 +125,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
   // ── Runtime hooks ──────────────────────────────────────────────────────
   // The plumbing seams engine subclasses override once, for every consumer,
-  // instead of once per step (PHASE3 Step 2 contracts).
+  // instead of once per step.
 
   /**
    * Resolve the live, non-serializable view of the run that predicate (and,
@@ -134,7 +134,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * durable subclass resolves from serialized iteration state + the run
    * registry.
    *
-   * `drainPendingSignals` is normalized here (ledger L13): each engine
+   * `drainPendingSignals` is normalized here: each engine
    * pre-binds `runId`, so consumers call `rt.drainPendingSignals?.()` and the
    * underlying runtime defaults the scope to `'pending'`.
    */
@@ -168,7 +168,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
   // ── Step factories ─────────────────────────────────────────────────────
   // Each delegates to today's step files unchanged. These are the hoisting
-  // targets for the shared-core migration (PHASE3 steps 3–5).
+  // targets for the shared-core migration.
 
   protected llmExecutionStep(toolCallForeachOptions: ToolCallForeachOptions): LoopStep {
     return createLLMExecutionStep<Tools, OUTPUT>({ ...this.params, toolCallForeachOptions });
@@ -190,7 +190,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * Step ⑦ — drain signals queued while the iteration was running, seal and
    * rotate the response message, and force continuation so the LLM sees them.
    * Behavior lives in `drainSignalsToTranscript` (shared with the durable
-   * override and both predicates' inline drains, ledger L11); this method
+   * override and both predicates' inline drains); this method
    * owns the main loop's live-`MessageList` plumbing and output projection.
    */
   protected signalDrainStep(): LoopStep {
@@ -486,7 +486,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       // the shared-core extraction (soft feedback stop, ungated stopWhen,
       // inject-but-halt past stopWhen, finite-maxSteps feedback guard).
       const decision = await decideContinuation({
-        // D1.5 — the default ladder's feedback force-continue only fires on
+        // The default ladder's feedback force-continue only fires on
         // runs with a finite maxSteps (runaway guard from the released
         // contract). `underMaxSteps` below collapses "unbounded" into true,
         // so the ladder needs this separately.

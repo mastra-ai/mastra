@@ -49,7 +49,7 @@ export interface ProcessChunkDeps<OUTPUT = undefined> {
 }
 
 /**
- * Shared per-chunk output-processor pipeline (PHASE3 Step 5): run a
+ * Shared per-chunk output-processor pipeline: run a
  * tool-shaped chunk through the run's output processors, emit the processed
  * chunk (or a tripwire when blocked), then drain any parts a processor
  * stashed for reprocessing (e.g. the non-text part that triggered a

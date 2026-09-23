@@ -1312,8 +1312,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const releaseStreamActivity = markRunActive(runId);
             try {
               let stepStartEmitted = false;
-              // Stream driver — deliberate divergence from the main loop
-              // (PHASE3 ledger L20, decided permanent): main commits chunks to
+              // Stream driver — deliberate, permanent divergence from the
+              // main loop: main commits chunks to
               // the message list and then emits them into its request-scoped
               // in-process stream; durable publishes to pubsub FIRST because
               // consumers are cross-process and must see chunks live, while
@@ -2028,7 +2028,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // failure/truncation/refusal when the request is re-sent, so the
             // loop would spin until maxSteps (#17893, #15717 parity port).
             //
-            // DELIBERATE DIVERGENCE from main (PHASE3 ledger L25): treating
+            // Deliberate divergence from the main loop: treating
             // `stop` as terminal here IS reachable with tool calls — some
             // providers report finishReason 'stop' alongside tool calls, and
             // no upstream normalization rewrites it (`normalizeFinishReason`
@@ -2040,7 +2040,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // tool-call foreach consumes `toolCalls` regardless of this flag)
             // and commits their results, but ends the loop without a
             // follow-up model step — unless a tool errors, in which case
-            // llm-mapping's recovery override (ledger L23) forces
+            // llm-mapping's recovery override forces
             // continuation. Kept as-is: the narrow #17893 port deliberately
             // preserved durable's gating; converge only with a pinning test.
             const isContinued = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);

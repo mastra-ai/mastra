@@ -15,15 +15,15 @@ export type ExecuteToolOutcome =
   | { status: 'error'; error: unknown };
 
 /**
- * Shared synchronous tool execution behavior (PHASE3 Step 4): run the tool,
+ * Shared synchronous tool execution behavior: run the tool,
  * make the result serialization-safe, fire the `onOutput` lifecycle hook, and
  * classify failures. Both engines' tool-call steps call this after their
  * approval/background ladders have fallen through to direct execution.
  *
- * Adjudications:
- * - `onOutput` receives `abortSignal` (ledger L6): previously main-only; tools
+ * Unified behaviors (each previously shipped on one engine only):
+ * - `onOutput` receives `abortSignal`: previously main-only; tools
  *   observing cancellation in their output hook now work on both engines.
- * - Abort-aware failure classification (ledger L7): previously main-only. A
+ * - Abort-aware failure classification: previously main-only. A
  *   throw while the request is aborted must not be recorded as an error
  *   result — that would fake-complete the call (its `result` becomes the
  *   abort message) and read as success on resume. Key off the abort signal,

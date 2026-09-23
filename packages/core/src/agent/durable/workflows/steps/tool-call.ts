@@ -89,7 +89,7 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   modelOutputComputed: z.boolean().optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
   // so the mapping step leaves the call incomplete.
-  // Mirrors the non-durable tool-call output schema (ledger L7).
+  // Mirrors the non-durable tool-call output schema.
   aborted: z.boolean().optional(),
   // Set when a processToolResult processor blocked the result via tripwire; no result
   // crosses the boundary and the mapping step leaves the call incomplete.
@@ -1205,7 +1205,7 @@ export function createDurableToolCallStep() {
       });
       // Background task dispatch via the shared dispatch ladder with the
       // durable policy: steps replay under at-least-once redelivery, so an
-      // already-running task is restarted to reattach hooks (ledger L5) and
+      // already-running task is restarted to reattach hooks and
       // ladder failures degrade to sync execution to preserve forward
       // progress across transport/store boundaries.
       const bgOutcome = await dispatchBackgroundTool({
@@ -1549,7 +1549,7 @@ export function createDurableToolCallStep() {
         if (outcome.status === 'aborted') {
           // Mid-flight cancellation: leave the call incomplete (no result/error,
           // no chunk emission) so the mapping step doesn't fake-complete it on
-          // resume. Mirrors the non-durable tool-call step (ledger L7).
+          // resume. Mirrors the non-durable tool-call step.
           return {
             ...typedInput,
             aborted: true,

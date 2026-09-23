@@ -14,7 +14,7 @@ export type BackgroundTaskCheckOutcome =
   | { status: 'completed' };
 
 /**
- * Shared background-task-check behavior (PHASE3 Step 3): after the LLM has
+ * Shared background-task-check behavior: after the LLM has
  * responded, look for still-running background tasks and decide whether to
  * wait for the next completion, signal pending without blocking, or pass
  * through. Progress chunks are emitted while waiting; result injection is

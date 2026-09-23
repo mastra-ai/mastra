@@ -156,7 +156,7 @@ export function createDurableLLMMappingStep() {
           // An aborted call was cancelled mid-flight, not completed: recording it
           // would fake-complete the call (`result: undefined` reads as success on
           // resume), so leave the invocation incomplete. Mirrors the non-durable
-          // llm-mapping-step's aborted exclusion (ledger L7).
+          // llm-mapping-step's aborted exclusion.
           if (toolResult.aborted) {
             continue;
           }
@@ -305,7 +305,7 @@ export function createDurableLLMMappingStep() {
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
       //
-      // DELIBERATE DIVERGENCE from main (PHASE3 ledger L23): this override
+      // Deliberate divergence from the main loop: this override
       // can trump a terminal finish reason — a step that finished with
       // `stop`/`length`/`content-filter` whose tool result errored still
       // continues. Main avoids the case structurally: its #17893

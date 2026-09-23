@@ -40,7 +40,7 @@ export interface BackgroundTaskContextInfo {
 }
 
 /**
- * Shared background dispatch ladder (PHASE3 Step 4): decide whether a tool
+ * Shared background dispatch ladder: decide whether a tool
  * call runs as a background task and, if so, resume/restart/dispatch it.
  * Engines own the per-task context hooks (executor, onChunk, onResult,
  * onExecution — they close over engine transport and message-list state) and
@@ -49,7 +49,7 @@ export interface BackgroundTaskContextInfo {
  * The mechanics are shared; two rungs are per-engine policy (both required
  * params, so every call site's choice is explicit):
  *
- * - `existingRunningTask` (D4.1): `'restart'` (durable, ledger L5) probes
+ * - `existingRunningTask`: `'restart'` (durable) probes
  *   `checkIfRunning` before dispatching and restarts an already-running task
  *   for this toolCallId to reattach hooks — durable step redelivery
  *   legitimately re-enters dispatch for the same toolCallId after a crash,
@@ -60,7 +60,7 @@ export interface BackgroundTaskContextInfo {
  *   by transport redelivery, so the dedup problem doesn't exist and the
  *   probe would add a storage read per dispatch that the released path
  *   never made.
- * - `dispatchFailure` (D4.2): `'fallback-to-sync'` (durable) degrades any
+ * - `dispatchFailure`: `'fallback-to-sync'` (durable) degrades any
  *   ladder failure (task creation, storage lookups, dispatch) to
  *   synchronous execution — durable dispatch crosses transport/store
  *   boundaries where transient failure is expected, and sync fallback
@@ -116,14 +116,14 @@ export async function dispatchBackgroundTool(deps: {
   /** Durable workflow steps may replay after the task reached persisted storage. */
   adoptPersistedTask?: boolean;
   /**
-   * D4.1 — what to do when a task for this toolCallId is already running:
-   * `'restart'` (durable: redelivery dedup, ledger L5) probes
+   * What to do when a task for this toolCallId is already running:
+   * `'restart'` (durable: redelivery dedup) probes
    * `checkIfRunning` and restarts to reattach hooks; `'dispatch-duplicate'`
    * (default engine: released contract) skips the probe entirely.
    */
   existingRunningTask: 'restart' | 'dispatch-duplicate';
   /**
-   * D4.2 — what to do when the dispatch ladder throws:
+   * What to do when the dispatch ladder throws:
    * `'fallback-to-sync'` (durable: forward progress across transport/store
    * failures) degrades to synchronous execution; `'propagate'` (default
    * engine: released contract) rethrows so the failure surfaces as a tool
@@ -277,10 +277,10 @@ export async function dispatchBackgroundTool(deps: {
       }
     }
 
-    // D4.1 — durable only ('restart'): a task for this toolCallId+runId is
+    // Durable only ('restart'): a task for this toolCallId+runId is
     // already running (e.g. the step was redelivered after a process
     // restart): restart it to reattach the per-stream hooks instead of
-    // dispatching a duplicate (ledger L5). The default engine
+    // dispatching a duplicate. The default engine
     // ('dispatch-duplicate') skips the probe entirely — its dispatch is
     // never redelivered, and the released contract made no storage read
     // here.
@@ -320,7 +320,7 @@ export async function dispatchBackgroundTool(deps: {
     if (failClosed) {
       throw bgError;
     }
-    // D4.2 — default engine ('propagate'): surface the dispatch failure as
+    // Default engine ('propagate'): surface the dispatch failure as
     // a tool error (released contract; silent sync execution could run a
     // tool that is background precisely because sync is unsafe). Durable
     // ('fallback-to-sync'): degrade to synchronous execution to preserve

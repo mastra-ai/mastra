@@ -15,7 +15,7 @@ export interface ToolMappingParentSpan {
 }
 
 /**
- * Shared `toModelOutput` computation for the tool-result commit (PHASE3 Step 5).
+ * Shared `toModelOutput` computation for the tool-result commit.
  *
  * Runs the tool's `toModelOutput` mapper under a MAPPING child span, normalizes
  * media parts into the AI SDK's LanguageModelV2ToolResultOutput shape, and
@@ -26,7 +26,7 @@ export interface ToolMappingParentSpan {
  * because MessageList keys off its presence and would otherwise override the
  * real result with `undefined`, producing a tool message with no output.
  *
- * Mapping-failure policy is engine-supplied (PHASE3 ledger): when
+ * Mapping-failure policy is engine-supplied: when
  * `onMappingError` is omitted the error propagates. The default engine omits
  * it — a toModelOutput failure fails the run, the released contract. The
  * durable engine supplies a warn-and-continue handler because redelivery
@@ -97,7 +97,7 @@ export type ToolResultCommitOutcome =
   | { kind: 'result'; result: unknown };
 
 /**
- * Shared per-result transcript commit (PHASE3 Step 5): record one resolved
+ * Shared per-result transcript commit: record one resolved
  * tool call on the MessageList as `output-denied`, `output-error`, or
  * `result`. Returns whether a matching invocation was found and updated.
  *

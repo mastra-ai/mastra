@@ -17,13 +17,13 @@ export interface BackgroundToolResultParams {
 }
 
 /**
- * Shared background-task result injector (PHASE3 Step 4): when a background
+ * Shared background-task result injector: when a background
  * tool finishes, replace the "Background task started..." placeholder in the
  * transcript with the real result (or failure), recompute the model-facing
  * output, and flush to memory. Engines call this from their per-task onResult
  * hook; transport-specific chunk emission stays engine-side (onChunk).
  *
- * Adjudications:
+ * Unified behaviors:
  * - `toModelOutput` recompute + `mastra.modelOutput` overwrite: previously
  *   main-only. The dispatch turn stored `mastra.modelOutput` derived from the
  *   placeholder (or, on durable, no mapping at all), and `llmPrompt()` prefers
@@ -38,8 +38,8 @@ export interface BackgroundToolResultParams {
  *   purpose.
  * - Transcript payload transforms remain an engine-supplied hook. Main
  *   supplies `transformForTranscript` from its run scope (dispatch-time
- *   capture, valid for its request-bound lifetime); durable supplies it too
- *   (PHASE3 ledger L22 port), resolving the policy and tool-level transform
+ *   capture, valid for its request-bound lifetime); durable supplies it too,
+ *   resolving the policy and tool-level transform
  *   at completion time from the live run registry because the entry may be
  *   rebuilt after a process restart. The run-level policy carries a closure
  *   and does not survive a restart on durable — only tool-level transforms
