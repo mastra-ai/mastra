@@ -4,7 +4,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { format } from 'date-fns';
@@ -75,7 +75,7 @@ export function InboxFeedbackList({
   }
 
   if (error) {
-    return <ErrorState title="Failed to load feedback" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load feedback" descriptionSlot={error.message} />;
   }
 
   return (

@@ -78,15 +78,15 @@ export const AgentBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-4 py-16">
+    <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-foreground text-header-lg md:text-header-xl text-center font-serif tracking-tight">
+        <h1 className="starter-heading text-center font-display text-title tracking-tight text-foreground md:text-display">
           What should we build today?
         </h1>
 
         <form
           onSubmit={handleSubmit}
-          className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+          className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -99,7 +99,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="text-ui-md placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+            className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

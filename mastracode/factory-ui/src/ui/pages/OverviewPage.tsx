@@ -10,7 +10,9 @@ import { Link } from 'react-router';
 import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
 import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
 import { CommitRail } from '../domains/factory/components/CommitRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { StageFunnel } from '../domains/factory/components/StageFunnel';
 import { ActivityFeed, AttentionPreview, RunningList, StalledList } from '../domains/factory/components/OverviewLists';
 import { computeFactoryOverview } from '../domains/factory/overview';
@@ -26,13 +28,15 @@ const RANGE_PRESETS = [
 
 const DEFAULT_RANGE_DAYS = 30;
 
-const BLOCK_TITLE = 'text-ui-sm text-neutral6/40 m-0 font-semibold';
+const BLOCK_TITLE = 'text-column text-muted-foreground m-0 font-semibold';
 
 export function OverviewPage() {
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
   return (
-    <DocumentFactoryPageShell>
-      {project => <OverviewContent factoryProjectId={project.id} repository={project.repositories[0]} />}
-    </DocumentFactoryPageShell>
+    <PageLayout {...slots}>
+      <OverviewContent factoryProjectId={factory.id} repository={factory.repositories[0]} />
+    </PageLayout>
   );
 }
 
@@ -111,7 +115,7 @@ export function OverviewContent({
           <div className="flex items-center gap-3">
             {supervisorHealth.data?.findings.length ? (
               <Link
-                className="text-accent1 hover:text-accent2 text-ui-xs"
+                className="text-accent1 hover:text-accent2 text-meta"
                 to={`/factories/${factoryProjectId ?? ''}/supervisor`}
               >
                 {supervisorHealth.data.findings.length} supervisor{' '}
@@ -130,7 +134,7 @@ export function OverviewContent({
 
 function ViewAll({ to }: { to: string }) {
   return (
-    <Link to={to} className="text-icon3 hover:text-icon5 text-ui-xs">
+    <Link to={to} className="text-muted-foreground hover:text-foreground text-meta">
       View all
     </Link>
   );
@@ -142,7 +146,7 @@ function ViewOnGithub({ slug }: { slug: string }) {
       href={`https://github.com/${slug}/commits`}
       target="_blank"
       rel="noreferrer"
-      className="text-icon3 hover:text-icon5 text-ui-xs"
+      className="text-muted-foreground hover:text-foreground text-meta"
     >
       {slug}
     </a>
@@ -151,7 +155,7 @@ function ViewOnGithub({ slug }: { slug: string }) {
 
 function Count({ value }: { value: string }) {
   return (
-    <Txt as="span" variant="ui-xs" className="text-icon3">
+    <Txt as="span" variant="meta" className="text-muted-foreground">
       {value}
     </Txt>
   );

@@ -175,7 +175,7 @@ export function ReviewQueueFilterBar({
       fields={fields}
       operators={OPERATORS}
       value={value}
-      onValueChange={items => onChange(fromItems(items))}
+      onValueChange={(items: FilterBarItem[]) => onChange(fromItems(items))}
       // Items are rebuilt from URL params with `id: fieldId`; keep the draft on the same id so the chip survives.
       createItemId={fieldId => fieldId}
       aria-label="Review queue filters"

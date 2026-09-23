@@ -69,7 +69,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
-          'focus-within:bg-surface4 focus-within:text-foreground focus-within:outline-hidden',
+          'focus-within:bg-fill-subtle focus-within:text-foreground focus-within:outline-hidden',
           className,
         )}
         style={{ paddingLeft: depth * 12 + 18 }}
@@ -86,7 +86,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          className="text-foreground placeholder:text-muted-foreground text-ui-sm min-w-0 flex-1 border-none bg-transparent outline-hidden"
+          className="min-w-0 flex-1 border-none bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
         />
       </li>
     );

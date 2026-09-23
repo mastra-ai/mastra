@@ -490,6 +490,34 @@ export const mastra = new Mastra({
 })
 ```
 
+### classifiers
+
+**Type:** `Record<string, Classifier>`
+
+Classifiers ask evaluation models fixed-option questions about application state and return typed answers. Register reusable classifiers here to retrieve them with `getClassifier()` or `getClassifierById()`. When a registered classifier is evaluated without an active trace, it starts a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
+
+Visit the [Classifier reference](/reference/classifier/classifier) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+
+const safety = new Classifier({
+  id: 'safety',
+  model,
+  questions: {
+    unsafe: {
+      type: 'boolean',
+      criteria: { true: 'Unsafe', false: 'Safe' },
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  classifiers: { safety },
+})
+```
+
 ### storage
 
 **Type:** `MastraCompositeStore`
@@ -794,12 +822,13 @@ export const mastra = new Mastra({
 **Type:** `object`\
 **Default:** `undefined`
 
-MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state aren't available.
+Options applied to every MCP HTTP route. MCP requests are self-contained, so no session state is kept between them and the routes run unchanged in serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.).
 
 | Property | Type | Default | Description |
 | - | - | - | - |
-| `serverless` | `boolean` | `false` | Run MCP in stateless mode without session management |
-| `sessionIdGenerator` | `() => string` | `undefined` | Custom session ID generator function |
+| `setRequestAuth` | `(req, requestContext) => void \| Promise<void>` | `undefined` | Sets `req.auth` on the request handed to the MCP transport, which surfaces as `context.mcp.extra.authInfo` in tools. When omitted, the principal resolved by `server.auth` is bridged automatically. |
+| `serverless` | `boolean` | `false` | Accepted for compatibility. Has no effect: every MCP request is already stateless. |
+| `sessionIdGenerator` | `() => string` | `undefined` | Accepted for compatibility. Has no effect: MCP requests carry no session. |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -807,7 +836,10 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   server: {
     mcpOptions: {
-      serverless: true,
+      setRequestAuth: (req, requestContext) => {
+        const payload = requestContext.get('bearerPayload')
+        req.auth = { token: payload.token, clientId: payload.sub, scopes: [] }
+      },
     },
   },
 })

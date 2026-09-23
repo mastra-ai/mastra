@@ -64,16 +64,15 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
       <Tooltip>
         <TooltipTrigger asChild>
           <ButtonsGroup
-            spacing="close"
             data-locked-field-id={field.id}
             data-property-filter-pill="locked"
             tabIndex={0}
             aria-label={lockA11yLabel}
           >
-            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-            <ButtonsGroupText size="md">is</ButtonsGroupText>
-            <ButtonsGroupText size="md">{display}</ButtonsGroupText>
-            <ButtonsGroupText size="md">
+            <ButtonsGroupText>{field.label}</ButtonsGroupText>
+            <ButtonsGroupText>is</ButtonsGroupText>
+            <ButtonsGroupText>{display}</ButtonsGroupText>
+            <ButtonsGroupText>
               <LockIcon />
             </ButtonsGroupText>
           </ButtonsGroup>
@@ -110,12 +109,11 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
   }, [autoFocus]);
 
   return (
-    <ButtonsGroup spacing="close">
-      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-      <ButtonsGroupText size="md">is</ButtonsGroupText>
+    <ButtonsGroup>
+      <ButtonsGroupText>{field.label}</ButtonsGroupText>
+      <ButtonsGroupText>is</ButtonsGroupText>
       <Input
         ref={inputRef}
-        size="md"
         disabled={disabled}
         value={draft}
         placeholder={field.placeholder ?? `Enter ${field.label}`}
@@ -134,7 +132,7 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
           } else if (e.key === 'Escape') {
             e.preventDefault();
             setDraft(value);
-            (e.target as HTMLInputElement).blur();
+            e.currentTarget.blur();
           }
         }}
       />
@@ -142,7 +140,6 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
-        size="md"
         onMouseDown={e => e.preventDefault()}
         onClick={onRemove}
       >
@@ -165,12 +162,12 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
   const [open, setOpen] = useState(false);
 
   return (
-    <ButtonsGroup spacing="close">
-      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-      <ButtonsGroupText size="md">is</ButtonsGroupText>
+    <ButtonsGroup>
+      <ButtonsGroupText>{field.label}</ButtonsGroupText>
+      <ButtonsGroupText>is</ButtonsGroupText>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" disabled={disabled} size="md">
+          <Button type="button" disabled={disabled}>
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
@@ -178,13 +175,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>
-      <Button
-        type="button"
-        disabled={disabled}
-        aria-label={`Remove ${field.label} filter`}
-        size="md"
-        onClick={onRemove}
-      >
+      <Button type="button" disabled={disabled} aria-label={`Remove ${field.label} filter`} onClick={onRemove}>
         <XIcon />
       </Button>
     </ButtonsGroup>
@@ -239,7 +230,7 @@ export function PropertyFilterApplied({
           );
         }
 
-        if (field.kind === 'text' && typeof token.value === 'string') {
+        if (field.kind === 'text' && !Array.isArray(token.value)) {
           return (
             <TextTokenPill
               key={`${token.fieldId}-${index}`}
@@ -271,14 +262,13 @@ export function PropertyFilterApplied({
         }
 
         return (
-          <ButtonsGroup spacing="close" key={`${token.fieldId}-${index}`}>
-            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-            <ButtonsGroupText size="md">is</ButtonsGroupText>
-            <ButtonsGroupText size="md">{stringifyTokenValue(token.value)}</ButtonsGroupText>
+          <ButtonsGroup key={`${token.fieldId}-${index}`}>
+            <ButtonsGroupText>{field.label}</ButtonsGroupText>
+            <ButtonsGroupText>is</ButtonsGroupText>
+            <ButtonsGroupText>{stringifyTokenValue(token.value)}</ButtonsGroupText>
             <Button
               type="button"
               disabled={disabled}
-              size="md"
               aria-label={`Remove ${field.label} filter`}
               onClick={() => removeTokenAt(index)}
             >

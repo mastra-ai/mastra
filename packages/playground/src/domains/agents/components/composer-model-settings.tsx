@@ -38,7 +38,7 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-foreground" disabled={itemDisabled} />
       <Label
-        className={cn('text-foreground', !isNetworkAvailable && 'text-muted-foreground! cursor-not-allowed')}
+        className={cn('text-foreground', !isNetworkAvailable && 'cursor-not-allowed text-muted-foreground!')}
         htmlFor="network"
       >
         Network
@@ -85,7 +85,7 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
         disabled={itemDisabled}
       />
       <Label
-        className={cn('text-foreground', !supported && 'text-muted-foreground! cursor-not-allowed')}
+        className={cn('text-foreground', !supported && 'cursor-not-allowed text-muted-foreground!')}
         htmlFor="streamSubscription"
       >
         Stream subscription (default)
@@ -174,13 +174,13 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
       >
         <PopoverTrigger asChild>
           <Button
-            variant="default"
+            variant="ghost"
             size="icon-md"
             type="button"
             tooltip="Model settings"
             data-testid="composer-model-settings-trigger"
           >
-            <Sliders className="text-muted-foreground hover:text-foreground h-5 w-5" />
+            <Sliders />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-4">
@@ -284,7 +284,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="text-muted-foreground bg-surface3 text-ui-sm flex items-center gap-2 rounded px-3 py-2"
+                  className="flex items-center gap-2 rounded bg-card px-3 py-2 text-caption text-muted-foreground"
                   data-testid="sampling-restriction-banner"
                 >
                   <Info className="h-3.5 w-3.5 shrink-0" />
@@ -315,7 +315,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       })
                     }
                   />
-                  <Txt as="p" variant="ui-sm" className="text-muted-foreground">
+                  <Txt as="p" variant="caption" tone="muted">
                     {settings?.modelSettings?.temperature ?? 'n/a'}
                   </Txt>
                 </div>
@@ -337,7 +337,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                     min={-0.1}
                     step={0.1}
                   />
-                  <Txt as="p" variant="ui-sm" className="text-muted-foreground">
+                  <Txt as="p" variant="caption" tone="muted">
                     {settings?.modelSettings?.topP ?? 'n/a'}
                   </Txt>
                 </div>

@@ -40,7 +40,7 @@ export const DeleteConfirmation: Story = {
   render: () => (
     <AlertDialog>
       <AlertDialog.Trigger asChild>
-        <Button variant="outline">Delete Item</Button>
+        <Button>Delete Item</Button>
       </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>
@@ -82,7 +82,7 @@ export const DiscardChanges: Story = {
   render: () => (
     <AlertDialog>
       <AlertDialog.Trigger asChild>
-        <Button variant="outline">Discard changes</Button>
+        <Button>Discard changes</Button>
       </AlertDialog.Trigger>
       <AlertDialog.Content>
         <AlertDialog.Header>

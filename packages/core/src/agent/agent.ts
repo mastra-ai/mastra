@@ -487,9 +487,8 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
  * provider that returns fresh processors per call still gets the instance on
  * the ones that run.
  *
- * `mastra.addProcessor` is deliberately not used here: it early-returns on the
- * first instance registered under an id, so a second agent's processor instance
- * would never receive the instance.
+ * `mastra.addProcessor` is deliberately not used here because these processors belong
+ * to the agent's resolved chain and shouldn't be added to Mastra's processor registry.
  */
 function registerProviderProcessors(
   processors: Array<InputProcessorOrWorkflow | OutputProcessorOrWorkflow>,
@@ -8527,7 +8526,7 @@ export class Agent<
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
-    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
+    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub(), this.#getThreadRuntimeAgent());
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions): string | undefined {
