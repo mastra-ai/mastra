@@ -128,17 +128,6 @@ function estimateMediaTokens(data: unknown, mediaType?: string): number {
  * and truncating one would turn a picture into a truncated JSON string. Mirrors the
  * shape check in `convertMcpContentToolResultOutput`.
  */
-/** Used when the cap is too small to hold the counted marker plus any content. */
-const SHORT_TRUNCATION_MARKER = '[truncated]';
-
-/**
- * The visible marker appended to a capped tool result. `shown` is the number of content
- * tokens retained, which excludes the marker's own cost.
- */
-function buildTruncationMarker(shown: number, total: number): string {
-  return `\n\n[truncated: showing ${shown} of ${total} tokens]`;
-}
-
 function isMcpMediaPart(part: unknown): part is McpMediaPart {
   if (!part || typeof part !== 'object') return false;
   const typedPart = part as Record<string, unknown>;
@@ -150,6 +139,26 @@ function isMcpMediaToolResult(result: unknown): boolean {
   const content = (result as Record<string, unknown>).content;
   if (!Array.isArray(content)) return false;
   return content.some(isMcpMediaPart);
+}
+
+/**
+ * Detects a content entry carrying prose — an MCP `text` part, or a `resource` part whose
+ * payload is text. These cost their full token count, unlike media, so they are capped.
+ */
+function isTextBearingPart(part: unknown): part is { text: string } {
+  if (!part || typeof part !== 'object') return false;
+  return typeof (part as Record<string, unknown>).text === 'string';
+}
+
+/** Used when the cap is too small to hold the counted marker plus any content. */
+const SHORT_TRUNCATION_MARKER = '[truncated]';
+
+/**
+ * The visible marker appended to a capped tool result. `shown` is the number of content
+ * tokens retained, which excludes the marker's own cost.
+ */
+function buildTruncationMarker(shown: number, total: number): string {
+  return `\n\n[truncated: showing ${shown} of ${total} tokens]`;
 }
 
 /**
@@ -575,9 +584,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     if (result === undefined || result === null) return;
 
     // An MCP media result is structured data the output converter turns into native
-    // image/audio parts for the model. Flattening it to a JSON string here would
-    // destroy that shape, so leave it alone rather than cap it.
-    if (isMcpMediaToolResult(result)) return;
+    // image/audio parts for the model. Flattening it to a JSON string would destroy that
+    // shape, so the media itself is never truncated. It is not exempt from the cap
+    // though: the shape is recognised by the presence of *any* media part, so exempting
+    // the whole result would let arbitrarily large text ride along beside a one-pixel
+    // image and bypass the cap entirely. Cap the text parts in place and leave the media
+    // structured — its cost is estimated, not tokenized, matching countInputMessageTokens.
+    if (isMcpMediaToolResult(result)) {
+      this.capMcpMediaToolResult(result as { content: unknown[] }, limit, setResult);
+      return;
+    }
 
     // A tool result is arbitrary user/provider data, so it can carry BigInts, cycles,
     // a throwing toJSON, or a shared-reference graph that JSON.stringify expands
@@ -622,6 +638,66 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // assembled from the chunks after this hook runs. setResult covers the stream chunk,
     // history, and the next model call for both provider- and client-executed tools.
     setResult?.(truncated);
+  }
+
+  /**
+   * Bound an MCP media result without flattening it.
+   *
+   * Media parts keep their structure so the output converter can still build native
+   * image/audio output, and are charged the same flat estimate that input trimming uses.
+   * The remaining budget is shared across the text parts, which are truncated in place.
+   */
+  private capMcpMediaToolResult(
+    result: { content: unknown[] },
+    limit: number,
+    setResult: ProcessToolResultArgs['setResult'],
+  ): void {
+    const { content } = result;
+
+    let mediaTokens = 0;
+    let textTokens = 0;
+    for (const part of content) {
+      if (isMcpMediaPart(part)) {
+        mediaTokens += estimateMediaTokens(part.data, part.mediaType ?? part.mimeType);
+      } else if (isTextBearingPart(part)) {
+        textTokens += this.countTokens(part.text);
+      } else {
+        textTokens += this.countTokens(serializeToolResult(part) ?? '');
+      }
+    }
+
+    if (mediaTokens + textTokens <= limit) return;
+
+    // Media is kept whole even when it alone exceeds the cap: truncating base64 yields a
+    // corrupt image rather than a smaller one, and dropping the part would lose the very
+    // data the tool was called for. The text budget simply goes to zero.
+    const textBudget = Math.max(0, limit - mediaTokens);
+
+    let remaining = textBudget;
+    const capped = content.map(part => {
+      if (isMcpMediaPart(part)) return part;
+
+      const text = isTextBearingPart(part) ? part.text : serializeToolResult(part);
+      if (text === undefined) return part;
+
+      const tokens = this.countTokens(text);
+      if (tokens <= remaining) {
+        remaining -= tokens;
+        return part;
+      }
+
+      const marker = buildTruncationMarker(remaining, tokens);
+      const contentBudget = remaining - this.countTokens(marker);
+      const truncated =
+        contentBudget > 0
+          ? `${sliceByTokensSafe(text, 0, contentBudget)}${buildTruncationMarker(contentBudget, tokens)}`
+          : SHORT_TRUNCATION_MARKER;
+      remaining = 0;
+
+      return isTextBearingPart(part) ? { ...part, text: truncated } : { type: 'text', text: truncated };
+    });
+
+    setResult?.({ ...result, content: capped });
   }
 
   private async countTokensInChunk(part: ChunkType): Promise<number> {

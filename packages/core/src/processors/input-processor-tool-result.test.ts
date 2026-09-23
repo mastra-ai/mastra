@@ -545,15 +545,12 @@ describe('TokenLimiter maxToolResultTokens', () => {
   // image/audio parts. Serializing it to JSON to measure tokens would destroy that shape,
   // so the cap has to leave it alone even when it is well over the limit.
   it('leaves an MCP media tool result intact instead of flattening it to JSON', async () => {
-    const mediaResult = {
-      content: [
-        { type: 'text', text: 'here is the chart' },
-        { type: 'image', data: 'A'.repeat(4000), mimeType: 'image/png' },
-      ],
-    };
+    const image = { type: 'image', data: 'A'.repeat(4000), mimeType: 'image/png' };
+    const mediaResult = { content: [{ type: 'text', text: 'here is the chart' }, image] };
 
     let captured: unknown;
-    const limiter = new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 10 });
+    // Generous cap: nothing needs cutting, so the result is passed through untouched.
+    const limiter = new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 5_000 });
     await limiter.processToolResult({
       result: mediaResult,
       setResult: (value: unknown) => {
@@ -563,6 +560,53 @@ describe('TokenLimiter maxToolResultTokens', () => {
 
     // No replacement at all: the structured shape reaches the converter untouched.
     expect(captured).toBeUndefined();
+  });
+
+  // The media shape is recognised by the presence of *any* media part, so exempting the
+  // whole result let unbounded text ride along beside a one-pixel image and skip the cap.
+  it('caps text riding alongside MCP media instead of exempting the whole result', async () => {
+    const huge = 'rule number seven hundred and seventy seven. '.repeat(2_000);
+    const image = { type: 'image', data: 'A', mimeType: 'image/png' };
+
+    let captured: any;
+    const limiter = new TokenLimiterProcessor({ limit: 100_000, maxToolResultTokens: 2_000 });
+    await limiter.processToolResult({
+      result: { content: [{ type: 'text', text: huge }, image] },
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    expect(captured).toBeDefined();
+    // The image survives byte-for-byte: truncating base64 corrupts it rather than shrinking it.
+    expect(captured.content).toContainEqual(image);
+    // The text no longer carries the full payload.
+    const text = captured.content.find((part: any) => part.type === 'text').text;
+    expect(text).toMatch(/\[truncated: showing \d+ of \d+ tokens]$/);
+    expect(estimateTokenCount(text)).toBeLessThanOrEqual(2_000);
+  });
+
+  // Media is charged the flat estimate, not its base64 length, so a large image does not
+  // starve the text budget on the grounds of a cost it never actually incurs.
+  it('charges media the flat estimate rather than its base64 length', async () => {
+    const text = 'rule number seven hundred and seventy seven. '.repeat(200);
+    const image = { type: 'image', data: 'A'.repeat(40_000), mimeType: 'image/png' };
+
+    let captured: any;
+    // 765 (flat image estimate) + ~2000 text exceeds the cap, so text is cut but survives.
+    const limiter = new TokenLimiterProcessor({ limit: 100_000, maxToolResultTokens: 1_500 });
+    await limiter.processToolResult({
+      result: { content: [{ type: 'text', text }, image] },
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    expect(captured.content).toContainEqual(image);
+    // Had the base64 been tokenized as text (~6700 tokens) the budget would have gone
+    // negative and left no room for any prose at all.
+    const capped = captured.content.find((part: any) => part.type === 'text').text;
+    expect(capped).toContain('rule number');
   });
 
   // Exempting the shape from capping is only half the job. Input trimming has to estimate
