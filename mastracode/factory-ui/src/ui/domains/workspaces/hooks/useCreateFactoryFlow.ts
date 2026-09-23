@@ -176,6 +176,13 @@ export function useCreateFactoryFlow() {
       patchDraft.mutateAsync({ step: 'model-provider', jiraProjectId, linearProjectId: undefined }),
     skipProjectManagement: () =>
       patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined, jiraProjectId: undefined }),
+    /** Step backwards to the previous wizard step, preserving already-collected picks. */
+    back: () => {
+      const currentIndex = CREATE_FACTORY_STEPS.indexOf(step);
+      if (currentIndex <= 0) return Promise.resolve(null);
+      const previous = CREATE_FACTORY_STEPS[currentIndex - 1];
+      return patchDraft.mutateAsync({ step: previous });
+    },
     /** Keep what the final commit already achieved, so a retry resumes instead of duplicating. */
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>
       patchDraft.mutateAsync({ factoryId: factory.id }),

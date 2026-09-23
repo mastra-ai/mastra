@@ -5,12 +5,15 @@ import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-val
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Settings2 } from 'lucide-react';
 
+import { toast } from '@mastra/playground-ui/components/Toaster';
+
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
+import { useConnectPlatformProviderMutation } from '../../../../../hooks/usePlatformConnections';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { GitLabIcon } from '../../../../ui/icons';
-import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../../factory/services/gitlab';
+import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -26,13 +29,13 @@ export interface CreateFactoryRepositoryRowsProps {
 function connectionMessage(status: GithubStatus | undefined): string {
   switch (status?.reason) {
     case 'missing_config':
-      return 'Connect your GitHub account through Mastra Platform.';
+      return 'GitHub is not configured for this deployment.';
     case 'organization_required':
       return 'Join an organization to connect GitHub repositories.';
     case 'auth_required':
       return 'Sign in again to connect GitHub.';
     default:
-      return 'Browse the repositories your installations can reach.';
+      return 'Install the GitHub App to grant access to repositories.';
   }
 }
 
@@ -48,6 +51,16 @@ export function CreateFactoryRepositoryRows({
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
   const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured);
+  const gitlabConnect = useConnectPlatformProviderMutation('gitlab');
+  const gitlabConnecting = gitlabConnect.isPending;
+  const startGitlabConnect = async () => {
+    try {
+      await gitlabConnect.mutateAsync({});
+      toast.success('GitLab connected');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to connect GitLab');
+    }
+  };
 
   if (githubStatus.isPending || gitlabStatus.isPending) {
     return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
@@ -55,7 +68,8 @@ export function CreateFactoryRepositoryRows({
 
   const githubRows = !connected ? (
     (() => {
-      const unavailable = githubStatus.data?.reason === 'organization_required';
+      const unavailable =
+        githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config';
 
       return (
         <CommandGroup heading="GitHub">
@@ -65,7 +79,7 @@ export function CreateFactoryRepositoryRows({
             subtitle={connectionMessage(githubStatus.data)}
             value="connect-github"
             disabled={unavailable || githubRedirecting}
-            onSelect={githubStatus.data?.enabled ? onConnect : openMastraPlatformIntegrations}
+            onSelect={onConnect}
           />
         </CommandGroup>
       );
@@ -100,20 +114,25 @@ export function CreateFactoryRepositoryRows({
           onSelectRepository={onSelectRepository}
         />
       ) : (
-        <CommandGroup heading="GitLab">
-          <CommandPaletteItem
-            icon={<GitLabIcon />}
-            title={gitlabStatus.data?.reason === 'organization_required' ? 'GitLab unavailable' : 'Connect GitLab'}
-            subtitle={
-              gitlabStatus.data?.reason === 'organization_required'
-                ? 'Join an organization to connect GitLab repositories.'
-                : 'Connect your GitLab account through Mastra Platform.'
-            }
-            value="connect-gitlab"
-            disabled={gitlabStatus.data?.reason === 'organization_required'}
-            onSelect={openMastraPlatformIntegrations}
-          />
-        </CommandGroup>
+        (() => {
+          const gitlabUnavailable = !gitlabStatus.data?.enabled;
+          return (
+            <CommandGroup heading="GitLab">
+              <CommandPaletteItem
+                icon={gitlabConnecting ? <Spinner size="sm" aria-label="Connecting to GitLab" /> : <GitLabIcon />}
+                title={gitlabUnavailable ? 'GitLab unavailable' : 'Connect GitLab'}
+                subtitle={
+                  gitlabUnavailable
+                    ? 'GitLab is not available for this deployment.'
+                    : 'Sign in to GitLab to grant access to your projects.'
+                }
+                value="connect-gitlab"
+                disabled={gitlabUnavailable || gitlabConnecting}
+                onSelect={() => void startGitlabConnect()}
+              />
+            </CommandGroup>
+          );
+        })()
       )}
     </>
   );

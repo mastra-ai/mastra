@@ -15,7 +15,9 @@ import {
   readOnboardingStep,
   type OnboardingStep as Step,
 } from '../services/onboardingFlow';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ArrowLeft } from 'lucide-react';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
@@ -134,23 +136,37 @@ export function EmptyFactoryState() {
 
   const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider'];
   const stepIndex = steps.indexOf(step);
+  const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
 
   return (
     <main className="bg-sidebar text-foreground min-h-dvh">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
-            <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
-              {steps.map((item, index) => (
-                <li
-                  key={item}
-                  aria-current={step === item ? 'step' : undefined}
-                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
+            <div className="mb-9 flex items-center gap-3">
+              {previousStep && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => goTo(previousStep)}
+                  aria-label="Go back to previous step"
                 >
-                  <span className="sr-only">Step {index + 1}</span>
-                </li>
-              ))}
-            </ol>
+                  <ArrowLeft aria-hidden="true" />
+                  Back
+                </Button>
+              )}
+              <ol className="flex gap-2" aria-label="Factory setup progress">
+                {steps.map((item, index) => (
+                  <li
+                    key={item}
+                    aria-current={step === item ? 'step' : undefined}
+                    className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
+                  >
+                    <span className="sr-only">Step {index + 1}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
 
             <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
               {STEP_META[step].title}

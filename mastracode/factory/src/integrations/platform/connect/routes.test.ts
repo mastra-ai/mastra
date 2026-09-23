@@ -103,6 +103,18 @@ describe('platform connect routes', () => {
     await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
   });
 
+  it('mints a GitLab connect session through the platform registry', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
+    const app = buildApp(org1(), fetchImpl);
+
+    const response = await app.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' });
+    expect(response.status).toBe(201);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://integrations.example.com/v2/integrations/gitlab/connect-sessions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('rejects unknown providers, signed-out callers, and personal accounts', async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     const app = buildApp(org1(), fetchImpl);

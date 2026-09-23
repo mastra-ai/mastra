@@ -2,12 +2,6 @@
 
 export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
 
-export function openMastraPlatformIntegrations(): void {
-  window.open(MASTRA_PROJECTS_URL, '_blank', 'noopener,noreferrer');
-}
-
-export const manageGitLabConnection = openMastraPlatformIntegrations;
-
 export interface GitLabConnection {
   id: string;
   integrationId: string;

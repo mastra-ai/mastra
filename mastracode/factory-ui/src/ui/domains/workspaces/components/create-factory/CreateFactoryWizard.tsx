@@ -98,6 +98,14 @@ export function CreateFactoryWizard() {
         step={step}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
+        onBack={
+          step === 'name'
+            ? undefined
+            : () => {
+                setTyped(undefined);
+                void flow.back();
+              }
+        }
         onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
       >
         {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}

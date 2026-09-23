@@ -366,7 +366,7 @@ describe('Create Factory wizard', () => {
     expect(await screen.findByRole('option', { name: /Connect GitHub/ })).toHaveAttribute('aria-disabled', 'false');
   });
 
-  it('offers Platform connection when GitHub App is not configured on the server', async () => {
+  it('marks GitHub unavailable and does not leak env details when the GitHub App is not configured', async () => {
     seedDraft('vcs');
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -382,9 +382,9 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    const row = await screen.findByRole('option', { name: /Connect GitHub/ });
-    expect(row).toHaveAttribute('aria-disabled', 'false');
-    expect(row).toHaveTextContent('Connect your GitHub account through Mastra Platform.');
+    const row = await screen.findByRole('option', { name: /GitHub unavailable/ });
+    expect(row).toHaveAttribute('aria-disabled', 'true');
+    expect(row).toHaveTextContent('GitHub is not configured for this deployment.');
     expect(row).not.toHaveTextContent('GITHUB_APP_ID');
   });
 
@@ -823,6 +823,50 @@ function stubConnectedJira() {
     ),
   );
 }
+
+describe('back navigation', () => {
+  it('has no back button on the name step', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('steps back from vcs to name while preserving the typed name', async () => {
+    seedDraft('vcs');
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    // Back returns to the name step, and the previously typed name is still in the draft.
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
+    expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
+  });
+
+  it('steps back from project-management to vcs', async () => {
+    seedDraft('project-management');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
+  });
+});
 
 /** Seed a mid-flow draft: name typed, repository picked, nothing created yet. */
 function seedDraft(step: 'vcs' | 'project-management' | 'model-provider') {
