@@ -1,8 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import { createWorkflow } from '../../../workflows/create';
-import { readScoped } from '../../run-scope-access';
-import { STEP_WORKSPACE_KEY } from '../../run-scope-keys';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import { STEP_WORKSPACE_KEY, TOOL_APPROVAL_VERDICTS_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
@@ -142,6 +142,9 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         //
         // Under 'called', function approval policies are evaluated with each call's args (the
         // same rule toolCallStep applies), so a policy returning false does not serialize.
+        // Cache each verdict so toolCallStep applies the exact scheduling decision without
+        // evaluating a potentially stateful policy a second time.
+        const approvalVerdicts = new Map<string, boolean>();
         toolCallForeachOptions.concurrency = await resolveCalledToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
           tools: (_internal?.stepTools as Tools | undefined) ?? rest.tools,
@@ -149,6 +152,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
           configuredConcurrency: configuredToolCallConcurrency,
           strategy: toolCallConcurrencyStrategy,
           toolCalls,
+          approvalVerdicts,
           requestContext,
           workspace: readScoped(
             { mastra: rest.mastra, runId: rest.runId, _internal },
@@ -157,6 +161,12 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
           ),
           logger: rest.logger,
         });
+        writeScoped(
+          { mastra: rest.mastra, runId: rest.runId, _internal },
+          TOOL_APPROVAL_VERDICTS_KEY,
+          'toolApprovalVerdicts',
+          approvalVerdicts,
+        );
         return toolCalls;
       },
       { id: 'map-tool-calls' },

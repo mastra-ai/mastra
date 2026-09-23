@@ -129,12 +129,14 @@ export function updateToolCallForeachConcurrency(
  */
 export async function resolveCalledToolCallConcurrency({
   toolCalls,
+  approvalVerdicts,
   requestContext,
   workspace,
   logger,
   ...args
 }: Parameters<typeof resolveToolCallConcurrency>[0] & {
-  toolCalls: readonly { toolName: string; args?: unknown }[];
+  toolCalls: readonly { toolCallId?: string; toolName: string; args?: unknown }[];
+  approvalVerdicts?: Map<string, boolean>;
   requestContext?: RequestContext;
   workspace?: ToolApprovalContext['workspace'];
   logger?: IMastraLogger;
@@ -160,7 +162,7 @@ export async function resolveCalledToolCallConcurrency({
         typeof toolCall.args === 'object' && toolCall.args !== null
           ? (({ resumeData: _resumeData, ...rest }) => rest)(toolCall.args as Record<string, unknown>)
           : (toolCall.args as ToolApprovalContext['args']);
-      return resolveToolApprovalVerdict({
+      const verdict = await resolveToolApprovalVerdict({
         tool,
         requireToolApproval: args.requireToolApproval,
         context: buildToolApprovalContext({
@@ -171,6 +173,10 @@ export async function resolveCalledToolCallConcurrency({
         }),
         logger,
       });
+      if (toolCall.toolCallId) {
+        approvalVerdicts?.set(toolCall.toolCallId, verdict);
+      }
+      return verdict;
     }),
   );
 

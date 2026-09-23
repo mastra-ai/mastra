@@ -42,6 +42,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
+  TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
@@ -417,18 +418,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Match the nullish fallback above: null/undefined use framework identity, while other falsy values are valid model payloads.
         const isResumeToolCall = resumeDataFromArgs != null;
 
-        // Check if approval is required (shared rule with the tool-call concurrency resolver).
-        const toolRequiresApproval = await resolveToolApprovalVerdict({
-          tool,
-          requireToolApproval,
-          context: buildToolApprovalContext({
-            toolName: inputData.toolName,
-            args,
-            requestContext,
-            workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
-          }),
-          logger,
-        });
+        // Reuse the called-strategy scheduling verdict when available so approval policies
+        // are evaluated exactly once per call. Other paths retain execution-time evaluation.
+        const approvalVerdicts = readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts');
+        const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
+        approvalVerdicts?.delete(inputData.toolCallId);
+        const toolRequiresApproval =
+          cachedApprovalVerdict ??
+          (await resolveToolApprovalVerdict({
+            tool,
+            requireToolApproval,
+            context: buildToolApprovalContext({
+              toolName: inputData.toolName,
+              args,
+              requestContext,
+              workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
+            }),
+            logger,
+          }));
 
         // On resume, the live `requireToolApproval` policy may be gone: function-form
         // policies do not survive RequestContext serialization, and decline/approve
