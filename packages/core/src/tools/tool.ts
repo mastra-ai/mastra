@@ -508,10 +508,13 @@ export class Tool<
               threadId,
               resourceId,
               writableStream,
+              isBackgroundTask,
+              background,
               ...rest
             } = baseContext;
             organizedContext = {
               ...rest,
+              background,
               agent: {
                 agentId: agentId || '',
                 toolCallId,
@@ -522,6 +525,7 @@ export class Tool<
                 threadId,
                 resourceId,
                 writableStream,
+                ...(isBackgroundTask ? { isBackgroundTask: true } : {}),
               },
               // Ensure requestContext is always present
               requestContext: executionRequestContext ?? new RequestContext(),
