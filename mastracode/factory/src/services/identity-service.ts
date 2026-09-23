@@ -95,6 +95,34 @@ export class IdentityService {
   }
 
   /**
+   * Merged candidate feed across every identity-capable integration. Each
+   * result is tagged with its `integrationId` so a single-dropdown UI can
+   * key the (integrationId, externalUserId) pair without a second lookup.
+   * Errors from one integration do not fail the whole call — the merged
+   * feed drops the failing integration and continues.
+   */
+  async listAllCandidates(
+    orgId: string,
+    query?: string,
+  ): Promise<Array<IntegrationCandidateAccount & { integrationId: string }>> {
+    const registrations = this.#integrations().filter(entry => Boolean(entry.integration.identity));
+    const results = await Promise.all(
+      registrations.map(async registration => {
+        try {
+          const accounts = await registration.integration.identity!.listCandidateAccounts(registration.context, {
+            orgId,
+            ...(query !== undefined ? { query } : {}),
+          });
+          return accounts.map(account => ({ ...account, integrationId: registration.integration.id }));
+        } catch {
+          return [];
+        }
+      }),
+    );
+    return results.flat();
+  }
+
+  /**
    * Build the `@me` resolution set the filter primitives consume. Runs one
    * storage read for the user and buckets by integration; no per-integration
    * round-trip is required because the source of truth is the local claim

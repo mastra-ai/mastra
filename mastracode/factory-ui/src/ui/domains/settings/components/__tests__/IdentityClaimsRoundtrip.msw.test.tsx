@@ -13,7 +13,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
@@ -21,26 +21,27 @@ import { useResolvedMe } from '../../../../../hooks/useIdentityClaims';
 import { boardRelevanceOptions, workItemMatchesMe } from '../../../factory/boardRelevance';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type {
-  IdentityCandidate,
+  IdentityCandidateAcrossIntegrations,
   IdentityClaim,
-  IdentityIntegrationDescriptor,
 } from '../../services/identityClaims';
 import { IdentityClaimsSection } from '../IdentityClaimsSection';
 
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  }
+});
+
 interface Backend {
-  integrations: IdentityIntegrationDescriptor[];
   claims: IdentityClaim[];
-  candidates: Record<string, IdentityCandidate[]>;
+  candidates: IdentityCandidateAcrossIntegrations[];
 }
 
 function stub(backend: Backend) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/identity/integrations`, () =>
-      HttpResponse.json({ integrations: backend.integrations }),
-    ),
     http.get(`${TEST_BASE_URL}/web/identity/claims`, () => HttpResponse.json({ claims: backend.claims })),
-    http.get(`${TEST_BASE_URL}/web/identity/candidates/:integrationId`, ({ params }) =>
-      HttpResponse.json({ candidates: backend.candidates[String(params.integrationId)] ?? [] }),
+    http.get(`${TEST_BASE_URL}/web/identity/candidates`, () =>
+      HttpResponse.json({ candidates: backend.candidates }),
     ),
     http.post(`${TEST_BASE_URL}/web/identity/claims`, async ({ request }) => {
       const body = (await request.json()) as {
@@ -56,7 +57,13 @@ function stub(backend: Backend) {
         email: body.email,
         claimedAt: new Date().toISOString(),
       };
-      backend.claims = [...backend.claims.filter(existing => existing.externalUserId !== body.externalUserId), claim];
+      backend.claims = [
+        ...backend.claims.filter(
+          existing =>
+            !(existing.integrationId === body.integrationId && existing.externalUserId === body.externalUserId),
+        ),
+        claim,
+      ];
       return HttpResponse.json({ claim }, { status: 201 });
     }),
   );
@@ -69,21 +76,14 @@ function ResolvedMeReadout() {
   for (const [integrationId, externalIds] of resolvedMe.data) {
     for (const externalId of externalIds) entries.push(`${integrationId}:${externalId}`);
   }
-  return (
-    <output aria-label="resolved-me">
-      {entries.length === 0 ? 'empty' : entries.sort().join(',')}
-    </output>
-  );
+  return <output aria-label="resolved-me">{entries.length === 0 ? 'empty' : entries.sort().join(',')}</output>;
 }
 
 /**
  * Board `@me` chip stand-in: feeds the acting user's resolved-me set
  * straight through the real `workItemMatchesMe` predicate against a
  * fixture GitHub PR authored by `octocat`. Renders `match` or `no
- * match` — matches only when a claim on `github:octocat` exists. This
- * exercises the same composition the BoardPage does; without spinning
- * up the full board we still prove the settings → useResolvedMe →
- * workItemMatchesMe path lights up end-to-end.
+ * match` — matches only when a claim on `github:octocat` exists.
  */
 function BoardMeMatchReadout({ item }: { item: WorkItem }) {
   const resolvedMe = useResolvedMe();
@@ -115,15 +115,23 @@ const githubPr: WorkItem = {
   updatedAt: '2026-08-05T09:00:00.000Z',
 };
 
+const octocatCandidate: IdentityCandidateAcrossIntegrations = {
+  integrationId: 'github',
+  externalUserId: 'octocat',
+  label: 'The Octocat',
+  sources: ['observed'],
+};
+
+async function selectOctocat() {
+  const trigger = await screen.findByRole('combobox', { name: /Your external accounts/i });
+  await userEvent.click(trigger);
+  const option = await screen.findByRole('option', { name: /The Octocat/ });
+  await userEvent.click(option);
+}
+
 describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
-  it('given a fresh claim on the settings section, when saved, then useResolvedMe re-renders with the new id', async () => {
-    stub({
-      integrations: [{ id: 'github' }],
-      claims: [],
-      candidates: {
-        github: [{ externalUserId: 'octocat', label: 'The Octocat', sources: ['observed'] }],
-      },
-    });
+  it('given a fresh claim on the settings section, when picked, then useResolvedMe re-renders with the new id', async () => {
+    stub({ claims: [], candidates: [octocatCandidate] });
 
     renderWithProviders(
       <div>
@@ -135,23 +143,13 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
     const readout = await screen.findByLabelText('resolved-me');
     await waitFor(() => expect(readout).toHaveTextContent('empty'));
 
-    // Expander is closed on load (no claims) — open it.
-    await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
-    await screen.findByText('The Octocat');
-    await userEvent.click(screen.getByRole('checkbox', { name: 'The Octocat' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await selectOctocat();
 
     await waitFor(() => expect(readout).toHaveTextContent('github:octocat'));
   });
 
-  it('given a board `@me` predicate composed with useResolvedMe, when a claim is saved on settings, then the predicate flips from no-match to match', async () => {
-    stub({
-      integrations: [{ id: 'github' }],
-      claims: [],
-      candidates: {
-        github: [{ externalUserId: 'octocat', label: 'The Octocat', sources: ['observed'] }],
-      },
-    });
+  it('given a board `@me` predicate composed with useResolvedMe, when a claim is picked on settings, then the predicate flips from no-match to match', async () => {
+    stub({ claims: [], candidates: [octocatCandidate] });
 
     renderWithProviders(
       <div>
@@ -160,21 +158,11 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
       </div>,
     );
 
-    // Baseline: no claims → predicate returns false against a GitHub PR
-    // authored by octocat.
     const match = await screen.findByLabelText('board-me-match');
     await waitFor(() => expect(match).toHaveTextContent('no match'));
 
-    // Claim octocat via the settings section.
-    await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
-    await screen.findByText('The Octocat');
-    await userEvent.click(screen.getByRole('checkbox', { name: 'The Octocat' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await selectOctocat();
 
-    // The board `@me` predicate now matches. This is the settings →
-    // board composition the plan's Playwright e2e was meant to prove;
-    // driven end-to-end through the real React Query cache and the
-    // real predicate.
     await waitFor(() => expect(match).toHaveTextContent('match'));
   });
 });

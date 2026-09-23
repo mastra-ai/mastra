@@ -87,6 +87,8 @@ export const queryKeys = {
   /** Candidate accounts for one integration, keyed by the optional query filter. */
   identityCandidates: (integrationId: string | undefined, query: string | undefined) =>
     ['identity', 'candidates', integrationId ?? null, query ?? null] as const,
+  /** Merged candidate feed across every identity-capable integration. */
+  identityAllCandidates: (query: string | undefined) => ['identity', 'candidates', 'all', query ?? null] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
+  listAllIdentityCandidates,
   listIdentityCandidates,
   listIdentityIntegrations,
   listMyIdentityClaims,
@@ -12,6 +13,7 @@ import {
 } from '../ui/domains/settings/services/identityClaims';
 import type {
   IdentityCandidate,
+  IdentityCandidateAcrossIntegrations,
   IdentityClaim,
   IdentityIntegrationDescriptor,
 } from '../ui/domains/settings/services/identityClaims';
@@ -45,6 +47,15 @@ export function useIdentityCandidatesQuery(integrationId: string | undefined, qu
     queryKey: queryKeys.identityCandidates(integrationId, query),
     queryFn: () => listIdentityCandidates(baseUrl, integrationId!, query),
     enabled: Boolean(integrationId),
+  });
+}
+
+/** Candidate accounts across every identity-capable integration, merged into one feed. */
+export function useAllIdentityCandidatesQuery(query?: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery<IdentityCandidateAcrossIntegrations[]>({
+    queryKey: queryKeys.identityAllCandidates(query),
+    queryFn: () => listAllIdentityCandidates(baseUrl, query),
   });
 }
 

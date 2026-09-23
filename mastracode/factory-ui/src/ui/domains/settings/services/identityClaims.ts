@@ -28,6 +28,10 @@ export interface IdentityCandidate {
   sources: Array<'observed' | 'api-listed'>;
 }
 
+export interface IdentityCandidateAcrossIntegrations extends IdentityCandidate {
+  integrationId: string;
+}
+
 export interface IdentityIntegrationDescriptor {
   id: string;
 }
@@ -82,6 +86,21 @@ export async function listIdentityCandidates(
   });
   if (!res.ok) throw await parseError(res);
   const { candidates } = (await res.json()) as { candidates: IdentityCandidate[] };
+  return candidates;
+}
+
+/** Candidate accounts across every identity-capable integration. */
+export async function listAllIdentityCandidates(
+  baseUrl: string,
+  query?: string,
+): Promise<IdentityCandidateAcrossIntegrations[]> {
+  const qs = query && query.trim().length > 0 ? `?query=${encodeURIComponent(query.trim())}` : '';
+  const res = await fetch(`${baseUrl}/web/identity/candidates${qs}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw await parseError(res);
+  const { candidates } = (await res.json()) as { candidates: IdentityCandidateAcrossIntegrations[] };
   return candidates;
 }
 

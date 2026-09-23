@@ -142,6 +142,64 @@ describe('IdentityRoutes', () => {
     });
   });
 
+  describe('GET /web/identity/candidates (merged)', () => {
+    it('merges candidates from every identity-capable integration and tags each with its integration id', async () => {
+      const seed = await createFactoryStorageForTests();
+      const githubList = vi
+        .fn<IntegrationIdentityCapability['listCandidateAccounts']>()
+        .mockResolvedValue([
+          { externalUserId: 'octocat', label: 'Octocat', sources: ['observed'] },
+        ] satisfies IntegrationCandidateAccount[]);
+      const linearList = vi
+        .fn<IntegrationIdentityCapability['listCandidateAccounts']>()
+        .mockResolvedValue([
+          { externalUserId: 'alice', label: 'Alice', sources: ['observed'] },
+        ] satisfies IntegrationCandidateAccount[]);
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        integrations: [
+          { integration: fakeIntegration('github', { listCandidateAccounts: githubList }), context: fakeContext() },
+          { integration: fakeIntegration('linear', { listCandidateAccounts: linearList }), context: fakeContext() },
+        ],
+        user: orgUser,
+      });
+
+      const response = await app.request('/web/identity/candidates?query=a');
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { candidates: Array<{ integrationId: string; externalUserId: string }> };
+      expect(body.candidates).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ integrationId: 'github', externalUserId: 'octocat' }),
+          expect.objectContaining({ integrationId: 'linear', externalUserId: 'alice' }),
+        ]),
+      );
+      expect(githubList).toHaveBeenCalledWith(expect.anything(), { orgId: 'org-1', query: 'a' });
+      expect(linearList).toHaveBeenCalledWith(expect.anything(), { orgId: 'org-1', query: 'a' });
+    });
+
+    it('drops a failing integration and keeps the rest of the merged feed', async () => {
+      const seed = await createFactoryStorageForTests();
+      const brokenList = vi
+        .fn<IntegrationIdentityCapability['listCandidateAccounts']>()
+        .mockRejectedValue(new Error('boom'));
+      const workingList = vi
+        .fn<IntegrationIdentityCapability['listCandidateAccounts']>()
+        .mockResolvedValue([{ externalUserId: 'alice', label: 'Alice', sources: ['observed'] }]);
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        integrations: [
+          { integration: fakeIntegration('github', { listCandidateAccounts: brokenList }), context: fakeContext() },
+          { integration: fakeIntegration('linear', { listCandidateAccounts: workingList }), context: fakeContext() },
+        ],
+        user: orgUser,
+      });
+      const response = await app.request('/web/identity/candidates');
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { candidates: Array<{ integrationId: string }> };
+      expect(body.candidates.map(candidate => candidate.integrationId)).toEqual(['linear']);
+    });
+  });
+
   describe('POST /web/identity/claims', () => {
     const githubIdentity: IntegrationIdentityCapability = { listCandidateAccounts: async () => [] };
     const identityCapableIntegrations = () => [

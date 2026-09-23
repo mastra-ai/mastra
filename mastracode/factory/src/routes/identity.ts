@@ -126,6 +126,25 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
        * than 404 so the UI can render an empty state without special-casing
        * missing integrations.
        */
+      /**
+       * Merged candidate feed across every identity-capable integration —
+       * powers the single-dropdown UI in Settings. Each row is tagged with
+       * its `integrationId`.
+       */
+      registerApiRoute('/web/identity/candidates', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const rawQuery = context.req.query('query');
+          const query = parseOptionalString(rawQuery, MAX_QUERY_LENGTH);
+          if (query === false) return context.json({ error: 'invalid_query' }, 400);
+          const candidates = await this.deps.service.listAllCandidates(tenant.orgId, query);
+          return context.json({ candidates });
+        },
+      }),
       registerApiRoute('/web/identity/candidates/:integrationId', {
         method: 'GET',
         requiresAuth: false,
