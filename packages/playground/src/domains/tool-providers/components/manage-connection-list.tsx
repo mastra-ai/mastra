@@ -55,7 +55,6 @@ export const ManageConnectionList = ({
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
             size="sm"
             onClick={onAddConnection}
             disabled={disabled || addingConnection}

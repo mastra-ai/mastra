@@ -1,15 +1,29 @@
-import { CircleSlashIcon } from 'lucide-react';
+import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
+type EmptyStateTone = 'default' | 'error';
+
+const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
+  default: <CircleSlashIcon />,
+  error: <CircleXIcon />,
+};
+
+const iconColorByTone: Record<EmptyStateTone, string> = {
+  default: 'text-muted-foreground',
+  error: 'text-error',
+};
+
 export type EmptyStateProps = {
-  /** Defaults to a circle-slash icon. Pass `null` to render no icon. */
+  /** Defaults to the tone's icon, always rendered at 32px. Pass `null` to render no icon. */
   iconSlot?: React.ReactNode;
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
   actionSlot?: React.ReactNode;
   className?: string;
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+  /** Colors the icon; an icon with its own text color keeps it. */
+  tone?: EmptyStateTone;
   /**
    * `inline` (default) renders the block in place.
    * `fill` centers it in the full height of its parent — the parent must have a definite height.
@@ -18,7 +32,8 @@ export type EmptyStateProps = {
 };
 
 export function EmptyState({
-  iconSlot = <CircleSlashIcon />,
+  tone = 'default',
+  iconSlot = defaultIconByTone[tone],
   titleSlot,
   descriptionSlot,
   actionSlot,
@@ -34,7 +49,7 @@ export function EmptyState({
         className,
       )}
     >
-      {iconSlot && <div className="mb-3">{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 [&_svg]:size-8', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
       {actionSlot && <div className="mt-4">{actionSlot}</div>}

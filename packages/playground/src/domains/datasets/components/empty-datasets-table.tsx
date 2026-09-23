@@ -20,7 +20,6 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
           )}
           <Button
             size="lg"
-            variant="outline"
             render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
 
             icon={<BookOpen />}

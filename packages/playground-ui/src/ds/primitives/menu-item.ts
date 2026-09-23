@@ -3,7 +3,7 @@ import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
-// Select, Combobox, PropertyFilter, DataFilter). An item is a ghost/md Button laid out
+// Select, Combobox, PropertyFilter). An item is a ghost/md Button laid out
 // left-aligned, with `rounded-lg` instead of the pill radius so stacked items sit
 // concentrically inside a `rounded-xl p-1` popup. Base UI drives keyboard/pointer
 // highlight via `data-highlighted`, which `:hover` alone does not cover.

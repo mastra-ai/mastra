@@ -104,9 +104,7 @@ export const ConfigurationSection: Story = {
     <Section variant={variant} className="w-125">
       <Section.Header inset={inset}>
         <Section.Heading>Configuration</Section.Heading>
-        <Button variant="outline" size="md">
-          Edit
-        </Button>
+        <Button size="md">Edit</Button>
       </Section.Header>
       <div className="space-y-3 rounded-md border border-border bg-background p-4">
         <div className="flex justify-between">

@@ -10,6 +10,7 @@ import { Link } from 'react-router';
 import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
 import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
 import { CommitRail } from '../domains/factory/components/CommitRail';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -34,7 +35,15 @@ export function OverviewPage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout {...slots}>
+    <PageLayout
+      {...slots}
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>Overview</PageHeader.Title>
+        </PageHeader>
+      }
+    >
       <OverviewContent factoryProjectId={factory.id} repository={factory.repositories[0]} />
     </PageLayout>
   );
@@ -74,9 +83,7 @@ export function OverviewContent({
   if (!items) return <OverviewLoading />;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-14 pt-4 pb-16">
-      <h1 className="sr-only">Overview</h1>
-
+    <div className="mt-6 flex flex-col gap-14 pb-16">
       <Block title="Pipeline" action={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}>
         <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
       </Block>
@@ -197,7 +204,7 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
 
 function OverviewLoading() {
   return (
-    <div role="status" aria-label="Loading factory overview" className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+    <div role="status" aria-label="Loading factory overview" className="mt-6 flex flex-col gap-10">
       <Skeleton className="h-52 w-full rounded-xl" />
       <Skeleton className="h-48 w-full rounded-xl" />
       <Skeleton className="h-24 w-full rounded-xl" />

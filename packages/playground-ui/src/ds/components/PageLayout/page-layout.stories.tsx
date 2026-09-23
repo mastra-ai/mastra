@@ -39,7 +39,7 @@ const crumbs = (
   </Breadcrumb>
 );
 
-const headerActions = <Button variant="outline">Docs</Button>;
+const headerActions = <Button>Docs</Button>;
 
 const pageHeader = (
   <PageHeader>
@@ -111,7 +111,7 @@ export const FullPage: Story = {
               <Input placeholder="Filter resources" className="max-w-120" />
             </ActionRow.Start>
             <ActionRow.End>
-              <Button variant="outline">Sort</Button>
+              <Button>Sort</Button>
             </ActionRow.End>
           </ActionRow>
         }

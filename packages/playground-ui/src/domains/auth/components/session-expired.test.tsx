@@ -3,7 +3,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SessionExpired } from './SessionExpired';
+import { SessionExpired } from './session-expired';
 
 const withClient = (children: ReactNode) => (
   <MastraReactProvider baseUrl="http://localhost:4111">{children}</MastraReactProvider>

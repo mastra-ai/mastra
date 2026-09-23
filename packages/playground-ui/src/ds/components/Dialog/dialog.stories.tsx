@@ -39,7 +39,7 @@ export const Default: Story = {
           <p className="text-body text-foreground">Dialog body content goes here.</p>
         </div>
         <DialogFooter>
-          <Button variant="outline">Cancel</Button>
+          <Button>Cancel</Button>
           <Button>Save</Button>
         </DialogFooter>
       </DialogContent>
@@ -111,7 +111,7 @@ export const LongContent: Story = {
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline">Decline</Button>
+          <Button>Decline</Button>
           <Button>Accept</Button>
         </DialogFooter>
       </DialogContent>
