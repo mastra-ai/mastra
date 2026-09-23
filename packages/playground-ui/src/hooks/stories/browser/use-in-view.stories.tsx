@@ -15,12 +15,12 @@ function InViewDemo() {
         tabIndex={0}
         role="region"
         aria-label="Visibility scroll area"
-        className="border-border1 h-60 overflow-y-auto rounded-lg border p-4"
+        className="h-60 overflow-y-auto rounded-lg border border-border p-4"
       >
         <div className="flex h-80 items-start">
           <Txt>Scroll down to reveal the target.</Txt>
         </div>
-        <div ref={setRef} className="bg-surface3 p-4">
+        <div ref={setRef} className="bg-card p-4">
           <Txt>Observed target</Txt>
         </div>
         <div className="h-80" />

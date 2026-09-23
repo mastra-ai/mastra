@@ -26,7 +26,7 @@ function ScrollToFirstHighlightDemo() {
         tabIndex={0}
         role="region"
         aria-label="Search results"
-        className="border-border1 h-60 overflow-y-auto rounded-lg border p-4"
+        className="h-60 overflow-y-auto rounded-lg border border-border p-4"
       >
         <div ref={highlightRef} className="space-y-4">
           {Array.from({ length: 30 }, (_, index) => (

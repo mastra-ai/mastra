@@ -17,7 +17,7 @@ function AutoscrollDemo({ enabled }: { enabled: boolean }) {
         tabIndex={0}
         role="log"
         aria-label="Streaming log"
-        className="border-border1 h-60 overflow-y-auto rounded-lg border p-4"
+        className="h-60 overflow-y-auto rounded-lg border border-border p-4"
       >
         {Array.from({ length: lineCount }, (_, index) => (
           <Txt key={index} font="mono">
