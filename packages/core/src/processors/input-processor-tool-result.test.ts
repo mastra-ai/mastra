@@ -540,6 +540,88 @@ describe('TokenLimiter maxToolResultTokens', () => {
       },
     });
 
+  // An MCP media result is structured data the output converter turns into native
+  // image/audio parts. Serializing it to JSON to measure tokens would destroy that shape,
+  // so the cap has to leave it alone even when it is well over the limit.
+  it('leaves an MCP media tool result intact instead of flattening it to JSON', async () => {
+    const mediaResult = {
+      content: [
+        { type: 'text', text: 'here is the chart' },
+        { type: 'image', data: 'A'.repeat(4000), mimeType: 'image/png' },
+      ],
+    };
+
+    let captured: unknown;
+    const limiter = new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 10 });
+    await limiter.processToolResult({
+      result: mediaResult,
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    // No replacement at all: the structured shape reaches the converter untouched.
+    expect(captured).toBeUndefined();
+  });
+
+  // A non-media object result is still capped as usual — the guard must not become a
+  // blanket exemption for every object.
+  it('still caps an oversized object result that carries no media', async () => {
+    let captured: unknown;
+    const limiter = new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 10 });
+    await limiter.processToolResult({
+      result: { content: [{ type: 'text', text: bigResult }] },
+      setResult: (value: unknown) => {
+        captured = value;
+      },
+    } as any);
+
+    expect(typeof captured).toBe('string');
+    expect(captured as string).toMatch(/\[truncated: showing 10 of \d+ tokens\]$/);
+  });
+
+  // modelOutput is derived from the tool result, so a processor that replaces the result
+  // has to leave the chunk's metadata describing the value that actually survived.
+  it('recomputes modelOutput from the processed result, not the raw one', async () => {
+    let executions = 0;
+    const { model } = makeCountingModel('You have 200 rules.');
+    const seenByToModelOutput: unknown[] = [];
+
+    const agent = new Agent({
+      id: 'token-limiter-tr-metadata-agent',
+      name: 'Test Agent',
+      instructions: 'tr',
+      model: model as any,
+      tools: {
+        listRules: createTool({
+          id: 'listRules',
+          description: 'list rules',
+          inputSchema: z.object({}),
+          execute: async () => {
+            executions++;
+            return bigResult;
+          },
+          toModelOutput: (output: unknown) => {
+            seenByToModelOutput.push(output);
+            return { type: 'text', value: String(output) };
+          },
+        }) as any,
+      },
+      inputProcessors: [new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 50 })],
+    });
+
+    const stream = await agent.stream('how many rules do I have?', { maxSteps: 5 });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(executions).toBe(1);
+    // The last mapping sees the truncated value, so the metadata describes what the
+    // model actually received rather than the evicted raw result.
+    const last = seenByToModelOutput[seenByToModelOutput.length - 1];
+    expect(String(last)).toMatch(/\[truncated: showing 50 of \d+ tokens\]$/);
+  });
+
   it('truncates an oversized tool result with a visible marker', async () => {
     let executions = 0;
     const { model, prompts } = makeCountingModel('You have 200 rules.');

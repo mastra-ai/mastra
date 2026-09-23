@@ -462,7 +462,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
             // can access it on the chunk's providerMetadata.mastra.modelOutput.
             // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            const providerMetadata = !toolCall.providerExecuted
+            let providerMetadata = !toolCall.providerExecuted
               ? await getProviderMetadataWithModelOutput(toolCall)
               : undefined;
             const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
@@ -508,6 +508,17 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             if (!trResult.ok) {
               emitTripwireChunk(trResult.tripwire);
               continue;
+            }
+
+            // A processor may have replaced the result (e.g. TokenLimiter truncating an oversized
+            // one). modelOutput is derived from the result, so recompute it from the processed
+            // value — otherwise consumers read a modelOutput built from a result that no longer
+            // exists, and the chunk carries metadata describing the raw value.
+            const processedResult = (chunk as { payload: { result: unknown } }).payload.result;
+            if (!toolCall.providerExecuted && processedResult !== toolCall.result) {
+              providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result: processedResult });
+              (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = (providerMetadata ??
+                toolCall.providerMetadata) as ProviderMetadata | undefined;
             }
 
             if (!toolCall.providerExecuted) {
@@ -633,7 +644,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
           // can access it on the chunk's providerMetadata.mastra.modelOutput.
           // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          const providerMetadata = !toolCall.providerExecuted
+          let providerMetadata = !toolCall.providerExecuted
             ? await getProviderMetadataWithModelOutput(toolCall)
             : undefined;
           const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
@@ -677,6 +688,17 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           if (!trResult.ok) {
             emitTripwireChunk(trResult.tripwire);
             continue;
+          }
+
+          // A processor may have replaced the result (e.g. TokenLimiter truncating an oversized
+          // one). modelOutput is derived from the result, so recompute it from the processed
+          // value — otherwise consumers read a modelOutput built from a result that no longer
+          // exists, and the chunk carries metadata describing the raw value.
+          const processedResult = (chunk as { payload: { result: unknown } }).payload.result;
+          if (!toolCall.providerExecuted && processedResult !== toolCall.result) {
+            providerMetadata = await getProviderMetadataWithModelOutput({ ...toolCall, result: processedResult });
+            (chunk as { payload: { providerMetadata?: unknown } }).payload.providerMetadata = (providerMetadata ??
+              toolCall.providerMetadata) as ProviderMetadata | undefined;
           }
 
           // Provider-executed tools are handled by llm-execution-step; for client-executed

@@ -120,6 +120,24 @@ function estimateMediaTokens(data: unknown, mediaType?: string): number {
 }
 
 /**
+ * True for MCP-style media results — `{ content: [{ type: 'image' | 'audio', data }] }`.
+ *
+ * The output converter turns these into native multimodal tool output, so serializing
+ * and truncating one would turn a picture into a truncated JSON string. Mirrors the
+ * shape check in `convertMcpContentToolResultOutput`.
+ */
+function isMcpMediaToolResult(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  const content = (result as Record<string, unknown>).content;
+  if (!Array.isArray(content)) return false;
+  return content.some(part => {
+    if (!part || typeof part !== 'object') return false;
+    const typedPart = part as Record<string, unknown>;
+    return (typedPart.type === 'image' || typedPart.type === 'audio') && typeof typedPart.data === 'string';
+  });
+}
+
+/**
  * Render a non-string tool result as text for token counting, or `undefined` when it has
  * no meaningful textual form.
  *
@@ -523,6 +541,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     const { result, setResult } = args;
     if (result === undefined || result === null) return;
+
+    // An MCP media result is structured data the output converter turns into native
+    // image/audio parts for the model. Flattening it to a JSON string here would
+    // destroy that shape, so leave it alone rather than cap it.
+    if (isMcpMediaToolResult(result)) return;
 
     // A tool result is arbitrary user/provider data, so it can carry BigInts, cycles,
     // a throwing toJSON, or a shared-reference graph that JSON.stringify expands
