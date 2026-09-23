@@ -19,11 +19,18 @@ import { selectFixture } from '../__utils__/select-fixture';
 
 async function openMemorySidebar(page: Page) {
   // On /new with no threads the left panel starts collapsed; expand it to reach the memory card.
+  // The collapse animates, so the card can be briefly visible alongside the expand button: give the
+  // panel a moment to settle before deciding whether it needs expanding.
   const expandPanel = page.getByRole('button', { name: 'Expand panel' });
   const memoryCard = page.getByTestId('memory-sidebar-card');
-  await expect(expandPanel.or(memoryCard)).toBeVisible({ timeout: 10000 });
-  if (await expandPanel.isVisible()) {
+  await expect(expandPanel.or(memoryCard).filter({ visible: true }).first()).toBeVisible({ timeout: 10000 });
+  const isCollapsed = await expandPanel.waitFor({ state: 'visible', timeout: 1500 }).then(
+    () => true,
+    () => false,
+  );
+  if (isCollapsed) {
     await expandPanel.click();
+    await expect(expandPanel).toBeHidden();
   }
   await expect(memoryCard).toBeVisible({ timeout: 10000 });
 

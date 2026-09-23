@@ -81,18 +81,20 @@ function AgentThread() {
 
   // With memory the panel also hosts the memory card, so it stays mounted (reachable via `{`
   // or the expand button) but starts collapsed, and reopens once the first thread exists.
+  // Collapse is one-shot per agent so query refetches can't re-collapse a panel the user opened.
   const collapseThreadsPanel =
     isNewThread && hasMemory && !isAgentLoading && !isThreadsLoading && sidebarThreads.length === 0;
-  const collapsedForLanding = useRef(false);
+  const hasThread = !isNewThread || sidebarThreads.length > 0;
+  const collapsedForAgent = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (collapseThreadsPanel) {
+    if (collapseThreadsPanel && collapsedForAgent.current !== agentId) {
+      collapsedForAgent.current = agentId;
       threadsPanel.current?.collapse();
-      collapsedForLanding.current = true;
-    } else if (collapsedForLanding.current) {
-      collapsedForLanding.current = false;
+    } else if (hasThread && collapsedForAgent.current === agentId) {
+      collapsedForAgent.current = null;
       threadsPanel.current?.expand();
     }
-  }, [collapseThreadsPanel]);
+  }, [collapseThreadsPanel, hasThread, agentId]);
 
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
