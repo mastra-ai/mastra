@@ -171,6 +171,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
+  -- Usage (OBS-381 / Decision 10: promoted from span attributes to columns)
+  inputTokens        Nullable(UInt64),
+  outputTokens       Nullable(UInt64),
+  totalTokens        Nullable(UInt64),
+  reasoningTokens    Nullable(UInt64),
+  cachedTokens       Nullable(UInt64),
+  estimatedCost      Nullable(Float64),
+  costUnit           LowCardinality(Nullable(String)),
+
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
   metadataSearch     Map(LowCardinality(String), String) DEFAULT map(),
@@ -241,6 +250,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+
+  -- Usage (OBS-381 / Decision 10: promoted from span attributes to columns)
+  inputTokens        Nullable(UInt64),
+  outputTokens       Nullable(UInt64),
+  totalTokens        Nullable(UInt64),
+  reasoningTokens    Nullable(UInt64),
+  cachedTokens       Nullable(UInt64),
+  estimatedCost      Nullable(Float64),
+  costUnit           LowCardinality(Nullable(String)),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -333,6 +351,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+
+  -- Usage (OBS-381 / Decision 10: promoted from span attributes to columns)
+  inputTokens        Nullable(UInt64),
+  outputTokens       Nullable(UInt64),
+  totalTokens        Nullable(UInt64),
+  reasoningTokens    Nullable(UInt64),
+  cachedTokens       Nullable(UInt64),
+  estimatedCost      Nullable(Float64),
+  costUnit           LowCardinality(Nullable(String)),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -1250,6 +1277,32 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  // Span usage columns (OBS-381 / Decision 10). Existing rows read back NULL.
+  // The trace_roots / trace_branches materialized views are `SELECT *` from
+  // span_events and `*` is expanded on every insert, so the MV targets must
+  // gain the columns BEFORE span_events does — otherwise inserts into
+  // span_events fail with "no such column" on the target between the ALTERs.
+  addColumn(TABLE_TRACE_ROOTS, 'inputTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_ROOTS, 'outputTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_ROOTS, 'totalTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_ROOTS, 'reasoningTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_ROOTS, 'cachedTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_ROOTS, 'estimatedCost', 'Nullable(Float64)'),
+  addColumn(TABLE_TRACE_ROOTS, 'costUnit', 'LowCardinality(Nullable(String))'),
+  addColumn(TABLE_TRACE_BRANCHES, 'inputTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'outputTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'totalTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'reasoningTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'cachedTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'estimatedCost', 'Nullable(Float64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'costUnit', 'LowCardinality(Nullable(String))'),
+  addColumn(TABLE_SPAN_EVENTS, 'inputTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'outputTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'totalTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'reasoningTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'cachedTokens', 'Nullable(UInt64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'estimatedCost', 'Nullable(Float64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'costUnit', 'LowCardinality(Nullable(String))'),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
   // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
   // immediately. With normal retention turning over the table, the index

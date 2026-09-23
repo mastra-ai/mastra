@@ -35,6 +35,8 @@ import {
   MV_TRACE_ROOTS_DELTA,
   MV_SCORE_EVENTS_DELTA,
   buildScoreEventsDeltaMvDDL,
+  MV_TRACE_BRANCHES,
+  MV_TRACE_ROOTS,
   parseTtlExpression,
   SCORE_EVENT_COLUMN_NAMES,
   TABLE_DELETION_REQUESTS,
@@ -47,8 +49,11 @@ import {
   TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_ROOTS_DELTA,
+  TRACE_BRANCHES_MV_DDL,
+  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
@@ -5916,6 +5921,126 @@ LIMIT 1`,
         await client.close();
       }
     });
+
+    it('migrates usage columns onto span_events and MV targets without breaking MV inserts', async () => {
+      // OBS-381: simulate a deployment created before the usage columns existed.
+      // The trace_roots / trace_branches MVs are `SELECT *` from span_events, so
+      // the migration must land the columns on the targets before the source and
+      // a span written afterwards must flow through the MV into trace_roots.
+      const usageColumns = [
+        'inputTokens',
+        'outputTokens',
+        'totalTokens',
+        'reasoningTokens',
+        'cachedTokens',
+        'estimatedCost',
+        'costUnit',
+      ];
+      const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      const listUsageColumns = async (table: string) => {
+        const result = await client.query({
+          query: `SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String} AND name IN ({names:Array(String)}) ORDER BY name`,
+          query_params: { table, names: usageColumns },
+          format: 'JSONEachRow',
+        });
+        return ((await result.json()) as Array<{ name: string }>).map(row => row.name);
+      };
+
+      try {
+        const storage = new ObservabilityStorageClickhouseVNext({ client });
+        await storage.init();
+        await storage.dangerouslyClearAll();
+
+        // ClickHouse refuses to DROP a column referenced by a `SELECT *` MV (it
+        // resolves `*` against the live source schema), so rebuild the older
+        // deployment shape: drop the MVs, drop the columns, recreate the MVs.
+        // The MVs are then in place while init() migrates, which is exactly the
+        // window where the target-before-source ordering matters.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_BRANCHES}` });
+        for (const table of spanTables) {
+          await client.command({
+            query: `ALTER TABLE ${table} ${usageColumns.map(column => `DROP COLUMN IF EXISTS ${column}`).join(', ')}`,
+          });
+          expect(await listUsageColumns(table)).toEqual([]);
+        }
+        await client.command({ query: TRACE_ROOTS_MV_DDL });
+        await client.command({ query: TRACE_BRANCHES_MV_DDL });
+
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+
+        for (const table of spanTables) {
+          expect(await listUsageColumns(table), `${table} should regain usage columns`).toEqual(
+            [...usageColumns].sort(),
+          );
+        }
+
+        const traceId = `usage-migration-${randomUUID()}`;
+        const startedAt = new Date();
+        await storage.createSpan({
+          span: {
+            traceId,
+            spanId: 'usage-migration-root',
+            parentSpanId: null,
+            name: 'agent run',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1_000),
+            inputTokens: 120,
+            outputTokens: 30,
+            totalTokens: 150,
+            reasoningTokens: 10,
+            cachedTokens: 40,
+            estimatedCost: 0.00123,
+            costUnit: 'usd',
+          },
+        });
+
+        const span = await waitForValue(
+          () => storage.getSpan({ traceId, spanId: 'usage-migration-root' }),
+          value => value?.span?.inputTokens === 120,
+        );
+        expect(span?.span).toMatchObject({
+          inputTokens: 120,
+          outputTokens: 30,
+          totalTokens: 150,
+          reasoningTokens: 10,
+          cachedTokens: 40,
+          estimatedCost: 0.00123,
+          costUnit: 'usd',
+        });
+
+        const rootRows = await waitForValue(
+          async () => {
+            const result = await client.query({
+              query: `SELECT inputTokens, totalTokens, estimatedCost, costUnit FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
+              query_params: { traceId },
+              format: 'JSONEachRow',
+            });
+            return (await result.json()) as Array<Record<string, unknown>>;
+          },
+          rows => rows.length > 0,
+        );
+        expect(rootRows[0]).toMatchObject({
+          inputTokens: 120,
+          totalTokens: 150,
+          estimatedCost: 0.00123,
+          costUnit: 'usd',
+        });
+      } finally {
+        await client.close();
+      }
+      // Every second init() in this describe block pays a ~30s stall on the
+      // shared client (see the sibling tests); this test runs two inits plus
+      // MV-visibility polling, so give it headroom above the 60s default.
+    }, 120_000);
   });
 });
 
