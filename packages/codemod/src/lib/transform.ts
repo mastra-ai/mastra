@@ -74,17 +74,13 @@ export type TransformErrors = {
 
 function parseErrors(transform: string, output: string): TransformErrors {
   const errors: TransformErrors = [];
-  const errorRegex = /ERR (.+) Transformation error/g;
-  const syntaxErrorRegex = /SyntaxError: .+/g;
+  const errorRegex = /^\s*ERR (.+?) Transformation error \((.*)\)\r?$/gm;
 
   let match;
   while ((match = errorRegex.exec(output)) !== null) {
     const filename = match[1]!;
-    const syntaxErrorMatch = syntaxErrorRegex.exec(output);
-    if (syntaxErrorMatch) {
-      const summary = syntaxErrorMatch[0];
-      errors.push({ transform, filename, summary });
-    }
+    const summary = match[2]!;
+    errors.push({ transform, filename, summary });
   }
 
   return errors;

@@ -82,4 +82,38 @@ describe('transform', () => {
     expect(childArgs).toContain(`--ignore-pattern=${path.join(path.resolve(source), '**/.*/**')}`);
     expect(childArgs).not.toContain('--ignore-pattern=**/.*/**');
   });
+
+  it('reports each transformation error with its matching file and message', async () => {
+    execFileMock.mockImplementationOnce((_file, _args, _options, callback) =>
+      callback(null, {
+        stdout: [
+          'Processing 2 files...',
+          " ERR /project/boom.ts Transformation error (Cannot read properties of undefined (reading 'name'))",
+          "TypeError: Cannot read properties of undefined (reading 'name')",
+          '    at transformer (/transforms/example.js:6:11)',
+          ' ERR /project/syntax.ts Transformation error (Unexpected token (1:13))',
+          'SyntaxError: Unexpected token (1:13)',
+          '    at toParseError (/parser/parse-error.ts:96:45)',
+          'Results:',
+          '2 errors',
+        ].join('\n'),
+        stderr: '',
+      }),
+    );
+
+    const result = await transform('v1/runtime-context', '.', {}, { logStatus: false });
+
+    expect(result.errors).toEqual([
+      {
+        transform: 'v1/runtime-context',
+        filename: '/project/boom.ts',
+        summary: "Cannot read properties of undefined (reading 'name')",
+      },
+      {
+        transform: 'v1/runtime-context',
+        filename: '/project/syntax.ts',
+        summary: 'Unexpected token (1:13)',
+      },
+    ]);
+  });
 });

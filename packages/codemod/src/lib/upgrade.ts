@@ -46,6 +46,7 @@ async function runCodemods(codemods: string[], options: TransformOptions, versio
     allErrors.forEach(({ transform, filename, summary }) => {
       error(`codemod=${transform}, path=${filename}, summary=${summary}`);
     });
+    process.exitCode = 1;
   }
 
   if (notImplementedAvailable) {
