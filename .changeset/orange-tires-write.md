@@ -2,7 +2,10 @@
 '@mastra/core': minor
 ---
 
-Added the trace aggregation registries that declare which trace fields can be grouped by, which fields `countDistinct` may target, and the v1 measures (`count`, `duration.*`, `errorCount`, `errorRate`) for the upcoming `aggregateTraces()` API.
+Added helpers to check which trace fields you can group by and which measures you can request for the upcoming `aggregateTraces()` API.
+
+- Group by trace fields such as `status` or `userId`, or by top-level `metadata.<key>` paths.
+- Supported measures: `count`, `duration.avg`/`min`/`max`/`p50`/`p90`/`p95`/`p99`, `errorCount`, `errorRate`, and `countDistinct.<field>`. Percentile values can be approximate.
 
 ```ts
 import {
@@ -18,5 +21,5 @@ isTraceAggregateDimension('traceId'); // false — identity fields are not dimen
 parseTraceAggregateMeasure('duration.p95'); // { type: 'canonical', measure: 'duration.p95', rule: { approximate: true, ... } }
 parseTraceAggregateMeasure('countDistinct.traceId'); // { type: 'countDistinct', field: 'traceId' }
 
-const dimensions = getTraceAggregateDimensionDescriptors(); // Decision 4 allowlist, in spec order
+const dimensions = getTraceAggregateDimensionDescriptors(); // all groupable trace fields
 ```
