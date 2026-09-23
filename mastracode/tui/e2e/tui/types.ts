@@ -254,12 +254,7 @@ export type McE2eStartMastraCodeAppOptions = {
   tui?: Partial<
     Pick<
       MastraTUIOptions,
-      | 'appName'
-      | 'initialMessage'
-      | 'skipInitialMessageOnResume'
-      | 'inlineQuestions'
-      | 'processMemoryDiagnostics'
-      | 'verbose'
+      'appName' | 'initialMessage' | 'resumeSkipNotice' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'
     >
   >;
 };

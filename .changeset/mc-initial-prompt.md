@@ -19,6 +19,8 @@ This opens the interactive TUI and submits the text as if you had typed it, then
 
 Mastra Code resumes the last conversation for a directory on startup. `--initial-prompt` only sends its prompt when there is nothing to resume, so relaunching in the same place doesn't repeat the task; `--send-prompt` sends it either way.
 
-`MASTRACODE_INITIAL_PROMPT` works like `--initial-prompt`, for launchers such as a terminal multiplexer, an editor pane or a wrapper. Mastra Code removes the variable at startup, so shells and nested Mastra Code sessions it starts never send the same prompt again. A flag wins over the variable, and piped stdin still works — it follows the prompt in the same first message.
+`MASTRACODE_INITIAL_PROMPT` works like `--initial-prompt`, for launchers such as a terminal multiplexer, an editor pane or a wrapper. Mastra Code removes the variable at startup, so shells and nested Mastra Code sessions it starts never send the same prompt again. A flag wins over the variable.
+
+Piped stdin still works. With a plain-text prompt it follows the prompt in the same first message, and it's skipped along with the prompt when `--initial-prompt` finds a conversation to resume. A slash command or `!` prompt can't be combined with piped stdin: Mastra Code exits with an error instead of passing the piped text to the command. Piped stdin on its own is always sent, as before.
 
 The first message (from a flag, the variable, or piped stdin) now renders once in the transcript instead of twice.

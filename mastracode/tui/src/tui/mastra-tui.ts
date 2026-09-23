@@ -410,11 +410,9 @@ export class MastraTUI {
     // Initial message (--initial-prompt / --send-prompt and/or piped stdin) is
     // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
-      if (this.state.options.skipInitialMessageOnResume && (await this.resumedConversation())) {
-        showInfo(
-          this.state,
-          'Resumed the existing conversation for this directory, so the initial prompt was not sent. Use --send-prompt to send it anyway.',
-        );
+      const { resumeSkipNotice } = this.state.options;
+      if (resumeSkipNotice && (await this.resumedConversation())) {
+        showInfo(this.state, resumeSkipNotice);
       } else {
         await this.submitUserInput(this.state.options.initialMessage);
       }

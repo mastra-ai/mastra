@@ -94,6 +94,7 @@ const RESUME_RESOURCE_ID = 'mc-e2e-initial-prompt-resume-resource';
 const RESUME_PROMPT = 'Return the Mastra Code resumed prompt phrase.';
 const SEEDED_REPLY = 'Seeded initial prompt resume assistant turn.';
 const FOLLOW_UP = 'Typed follow-up after resuming.';
+const PIPED_INPUT = 'Piped diff that must not reach the resumed conversation.';
 
 const quoteSql = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
@@ -116,6 +117,7 @@ values
 
 function resumeScenario(
   flag: '--initial-prompt' | '--send-prompt',
+  pipedInput: string | null = null,
 ): Pick<McE2eScenario, 'projectFixture' | 'useOpenAIModel' | 'aimockFixture' | 'env' | 'prepare' | 'inProcessApp'> {
   return {
     projectFixture: 'long-branch',
@@ -125,20 +127,24 @@ function resumeScenario(
     prepare: ({ dbPath, projectDir }) => seedConversation(dbPath, projectDir),
     async inProcessApp({ startMastraCodeApp }) {
       const args = takeInitialPrompt(['node', 'mastracode', flag, RESUME_PROMPT], {});
-      return startMastraCodeApp({ tui: initialMessageOptions(args, null) });
+      return startMastraCodeApp({ tui: initialMessageOptions(args, pipedInput) });
     },
   };
 }
 
 export const initialPromptResumeScenario: McE2eScenario = {
   name: 'initial-prompt-resume',
-  description: 'With --initial-prompt, a resumed conversation is shown without sending the prompt into it.',
-  testName: 'does not send --initial-prompt into a resumed conversation',
-  ...resumeScenario('--initial-prompt'),
+  description: 'With --initial-prompt and piped stdin, a resumed conversation is shown without sending either into it.',
+  testName: 'does not send --initial-prompt or piped stdin into a resumed conversation',
+  ...resumeScenario('--initial-prompt', PIPED_INPUT),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Seeded initial prompt resume assistant turn/, terminal, 15_000);
-    await runtime.waitForScreenText(/initial prompt was not sent\. Use --send-prompt/, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /initial prompt and piped input were not sent\.[\s\S]*--send-prompt to send them anyway/,
+      terminal,
+      8_000,
+    );
     runtime.printScreen('after resume', terminal);
     await runtime.waitForScreenTextAbsent(/Return the Mastra Code resumed prompt phrase/, terminal, 2_000);
 
@@ -153,6 +159,7 @@ export const initialPromptResumeScenario: McE2eScenario = {
     const body = JSON.stringify(requests);
     assert.ok(body.includes(FOLLOW_UP), 'the typed follow-up is sent');
     assert.ok(!body.includes(RESUME_PROMPT), 'the skipped initial prompt never reaches the model');
+    assert.ok(!body.includes(PIPED_INPUT), 'the skipped piped input never reaches the model');
   },
 };
 

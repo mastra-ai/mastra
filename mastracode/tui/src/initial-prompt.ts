@@ -61,13 +61,35 @@ export function composeInitialMessage(prompt: string | undefined, pipedInput: st
   return prompt ?? piped;
 }
 
+/**
+ * Why a startup prompt can't be combined with piped stdin, if it can't.
+ *
+ * The first message is submitted like typed input, so a prompt starting with
+ * `/` or `!` is dispatched as a command. Folding piped text into it would make
+ * that text part of the command — skill arguments, or a shell script for `!`.
+ */
+export function pipedInputConflict(
+  args: Pick<InitialPromptArgs, 'prompt' | 'flag'>,
+  pipedInput: string | null | undefined,
+): string | undefined {
+  if (!args.prompt || !pipedInput) return undefined;
+  if (!args.prompt.startsWith('/') && !args.prompt.startsWith('!')) return undefined;
+  const source = args.flag ?? INITIAL_PROMPT_ENV;
+  return `${source} can't be combined with piped stdin when it is a slash command or starts with !`;
+}
+
 /** The TUI options for a startup prompt and/or piped stdin. */
 export function initialMessageOptions(
   args: Pick<InitialPromptArgs, 'prompt' | 'sendOnResume'>,
   pipedInput?: string | null,
-) {
+): { initialMessage?: string; resumeSkipNotice?: string } {
   const initialMessage = composeInitialMessage(args.prompt, pipedInput);
   if (!initialMessage) return {};
   // Piped stdin on its own is always sent, as before.
-  return { initialMessage, skipInitialMessageOnResume: !!args.prompt && !args.sendOnResume };
+  if (!args.prompt || args.sendOnResume) return { initialMessage };
+  const skipped = pipedInput ? 'the initial prompt and piped input were' : 'the initial prompt was';
+  return {
+    initialMessage,
+    resumeSkipNotice: `Resumed the existing conversation for this directory, so ${skipped} not sent. Use ${SEND_PROMPT_FLAG} to send ${pipedInput ? 'them' : 'it'} anyway.`,
+  };
 }

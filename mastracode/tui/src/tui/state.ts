@@ -136,10 +136,11 @@ export interface MastraTUIOptions {
   initialMessage?: string;
 
   /**
-   * Don't send `initialMessage` when startup resumes a thread that already has
-   * messages (`--initial-prompt`); by default it is always sent.
+   * When set, don't send `initialMessage` if startup resumes a thread that
+   * already has messages (`--initial-prompt`); show this notice instead. By
+   * default the message is always sent.
    */
-  skipInitialMessageOnResume?: boolean;
+  resumeSkipNotice?: string;
 
   /** Whether to show verbose startup info */
   verbose?: boolean;

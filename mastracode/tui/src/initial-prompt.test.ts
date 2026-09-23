@@ -4,6 +4,7 @@ import {
   composeInitialMessage,
   INITIAL_PROMPT_ENV,
   initialMessageOptions,
+  pipedInputConflict,
   takeInitialPrompt,
 } from './initial-prompt.js';
 
@@ -110,16 +111,39 @@ describe('initialMessageOptions', () => {
   it('skips --initial-prompt and the env var on resume, but not --send-prompt or piped stdin alone', () => {
     expect(initialMessageOptions({ prompt: 'a', sendOnResume: false }, null)).toEqual({
       initialMessage: 'a',
-      skipInitialMessageOnResume: true,
+      resumeSkipNotice:
+        'Resumed the existing conversation for this directory, so the initial prompt was not sent. Use --send-prompt to send it anyway.',
     });
-    expect(initialMessageOptions({ prompt: 'a', sendOnResume: true }, null)).toEqual({
-      initialMessage: 'a',
-      skipInitialMessageOnResume: false,
-    });
+    expect(initialMessageOptions({ prompt: 'a', sendOnResume: true }, null)).toEqual({ initialMessage: 'a' });
     expect(initialMessageOptions({ prompt: undefined, sendOnResume: false }, 'log')).toEqual({
       initialMessage: 'The following was piped via stdin:\n\nlog',
-      skipInitialMessageOnResume: false,
     });
     expect(initialMessageOptions({ prompt: undefined, sendOnResume: false }, null)).toEqual({});
+  });
+
+  it('says piped input is skipped along with the prompt', () => {
+    expect(initialMessageOptions({ prompt: 'review this', sendOnResume: false }, 'diff')).toEqual({
+      initialMessage: 'review this\n\nThe following was piped via stdin:\n\ndiff',
+      resumeSkipNotice:
+        'Resumed the existing conversation for this directory, so the initial prompt and piped input were not sent. Use --send-prompt to send them anyway.',
+    });
+  });
+});
+
+describe('pipedInputConflict', () => {
+  it('rejects piped stdin with a slash command or ! prompt, naming where the prompt came from', () => {
+    expect(pipedInputConflict({ prompt: '!git apply -', flag: '--initial-prompt' }, 'diff')).toBe(
+      "--initial-prompt can't be combined with piped stdin when it is a slash command or starts with !",
+    );
+    expect(pipedInputConflict({ prompt: '/skill/review', flag: '--send-prompt' }, 'diff')).toMatch(/^--send-prompt /);
+    expect(pipedInputConflict({ prompt: '/skill/review', flag: undefined }, 'diff')).toMatch(
+      /^MASTRACODE_INITIAL_PROMPT /,
+    );
+  });
+
+  it('allows plain prompts with piped stdin, and commands without it', () => {
+    expect(pipedInputConflict({ prompt: 'review this', flag: '--initial-prompt' }, 'diff')).toBeUndefined();
+    expect(pipedInputConflict({ prompt: '!ls', flag: '--initial-prompt' }, null)).toBeUndefined();
+    expect(pipedInputConflict({ prompt: undefined, flag: undefined }, '!rm -rf /')).toBeUndefined();
   });
 });

@@ -18,7 +18,7 @@ import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
-import { initialMessageOptions, takeInitialPrompt } from './initial-prompt.js';
+import { initialMessageOptions, pipedInputConflict, takeInitialPrompt } from './initial-prompt.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -401,6 +401,12 @@ async function main() {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }
+  }
+
+  const conflict = pipedInputConflict(initialPrompt, pipedInput);
+  if (conflict) {
+    process.stderr.write(`${conflict}\n`);
+    process.exit(1);
   }
 
   return tuiMain(initialMessageOptions(initialPrompt, pipedInput));

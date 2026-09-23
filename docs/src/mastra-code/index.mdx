@@ -102,7 +102,9 @@ mastracode --initial-prompt "/skill/review-pr https://github.com/org/repo/pull/1
 mastracode --send-prompt "Pick up where we left off and run the tests"
 ```
 
-Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_INITIAL_PROMPT` instead. It works like `--initial-prompt`, and Mastra Code removes the variable at startup so shells and nested sessions it starts don't send the prompt again. A flag takes precedence over the variable. To run a task without the interactive UI and exit, use [headless mode](/headless).
+Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_INITIAL_PROMPT` instead. It works like `--initial-prompt`, and Mastra Code removes the variable at startup so shells and nested sessions it starts don't send the prompt again. A flag takes precedence over the variable.
+
+Piped stdin is added after a plain-text prompt in the same first message, and is skipped with the prompt when `--initial-prompt` resumes a conversation. A prompt that is a slash command or starts with `!` can't be combined with piped stdin. To run a task without the interactive UI and exit, use [headless mode](/headless).
 
 ## Slash commands
 
