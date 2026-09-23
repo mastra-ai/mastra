@@ -769,6 +769,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           workflowStatus: normalizedPrevResult.status,
           ...(normalizedPrevResult.status === 'success' ? { finalWorkflowResult: normalizedPrevResult.output } : {}),
+          ...(normalizedPrevResult.status === 'failed' ? { error: normalizedPrevResult.error } : {}),
         },
       },
     });

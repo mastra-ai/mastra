@@ -1087,6 +1087,30 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         },
       );
 
+      it.skipIf(skipTests.streamingErrorPreservation)(
+        'should put the run error on every failed workflow-finish event',
+        async () => {
+          const { workflow, resetMocks } = registry!['error-preserve-workflow']!;
+          const { stream } = ctx;
+          resetMocks?.();
+
+          if (!stream) {
+            return;
+          }
+
+          const { events } = await stream(workflow, {}, {}, 'stream');
+
+          const finishes = events.filter(event => event.type === 'workflow-finish');
+          expect(finishes.length).toBeGreaterThan(0);
+          for (const finish of finishes) {
+            expect(finish.payload).toMatchObject({
+              workflowStatus: 'failed',
+              error: expect.objectContaining({ message: 'Rate limit exceeded' }),
+            });
+          }
+        },
+      );
+
       it('should be able to use an agent as a step with detailed events (streamLegacy)', async () => {
         const { createWorkflow, createStep, Agent } = ctx;
 

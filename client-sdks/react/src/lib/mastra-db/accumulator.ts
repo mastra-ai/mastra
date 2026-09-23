@@ -298,6 +298,25 @@ const foldStepState = <TPayload extends { id: string }>(
   { stepCallId: _stepCallId, stepName: _stepName, ...state }: TPayload & { stepCallId?: string; stepName?: string },
 ) => ({ ...steps, [state.id]: { ...steps[state.id], ...state } });
 
+const finishRun = (
+  previous: WorkflowStreamResult<any, any, any, any>,
+  outcome: Extract<WorkflowStreamEvent, { type: 'workflow-finish' }>['payload'],
+): WorkflowStreamResult<any, any, any, any> => {
+  switch (outcome.workflowStatus) {
+    case 'success':
+      return { ...previous, status: 'success', result: outcome.finalWorkflowResult };
+    case 'failed':
+      return { ...previous, status: 'failed', error: outcome.error };
+    case 'tripwire':
+      return { ...previous, status: 'tripwire', tripwire: outcome.tripwire };
+    // The step-suspended events already folded the suspension; the finish only repeats it.
+    case 'suspended':
+      return previous;
+    default:
+      return { ...previous, status: outcome.workflowStatus };
+  }
+};
+
 /**
  * Workflow chunk accumulation. Mirrors
  * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
@@ -320,20 +339,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
   }
 
   if (chunk.type === 'workflow-finish') {
-    const finalStatus = chunk.payload.workflowStatus;
-    const lastStep = Object.values(previous.steps).pop();
-    // The finish event names the final status but may lack the result, error or tripwire that status promises.
-    return {
-      ...previous,
-      status: chunk.payload.workflowStatus,
-      ...(finalStatus === 'success' && lastStep?.status === 'success'
-        ? { result: lastStep?.output }
-        : finalStatus === 'failed' && lastStep?.status === 'failed'
-          ? { error: lastStep?.error }
-          : finalStatus === 'tripwire' && chunk.payload.tripwire
-            ? { tripwire: chunk.payload.tripwire }
-            : {}),
-    } as WorkflowStreamResult<any, any, any, any>;
+    return finishRun(previous, chunk.payload);
   }
 
   if (chunk.type === 'workflow-step-start' || chunk.type === 'workflow-step-result') {

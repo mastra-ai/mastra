@@ -12333,6 +12333,79 @@ describe('MastraInngestWorkflow', () => {
       );
     });
 
+    it('should put the run error on the workflow-finish event', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const chargeCard = createStep({
+        id: 'charge-card',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => {
+          throw new Error('Rate limit exceeded');
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'failing-finish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [chargeCard],
+        retryConfig: { attempts: 0 },
+      });
+      workflow.then(chargeCard).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'failing-finish-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun({ runId: 'failing-finish-run' });
+      const streamOutput = run.stream({ inputData: {} });
+
+      const events: StreamEvent[] = [];
+      for await (const event of streamOutput.fullStream) {
+        events.push(JSON.parse(JSON.stringify(event)));
+      }
+
+      srv.close();
+
+      const finishes = events.filter(event => event.type === 'workflow-finish');
+      expect(finishes.length).toBeGreaterThan(0);
+      for (const finish of finishes) {
+        expect(finish.payload).toMatchObject({
+          workflowStatus: 'failed',
+          error: expect.objectContaining({ message: 'Rate limit exceeded' }),
+        });
+      }
+    });
+
     it('should emit step-result and step-finish events when step fails', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',

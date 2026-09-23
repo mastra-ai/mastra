@@ -152,10 +152,10 @@ export class InngestRun<
 
                 const realtimeResult: Record<string, unknown> = {
                   steps: snapshot?.context,
-                  status: event.payload?.status ?? snapshot?.status,
+                  status: event.payload?.workflowStatus ?? snapshot?.status,
                   input: (snapshot?.context as Record<string, unknown>)?.input,
                 };
-                const resultValue = event.payload?.result ?? snapshot?.result;
+                const resultValue = event.payload?.finalWorkflowResult ?? snapshot?.result;
                 if (resultValue !== undefined) realtimeResult.result = resultValue;
                 const rawError = event.payload?.error ?? snapshot?.error;
                 if (rawError) {

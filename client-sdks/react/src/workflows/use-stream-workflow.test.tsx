@@ -132,7 +132,7 @@ describe('useStreamWorkflow stream ownership', () => {
       remote.send('workflow-step-start', { id: 'emit', status: 'running' });
       remote.sendCustomEvent('data-progress', { percent: 50 });
       remote.send('workflow-step-result', { id: 'emit', status: 'success', output: { ok: true } });
-      remote.send('workflow-finish', { workflowStatus: 'success' });
+      remote.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: { ok: true } });
       remote.close();
       await observation;
     });
@@ -141,6 +141,43 @@ describe('useStreamWorkflow stream ownership', () => {
       result: { ok: true },
       steps: { emit: { status: 'success' } },
     });
+  });
+
+  it('shows the workflow result from the finish event, not the last step output', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('mapped', remote.response);
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'mapped');
+    });
+    await act(async () => {
+      remote.send('workflow-step-result', { id: 'fetch', status: 'success', output: { raw: 'Paris' } });
+      remote.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: { city: 'Paris' } });
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'success', result: { city: 'Paris' } });
+  });
+
+  it('shows the run error even when a parallel step finishes after the failing one', async () => {
+    const { result, streams, invoke, onError } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('failing', remote.response);
+    const error = { name: 'Error', message: 'Rate limit exceeded' };
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'failing');
+    });
+    await act(async () => {
+      remote.send('workflow-step-result', { id: 'charge', status: 'failed', error });
+      remote.send('workflow-step-result', { id: 'notify', status: 'success', output: { sent: true } });
+      remote.send('workflow-finish', { workflowStatus: 'failed', error, metadata: {} });
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'failed', error });
+    expect(onError).toHaveBeenCalled();
   });
 
   it('continues observing a paused run and preserves opaque outputs, custom IDs and metadata', async () => {
@@ -166,7 +203,7 @@ describe('useStreamWorkflow stream ownership', () => {
         output,
         customMetadata: { ['__proto__']: 'ordinary payload key', values: [null, false] },
       });
-      remote.send('workflow-finish', { workflowStatus: 'success' });
+      remote.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: output });
       remote.close();
       await observation;
     });
@@ -218,7 +255,7 @@ describe('useStreamWorkflow stream ownership', () => {
         pendingCreate.resolve(Response.json({ runId: 'suspended' }));
         remote.send('workflow-start');
         remote.send('workflow-step-result', { id: 'approval', status: 'success', output: 'continued' });
-        remote.send('workflow-finish', { workflowStatus: 'success' });
+        remote.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: 'continued' });
         remote.close();
         await continuation;
       });
@@ -249,7 +286,7 @@ describe('useStreamWorkflow stream ownership', () => {
     expect(result.current.streamResult?.steps?.stale).toBeUndefined();
     await act(async () => {
       current.send('workflow-step-result', { id: 'current', status: 'success', output: false });
-      current.send('workflow-finish', { workflowStatus: 'success' });
+      current.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: false });
       current.close();
       await newOperation;
     });
@@ -280,7 +317,7 @@ describe('useStreamWorkflow stream ownership', () => {
     expect(result.current.isStreaming).toBe(true);
     await act(async () => {
       replacement.send('workflow-step-result', { id: 'replacement', status: 'success', output: 'new' });
-      replacement.send('workflow-finish', { workflowStatus: 'success' });
+      replacement.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: 'new' });
       replacement.close();
       await newOperation;
     });
@@ -312,7 +349,7 @@ describe('useStreamWorkflow stream ownership', () => {
     expect(result.current.isStreaming).toBe(true);
     await act(async () => {
       replacement.send('workflow-step-result', { id: 'replacement', status: 'success', output: ['new'] });
-      replacement.send('workflow-finish', { workflowStatus: 'success' });
+      replacement.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: ['new'] });
       replacement.close();
       await newOperation;
     });
