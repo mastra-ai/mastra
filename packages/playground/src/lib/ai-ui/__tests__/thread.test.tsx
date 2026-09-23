@@ -290,7 +290,9 @@ describe('Thread', () => {
       expect(heading.textContent).toContain('Helper');
       // Emphasis contract: only the agent name is high-contrast; the surrounding copy is muted and regular weight.
       expect(heading.classList.contains('font-normal')).toBe(true);
-      expect(screen.getByText('Helper').classList.contains('text-foreground')).toBe(true);
+      const name = screen.getByText('Helper');
+      expect(name.classList.contains('font-medium')).toBe(true);
+      expect(name.classList.contains('starter-shimmer-ink')).toBe(true);
       const landing = screen.getByTestId('thread-landing');
       expect(landing.contains(heading)).toBe(true);
       expect(landing.contains(screen.getByRole('textbox'))).toBe(true);

@@ -136,27 +136,38 @@ th:has(header) {
    * One diagonal light sweep across the landing greeting, timed to land once the
    * suggested prompts have finished staggering in (last chip ≈ 540ms + 420ms).
    */
+  /* With a 300% image, 100% → 0% moves the centered band once across the box, left to right. */
   @keyframes starter-shimmer {
     from {
-      transform: translateX(-100%);
+      background-position: 100% 0;
     }
     to {
-      transform: translateX(100%);
+      background-position: 0% 0;
     }
   }
+  /*
+   * The gradient is clipped to the glyphs: the text is painted transparent and
+   * the sweep lives in its background. `--shimmer-base` is the resting text tone,
+   * so each tone in the greeting sets it and still gets the same white highlight.
+   */
   .starter-shimmer {
-    position: relative;
-    display: inline-block;
-    overflow: hidden;
-  }
-  /* A white band sweeps over the glyphs, so they briefly lighten while the band stays near-invisible on the light surface. */
-  .starter-shimmer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.85) 50%, transparent 65%);
+    --shimmer-base: var(--color-muted-foreground);
+    color: transparent;
+    background-image: linear-gradient(
+      115deg,
+      var(--shimmer-base) 42%,
+      color-mix(in oklab, var(--shimmer-base) 25%, white) 50%,
+      var(--shimmer-base) 58%
+    );
+    background-size: 300% 100%;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+    background-clip: text;
+    -webkit-background-clip: text;
     animation: starter-shimmer 1100ms ease-in-out 1000ms both;
+  }
+  .starter-shimmer-ink {
+    --shimmer-base: var(--color-foreground);
   }
 
   /*
@@ -240,7 +251,7 @@ th:has(header) {
     .starter-heading,
     .starter-prompt,
     .starter-chip,
-    .starter-shimmer::after,
+    .starter-shimmer,
     .ready-stage::before,
     .ready-stage-content {
       animation: none;

@@ -304,7 +304,8 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
         className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
       >
         <span className="starter-shimmer">
-          What can <span className="font-medium text-foreground">{agentName || 'this agent'}</span> do for you today?
+          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
+          do for you today?
         </span>
       </Txt>
     </div>
