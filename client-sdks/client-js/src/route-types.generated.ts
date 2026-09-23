@@ -247,6 +247,7 @@ type InputShared_Type_1 = {
 };
 
 type InputShared_Type_2 = {
+  rootSpanName?: string | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -3081,6 +3082,7 @@ type Shared_Type_46 = {
     | 'step'
     | 'agent'
     | 'tool'
+    | 'classifier'
     | 'mapping'
     | 'sleep'
     | 'sleepUntil'

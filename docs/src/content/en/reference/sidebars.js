@@ -690,6 +690,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'processors/agents-md-injector', label: 'AgentsMDInjector' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
+        { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
@@ -969,6 +970,7 @@ const sidebars = {
           items: [
             { type: 'doc', id: 'workflows/workflow-methods/agent', label: '.agent()' },
             { type: 'doc', id: 'workflows/workflow-methods/branch', label: '.branch()' },
+            { type: 'doc', id: 'workflows/workflow-methods/classifier', label: '.classifier()' },
             { type: 'doc', id: 'workflows/workflow-methods/commit', label: '.commit()' },
             { type: 'doc', id: 'workflows/workflow-methods/create-run', label: '.createRun()' },
             { type: 'doc', id: 'workflows/workflow-methods/dountil', label: '.dountil()' },
