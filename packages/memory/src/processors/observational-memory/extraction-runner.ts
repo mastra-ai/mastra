@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
 import { buildExtractorPriorLines } from './extractor';
-import { hasAbortInChain, withRetry } from './retry';
+import { hasAbortInChain, isTransientLLMError, withRetry } from './retry';
 
 export interface StructuredExtractionResult {
   values: Record<string, unknown>;
@@ -103,6 +103,16 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   } catch (error) {
     if (isAbortError(error, opts.abortSignal)) {
       throw error;
+    }
+
+    // The retry ladder already exhausted transient failures; the JSON-prompt
+    // fallback only helps providers that reject native structured output.
+    if (isTransientLLMError(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        values,
+        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+      };
     }
 
     try {

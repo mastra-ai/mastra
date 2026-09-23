@@ -537,3 +537,50 @@ describe('sync reflection suppression (unchanged input)', () => {
     expect(createReflectionGeneration).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('reflector failure marker handling', () => {
+  it('surfaces the original sync reflector error when failed-marker storage also fails', async () => {
+    const failing = createFailingModel();
+    const { runner, emitDebugEvent, persistMarkerToStorage } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'abort', maxRetries: 0 },
+    });
+    persistMarkerToStorage.mockImplementation(async (marker: { type: string }) => {
+      if (marker.type === 'data-om-observation-failed') throw new Error('storage down');
+    });
+    const onReflectionEnd = vi.fn();
+
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+        reflectionHooks: { onReflectionEnd },
+      } as any),
+    ).rejects.toThrow(/terminated/);
+
+    expect(emitDebugEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'reflection_failed' }));
+    expect(onReflectionEnd).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(Error) }));
+  });
+
+  it('records the configured failure policy on async buffered reflection failure markers', async () => {
+    const failing = createFailingModel();
+    const { runner, persistMarkerToStorage } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+      storage: { setBufferingReflectionFlag: vi.fn(async () => {}) },
+      buffering: { getReflectionBufferKey: (k: string) => `reflect:${k}`, isAsyncBufferingInProgress: () => false },
+    });
+    vi.spyOn(runner as any, 'doAsyncBufferedReflection').mockRejectedValue(
+      new OmModelExecutionError('reflector-model', new TypeError('terminated')),
+    );
+
+    (runner as any).startAsyncBufferedReflection(makeRecord(), 100, 'thread-1:resource-1', {
+      custom: vi.fn(async () => {}),
+    });
+    await BufferingCoordinator.asyncBufferingOps.get('reflect:thread-1:resource-1');
+
+    const failedMarker = persistMarkerToStorage.mock.calls
+      .map(call => call[0] as { type: string; data: Record<string, unknown> })
+      .find(marker => marker.type === 'data-om-buffering-failed');
+    expect(failedMarker?.data.failurePolicy).toBe('continue');
+  });
+});

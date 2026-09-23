@@ -183,9 +183,7 @@ const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
  * already evaluated.
  */
 type TryActivateResult =
-  | { status: 'activated' }
-  | { status: 'no-buffer' }
-  | { status: 'suppressed'; reason: 'composition' | 'size' };
+  { status: 'activated' } | { status: 'no-buffer' } | { status: 'suppressed'; reason: 'composition' | 'size' };
 
 /**
  * Runs the Reflector agent for compressing observations.
@@ -704,6 +702,7 @@ export class ReflectorRunner {
               startedAt: new Date().toISOString(),
               tokensAttempted: observationTokens,
               error,
+              failurePolicy: this.reflectionConfig.failurePolicy,
               recordId: record.id,
               threadId: record.threadId ?? '',
             });
@@ -1442,6 +1441,7 @@ export class ReflectorRunner {
         usage: reflectResult.usage,
       });
     } catch (error) {
+      reflectionError = error instanceof Error ? error : new Error(String(error));
       const failedMarker = createObservationFailedMarker({
         cycleId: streamContext?.cycleId ?? cycleId,
         operationType: 'reflection',
@@ -1471,9 +1471,13 @@ export class ReflectorRunner {
         persistedToList = false;
       }
       if (!persistedToList) {
-        await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+        // Best-effort: a marker storage failure must not replace the reflector error.
+        try {
+          await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+        } catch (markerError) {
+          omError('[OM] Failed to persist reflection-failed marker', markerError);
+        }
       }
-      reflectionError = error instanceof Error ? error : new Error(String(error));
       this.emitDebugEvent({
         type: 'reflection_failed',
         timestamp: new Date(),

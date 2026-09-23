@@ -415,6 +415,31 @@ describe('Extractor', () => {
     }
   });
 
+  it('returns failures without a second retry ladder once transient retries are exhausted', async () => {
+    const originalRetryConfig = { ...RETRY_CONFIG };
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 4;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+      const stream = vi.fn().mockRejectedValue(Object.assign(new Error('rate limited'), { statusCode: 429 }));
+
+      const result = await extractStructuredValues({
+        agent: { stream } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        maxRetries: 2,
+      });
+
+      expect(result.failures).toEqual([{ slug: 'priority', error: 'rate limited' }]);
+      // One ladder (initial call + 2 retries), and no JSON-prompt fallback ladder.
+      expect(stream).toHaveBeenCalledTimes(3);
+      expect(stream.mock.calls.every(call => call[1].structuredOutput.jsonPromptInjection === undefined)).toBe(true);
+    } finally {
+      Object.assign(RETRY_CONFIG, originalRetryConfig);
+    }
+  });
+
   it('uses streaming for structured extraction', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi.fn();

@@ -2,4 +2,11 @@
 '@mastra/core': patch
 ---
 
-Added `maxRetries` and `failurePolicy` to the observational-memory `observation` and `reflection` config types, and updated AgentController to preserve observational-memory failure diagnostics while allowing explicitly classified Observer and Reflector model failures to continue when the memory policy requests it. Unclassified observational-memory failures retain the existing request-abort behavior.
+Added `maxRetries` and `failurePolicy` options to the observational memory `observation` and `reflection` settings. When `failurePolicy` is `'continue'`, an Observer or Reflector model failure no longer ends the agent turn.
+
+```ts
+observationalMemory: {
+  observation: { maxRetries: 2, failurePolicy: 'continue' },
+  reflection: { maxRetries: 2, failurePolicy: 'continue' },
+}
+```

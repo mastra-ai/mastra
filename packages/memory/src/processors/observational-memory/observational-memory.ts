@@ -1027,6 +1027,14 @@ export class ObservationalMemory {
    * Ensures bufferTokens is less than the threshold and bufferActivation is valid.
    */
   private validateBufferConfig(): void {
+    for (const [path, value] of [
+      ['observation.maxRetries', this.observationConfig.maxRetries],
+      ['reflection.maxRetries', this.reflectionConfig.maxRetries],
+    ] as const) {
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`${path} must be a finite non-negative integer, got ${value}`);
+      }
+    }
     // Async buffering is not yet supported with resource scope
     const hasAsyncBuffering =
       this.observationConfig.bufferTokens !== undefined ||
@@ -1855,8 +1863,7 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id: string }; resourceId?: string } | undefined;
 
     if (memoryContext?.thread?.id) {
       return {

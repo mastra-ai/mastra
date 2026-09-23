@@ -11,8 +11,9 @@ export function findLastCompletedObservationBoundary(message: MastraDBMessage): 
 
   // Search from the end to find the most recent end marker
   for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i] as { type?: string };
-    if (part?.type === 'data-om-observation-end') {
+    const part = parts[i] as { type?: string; data?: { operationType?: string } };
+    // Reflection markers live on the user message but do not observe its parts.
+    if (part?.type === 'data-om-observation-end' && part.data?.operationType !== 'reflection') {
       return i;
     }
   }

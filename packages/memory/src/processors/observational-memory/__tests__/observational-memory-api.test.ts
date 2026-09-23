@@ -4443,3 +4443,41 @@ describe('config-level hooks', () => {
     );
   });
 });
+
+describe('maxRetries validation', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])('rejects observation/reflection maxRetries of %s', value => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    for (const stage of ['observation', 'reflection'] as const) {
+      expect(
+        () =>
+          new ObservationalMemory({
+            storage,
+            scope: 'thread',
+            observation: {
+              model: 'mock/model',
+              messageTokens: 500,
+              ...(stage === 'observation' ? { maxRetries: value } : {}),
+            },
+            reflection: {
+              model: 'mock/model',
+              observationTokens: 10000,
+              ...(stage === 'reflection' ? { maxRetries: value } : {}),
+            },
+          }),
+      ).toThrow(`${stage}.maxRetries must be a finite non-negative integer`);
+    }
+  });
+
+  it('accepts zero retries', () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          observation: { model: 'mock/model', messageTokens: 500, maxRetries: 0 },
+          reflection: { model: 'mock/model', observationTokens: 10000, maxRetries: 0 },
+        }),
+    ).not.toThrow();
+  });
+});
