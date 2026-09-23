@@ -186,7 +186,50 @@ describe('IdentityClaimsSection', () => {
     });
   });
 
-  it('given an integration with no observed candidates, when opened, then it explains the empty state', async () => {
+  it('given unsaved edits on integration B, when integration A is saved, then integration B keeps its unsaved edits', async () => {
+    const calls = stub({
+      integrations: [{ id: 'github' }, { id: 'linear' }],
+      claims: [],
+      candidates: {
+        github: [octocat],
+        linear: [{ externalUserId: 'alice', label: 'Alice Linear', sources: ['observed'] }],
+      },
+    });
+
+    renderWithProviders(<IdentityClaimsSection />);
+
+    // Open both panels.
+    await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Linear/ }));
+
+    // Compose an unsaved edit on Linear: check Alice.
+    const alice = await screen.findByText('Alice Linear');
+    const aliceCheckbox = alice.closest('li')?.querySelector('input[type="checkbox"]');
+    await userEvent.click(aliceCheckbox as HTMLInputElement);
+    expect((aliceCheckbox as HTMLInputElement).checked).toBe(true);
+
+    // Save GitHub — this invalidates the shared claims query.
+    const octocatLabel = await screen.findByText('The Octocat');
+    const octocatCheckbox = octocatLabel.closest('li')?.querySelector('input[type="checkbox"]');
+    await userEvent.click(octocatCheckbox as HTMLInputElement);
+    // Two Save buttons — GitHub's is the enabled one first (Linear's is
+    // enabled too since Alice is checked). Grab both, click GitHub's.
+    const saveButtons = screen.getAllByRole('button', { name: 'Save' });
+    // Order: GitHub first (opened first).
+    await userEvent.click(saveButtons[0]);
+
+    await waitFor(() => expect(calls.posts).toHaveLength(1));
+    expect(calls.posts[0]?.integrationId).toBe('github');
+
+    // Linear's Alice checkbox must still be checked — the shared claims
+    // invalidation from the GitHub save must not clobber Linear's unsaved
+    // edits.
+    const aliceAfter = screen.getByText('Alice Linear');
+    const aliceCheckboxAfter = aliceAfter.closest('li')?.querySelector('input[type="checkbox"]');
+    expect((aliceCheckboxAfter as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('given an integration with no observed candidates, when opened, then it explains and offers manual entry', async () => {
     stub({
       integrations: [{ id: 'github' }],
       claims: [],
@@ -197,10 +240,33 @@ describe('IdentityClaimsSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
 
-    expect(
-      await screen.findByText(
-        'No accounts found. Once this integration observes an external user in its data, they will appear here.',
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No accounts observed yet on this integration/)).toBeInTheDocument();
+    expect(screen.getByLabelText('GitHub id')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+  });
+
+  it('given no candidates, when the user types an id and clicks Add, then it POSTs a claim for that manual id', async () => {
+    const calls = stub({
+      integrations: [{ id: 'github' }],
+      claims: [],
+      candidates: { github: [] },
+    });
+
+    renderWithProviders(<IdentityClaimsSection />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
+
+    const idInput = await screen.findByLabelText('GitHub id');
+    const nameInput = screen.getByLabelText('GitHub display name');
+    await userEvent.type(idInput, 'octocat');
+    await userEvent.type(nameInput, 'The Octocat');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(calls.posts).toHaveLength(1));
+    expect(calls.posts[0]).toMatchObject({
+      integrationId: 'github',
+      externalUserId: 'octocat',
+      label: 'The Octocat',
+    });
   });
 });

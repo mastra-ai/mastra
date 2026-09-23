@@ -166,6 +166,14 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
           if (!integrationId || !externalUserId || !label || email === false) {
             return context.json({ error: 'invalid_body' }, 400);
           }
+          // Refuse claims against integrations that don't advertise the
+          // identity capability. Prevents an authenticated tenant from
+          // writing thousands of dangling claim rows against arbitrary
+          // provider ids that no consumer would ever surface.
+          const known = this.deps.service.listIdentityIntegrations();
+          if (!known.some(descriptor => descriptor.id === integrationId)) {
+            return context.json({ error: 'unknown_integration' }, 400);
+          }
           const existing = await this.deps.service.listMyClaims(tenant.orgId, tenant.userId);
           const wasPresent = existing.some(
             claim => claim.integrationId === integrationId && claim.externalUserId === externalUserId,

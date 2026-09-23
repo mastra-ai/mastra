@@ -44,7 +44,7 @@ function matchesQuery(candidate: IntegrationCandidateAccount, needle: string): b
 }
 
 export async function listObservedCommentAuthors(
-  comments: WorkItemCommentsStorage,
+  comments: Pick<WorkItemCommentsStorage, 'listExternalAuthorsForOrg'>,
   args: ObservedCommentAuthorsArgs,
 ): Promise<IntegrationCandidateAccount[]> {
   const rows = await comments.listExternalAuthorsForOrg({

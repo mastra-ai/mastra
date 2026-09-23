@@ -143,9 +143,18 @@ describe('IdentityRoutes', () => {
   });
 
   describe('POST /web/identity/claims', () => {
+    const githubIdentity: IntegrationIdentityCapability = { listCandidateAccounts: async () => [] };
+    const identityCapableIntegrations = () => [
+      { integration: fakeIntegration('github', githubIdentity), context: fakeContext() },
+    ];
+
     it('creates a fresh claim with 201', async () => {
       const seed = await createFactoryStorageForTests();
-      const app = await buildApp({ storage: seed.integrationIdentity, user: orgUser });
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        user: orgUser,
+        integrations: identityCapableIntegrations(),
+      });
       const response = await app.request('/web/identity/claims', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -167,7 +176,11 @@ describe('IdentityRoutes', () => {
 
     it('replays a claim with 200 (idempotent)', async () => {
       const seed = await createFactoryStorageForTests();
-      const app = await buildApp({ storage: seed.integrationIdentity, user: orgUser });
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        user: orgUser,
+        integrations: identityCapableIntegrations(),
+      });
       const body = {
         integrationId: 'github',
         externalUserId: 'octocat',
@@ -192,7 +205,11 @@ describe('IdentityRoutes', () => {
 
     it('rejects a body missing required fields with 400', async () => {
       const seed = await createFactoryStorageForTests();
-      const app = await buildApp({ storage: seed.integrationIdentity, user: orgUser });
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        user: orgUser,
+        integrations: identityCapableIntegrations(),
+      });
       const response = await app.request('/web/identity/claims', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -203,13 +220,40 @@ describe('IdentityRoutes', () => {
 
     it('rejects an entirely non-JSON body with 400', async () => {
       const seed = await createFactoryStorageForTests();
-      const app = await buildApp({ storage: seed.integrationIdentity, user: orgUser });
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        user: orgUser,
+        integrations: identityCapableIntegrations(),
+      });
       const response = await app.request('/web/identity/claims', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: 'not json',
       });
       expect(response.status).toBe(400);
+    });
+
+    it('rejects a claim against an integration that does not advertise the identity capability', async () => {
+      const seed = await createFactoryStorageForTests();
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        user: orgUser,
+        integrations: identityCapableIntegrations(),
+      });
+      const response = await app.request('/web/identity/claims', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          integrationId: 'not-a-real-integration',
+          externalUserId: 'octocat',
+          label: 'Octocat',
+        }),
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toBe('unknown_integration');
+      const listed = await seed.integrationIdentity.listByUser({ orgId: 'org-1', userId: 'user-1' });
+      expect(listed).toHaveLength(0);
     });
   });
 

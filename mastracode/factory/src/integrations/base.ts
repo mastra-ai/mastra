@@ -135,11 +135,11 @@ export interface IntegrationContext {
      */
     integrationIdentity: IntegrationIdentityStorage;
     /**
-     * Work-item comments handle. Integration identity capabilities read
-     * `author_external` here to build the source-(a) observed list of
-     * external users the integration has already seen touch factory data.
+     * Work-item comments handle. Narrowed to the single reader the identity
+     * capability needs; broader comment CRUD stays on the feed and comments
+     * domain that own it.
      */
-    comments: WorkItemCommentsStorage;
+    comments: Pick<WorkItemCommentsStorage, 'listExternalAuthorsForOrg'>;
   };
   /**
    * Factory runtime available when the work-item domain is ready.

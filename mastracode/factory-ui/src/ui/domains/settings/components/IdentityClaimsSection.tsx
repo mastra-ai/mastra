@@ -139,6 +139,8 @@ function IntegrationClaimGroup({ integrationId, claims }: { integrationId: strin
 
 function IntegrationClaimPanel({ integrationId, claims }: { integrationId: string; claims: IdentityClaim[] }) {
   const [query, setQuery] = useState('');
+  const [manualId, setManualId] = useState('');
+  const [manualLabel, setManualLabel] = useState('');
   const candidatesQuery = useIdentityCandidatesQuery(integrationId, query || undefined);
   const upsert = useUpsertIdentityClaimMutation();
   const remove = useRemoveIdentityClaimMutation();
@@ -146,9 +148,14 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
   const claimedIds = useMemo(() => new Set(claims.map(claim => claim.externalUserId)), [claims]);
   const [pendingChecks, setPendingChecks] = useState<Set<string>>(claimedIds);
 
-  // Reset the working set whenever the claim baseline changes underfoot (a
-  // save on another integration invalidates the shared claims query).
-  useMemoSyncClaimed(claimedIds, setPendingChecks);
+  // Advance the working set only when the user has no in-progress edits for
+  // this integration (i.e. the local set still matches the previous baseline).
+  // A save elsewhere invalidates the shared claims query and re-renders us,
+  // but we must not silently discard checkbox changes the user is composing
+  // on this panel — that also covers the same-panel post-save case (after a
+  // successful save the new baseline equals the local set, so this advances
+  // cleanly without churning the checkboxes).
+  useAdvanceBaselineWhenClean(claimedIds, pendingChecks, setPendingChecks);
 
   const candidates: IdentityCandidate[] = candidatesQuery.data ?? [];
 
@@ -216,7 +223,8 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
         <SkeletonRows label="Loading accounts" rows={3} rowClassName="h-10 w-full" />
       ) : merged.length === 0 ? (
         <Txt as="p" variant="ui-sm" className="text-icon3">
-          No accounts found. Once this integration observes an external user in its data, they will appear here.
+          No accounts observed yet on this integration. Add your account id below to enable the <code>@me</code> filter
+          for records that reference you.
         </Txt>
       ) : (
         <ul aria-label={`${integrationLabel(integrationId)} accounts`} className="flex flex-col gap-1">
@@ -246,6 +254,47 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
           })}
         </ul>
       )}
+
+      <div className="border-border1 flex flex-col gap-2 border-t pt-3">
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Add an account by its {integrationLabel(integrationId)} id (e.g. <code>octocat</code> for GitHub).
+        </Txt>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            aria-label={`${integrationLabel(integrationId)} id`}
+            placeholder="account id"
+            value={manualId}
+            onChange={event => setManualId(event.target.value)}
+            className="bg-surface3 border-border1 text-ui-sm h-8 min-w-32 flex-1 rounded-md border px-2"
+          />
+          <input
+            aria-label={`${integrationLabel(integrationId)} display name`}
+            placeholder="display name (optional)"
+            value={manualLabel}
+            onChange={event => setManualLabel(event.target.value)}
+            className="bg-surface3 border-border1 text-ui-sm h-8 min-w-32 flex-1 rounded-md border px-2"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              const id = manualId.trim();
+              if (!id) return;
+              await upsert.mutateAsync({
+                integrationId,
+                externalUserId: id,
+                label: manualLabel.trim() || id,
+              });
+              setManualId('');
+              setManualLabel('');
+            }}
+            disabled={!manualId.trim() || isBusy}
+          >
+            Add
+          </Button>
+        </div>
+      </div>
 
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="primary" size="sm" onClick={onSave} disabled={!dirty || isBusy}>
@@ -282,30 +331,33 @@ function diffClaims(
 }
 
 /**
- * When the claim baseline changes (a save elsewhere invalidates the
- * shared claims query), re-seed the working checkbox set. Uses a stable
- * key comparison so a claim set with the same ids doesn't cause churn.
+ * When the shared claims query resolves with a new baseline, advance the
+ * working checkbox set to it — but only if the user has no in-progress
+ * edits on this panel. A save on a different integration invalidates the
+ * shared claims query too; without this guard, the invalidation would
+ * blow away unsaved checkbox changes here.
+ *
+ * Uses a stable key comparison so the baseline-set identity churn from
+ * every refetch doesn't cause re-runs.
  */
-function useMemoSyncClaimed(
+function useAdvanceBaselineWhenClean(
   claimedIds: ReadonlySet<string>,
-  setPending: (updater: (current: Set<string>) => Set<string>) => void,
+  pending: ReadonlySet<string>,
+  setPending: (next: Set<string>) => void,
 ) {
-  const key = [...claimedIds].sort().join('\u0000');
-  useMemoSyncClaimedImpl(key, claimedIds, setPending);
+  const newBaselineKey = setKey(claimedIds);
+  const [previousBaselineKey, setPreviousBaselineKey] = useState(newBaselineKey);
+  if (previousBaselineKey !== newBaselineKey) {
+    setPreviousBaselineKey(newBaselineKey);
+    // Only reseed when the local set matches the *previous* baseline: that
+    // means the user hasn't changed anything on this panel and it's safe to
+    // move them forward. If they have unsaved changes, keep them intact.
+    if (setKey(pending) === previousBaselineKey) {
+      setPending(new Set(claimedIds));
+    }
+  }
 }
 
-/**
- * Split so the effect deps read the stable key string, not the set (whose
- * identity changes on every query resolution).
- */
-function useMemoSyncClaimedImpl(
-  key: string,
-  claimedIds: ReadonlySet<string>,
-  setPending: (updater: (current: Set<string>) => Set<string>) => void,
-) {
-  const [lastKey, setLastKey] = useState(key);
-  if (lastKey !== key) {
-    setLastKey(key);
-    setPending(() => new Set(claimedIds));
-  }
+function setKey(set: ReadonlySet<string>): string {
+  return [...set].sort().join('\u0000');
 }
