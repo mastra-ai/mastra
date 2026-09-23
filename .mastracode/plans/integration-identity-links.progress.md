@@ -146,6 +146,27 @@ Recorded so future regressions can be distinguished from noise. All 7 failures a
 **Deviations**:
 - Plan calls for Playwright e2e. `factory-ui` uses MSW as its primary e2e substrate (per its `AGENTS.md`; Playwright is used only for cross-page journeys MSW cannot model). The claim-to-`@me` flow lives entirely inside the React Query cache and the settings/board/search hooks that read it — MSW models it in one shot without spinning up a browser. Deviation: cover the flow with `IdentityClaimsRoundtrip.msw.test.tsx` instead of a Playwright test, matching the Phase 4 deviation on the same substrate. Same user-visible outcome verified end-to-end through the real client + React Query stack; no browser rendering.
 
+### Ship checks (final)
+
+**Status**: complete. Reviewer verdict: no must-fix outstanding.
+
+**Round 3 adversarial review** — confirmed the round-2 regression is fixed by unifying manual-add with the checkbox Save path. New MSW regression guard proves 2 POSTs and 0 DELETEs when a user Adds a manual id alongside an in-progress checkbox edit. Round-3 non-blockers (case-sensitivity split in unused `filters/at-me.ts` production consumer, storage 2000-row cap, unused `mergeCandidates` export, `wasPresent` double-scan, `manualCandidates` reset on expander collapse) recorded as Follow-ups.
+
+**Final gate matrix** (post-fixes, HEAD `86a75e27bd`):
+
+| Command | Result | Notes |
+| --- | --- | --- |
+| `pnpm --filter @mastra/factory test --run --reporter=dot` | ✅ 2897 passed, 6 skipped (150 files, 14.99s) | +44 tests vs baseline |
+| `pnpm --filter @internal/factory-ui exec vitest run src/ui/domains/settings --reporter=dot` | ✅ 148 passed (21 files, 3.82s) | +11 tests vs baseline in this scope |
+| `pnpm --filter @mastra/factory exec tsc --noEmit` | ✅ clean | |
+| `pnpm --filter @internal/factory-ui typecheck` | ✅ clean | |
+| `pnpm --filter @mastra/factory lint` | ✅ 0 warnings, 0 errors | |
+
+**Ship artifacts**:
+- Changeset `.changeset/kind-pets-agree.md` — `@mastra/factory` minor, `@mastra/connect` patch (auto-detected from `@internal/factory-ui`).
+- Docs — `mastracode/factory/README.md` gains an "Identity claims and `@me` filter" section covering the opt-in helper (`buildCommentAuthorsIdentity`), settings UI, and HTTP surface (`/web/identity/*`).
+- Progress file (this file) records every phase, deviation, amendment, and Follow-up.
+
 ## Follow-ups
 
 - Fix or delete the 7 pre-existing factory-ui msw test failures (out of scope for this plan; recorded so someone owns them). Phase 5 confirmed an 8th flaky test (`ActivityLine.msw.test.tsx > steps aside while the answer streams`) that passes in isolation but flakes under full-suite load.
