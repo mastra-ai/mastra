@@ -252,6 +252,7 @@ describe('ClassifierProcessor', () => {
       const processor = new ClassifierProcessor({
         classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
         onResult,
+        errorStrategy: 'warn',
       });
       const abort = abortThatThrows();
       const messages = [message('1', 'text')];
@@ -264,12 +265,11 @@ describe('ClassifierProcessor', () => {
       expect(warn).toHaveBeenCalled();
     });
 
-    it('aborts when the classifier fails with errorStrategy strict', async () => {
+    it('aborts by default when the classifier fails', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const processor = new ClassifierProcessor({
         classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
         onResult: noop,
-        errorStrategy: 'strict',
       });
       const abort = abortThatThrows();
 
@@ -381,6 +381,7 @@ describe('ClassifierProcessor', () => {
       const processor = new ClassifierProcessor({
         classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
         onResult: noop,
+        errorStrategy: 'warn',
       });
       const part = textDelta('text');
 
@@ -394,12 +395,11 @@ describe('ClassifierProcessor', () => {
       expect(result).toBe(part);
     });
 
-    it('aborts the stream when classification fails with errorStrategy strict', async () => {
+    it('aborts the stream by default when classification fails', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const processor = new ClassifierProcessor({
         classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
         onResult: noop,
-        errorStrategy: 'strict',
       });
       const part = textDelta('text');
       const abort = abortThatThrows();

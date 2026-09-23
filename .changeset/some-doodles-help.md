@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `ClassifierProcessor` for applying typed classifier policies to agent input, output, and streaming content.
+Added `ClassifierProcessor` for applying typed classifier policies to agent input, output, and streaming content. Evaluation failures fail closed by default. Pass `errorStrategy: 'warn'` to explicitly let content through when the classifier call fails.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
