@@ -531,7 +531,14 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         // is what makes the choice outlive this process. A switch that fails is
         // logged by the channel machinery and leaves the factory/SDK model that
         // `hydrateFactorySession` already applied: the message still answers.
-        await session.model.switch({ modelId: selectedModelId });
+        try {
+          await session.model.switch({ modelId: selectedModelId });
+        } catch (error) {
+          console.warn("[slack] Failed to apply the sender's model pack model", {
+            modelId: selectedModelId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else if (!selectedModelId) {
         // Neither preference exists, so the SDK's built-in mode default is this
         // thread's model of record. Pin it too: a later SDK upgrade that moves
