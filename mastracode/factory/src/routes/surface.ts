@@ -16,6 +16,8 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
+import type { IdentityServiceIntegration } from '../services/identity-service.js';
+import { IdentityService } from '../services/identity-service.js';
 import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
@@ -53,6 +55,7 @@ import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IdentityRoutes } from './identity.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -481,6 +484,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
 
+  const identityRegistrations: IdentityServiceIntegration[] = [];
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
@@ -493,7 +497,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       },
       integration.id,
     );
+    // Identity capability is resolved from the same context the integration's
+    // own routes/workers see, so its listCandidateAccounts calls end up with
+    // the same storage handles and org scoping.
+    if (integration.identity) identityRegistrations.push({ integration, context });
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
+  });
+  const identityService = new IdentityService({
+    storage: deps.domains.integrationIdentity,
+    integrations: () => identityRegistrations,
   });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear', 'jira']
@@ -578,6 +590,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),
+    ...new IdentityRoutes({ auth: deps.auth, service: identityService }).routes(),
     ...integrationRoutes,
     ...absentStubs,
     ...slackAbsentStubs,

@@ -230,7 +230,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    * they post as, so this starts from the configured slug (usually absent on a
    * Platform deployment) and is corrected the first time Factory writes.
    */
-  readonly identity: GithubAppIdentity;
+  readonly appIdentity: GithubAppIdentity;
   /**
    * Extra reviewer bot logins this deployment trusts for author-gated
    * notifications, merged over the built-in defaults.
@@ -519,7 +519,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     // is legitimately unset. Borrowing it is what left every self-loop guard
     // comparing against `undefined[bot]`. This integration *is* the Platform
     // App, so it names itself, with an override for non-production Apps.
-    this.identity = new GithubAppIdentity(
+    this.appIdentity = new GithubAppIdentity(
       process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
     );
     this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
@@ -548,7 +548,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   isFactoryCommentAuthor(login: string | null | undefined): boolean {
-    return typeof login === 'string' && this.identity.matches(login);
+    return typeof login === 'string' && this.appIdentity.matches(login);
   }
 
   get storage(): SourceControlStorageHandle {
@@ -1198,7 +1198,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    */
   #observeSelfAuthor(comment: GithubComment, actingUserId: string | undefined): void {
     if (actingUserId) return;
-    this.identity.observeSelfAuthor(comment.user?.login);
+    this.appIdentity.observeSelfAuthor(comment.user?.login);
   }
 
   async #createIssueComment(input: CreateIntakeCommentInput) {
