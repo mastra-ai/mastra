@@ -89,6 +89,23 @@ const factualityScorer = createClassifierScorer({
 })
 ```
 
+## Request context
+
+The `state` function receives the scorer run's `requestContext`, so the classifier input can include per-request details such as a tenant policy. This lets one classifier judge the same output differently depending on who made the request:
+
+```typescript
+export const policyScorer = createClassifierScorer({
+  id: 'policy-factuality',
+  classifier: responseJudge,
+  question: 'factual',
+  type: 'agent',
+  state: ({ run, requestContext }) => ({
+    policy: requestContext?.get('policy'),
+    output: run.output,
+  }),
+})
+```
+
 ## Registered classifiers
 
 Pass a classifier ID to resolve it from Mastra when the scorer runs. Provide the configured classifier type and selected question as generics because TypeScript can't infer them from a string ID.

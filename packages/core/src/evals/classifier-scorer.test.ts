@@ -138,6 +138,23 @@ describe('createClassifierScorer', () => {
     });
   });
 
+  it('passes the run request context to the state selector', async () => {
+    const classifier = createClassifier();
+    const evaluate = vi
+      .spyOn(classifier, 'evaluate')
+      .mockResolvedValue(mockResult({ type: 'boolean', probability: 0.8 }) as any);
+    const scorer = createClassifierScorer({
+      id: 'policy-factual',
+      classifier,
+      question: 'factual',
+      state: ({ run, requestContext }) => `${requestContext?.get('policy')}: ${run.output}`,
+    });
+
+    await scorer.run({ output: 'answer', requestContext: { policy: 'cite sources' } });
+
+    expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ state: 'cite sources: answer' }));
+  });
+
   it('resolves registered classifier IDs at run time', async () => {
     const classifier = createClassifier();
     vi.spyOn(classifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 0.9 }) as any);
