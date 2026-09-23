@@ -104,7 +104,7 @@ const redisUrl = process.env.REDIS_URL;
 // topics) are never clearTopic'd, and topics whose eager cleanup was missed
 // (e.g. a crashed run, or a reply landing after the requester's clearTopic)
 // would otherwise stay in Redis forever.
-const STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const STREAM_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl, streamIdleTtlMs: STREAM_IDLE_TTL_MS }) : undefined;
 if (redisUrl) {
   // Redact credentials before logging (REDIS_URL may embed a password).
