@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -160,9 +161,11 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
-  const stat = fs.statSync(entryPath, { bigint: true });
-  url.searchParams.set('mtimeNs', stat.mtimeNs.toString());
-  url.searchParams.set('size', stat.size.toString());
+  // Cache-bust on file *content*, not metadata: an update that keeps the same
+  // byte length and lands within the filesystem's timestamp granularity would
+  // otherwise reuse the stale cached module.
+  const contentHash = createHash('sha1').update(fs.readFileSync(entryPath)).digest('hex');
+  url.searchParams.set('contentHash', contentHash);
   const mod = (await import(url.href)) as { default?: unknown; plugin?: unknown };
   return validatePluginExport(mod.default ?? mod.plugin);
 }
