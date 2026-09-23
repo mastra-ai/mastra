@@ -191,14 +191,23 @@ export function planTraceAggregate(
   };
 }
 
+/**
+ * Normalizes a measure name identically for `measures`, `having` paths, and `orderBy.field`, so
+ * `countDistinct.${threadId}` and `countDistinct.threadId` resolve to the same requested measure.
+ */
+function normalizeTraceAggregateMeasureName(raw: string): string {
+  const unwrapped = normalizeTraceQueryPath(raw);
+  return unwrapped.startsWith(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX)
+    ? `${TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX}${normalizeTraceQueryPath(unwrapped.slice(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX.length))}`
+    : unwrapped;
+}
+
 function planMeasure(
   raw: string,
   path: IssuePath,
   issues: TraceQueryIssue[],
 ): TrustedTraceAggregateMeasure | undefined {
-  const name = raw.startsWith(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX)
-    ? `${TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX}${normalizeTraceQueryPath(raw.slice(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX.length))}`
-    : raw;
+  const name = normalizeTraceAggregateMeasureName(raw);
   const parsed = parseTraceAggregateMeasure(name);
   if (parsed?.type === 'canonical') return { type: 'canonical', name: parsed.measure };
   if (parsed?.type === 'countDistinct') {
@@ -302,7 +311,7 @@ function planHaving(
 }
 
 function resolveHavingMeasure(raw: string, path: IssuePath, state: HavingState): TraceAggregateMeasure | undefined {
-  const name = normalizeTraceQueryPath(raw);
+  const name = normalizeTraceAggregateMeasureName(raw);
   if (state.measureNames.has(name)) return name as TraceAggregateMeasure;
   state.issues.push({ code: 'field_not_allowed', path, message: 'having may only reference requested measures' });
   return undefined;
@@ -314,7 +323,7 @@ function planOrderBy(
   dimensions: TraceAggregateDimension[],
   issues: TraceQueryIssue[],
 ): TrustedTraceAggregateOrderBy | undefined {
-  const field = normalizeTraceQueryPath(orderBy.field);
+  const field = normalizeTraceAggregateMeasureName(orderBy.field);
   if (field === 'count' || measureNames.has(field)) {
     return { target: 'measure', measure: field as TraceAggregateMeasure, direction: orderBy.direction };
   }

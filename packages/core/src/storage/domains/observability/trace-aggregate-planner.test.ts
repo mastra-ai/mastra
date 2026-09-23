@@ -309,6 +309,30 @@ describe('planTraceAggregate', () => {
         expect(issue.message).not.toContain(field);
       }
     });
+
+    it('normalizes countDistinct measure names identically in measures, having, and orderBy', () => {
+      const spellings = ['countDistinct.threadId', 'countDistinct.${threadId}', '${countDistinct.threadId}'];
+      for (const requested of spellings.slice(0, 2)) {
+        for (const reference of spellings) {
+          const result = plan({
+            timeRange,
+            measures: [requested],
+            having: gt(reference, 1),
+            orderBy: { field: reference, direction: 'asc' },
+          });
+          expect(result.measures).toEqual([
+            { type: 'countDistinct', name: 'countDistinct.threadId', field: 'threadId' },
+          ]);
+          expect(result.having).toEqual({
+            type: 'comparison',
+            measure: 'countDistinct.threadId',
+            operator: 'gt',
+            value: 1,
+          });
+          expect(result.orderBy).toEqual({ target: 'measure', measure: 'countDistinct.threadId', direction: 'asc' });
+        }
+      }
+    });
   });
 
   describe('time range and buckets (Decision 6)', () => {
