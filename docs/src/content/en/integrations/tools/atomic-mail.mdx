@@ -1,0 +1,141 @@
+---
+title: "Atomic Mail | Tools"
+description: "Give a Mastra agent an email inbox of its own with Atomic Mail, so it can register an address, then send, read and search mail over JMAP."
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Atomic Mail
+
+[Atomic Mail](https://atomicmail.ai) gives an agent a mailbox of its own rather than access to a person's. The agent registers its own `@atomicmail.ai` address by solving a proof-of-work challenge — no signup form, no domain, no card — and then sends, reads and searches over [JMAP](https://jmap.io/) (RFC 8620/8621).
+
+That matters for agents that need to be reachable between runs: a Mastra workflow can hand out an address, receive a reply hours later, and act on it, without a human forwarding anything.
+
+Atomic Mail ships an MCP server, so you wire it in with [`MCPClient`](/reference/tools/mcp-client) rather than writing tool definitions by hand.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow [Get started](/docs) to create one.
+
+No Atomic Mail key is required to start — the `register` tool provisions the inbox. To reuse an inbox you already have, set `ATOMIC_MAIL_API_KEY`.
+
+## Installation
+
+Install the MCP package:
+
+```bash npm2yarn
+npm install @mastra/mcp@latest
+```
+
+## Connect the server
+
+<Steps>
+  <StepItem>
+    Create `src/mastra/mcp/atomic-mail.ts` and point `MCPClient` at the Atomic Mail server. Run it locally over stdio:
+
+    ```typescript title="src/mastra/mcp/atomic-mail.ts"
+    import { MCPClient } from '@mastra/mcp'
+
+    export const atomicMailClient = new MCPClient({
+      id: 'atomic-mail',
+      servers: {
+        atomicmail: {
+          command: 'npx',
+          args: ['-y', '@atomicmail/mcp'],
+        },
+      },
+    })
+    ```
+
+    Or use the hosted server, authenticating with an API key from the Atomic Mail dashboard:
+
+    ```typescript title="src/mastra/mcp/atomic-mail.ts"
+    import { MCPClient } from '@mastra/mcp'
+
+    export const atomicMailClient = new MCPClient({
+      id: 'atomic-mail',
+      servers: {
+        atomicmail: {
+          url: new URL('https://mcp.atomicmail.ai/mcp'),
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${process.env.ATOMIC_MAIL_API_KEY}`,
+            },
+          },
+        },
+      },
+    })
+    ```
+  </StepItem>
+
+  <StepItem>
+    Create an agent at `src/mastra/agents/inbox-agent.ts` and pass the tools in:
+
+    ```typescript title="src/mastra/agents/inbox-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { atomicMailClient } from '../mcp/atomic-mail'
+
+    export const inboxAgent = new Agent({
+      id: 'inbox-agent',
+      name: 'Inbox Agent',
+      instructions: `
+        You have an email inbox of your own.
+
+        Call help before your first jmap_request — it documents the available
+        presets and JMAP method calls. If no inbox exists yet, call register
+        first; it is idempotent for the same username. Do not invent JMAP
+        method calls you have not seen in help.
+      `,
+      model: '__GATEWAY_OPENAI_MODEL__',
+      tools: await atomicMailClient.listTools(),
+    })
+    ```
+  </StepItem>
+
+  <StepItem>
+    Register the agent in `src/mastra/index.ts` on your Mastra instance:
+
+    ```typescript title="src/mastra/index.ts" {2, 5}
+    import { Mastra } from '@mastra/core'
+    import { inboxAgent } from './agents/inbox-agent'
+
+    export const mastra = new Mastra({
+      agents: { inboxAgent },
+    })
+    ```
+  </StepItem>
+</Steps>
+
+## Available tools
+
+The server exposes three tools:
+
+| Tool | What it does |
+| --- | --- |
+| `register` | Provisions an inbox by proof of work and stores its credentials. Idempotent for the same username; pass a separate `credentials_dir` to hold more than one inbox. |
+| `jmap_request` | Runs a JMAP method-call batch, authenticated automatically. Takes inline `ops` or a named preset such as `list_inbox.json`, `send_mail.json` or `reply.json`, with placeholder substitution and file attachments. |
+| `help` | Serves the bundled docs — JMAP cheatsheet, preset list, troubleshooting. |
+
+## Environment variables
+
+Optional, and only needed to reuse an existing inbox or point at a custom domain:
+
+```bash title=".env"
+ATOMIC_MAIL_API_KEY=your-api-key
+ATOMIC_MAIL_CREDENTIALS_DIR=/path/to/.atomicmail
+ATOMIC_MAIL_INBOX_DOMAIN=mail.example.com
+```
+
+`credentials_dir` can also be passed per tool call, so one Mastra instance can drive several inboxes — for example one agent that files receipts and one that answers customers.
+
+:::warning Unattended inbox checks
+
+`register` takes a `watch` value deciding who reads the inbox afterwards. If you schedule unattended checks, remember the agent is then processing mail from strangers: give that run only the tools it needs, and do not combine inbox polling with broad shell or file-write access. Call `help` with the `cron` topic for the details.
+
+:::

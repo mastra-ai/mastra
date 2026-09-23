@@ -607,6 +607,12 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'tools/atomic-mail',
+          label: 'Atomic Mail',
+          customProps: { icon: '/img/integrations/atomic-mail.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/brightdata',
           label: 'Bright Data',
           customProps: { icon: '/img/integrations/bright-data.svg' },
