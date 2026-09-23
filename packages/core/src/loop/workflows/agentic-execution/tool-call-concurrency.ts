@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { RequireToolApproval } from '../../../tools';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { ToolApprovalContext } from '../../../tools/types';
 import type { ToolCallConcurrency, ToolCallConcurrencyStrategy } from '../../types';
 import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
@@ -144,9 +145,13 @@ export async function resolveCalledToolCallConcurrency({
 
   const verdicts = await Promise.all(
     toolCalls.map(async toolCall => {
-      const tool = args.tools?.[toolCall.toolName];
+      // Mirror the tool-call step's lookup (key, provider name, then tool id).
+      const tool =
+        args.tools?.[toolCall.toolName] ||
+        findProviderToolByName(args.tools, toolCall.toolName) ||
+        Object.values(args.tools || {}).find(t => 'id' in t && t.id === toolCall.toolName);
       if (!tool) {
-        return false;
+        return true;
       }
       if ((tool as { hasSuspendSchema?: unknown }).hasSuspendSchema) {
         return true;

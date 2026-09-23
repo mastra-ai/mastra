@@ -239,6 +239,26 @@ describe('resolveCalledToolCallConcurrency', () => {
     expect(tool.needsApprovalFn).toHaveBeenCalledWith({ value: 1 }, expect.anything());
   });
 
+  it('resolves called tools by id like the tool-call step', async () => {
+    const concurrency = await resolveCalledToolCallConcurrency({
+      ...base,
+      strategy: 'called',
+      tools: { key: { id: 'aliased', requireApproval: true } } as any,
+      toolCalls: [{ toolName: 'aliased', args: {} }],
+    });
+    expect(concurrency).toBe(1);
+  });
+
+  it('forces sequential when a called tool cannot be resolved', async () => {
+    const concurrency = await resolveCalledToolCallConcurrency({
+      ...base,
+      strategy: 'called',
+      tools: { safe: {} } as any,
+      toolCalls: [{ toolName: 'unknown', args: {} }],
+    });
+    expect(concurrency).toBe(1);
+  });
+
   it('forces sequential when a function policy returns true', async () => {
     const concurrency = await resolveCalledToolCallConcurrency({
       ...base,
