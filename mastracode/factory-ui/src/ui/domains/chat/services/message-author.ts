@@ -20,7 +20,7 @@ function firstString(...values: unknown[]): string | undefined {
 /** Wherever this copy of a user signal keeps its provider options: persisted message, signal envelope, live data part. */
 function mastraOptions(message: MastraDBMessage): Record<string, unknown> | undefined {
   const signal = message.content.metadata?.signal;
-  const dataPart: unknown = message.content.parts.find(part => part.type === 'data-user-message');
+  const dataPart: unknown = message.content.parts.find(part => isRecord(part) && part.type === 'data-user-message');
   const candidates = [
     message.content.providerMetadata,
     isRecord(signal) ? signal.providerOptions : undefined,

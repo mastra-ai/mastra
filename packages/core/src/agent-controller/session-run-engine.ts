@@ -8,7 +8,7 @@ import type {
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
 import type { AgentThreadSubscription } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -108,6 +108,14 @@ function isProviderMetadata(value: unknown): value is MastraProviderMetadata {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function isObsoleteAutomaticApproval(error: unknown): boolean {
+  return (
+    error instanceof MastraError &&
+    (error.id === 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN' ||
+      error.id === 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN')
+  );
 }
 
 function getNumber(value: unknown, fallback: number): number {
@@ -764,14 +772,31 @@ export class SessionRunEngine {
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
         const policy = this.#session.resolveToolApproval(toolName);
+        const approvalIdentity = {
+          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
+          threadId: state.threadId,
+          resourceId: this.#session.identity.getResourceId(),
+        };
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          try {
+            await this.#session.approveToolCall({ toolCallId, requestContext, ...approvalIdentity });
+          } catch (error) {
+            if (!isObsoleteAutomaticApproval(error)) {
+              throw error;
+            }
+          }
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          try {
+            await this.#session.declineToolCall({ toolCallId, requestContext, ...approvalIdentity });
+          } catch (error) {
+            if (!isObsoleteAutomaticApproval(error)) {
+              throw error;
+            }
+          }
           break;
         }
 
@@ -798,11 +823,13 @@ export class SessionRunEngine {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,

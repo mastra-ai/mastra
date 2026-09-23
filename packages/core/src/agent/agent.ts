@@ -9911,7 +9911,7 @@ export class Agent<
       return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
     }
 
-    let runId = this.getActiveThreadRunId({ threadId, resourceId });
+    let runId = executionOptions.runId ?? this.getActiveThreadRunId({ threadId, resourceId });
     // Tracks whether runId was recovered from storage (not the in-memory active-run
     // map). This path resumes directly because the snapshot has already been
     // discovered here, avoiding a second storage lookup in sendStreamResume().

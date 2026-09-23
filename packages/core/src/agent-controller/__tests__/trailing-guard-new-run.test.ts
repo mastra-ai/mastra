@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
@@ -144,7 +145,52 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     );
 
     expect(approveToolCall).toHaveBeenCalledTimes(2);
+    expect(approveToolCall.mock.calls[0]?.[0]).toMatchObject({ runId: 'run-a' });
+    expect(approveToolCall.mock.calls[0]?.[0].threadId).toBeTruthy();
+    expect(approveToolCall.mock.calls[0]?.[0].resourceId).toBeTruthy();
     expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({ id: 'first-user' });
+    expect(approveToolCall.mock.calls[1]?.[0]).toMatchObject({
+      runId: 'run-b',
+      threadId: approveToolCall.mock.calls[0]?.[0].threadId,
+      resourceId: approveToolCall.mock.calls[0]?.[0].resourceId,
+    });
     expect(approveToolCall.mock.calls[1]?.[0].requestContext?.get('user')).toEqual({ id: 'second-user' });
+  });
+
+  it('ignores an obsolete replay when an automatic approval targets an ended run', async () => {
+    const controller = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const approveToolCall = vi.spyOn(session, 'approveToolCall').mockRejectedValueOnce(
+      new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'The approval run already ended.',
+      }),
+    );
+
+    await expect(
+      processSubscribedChunks(session, [
+        { type: 'start', runId: 'stale-run' },
+        {
+          type: 'tool-call-approval',
+          runId: 'stale-run',
+          payload: { toolCallId: 'stale-tool-call', toolName: 'factory_transition_work_item', args: {} },
+        },
+        { type: 'finish', runId: 'stale-run', payload: { stepResult: { reason: 'stop' } } },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(approveToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'stale-tool-call',
+        runId: 'stale-run',
+        threadId: expect.any(String),
+        resourceId: expect.any(String),
+      }),
+    );
   });
 });

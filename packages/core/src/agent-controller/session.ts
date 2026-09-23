@@ -4201,11 +4201,18 @@ export class Session<TState = unknown> {
   async approveToolCall({
     toolCallId,
     requestContext: requestContextInput,
+    runId: inputRunId,
+    threadId: inputThreadId,
+    resourceId = this.identity.getResourceId(),
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<void> {
-    const runId = this.run.getRunId();
+    const runId = inputRunId ?? this.run.getRunId();
+    const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -4213,11 +4220,9 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
-    const resourceId = this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -4240,12 +4245,19 @@ export class Session<TState = unknown> {
     toolCallId,
     requestContext: requestContextInput,
     declineContext,
+    runId: inputRunId,
+    threadId: inputThreadId,
+    resourceId = this.identity.getResourceId(),
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<void> {
-    const runId = this.run.getRunId();
+    const runId = inputRunId ?? this.run.getRunId();
+    const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -4253,11 +4265,9 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
-    const resourceId = this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,

@@ -60,6 +60,13 @@ describe('messageAuthor', () => {
     expect(messageAuthor(persisted())).toBeUndefined();
     expect(messageAuthor(persisted({ author: { name: 'no id' } }))).toBeUndefined();
   });
+
+  it('ignores malformed empty message parts', () => {
+    const message = persisted({ author: ADA });
+    Reflect.set(message.content.parts, 0, undefined);
+
+    expect(messageAuthor(message)).toEqual(ADA);
+  });
 });
 
 describe('channelOrigin', () => {
