@@ -47,6 +47,7 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
@@ -193,6 +194,16 @@ export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
   readonly #rules: GithubEventRules;
+
+  /**
+   * Identity capability — source (a) reads distinct external comment
+   * authors carried on `author_external.platform === 'github'`. Source
+   * (b) (org members via `GET /orgs/{org}/members`) is not implemented in
+   * this iteration: no GitHub HTTP helper for a per-org roster exists yet,
+   * and standing one up plus paginating + rate-limit handling exceeds
+   * Phase 3's scope. Tracked as a follow-up in the progress file.
+   */
+  readonly identity = buildCommentAuthorsIdentity('github');
 
   get rules(): GithubEventRules {
     return this.#rules;

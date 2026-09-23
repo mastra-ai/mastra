@@ -67,6 +67,7 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
+import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -217,6 +218,11 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
+  /**
+   * Identity capability — source (a) from persisted comment authors on
+   * `platform === 'github'`. Source (b) deferred.
+   */
+  readonly identity = buildCommentAuthorsIdentity('github');
   readonly #rules: GithubEventRules;
 
   get rules(): GithubEventRules {

@@ -38,6 +38,7 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
+import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
@@ -290,6 +291,12 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
 export class LinearIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../base.ts`). */
   readonly id = 'linear';
+  /**
+   * Identity capability — source (a) reads distinct external comment
+   * authors on `author_external.platform === 'linear'`. Source (b) (Linear
+   * workspace-members roster) is not implemented in this iteration.
+   */
+  readonly identity = buildCommentAuthorsIdentity('linear');
   /** Bound once by the factory via `initialize()` before any surface is used. */
   #storage: LinearStorageHandle | undefined;
   #projects: FactoryProjectsStorage | undefined;

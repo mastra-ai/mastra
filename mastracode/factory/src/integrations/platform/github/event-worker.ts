@@ -514,7 +514,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     // forbids an app from reviewing its own pull request, so `factory-review`
     // posts its verdict as a comment under this login and that comment is the
     // handoff the authoring agent wakes on.
-    if (this.#github.identity?.matches(sender)) return true;
+    if (this.#github.appIdentity?.matches(sender)) return true;
     if (isFactoryAppSender(sender, this.#github.slug)) return true;
     const normalizedSender = sender.toLowerCase();
     const authorizedBots = resolveAuthorizedBots(this.#github.authorizedBots);

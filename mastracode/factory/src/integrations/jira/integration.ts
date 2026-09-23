@@ -39,6 +39,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
+import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
@@ -109,6 +110,11 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 export class JiraIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../base.ts`). */
   readonly id = 'jira';
+  /**
+   * Identity capability — source (a) from persisted comment authors keyed
+   * by `platform === 'jira'`. Source (b) roster deferred.
+   */
+  readonly identity = buildCommentAuthorsIdentity('jira');
 
   readonly #config: JiraIntegrationConfig;
   /** Typed REST client bound to the deployment credentials. */

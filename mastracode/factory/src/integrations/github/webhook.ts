@@ -80,7 +80,7 @@ export interface GithubWebhookDispatchIntegration {
    * {@link slug}, which names the deployment's own self-hosted App and is unset
    * on deployments that run against Platform's App.
    */
-  readonly identity?: GithubAppIdentity;
+  readonly appIdentity?: GithubAppIdentity;
   readonly integrationStorage: GithubSubscriptionStorage;
   /**
    * Extra bot logins this deployment authorizes to trigger author-gated
@@ -503,7 +503,7 @@ async function isAuthorizedGithubSender(
   github:
     | Pick<
         GithubWebhookDispatchIntegration,
-        'getRepositoryCollaboratorPermission' | 'slug' | 'identity' | 'authorizedBots'
+        'getRepositoryCollaboratorPermission' | 'slug' | 'appIdentity' | 'authorizedBots'
       >
     | undefined,
 ): Promise<boolean> {
@@ -511,7 +511,7 @@ async function isAuthorizedGithubSender(
   const sender = notification.metadata.sender;
   const repository = notification.metadata.repository;
   if (!sender || !repository) return false;
-  if (github?.identity?.matches(sender)) return true;
+  if (github?.appIdentity?.matches(sender)) return true;
   if (isFactoryAppSender(sender, github?.slug)) return true;
   const normalizedSender = sender.toLowerCase();
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {

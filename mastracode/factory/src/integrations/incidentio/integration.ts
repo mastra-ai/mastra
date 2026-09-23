@@ -7,6 +7,7 @@ import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
+import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import { buildIncidentioAgentTools } from './agent-tools.js';
 import { IncidentioApiClient } from './api.js';
 import { resolveIncidentioRules } from './default-rules.js';
@@ -30,6 +31,11 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 export class IncidentioIntegration implements FactoryIntegration {
   readonly id = 'incidentio';
+  /**
+   * Identity capability — source (a) from persisted comment authors on
+   * `platform === 'incidentio'`. Source (b) deferred.
+   */
+  readonly identity = buildCommentAuthorsIdentity('incidentio');
   readonly intake;
   readonly #endpointHost: string;
   readonly #rules: IncidentioEventRules;

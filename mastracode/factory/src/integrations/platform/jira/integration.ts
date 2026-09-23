@@ -30,6 +30,7 @@ import { resolveJiraRules } from '../../jira/default-rules.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import { attachJiraRules } from '../../jira/rules.js';
+import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import {
   logPlatformInfo,
   PlatformApiClient,
@@ -106,6 +107,11 @@ export interface PlatformJiraIntegrationConfig {
 
 export class PlatformJiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
+  /**
+   * Identity capability — source (a) from persisted comment authors on
+   * `platform === 'jira'`. Source (b) deferred.
+   */
+  readonly identity = buildCommentAuthorsIdentity('jira');
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;

@@ -39,6 +39,7 @@ import {
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import { attachIncidentioRules } from '../../incidentio/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
+import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
 
 export interface PlatformIncidentioIntegrationConfig {
@@ -152,6 +153,11 @@ interface IncidentioConnectionContext {
 
 export class PlatformIncidentioIntegration implements FactoryIntegration {
   readonly id = 'incidentio';
+  /**
+   * Identity capability — source (a) from persisted comment authors on
+   * `platform === 'incidentio'`. Source (b) deferred.
+   */
+  readonly identity = buildCommentAuthorsIdentity('incidentio');
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;

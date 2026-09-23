@@ -621,7 +621,7 @@ describe('GithubRules', () => {
       github: {
         ...github,
         slug: undefined,
-        identity: new GithubAppIdentity('mastra-platform'),
+        appIdentity: new GithubAppIdentity('mastra-platform'),
       } as unknown as GithubIntegration,
       sourceControl,
       integrationStorage,

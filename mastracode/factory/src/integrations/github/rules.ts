@@ -256,7 +256,7 @@ export interface GithubRulesIntegration {
    * back to the configured slug and, failing that, to content Factory stamps
    * itself (see `FACTORY_TRIAGE_COMMENT_MARKER`).
    */
-  readonly identity?: GithubAppIdentity;
+  readonly appIdentity?: GithubAppIdentity;
   getRepositoryCollaboratorPermission(
     installationId: number,
     repoFullName: string,
@@ -295,7 +295,7 @@ export class GithubRules {
    * disabled every self-loop guard.
    */
   #isFactoryLogin(login: string | undefined): boolean {
-    const identity = this.options.github.identity;
+    const identity = this.options.github.appIdentity;
     if (identity?.known) return identity.matches(login);
     const slug = this.options.github.slug?.trim();
     if (!slug || !login) return false;
@@ -303,7 +303,7 @@ export class GithubRules {
   }
 
   #factoryMentionTarget(): string | undefined {
-    const identity = this.options.github.identity;
+    const identity = this.options.github.appIdentity;
     if (identity?.known) return identity.login;
     const slug = this.options.github.slug?.trim();
     return slug ? `${slug.toLowerCase()}[bot]` : undefined;
