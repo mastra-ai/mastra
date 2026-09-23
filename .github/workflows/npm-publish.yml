@@ -569,32 +569,8 @@ jobs:
 
       - name: Update workspace dependencies
         run: |
-          node <<'EOF'
-          const { execSync } = require('child_process');
-          const fs = require('fs');
-          const workspacePackages = new Set(
-            JSON.parse(execSync('pnpm m ls --depth -1 --json', { maxBuffer: 64 * 1024 * 1024 }))
-              .map(pkg => pkg.name)
-              .filter(Boolean),
-          );
-          const files = execSync('git ls-files "*/package.json"').toString().trim().split('\n');
-          let changedCount = 0;
-          for (const file of files) {
-            const content = fs.readFileSync(file, 'utf8');
-            let updated = content.replace(/"workspace:\^"/g, '"workspace:*"');
-            // Only rewrite @mastra/* deps that are actual workspace packages;
-            // some (e.g. @mastra/docusaurus-plugin-*) are published from other repos.
-            updated = updated.replace(/"(@mastra\/[^"]*)":\s*"[^"]*"/g, (match, name) =>
-              workspacePackages.has(name) ? `"${name}": "workspace:*"` : match,
-            );
-            if (updated !== content) {
-              console.log(`Updating ${file}`);
-              fs.writeFileSync(file, updated);
-              changedCount++;
-            }
-          }
-          console.log(`Finished updating workspace dependencies. ${changedCount} files updated.`);
-          EOF
+          node --test .github/scripts/update-snapshot-dependencies.test.mjs
+          node .github/scripts/update-snapshot-dependencies.mjs
         shell: bash
 
       - name: Update lockfile

@@ -203,6 +203,25 @@ describe('System Handlers', () => {
       });
     });
 
+    it('advertises recording review for the exact default LiveKit GET route', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, {
+          apiRoutes: [{ method: 'GET', path: '/voice/livekit/recordings/:traceId' }],
+        }),
+      } as any);
+      expect(result).toMatchObject({ liveKitRecordingRouteEnabled: true });
+    });
+
+    it.each([
+      { method: 'POST' as const, path: '/voice/livekit/recordings/:traceId' },
+      { method: 'GET' as const, path: '/custom/recordings/:traceId' },
+    ])('does not advertise recording review for $method $path', async route => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, { apiRoutes: [route] }),
+      } as any);
+      expect(result).not.toHaveProperty('liveKitRecordingRouteEnabled');
+    });
+
     it('should return liveKitConnectionRouteEnabled true for the exact default LiveKit POST route', async () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra(false, undefined, false, {

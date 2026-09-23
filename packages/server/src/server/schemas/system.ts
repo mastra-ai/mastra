@@ -40,6 +40,8 @@ export const systemPackagesResponseSchema = z.object({
   cmsEnabled: z.boolean(),
   /** Whether the default LiveKit connection-details route is registered — not whether credentials or a worker exist. */
   liveKitConnectionRouteEnabled: z.boolean(),
+  /** True when the default LiveKit trace recording review route is registered. */
+  liveKitRecordingRouteEnabled: z.boolean().optional(),
   /**
    * The editor's configured source, when set. `'code'` swaps Studio's
    * Save/Publish UI for Download JSON + Open PR. `'db'` keeps the standard

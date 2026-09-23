@@ -12,12 +12,15 @@
     "worker:regulated": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev",
     "worker:regulated:demo": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev --log-level info",
     "worker:plugin": "node --env-file=.env --import tsx src/mastra/voice-worker-plugin.ts dev",
-    "worker:download-files": "pnpm --dir ../../integrations/livekit exec livekit-agents download-files",
+    "worker:download-files": "node --env-file=.env --import tsx src/mastra/voice-worker.ts download-files",
+    "recording:dispatch": "node --env-file=.env --import tsx scripts/dispatch-recorded-session.ts",
     "dev:ui": "concurrently --kill-others-on-fail --names mastra,studio \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .mastra *.db"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@livekit/agents": "^1.4.5",
     "@livekit/agents-plugin-livekit": "^1.4.5",
     "@livekit/agents-plugin-silero": "^1.4.5",
@@ -26,6 +29,7 @@
     "@mastra/livekit": "link:../../integrations/livekit",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "livekit-server-sdk": "^2.15.4",
     "mastra": "latest",
     "zod": "^4.3.6"
   },
@@ -39,6 +43,7 @@
       "@livekit/agents": "link:../../integrations/livekit/node_modules/@livekit/agents",
       "@livekit/agents-plugin-livekit": "link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit",
       "@livekit/agents-plugin-silero": "link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero",
+      "livekit-server-sdk": "link:../../integrations/livekit/node_modules/livekit-server-sdk",
       "@mastra/core": "link:../../packages/core",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/livekit": "link:../../integrations/livekit",

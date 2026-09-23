@@ -3,8 +3,10 @@ import { RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
 import type { ContextWithMastra, ApiRoute } from '@mastra/core/server';
 import { AccessToken } from 'livekit-server-sdk';
 import { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';
+import { dispatchVoiceSession } from './dispatch';
 import { serializeSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
+import type { LiveKitRecordingOptions } from './recording';
 
 /** Response body of the connection-details route. Matches LiveKit's frontend starter contract. */
 export interface LiveKitConnectionDetails {
@@ -44,6 +46,16 @@ export interface LiveKitConnectionRouteOptions {
    * through `agentId`, `threadId`, and `resourceId` from the request body.
    */
   metadata?: (args: ConnectionRequestArgs) => LiveKitSessionMetadata | Promise<LiveKitSessionMetadata>;
+  /**
+   * Create a fresh room with automatic recording and dispatch the agent before returning a token.
+   * The server-side callback receives the resolved room name; return undefined to skip recording.
+   * Recording settings and storage credentials are never included in the participant token.
+   */
+  recording?:
+    | LiveKitRecordingOptions
+    | ((
+        args: ConnectionRequestArgs & { roomName: string },
+      ) => LiveKitRecordingOptions | undefined | Promise<LiveKitRecordingOptions | undefined>);
 }
 
 function stringField(body: Record<string, unknown>, key: string): string | undefined {
@@ -105,6 +117,20 @@ export function liveKitConnectionRoute(options: LiveKitConnectionRouteOptions = 
     // One memory thread per room unless the caller pins a thread explicitly.
     metadata.threadId ??= roomName;
 
+    const recording =
+      typeof options.recording === 'function' ? await options.recording({ ...args, roomName }) : options.recording;
+    if (recording !== undefined) {
+      await dispatchVoiceSession({
+        roomName,
+        agentName: options.agentName,
+        metadata,
+        serverUrl,
+        apiKey,
+        apiSecret,
+        recording,
+      });
+    }
+
     const token = new AccessToken(apiKey, apiSecret, { identity, ttl: options.ttl ?? '15m' });
     token.addGrant({
       room: roomName,
@@ -114,14 +140,17 @@ export function liveKitConnectionRoute(options: LiveKitConnectionRouteOptions = 
       canPublishData: true,
       canUpdateOwnMetadata: true,
     });
-    token.roomConfig = new RoomConfiguration({
-      agents: [
-        new RoomAgentDispatch({
-          agentName: options.agentName ?? DEFAULT_LIVEKIT_AGENT_NAME,
-          metadata: serializeSessionMetadata(metadata),
-        }),
-      ],
-    });
+    // A pre-created room needs explicit dispatch; token roomConfig only applies at room creation.
+    if (recording === undefined) {
+      token.roomConfig = new RoomConfiguration({
+        agents: [
+          new RoomAgentDispatch({
+            agentName: options.agentName ?? DEFAULT_LIVEKIT_AGENT_NAME,
+            metadata: serializeSessionMetadata(metadata),
+          }),
+        ],
+      });
+    }
 
     const details: LiveKitConnectionDetails = {
       serverUrl,

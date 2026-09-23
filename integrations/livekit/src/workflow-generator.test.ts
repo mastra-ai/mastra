@@ -3,6 +3,8 @@ import type { ReadableStream } from 'node:stream/web';
 import { llm } from '@livekit/agents';
 import { describe, expect, it, vi } from 'vitest';
 import type { VoiceTurnContext } from './bridge';
+import { createGenerationMetrics, VOICE_TEXT_FLUSH } from './turn-metrics';
+import type { VoiceReplyChunk } from './turn-metrics';
 import {
   createWorkflowReplyGenerator,
   pipeAgentReplyToWriter,
@@ -57,13 +59,13 @@ function turnContext(overrides: Partial<VoiceTurnContext> = {}): VoiceTurnContex
   };
 }
 
-async function readAll(stream: ReadableStream<string>): Promise<string[]> {
+async function readAll(stream: ReadableStream<VoiceReplyChunk>): Promise<string[]> {
   const reader = stream.getReader();
   const out: string[] = [];
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    out.push(value);
+    if (typeof value === 'string') out.push(value);
   }
   return out;
 }
@@ -115,7 +117,7 @@ describe('pipeAgentReplyToWriter', () => {
     })(),
   });
 
-  it('forwards only text-delta and tool-call chunks and returns the accumulated text', async () => {
+  it('preserves speech boundaries and tool results while excluding reasoning from the reply', async () => {
     const written: FakeChunk[] = [];
     const writer = new WritableStream<unknown>({
       write: c => {
@@ -125,17 +127,27 @@ describe('pipeAgentReplyToWriter', () => {
     const stream = fakeAgentStream([
       { type: 'text-start' },
       { type: 'text-delta', payload: { text: 'Hello ' } },
+      { type: 'text-end' },
       { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'lookup', args: { q: 1 } } },
+      { type: 'tool-result', payload: { toolCallId: 't1', result: 42 } },
+      { type: 'step-finish' },
       { type: 'reasoning-delta', payload: { text: 'thinking' } },
       { type: 'text-delta', payload: { text: 'world' } },
       { type: 'finish' },
     ]);
     const text = await pipeAgentReplyToWriter(stream, writer);
     expect(text).toBe('Hello world');
-    expect(written.map(c => c.type)).toEqual(['text-delta', 'tool-call', 'text-delta']);
+    expect(written.map(c => c.type)).toEqual([
+      'text-delta',
+      'text-end',
+      'tool-call',
+      'tool-result',
+      'step-finish',
+      'text-delta',
+    ]);
     // The forwarded chunks are exactly what the workflow generator unwraps on the read side.
     expect(unwrapStepText(written[0])).toBe('Hello ');
-    expect(unwrapStepToolCall(written[1])).toEqual({ toolCallId: 't1', toolName: 'lookup', args: { q: 1 } });
+    expect(unwrapStepToolCall(written[2])).toEqual({ toolCallId: 't1', toolName: 'lookup', args: { q: 1 } });
   });
 
   it('skips empty text deltas', async () => {
@@ -155,6 +167,45 @@ describe('pipeAgentReplyToWriter', () => {
 });
 
 describe('createWorkflowReplyGenerator', () => {
+  it('preserves reply-step boundaries and times tools without leaking other steps', async () => {
+    const metricHook = vi.fn();
+    const metrics = createGenerationMetrics({ turnId: 'turn', attemptId: 'attempt' }, metricHook);
+    const { workflow } = fakeWorkflow([
+      stepOutput({ type: 'text-end' }, 'private-step'),
+      stepOutput({ type: 'text-delta', payload: { text: 'Checking.' } }),
+      stepOutput({ type: 'text-end' }),
+      toolCallOutput('tool-1', 'lookup'),
+      stepOutput({ type: 'tool-result', payload: { toolCallId: 'tool-1' } }),
+      stepOutput({ type: 'step-finish' }),
+    ]);
+    const generate = createWorkflowReplyGenerator({
+      workflow,
+      workflowInput: () => ({}),
+      replyStep: 'generateResponse',
+      toolFeedback: () => 'One moment.',
+    });
+    const reader = (await generate(turnContext({ metrics })))!.getReader();
+    const chunks: VoiceReplyChunk[] = [];
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    expect(chunks).toEqual([
+      'Checking.',
+      VOICE_TEXT_FLUSH,
+      VOICE_TEXT_FLUSH,
+      'One moment. ',
+      VOICE_TEXT_FLUSH,
+      VOICE_TEXT_FLUSH,
+    ]);
+    metrics.end('completed');
+    await vi.waitFor(() => expect(metricHook).toHaveBeenCalledOnce());
+    expect(metricHook.mock.calls[0]![0].tools).toEqual([
+      { toolCallId: 'tool-1', toolName: 'lookup', startedAtMs: expect.any(Number), durationMs: expect.any(Number) },
+    ]);
+  });
+
   it('streams text from string step outputs and ignores non-text events', async () => {
     const { workflow, stream } = fakeWorkflow([
       { type: 'workflow-start' },

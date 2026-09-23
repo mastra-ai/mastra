@@ -6,10 +6,11 @@ import {
 import { useState, type ComponentProps } from 'react';
 import { SpanScoring } from './span-scoring';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
 
 type TraceDataPanelProps = Omit<
   ComponentProps<typeof TraceDataPanelView>,
-  'sideView' | 'onSideViewChange' | 'onEvaluateTrace'
+  'sideView' | 'onSideViewChange' | 'onEvaluateTrace' | 'headerActionsSlot'
 >;
 
 /**
@@ -28,6 +29,11 @@ export function TraceDataPanel(props: TraceDataPanelProps) {
     <>
       <TraceDataPanelView
         {...props}
+        headerActionsSlot={
+          props.traceId ? (
+            <LiveKitRecordingReview key={props.traceId} traceId={props.traceId} spans={props.spans} />
+          ) : undefined
+        }
         onEvaluateTrace={() => setIsScoringOpen(true)}
         sideView={sideView}
         onSideViewChange={setSideView}
