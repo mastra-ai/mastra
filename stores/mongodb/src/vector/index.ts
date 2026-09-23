@@ -497,32 +497,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
-  /**
-   * Builds the projection pipeline stage(s) for query results based on metadata mode and
-   * whether to include vectors. Shared across query, textQuery, and hybridQuery to keep
-   * projection logic DRY. Returns an array of stages because `metadataMode: 'document'` may
-   * append a `$unset` to strip the embedding from `metadata`.
-   *
-   * The relevance score is computed here via `$meta: <scoreMeta>` INSIDE the projection
-   * rather than by a preceding `$set { score }` stage. This is deliberate: in
-   * `metadataMode: 'document'`, `metadata: '$$ROOT'` copies the source document, and if the
-   * synthetic score had been `$set` onto the root first, it would (a) leak into `metadata`
-   * and (b) clobber any real source field named `score`. Because `$$ROOT` here is the stage
-   * input (before this projection materialises `score`), `metadata` is the clean source doc
-   * and a real `score` field survives, while the top-level result still carries the synthetic
-   * relevance score.
-   *
-   * **Embedding in document mode:** `metadata: '$$ROOT'` copies the full source document,
-   * which includes the (large) embedding field — payload bloat callers rarely want. So when
-   * `includeVector` is false, a trailing `$unset` drops the embedding path from `metadata`.
-   * `$unset` accepts a dot path, so a nested `embeddingFieldName` (e.g. `text.contentEmbedding`)
-   * is handled. When `includeVector` is true, the embedding is retained in `metadata` AND
-   * exposed via the top-level `vector` field. Field mode's `metadata` is the managed
-   * subdocument, which never contains the embedding, so no `$unset` is needed there.
-   *
-   * @param scoreMeta - metadata field holding the relevance score for the search stage in use
-   *   (`vectorSearchScore` for $vectorSearch, `searchScore` for $search, `score` for $rankFusion).
-   */
   /** Validates a text upsert: `documents` is present, and `metadata`/`ids` line up with it. */
   private validateTextUpsertInput(
     indexName: string,
@@ -569,6 +543,32 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
+  /**
+   * Builds the projection pipeline stage(s) for query results based on metadata mode and
+   * whether to include vectors. Shared across query, textQuery, and hybridQuery to keep
+   * projection logic DRY. Returns an array of stages because `metadataMode: 'document'` may
+   * append a `$unset` to strip the embedding from `metadata`.
+   *
+   * The relevance score is computed here via `$meta: <scoreMeta>` INSIDE the projection
+   * rather than by a preceding `$set { score }` stage. This is deliberate: in
+   * `metadataMode: 'document'`, `metadata: '$$ROOT'` copies the source document, and if the
+   * synthetic score had been `$set` onto the root first, it would (a) leak into `metadata`
+   * and (b) clobber any real source field named `score`. Because `$$ROOT` here is the stage
+   * input (before this projection materialises `score`), `metadata` is the clean source doc
+   * and a real `score` field survives, while the top-level result still carries the synthetic
+   * relevance score.
+   *
+   * **Embedding in document mode:** `metadata: '$$ROOT'` copies the full source document,
+   * which includes the (large) embedding field — payload bloat callers rarely want. So when
+   * `includeVector` is false, a trailing `$unset` drops the embedding path from `metadata`.
+   * `$unset` accepts a dot path, so a nested `embeddingFieldName` (e.g. `text.contentEmbedding`)
+   * is handled. When `includeVector` is true, the embedding is retained in `metadata` AND
+   * exposed via the top-level `vector` field. Field mode's `metadata` is the managed
+   * subdocument, which never contains the embedding, so no `$unset` is needed there.
+   *
+   * @param scoreMeta - metadata field holding the relevance score for the search stage in use
+   *   (`vectorSearchScore` for $vectorSearch, `searchScore` for $search, `score` for $rankFusion).
+   */
   private buildProjection(
     metadataMode: 'field' | 'document',
     includeVector: boolean,
@@ -642,22 +642,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * queryable. Skipping that step on a real Atlas cluster may cause
    * "index not found" or "index not ready" errors on subsequent operations.
    */
-  async createIndex({
-    indexName,
-    dimension,
-    metric = 'cosine',
-    filterFields,
-    collectionName,
-    searchIndexName,
-    allowWrites,
-    autoEmbed,
-  }: MongoDBCreateIndexParams): Promise<void> {
+  async createIndex(params: MongoDBCreateIndexParams): Promise<void> {
+    const {
+      indexName,
+      dimension,
+      metric = 'cosine',
+      filterFields,
+      collectionName,
+      searchIndexName,
+      allowWrites,
+      autoEmbed,
+    } = params;
     let mongoMetric;
     try {
       if (autoEmbed) {
         if (dimension !== undefined) {
           throw new Error(
             'dimension cannot be combined with autoEmbed. The embedding model determines the vector size; use autoEmbed.numDimensions to override it.',
+          );
+        }
+        // Read from `params`, since `metric` above carries a default that hides whether the
+        // caller named it.
+        if (params.metric !== undefined) {
+          throw new Error(
+            'metric cannot be combined with autoEmbed. metric configures a client-side vector field; use autoEmbed.similarity instead.',
           );
         }
       } else if (dimension === undefined || !Number.isInteger(dimension) || dimension <= 0) {
@@ -817,7 +825,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             allowWrites: effectiveWritable,
             textSearchIndexName,
             dimension,
-            metric,
+            // An autoEmbed index has no client-side metric; its similarity lives in autoEmbed.
+            ...(resolvedAutoEmbed ? {} : { metric }),
             autoEmbed: resolvedAutoEmbed,
           },
           registryClaim,
@@ -1799,7 +1808,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         euclidean: 'euclidean',
         dotProduct: 'dotproduct',
       };
-      const metric = reverseMetricMap[vectorField.similarity] ?? 'cosine';
+      // `similarity` is optional on an autoEmbed field, and Atlas reports nothing for it when
+      // the index did not set one, so the function the server applies is not knowable from
+      // here. Report a metric only where the index declares one. `similarity` is required on a
+      // plain vector field, so that path always has a value.
+      const metric =
+        vectorField.type === 'autoEmbed' && vectorField.similarity === undefined
+          ? undefined
+          : (reverseMetricMap[vectorField.similarity] ?? 'cosine');
 
       return { dimension, count, metric };
     } catch (error) {

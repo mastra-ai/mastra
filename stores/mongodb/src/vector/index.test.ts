@@ -2493,6 +2493,37 @@ describe('MongoDBVector autoEmbed', () => {
       ).rejects.toThrow(/dimension cannot be combined with autoEmbed/);
     });
 
+    it('rejects metric combined with autoEmbed', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+
+      await expect(
+        v.createIndex({ indexName: 'movies', metric: 'dotproduct', autoEmbed: { model: 'voyage-4' } }),
+      ).rejects.toThrow(/metric cannot be combined with autoEmbed/);
+    });
+
+    it('rejects metric combined with autoEmbed even when it matches the default', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+
+      // 'cosine' is the value `metric` defaults to, so accepting it here would depend on
+      // whether the caller typed it rather than on what the index does with it.
+      await expect(
+        v.createIndex({ indexName: 'movies', metric: 'cosine', autoEmbed: { model: 'voyage-4' } }),
+      ).rejects.toThrow(/metric cannot be combined with autoEmbed/);
+    });
+
+    it('creates an autoEmbed index when metric is omitted', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+
+      const field = vectorDefOf(createSearchIndex).find((f: any) => f.type === 'autoEmbed');
+      expect(field).toMatchObject({ model: 'voyage-4' });
+      expect(field.similarity).toBeUndefined();
+    });
+
     it('does not cache the embedded field as a declared filter path', async () => {
       const v = makeVector();
       stubCreateIndex(v);
@@ -3100,6 +3131,43 @@ describe('MongoDBVector autoEmbed', () => {
       });
       return countDocuments;
     };
+
+    it.each(['float', 'scalar', 'binary', 'binaryNoRescore'])(
+      'reports no metric for a %s autoEmbed index that declares no similarity',
+      async quantization => {
+        const v = makeVector();
+        // Atlas reports no `similarity` for an autoEmbed index that did not set one, whatever
+        // the quantization, so the function it applies cannot be read back.
+        stubDescribe(v, {
+          fields: [{ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4', quantization }],
+        });
+
+        const stats = await v.describeIndex({ indexName: 'movies' });
+
+        expect(stats.metric).toBeUndefined();
+        expect(stats.count).toBe(2);
+      },
+    );
+
+    it('reports the similarity an autoEmbed index declares', async () => {
+      const v = makeVector();
+      stubDescribe(v, {
+        fields: [
+          {
+            type: 'autoEmbed',
+            modality: 'text',
+            path: 'fullplot',
+            model: 'voyage-4',
+            quantization: 'binary',
+            similarity: 'dotProduct',
+          },
+        ],
+      });
+
+      const stats = await v.describeIndex({ indexName: 'movies' });
+
+      expect(stats.metric).toBe('dotproduct');
+    });
 
     it('reads stats from an autoEmbed definition instead of throwing', async () => {
       const v = makeVector();
