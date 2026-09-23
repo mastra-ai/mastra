@@ -57,7 +57,7 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox className="h-auto w-[126px] text-muted-foreground" />,
+    iconSlot: <Inbox />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
     actionSlot: <Button>Get Started</Button>,
@@ -77,4 +77,13 @@ export const Fill: Story = {
       <EmptyState {...args} />
     </div>
   ),
+};
+
+export const ErrorTone: Story = {
+  args: {
+    tone: 'error',
+    titleSlot: 'Unable to load traces',
+    descriptionSlot: 'The observability store did not respond. Check the connection and try again.',
+    actionSlot: <Button>Try again</Button>,
+  },
 };
