@@ -3393,20 +3393,27 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * Take the origin captured when a gated abort was armed. The run engine
+   * claims it as soon as the gate releases, so a later abort of another run
+   * cannot overwrite the origin this run's teardown is checked against.
+   */
+  takeDeferredAbortOrigin(): { bindingGeneration: number; localOnly: boolean } | undefined {
+    const origin = this.#deferredAbortOrigin;
+    this.#deferredAbortOrigin = undefined;
+    return origin;
+  }
+
+  /**
    * Fire the deferred abort teardown for a run that was aborted while parked on
    * a tool-approval gate: abort the live subscription and the run's controller.
    * Called by the run engine once the gated call's decline has been driven
    * through the agent, so the denial is persisted before the run is torn down.
-   * `origin` defaults to the one captured when a gated abort was armed. When
-   * present, the teardown is skipped if the session's binding was
-   * torn down since, because a successor run may now own the stream and run
-   * state. (The abort-requested flag is not a usable guard: the denial's own
-   * resumed run resets it before settlement resolves.)
+   * When `origin` is present, the teardown is skipped if the session's binding
+   * was torn down since, because a successor run may now own the stream and
+   * run state. (The abort-requested flag is not a usable guard: the denial's
+   * own resumed run resets it before settlement resolves.)
    */
-  completeDeferredAbort(
-    origin: { bindingGeneration: number; localOnly: boolean } | undefined = this.#deferredAbortOrigin,
-  ): void {
-    this.#deferredAbortOrigin = undefined;
+  completeDeferredAbort(origin?: { bindingGeneration: number; localOnly: boolean }): void {
     if (origin && this.run.bindingGeneration() !== origin.bindingGeneration) return;
     this.stream.abort({ localOnly: origin?.localOnly ?? this.#localOnlyAbort });
     this.run.requestAbort();

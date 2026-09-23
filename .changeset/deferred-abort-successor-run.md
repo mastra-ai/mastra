@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed stopping a run that is waiting on a paused tool call or a tool approval so it can no longer cancel a new run started right after, for example after switching threads or running `/new`.
+Fixed deferred aborts for paused tool calls and tool approvals. They no longer stop a new run started after switching threads or running `/new`.
