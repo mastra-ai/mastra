@@ -79,7 +79,7 @@ export type ScenarioName =
   | 'initial-prompt'
   | 'initial-prompt-skill'
   | 'initial-prompt-resume'
-  | 'send-prompt-resume'
+  | 'tui-prompt-resume'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'

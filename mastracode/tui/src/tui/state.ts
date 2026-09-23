@@ -137,7 +137,7 @@ export interface MastraTUIOptions {
 
   /**
    * When set, don't send `initialMessage` if startup resumes a thread that
-   * already has messages (`--initial-prompt`); show this notice instead. By
+   * already has messages (`--tui-initial-prompt`); show this notice instead. By
    * default the message is always sent.
    */
   resumeSkipNotice?: string;

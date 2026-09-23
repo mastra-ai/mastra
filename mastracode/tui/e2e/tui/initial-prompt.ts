@@ -10,13 +10,13 @@ const PROMPT = 'Return the Mastra Code initial prompt phrase.';
 
 export const initialPromptScenario: McE2eScenario = {
   name: 'initial-prompt',
-  description: 'Start the interactive TUI with --initial-prompt and assert the prompt is sent without typing.',
-  testName: 'sends the --initial-prompt text as the first message and stays interactive',
+  description: 'Start the interactive TUI with --tui-initial-prompt and assert the prompt is sent without typing.',
+  testName: 'sends the --tui-initial-prompt text as the first message and stays interactive',
   useOpenAIModel: true,
   aimockFixture: 'initial-prompt.json',
   async inProcessApp({ startMastraCodeApp }) {
     // The same argv handling main.ts runs before starting the TUI.
-    const args = takeInitialPrompt(['node', 'mastracode', '--initial-prompt', PROMPT], {});
+    const args = takeInitialPrompt(['node', 'mastracode', '--tui-initial-prompt', PROMPT], {});
     assert.deepEqual(args.argv, ['node', 'mastracode']);
     return startMastraCodeApp({ tui: initialMessageOptions(args, null) });
   },
@@ -53,8 +53,9 @@ const SKILL_ARGS = 'https://github.com/mastra-ai/mastra/pull/1';
 
 export const initialPromptSkillScenario: McE2eScenario = {
   name: 'initial-prompt-skill',
-  description: 'Start the interactive TUI with --initial-prompt set to /skill/<name> and assert the skill activates.',
-  testName: 'runs a /skill command passed as the --initial-prompt',
+  description:
+    'Start the interactive TUI with --tui-initial-prompt set to /skill/<name> and assert the skill activates.',
+  testName: 'runs a /skill command passed as the --tui-initial-prompt',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'initial-prompt-skill.json',
@@ -68,7 +69,7 @@ export const initialPromptSkillScenario: McE2eScenario = {
   },
   async inProcessApp({ startMastraCodeApp }) {
     const args = takeInitialPrompt(
-      ['node', 'mastracode', '--initial-prompt', `/skill/${SKILL_NAME} ${SKILL_ARGS}`],
+      ['node', 'mastracode', '--tui-initial-prompt', `/skill/${SKILL_NAME} ${SKILL_ARGS}`],
       {},
     );
     return startMastraCodeApp({ tui: initialMessageOptions(args, null) });
@@ -116,7 +117,7 @@ values
 }
 
 function resumeScenario(
-  flag: '--initial-prompt' | '--send-prompt',
+  flag: '--tui-initial-prompt' | '--tui-prompt',
   pipedInput: string | null = null,
 ): Pick<McE2eScenario, 'projectFixture' | 'useOpenAIModel' | 'aimockFixture' | 'env' | 'prepare' | 'inProcessApp'> {
   return {
@@ -134,14 +135,15 @@ function resumeScenario(
 
 export const initialPromptResumeScenario: McE2eScenario = {
   name: 'initial-prompt-resume',
-  description: 'With --initial-prompt and piped stdin, a resumed conversation is shown without sending either into it.',
-  testName: 'does not send --initial-prompt or piped stdin into a resumed conversation',
-  ...resumeScenario('--initial-prompt', PIPED_INPUT),
+  description:
+    'With --tui-initial-prompt and piped stdin, a resumed conversation is shown without sending either into it.',
+  testName: 'does not send --tui-initial-prompt or piped stdin into a resumed conversation',
+  ...resumeScenario('--tui-initial-prompt', PIPED_INPUT),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Seeded initial prompt resume assistant turn/, terminal, 15_000);
     await runtime.waitForScreenText(
-      /initial prompt and piped input were not sent\.[\s\S]*--send-prompt to send them anyway/,
+      /initial prompt and piped input were not sent\.[\s\S]*--tui-prompt to send them anyway/,
       terminal,
       8_000,
     );
@@ -163,16 +165,16 @@ export const initialPromptResumeScenario: McE2eScenario = {
   },
 };
 
-export const sendPromptResumeScenario: McE2eScenario = {
-  name: 'send-prompt-resume',
-  description: 'With --send-prompt, the prompt is sent into the resumed conversation.',
-  testName: 'sends --send-prompt into a resumed conversation',
-  ...resumeScenario('--send-prompt'),
+export const tuiPromptResumeScenario: McE2eScenario = {
+  name: 'tui-prompt-resume',
+  description: 'With --tui-prompt, the prompt is sent into the resumed conversation.',
+  testName: 'sends --tui-prompt into a resumed conversation',
+  ...resumeScenario('--tui-prompt'),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Seeded initial prompt resume assistant turn/, terminal, 15_000);
     await runtime.waitForScreenText(/MC resumed prompt response/, terminal, 15_000);
-    runtime.printScreen('after send-prompt', terminal);
+    runtime.printScreen('after tui-prompt', terminal);
     terminal.submit('/help');
     await runtime.waitForScreenText(/Commands/i, terminal, 8_000);
     terminal.keyCtrlC();

@@ -407,7 +407,7 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Initial message (--initial-prompt / --send-prompt and/or piped stdin) is
+    // Initial message (--tui-initial-prompt / --tui-prompt and/or piped stdin) is
     // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
       const { resumeSkipNotice } = this.state.options;

@@ -84,27 +84,27 @@ Mastra Code requires Node.js 22.19.0 or later. To enable `@` filename suggestion
 
 ## Start with a prompt
 
-Pass `--initial-prompt` to open Mastra Code with a first message already submitted, as if you had typed it. The session stays open, so you can follow up as usual:
+Pass `--tui-initial-prompt` to open Mastra Code with a first message already submitted, as if you had typed it. The session stays open, so you can follow up as usual:
 
 ```sh
-mastracode --initial-prompt "Review the changes on this branch"
+mastracode --tui-initial-prompt "Review the changes on this branch"
 ```
 
 Slash commands and skills work too:
 
 ```sh
-mastracode --initial-prompt "/skill/review-pr https://github.com/org/repo/pull/1"
+mastracode --tui-initial-prompt "/skill/review-pr https://github.com/org/repo/pull/1"
 ```
 
-`--initial-prompt` only starts a new conversation. If Mastra Code resumes an existing conversation for the directory, it shows that conversation and doesn't send the prompt, so relaunching in the same place doesn't repeat the task. Use `--send-prompt` to send the prompt either way, including into a resumed conversation:
+`--tui-initial-prompt` only starts a new conversation. If Mastra Code resumes an existing conversation for the directory, it shows that conversation and doesn't send the prompt, so relaunching in the same place doesn't repeat the task. Use `--tui-prompt` to send the prompt either way, including into a resumed conversation:
 
 ```sh
-mastracode --send-prompt "Pick up where we left off and run the tests"
+mastracode --tui-prompt "Pick up where we left off and run the tests"
 ```
 
-Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_INITIAL_PROMPT` instead. It works like `--initial-prompt`, and Mastra Code removes the variable at startup so shells and nested sessions it starts don't send the prompt again. A flag takes precedence over the variable.
+Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_TUI_INITIAL_PROMPT` instead. It works like `--tui-initial-prompt`, and Mastra Code removes the variable at startup so shells and nested sessions it starts don't send the prompt again. A flag takes precedence over the variable.
 
-Piped stdin is added after a plain-text prompt in the same first message, and is skipped with the prompt when `--initial-prompt` resumes a conversation. A prompt that is a slash command or starts with `!` can't be combined with piped stdin. To run a task without the interactive UI and exit, use [headless mode](/headless).
+Piped stdin is added after a plain-text prompt in the same first message, and is skipped with the prompt when `--tui-initial-prompt` resumes a conversation. A prompt that is a slash command or starts with `!` can't be combined with piped stdin. To run a task without the interactive UI and exit, use [headless mode](/headless).
 
 ## Slash commands
 

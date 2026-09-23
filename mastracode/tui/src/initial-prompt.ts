@@ -1,7 +1,7 @@
-export const INITIAL_PROMPT_FLAG = '--initial-prompt' as const;
-export const INITIAL_PROMPT_ENV = 'MASTRACODE_INITIAL_PROMPT';
+export const INITIAL_PROMPT_FLAG = '--tui-initial-prompt' as const;
+export const INITIAL_PROMPT_ENV = 'MASTRACODE_TUI_INITIAL_PROMPT';
 
-export const SEND_PROMPT_FLAG = '--send-prompt' as const;
+export const TUI_PROMPT_FLAG = '--tui-prompt' as const;
 
 export type InitialPromptArgs = {
   /** argv with the flag and its value removed, so headless detection never mistakes the value for a prompt. */
@@ -10,18 +10,18 @@ export type InitialPromptArgs = {
   /** Set when a flag was passed without a value, or both flags were passed. */
   error?: string;
   /** The flag the prompt came from; undefined when it came from the environment. */
-  flag?: typeof INITIAL_PROMPT_FLAG | typeof SEND_PROMPT_FLAG;
+  flag?: typeof INITIAL_PROMPT_FLAG | typeof TUI_PROMPT_FLAG;
   /**
-   * `--send-prompt` sends even when startup resumes an existing conversation;
-   * `--initial-prompt` and the environment variable only start a new one.
+   * `--tui-prompt` sends even when startup resumes an existing conversation;
+   * `--tui-initial-prompt` and the environment variable only start a new one.
    */
   sendOnResume: boolean;
 };
 
 /**
- * Takes the interactive startup prompt from `--initial-prompt <text>` or
- * `--send-prompt <text>` (also `--flag=<text>`), falling back to
- * `MASTRACODE_INITIAL_PROMPT`.
+ * Takes the interactive startup prompt from `--tui-initial-prompt <text>` or
+ * `--tui-prompt <text>` (also `--flag=<text>`), falling back to
+ * `MASTRACODE_TUI_INITIAL_PROMPT`.
  *
  * The environment variable is always removed from `env`: everything this
  * process spawns inherits its environment, and a nested Mastra Code (or any
@@ -36,7 +36,7 @@ export function takeInitialPrompt(argv: string[], env: NodeJS.ProcessEnv): Initi
   let error: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    const flag = [INITIAL_PROMPT_FLAG, SEND_PROMPT_FLAG].find(f => arg === f || arg.startsWith(`${f}=`));
+    const flag = [INITIAL_PROMPT_FLAG, TUI_PROMPT_FLAG].find(f => arg === f || arg.startsWith(`${f}=`));
     if (!flag) {
       rest.push(arg);
     } else if (arg !== flag) {
@@ -47,11 +47,11 @@ export function takeInitialPrompt(argv: string[], env: NodeJS.ProcessEnv): Initi
       found.set(flag, argv[++i]!);
     }
   }
-  if (found.size > 1) error = `Use either ${INITIAL_PROMPT_FLAG} or ${SEND_PROMPT_FLAG}, not both`;
+  if (found.size > 1) error = `Use either ${INITIAL_PROMPT_FLAG} or ${TUI_PROMPT_FLAG}, not both`;
 
   const [flag, flagValue] = [...found][0] ?? [];
   const prompt = (flag ? flagValue : fromEnv)?.trim() || undefined;
-  return { argv: rest, prompt, error, flag, sendOnResume: flag === SEND_PROMPT_FLAG };
+  return { argv: rest, prompt, error, flag, sendOnResume: flag === TUI_PROMPT_FLAG };
 }
 
 /** The first message the TUI sends: the initial prompt, followed by any piped stdin. */
@@ -90,6 +90,6 @@ export function initialMessageOptions(
   const skipped = pipedInput ? 'the initial prompt and piped input were' : 'the initial prompt was';
   return {
     initialMessage,
-    resumeSkipNotice: `Resumed the existing conversation for this directory, so ${skipped} not sent. Use ${SEND_PROMPT_FLAG} to send ${pipedInput ? 'them' : 'it'} anyway.`,
+    resumeSkipNotice: `Resumed the existing conversation for this directory, so ${skipped} not sent. Use ${TUI_PROMPT_FLAG} to send ${pipedInput ? 'them' : 'it'} anyway.`,
   };
 }

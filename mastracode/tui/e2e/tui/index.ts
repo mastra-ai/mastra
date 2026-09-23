@@ -77,7 +77,7 @@ import {
   initialPromptResumeScenario,
   initialPromptScenario,
   initialPromptSkillScenario,
-  sendPromptResumeScenario,
+  tuiPromptResumeScenario,
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
@@ -286,7 +286,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'initial-prompt': initialPromptScenario,
   'initial-prompt-skill': initialPromptSkillScenario,
   'initial-prompt-resume': initialPromptResumeScenario,
-  'send-prompt-resume': sendPromptResumeScenario,
+  'tui-prompt-resume': tuiPromptResumeScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
