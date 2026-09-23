@@ -10,8 +10,8 @@ export function SectionTitle({ icon, children, className }: SectionTitleProps) {
   return (
     <h3
       className={cn(
-        'flex items-center gap-2 text-ui-sm font-medium text-muted-foreground',
-        '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em]',
+        'flex items-center gap-2 text-column text-muted-foreground',
+        '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em]',
         className,
       )}
     >

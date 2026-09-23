@@ -1,13 +1,10 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
+import type { SidebarNewLink } from '@mastra/playground-ui/new/sidebar';
 import { Ellipsis, Search, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -18,10 +15,7 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
-import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
-import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
 import { useNavigationCommand } from '@/lib/command';
-import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
@@ -35,7 +29,7 @@ declare global {
   }
 }
 
-function toSidebarLink(item: NavItem): NavLink {
+function toSidebarLink(item: NavItem): SidebarNewLink {
   const { Icon } = item;
   return { name: item.name, url: item.url, icon: <Icon /> };
 }
@@ -45,38 +39,33 @@ interface SidebarNavItemProps {
   /** Items in the same list, used for section-aware active matching. */
   siblings: NavItem[];
   onClick?: () => void;
-  children?: ReactNode;
 }
 
-function SidebarNavItem({ item, siblings, onClick, children }: SidebarNavItemProps) {
-  const { Link } = useLinkComponent();
-  const { state } = useMainSidebar();
+function SidebarNavItem({ item, siblings, onClick }: SidebarNavItemProps) {
+  const { state } = useSidebarNew();
   const { pathname } = useLocation();
 
   return (
-    <MainSidebar.NavLink
-      LinkComponent={Link}
+    <SidebarNew.NavLink
       state={state}
       link={toSidebarLink(item)}
       isActive={getIsLinkActive(item, pathname, siblings)}
       onClick={onClick}
-    >
-      {children}
-    </MainSidebar.NavLink>
+    />
   );
 }
 
 function MoreRow({ onClick }: { onClick: () => void }) {
-  const { state } = useMainSidebar();
+  const { state } = useSidebarNew();
 
   return (
-    <MainSidebar.NavLink
+    <SidebarNew.NavLink
       state={state}
       link={{ name: 'More', url: '#', icon: <Ellipsis /> }}
       render={
         <button type="button" onClick={onClick}>
           <Ellipsis />
-          <MainSidebar.NavLabel state={state}>More</MainSidebar.NavLabel>
+          <SidebarNew.NavLabel state={state}>More</SidebarNew.NavLabel>
         </button>
       }
     />
@@ -85,7 +74,7 @@ function MoreRow({ onClick }: { onClick: () => void }) {
 
 /** Mirrors the nav row box (h-7, px-3, size-4 icon + label with gap-2) so the list doesn't jump on resolve. */
 function NavSkeletonRow() {
-  const { state } = useMainSidebar();
+  const { state } = useSidebarNew();
   const isCollapsed = state === 'collapsed';
 
   return (
@@ -133,8 +122,7 @@ function FoldableNavTail({ items, siblings }: FoldableNavTailProps) {
 }
 
 export function AppSidebar() {
-  const { Link } = useLinkComponent();
-  const { state, isMobile, setOpenMobile } = useMainSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebarNew();
   const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
   const commandShortcutLabel = useKeyboardShortcutLabel('K');
 
@@ -145,12 +133,6 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
-  const canReadInbox =
-    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
-  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
-  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
-  const hasInboxItems =
-    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -188,159 +170,81 @@ export function AppSidebar() {
   const filteredBottom = bottomNav.filter(filterItem);
 
   return (
-    <MainSidebar>
-      <div className="mb-1.5 pt-2.5">
-        {state === 'collapsed' ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="relative grid size-9 place-items-center">
-              <LogoWithoutText
-                className={cn(
-                  'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
-                  !isMobile && 'group-hover/sidebar:opacity-0',
-                )}
-              />
-              {!isMobile && (
-                <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-                  <MainSidebar.Trigger />
-                </div>
-              )}
-            </div>
-            {isUserAuthenticated && <AuthStatus />}
-          </div>
-        ) : isUserAuthenticated ? (
-          <span className="flex h-7 items-center justify-between pr-2 pl-3">
-            <span className="flex min-w-0 flex-1 items-center gap-2">
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
-                Mastra Studio
-              </span>
-              {!isMobile && <MainSidebar.Trigger />}
-            </span>
-            <AuthStatus />
-          </span>
-        ) : (
-          <span className="flex h-7 items-center gap-2 pr-2 pl-3">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
-              Mastra Studio
-            </span>
-            {!isMobile && <MainSidebar.Trigger />}
-          </span>
+    <SidebarNew aria-label="Sidebar">
+      <SidebarNew.CommandHeader>
+        <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Studio" />
+        {isUserAuthenticated && <AuthStatus />}
+        {!isMobile && (
+          <SidebarNew.SearchTrigger
+            aria-label="Search and navigate"
+            shortcut={commandShortcutLabel}
+            onClick={openNavigationCommand}
+          >
+            <Search />
+          </SidebarNew.SearchTrigger>
         )}
-      </div>
-
-      {!isMobile && (
-        <div className="mb-2">
-          <MainSidebar.NavList>
-            <MainSidebar.NavLink
-              asChild
-              state={state}
-              link={{
-                name: 'Search',
-                url: '#',
-                icon: <Search />,
-              }}
-            >
-              <button
-                type="button"
-                onClick={openNavigationCommand}
-                aria-label="Search and navigate"
-                className="border-border1 bg-surface3 text-foreground hover:bg-surface4 hover:text-foreground active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
-              >
-                <Search />
-                <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
-                {state !== 'collapsed' && (
-                  <kbd
-                    aria-hidden="true"
-                    className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
-                  >
-                    {commandShortcutLabel}
-                  </kbd>
-                )}
-              </button>
-            </MainSidebar.NavLink>
-          </MainSidebar.NavList>
-        </div>
-      )}
+      </SidebarNew.CommandHeader>
 
       {isAgentBuilderVisible && (
-        <div className="mb-1">
-          <MainSidebar.NavList>
-            <MainSidebar.NavLink
-              LinkComponent={Link}
-              state={state}
-              link={{
-                name: 'Agent Builder',
-                url: '/agent-builder',
-                icon: <Wrench />,
-              }}
-              isActive={isAgentBuilderActive}
-            />
-          </MainSidebar.NavList>
-        </div>
+        <SidebarNew.NavList className="mb-1">
+          <SidebarNew.NavLink
+            state={state}
+            link={{
+              name: 'Agent Builder',
+              url: '/agent-builder',
+              icon: <Wrench />,
+            }}
+            isActive={isAgentBuilderActive}
+          />
+        </SidebarNew.NavList>
       )}
 
       <ImpersonationBanner />
 
-      <MainSidebar.Nav>
+      <SidebarNew.Nav>
         {mainNav.map(section => {
           const filtered = section.items.filter(filterItem);
           const anySubActive = filtered.some(item => getIsLinkActive(item, pathname));
           const isHeaderActive = !!(section.href && pathname === section.href && !anySubActive);
 
           return (
-            <MainSidebar.NavSection key={section.key}>
+            <SidebarNew.NavSection key={section.key}>
               {section.title ? (
-                <MainSidebar.NavHeader LinkComponent={Link} state={state} href={section.href} isActive={isHeaderActive}>
+                <SidebarNew.NavHeader href={section.href} isActive={isHeaderActive}>
                   {section.title}
-                </MainSidebar.NavHeader>
+                </SidebarNew.NavHeader>
               ) : null}
-              <MainSidebar.NavList>
+              <SidebarNew.NavList>
                 {filtered
                   .filter(item => !item.foldable)
                   .map(item => (
-                    <SidebarNavItem key={item.name} item={item} siblings={filtered}>
-                      {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
-                        <Badge
-                          variant="yellow"
-                          size="sm"
-                          indicator="dot"
-                          className="ml-auto"
-                          aria-label="Items need review"
-                        />
-                      ) : null}
-                    </SidebarNavItem>
+                    <SidebarNavItem key={item.name} item={item} siblings={filtered} />
                   ))}
                 {filtered.some(item => item.foldable) && (
                   <FoldableNavTail items={filtered.filter(item => item.foldable)} siblings={filtered} />
                 )}
-              </MainSidebar.NavList>
-            </MainSidebar.NavSection>
+              </SidebarNew.NavList>
+            </SidebarNew.NavSection>
           );
         })}
-      </MainSidebar.Nav>
+      </SidebarNew.Nav>
 
-      <MainSidebar.Bottom className="pb-3">
+      <SidebarNew.Footer>
         {filteredBottom.length > 0 && (
-          <MainSidebar.NavList>
+          <SidebarNew.NavList>
             {filteredBottom.map(item => (
-              <MainSidebar.NavLink
+              <SidebarNew.NavLink
                 key={item.name}
-                LinkComponent={Link}
                 state={state}
                 link={toSidebarLink(item)}
                 isActive={getIsLinkActive(item, pathname)}
               />
             ))}
-          </MainSidebar.NavList>
+          </SidebarNew.NavList>
         )}
-        {state !== 'collapsed' && (
-          <>
-            <hr className="bg-border1 mx-3 my-2 h-px border-0" />
-            <MastraVersionFooter collapsed={false} />
-          </>
-        )}
-      </MainSidebar.Bottom>
-    </MainSidebar>
+        <MastraVersionFooter collapsed={state === 'collapsed'} />
+        <SidebarNew.FooterMeta action={<SidebarNew.Trigger />} />
+      </SidebarNew.Footer>
+    </SidebarNew>
   );
 }

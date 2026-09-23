@@ -93,6 +93,17 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('getEntry', () => {
+    it('recovers active workflow runs during production startup', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const entry = (new BuildBundler() as any).getEntry();
+
+      expect(entry).toContain('await mastra.restartAllActiveWorkflowRuns()');
+      expect(entry).toContain("mastra.recoveryConfig?.durableAgents === 'auto'");
+      expect(entry).toContain('await mastra.recoverAllDurableAgents()');
+    });
+  });
+
   describe('bundle', () => {
     it('does not execute worker introspection outside environment deploys', async () => {
       const { BuildBundler } = await import('./BuildBundler');

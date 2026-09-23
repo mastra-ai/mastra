@@ -1,17 +1,17 @@
-import '../../../../new-theme.css';
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { controlHeight, controlIconClasses, controlSizeClasses } from '@/ds/primitives/control-size';
+import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
+import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
-  disabledFilledSurfaceStyle,
-  disabledOutlineSurfaceStyle,
+  raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label and larger radius.
@@ -34,63 +34,60 @@ const TEXT_MODE_ADORNMENTS = cn(
 // Filled variants opt out because there the glyph colour carries the meaning.
 const NEUTRAL_ICON_STATE = cn(
   '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground aria-disabled:[&_svg]:text-muted-foreground',
-  '[&_svg]:transition-colors [&_svg]:duration-normal [&_svg]:ease-out-custom',
-  'motion-reduce:[&_svg]:transition-none',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'new-theme inline-flex cursor-pointer items-center justify-center',
-    'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
+    'inline-flex cursor-pointer items-center justify-center',
+    controlStateColorTransition,
     sharedFormElementDisabledStyle,
-    'aria-disabled:pointer-events-none aria-disabled:text-muted-foreground',
+    'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground',
     controlFocusBorderVisible,
   ),
   {
     variants: {
       variant: {
+        // The raised card material, the same one a field wears: a neutral filled control is
+        // one material system-wide. No border of its own — the material's rim is its edge,
+        // and focus repaints that rim. Inside a ButtonsGroup the group flattens the rim and
+        // hands every segment the same 1px border instead (see `buttons-group.css`).
         default: cn(
-          'border border-border bg-foreground/10 font-medium text-foreground not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/18',
+          'border-0',
+          raisedControlSurfaceStyle,
           NEUTRAL_ICON_STATE,
-          disabledFilledSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-muted',
+          'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
+        // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
+        // layered on the surface, so a state that thinned it would let whatever the button
+        // covers read through the hover it is meant to answer.
         primary: cn(
-          'border border-transparent bg-foreground font-medium text-background not-disabled:hover:bg-foreground/75 not-disabled:active:bg-foreground/60',
-          'disabled:bg-foreground/45 disabled:text-background/75 aria-disabled:bg-foreground/45 aria-disabled:text-background/75',
+          'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-destructive font-medium text-destructive-foreground not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
-          'disabled:bg-destructive/45 disabled:text-destructive-foreground/75 aria-disabled:bg-destructive/45 aria-disabled:text-destructive-foreground/75',
+          'border border-transparent bg-fill-destructive text-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          'disabled:bg-fill-destructive-disabled disabled:text-destructive-foreground/75 aria-disabled:bg-fill-destructive-disabled aria-disabled:text-destructive-foreground/75',
         ),
         'destructive-ghost': cn(
           'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
           'disabled:bg-transparent disabled:text-destructive/50 aria-disabled:bg-transparent aria-disabled:text-destructive/50',
         ),
         ghost: cn(
-          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',
+          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
           'disabled:bg-transparent aria-disabled:bg-transparent',
-        ),
-        outline: cn(
-          'border border-foreground/18 bg-transparent text-foreground not-disabled:hover:border-foreground/30 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
-          NEUTRAL_ICON_STATE,
-          disabledOutlineSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-transparent',
         ),
       },
       size: {
-        xs: cn(controlSizeClasses.xs, controlIconClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
-        sm: cn(controlSizeClasses.sm, controlIconClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, controlIconClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, controlIconClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
-        // so icon-mode and text-mode use the same press feedback. Every size comes off the shared
-        // scale, so an icon-only button matches a labelled one at the same size in the same row.
-        'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
-        'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
-        'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),
-        'icon-lg': cn(controlHeight.lg, 'w-form-lg rounded-full'),
+        // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
+        // wrapper the component puts around an icon-mode child, keyed off the same scale.
+        'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
+        'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
+        'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
       },
     },
     defaultVariants: {
@@ -146,20 +143,16 @@ function preventLinkActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
-// One icon step per control step, so the same nominal size renders the same icon
-// whether it arrives as an icon-mode child, the `icon` prop, or a bare SVG.
-const iconChildSizeMap: Record<IconButtonSize, 'sm' | 'smd' | 'default' | 'lg'> = {
-  'icon-xs': 'sm',
-  'icon-sm': 'smd',
-  'icon-md': 'default',
-  'icon-lg': 'lg',
-};
-
-const textIconSizeMap: Record<TextButtonSize, 'sm' | 'smd' | 'default' | 'lg'> = {
-  xs: 'sm',
-  sm: 'smd',
-  md: 'default',
+// One icon step per control step: a glyph is sized by the rung it sits in, so the
+// same nominal size renders the same icon whether it arrives as an icon-mode child,
+// the `icon` prop, or a bare SVG.
+const iconSizeMap: Record<ButtonSize, IconSize> = {
+  sm: 'sm',
+  md: 'md',
   lg: 'lg',
+  'icon-sm': 'sm',
+  'icon-md': 'md',
+  'icon-lg': 'lg',
 };
 
 // Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
@@ -183,8 +176,8 @@ function isIconOnly(children: React.ReactNode): boolean {
   return flat.length > 0 && flat.every(child => React.isValidElement(child));
 }
 
-// Type guard: narrows `ButtonSize` to `IconButtonSize` so consumers (e.g. `iconChildSizeMap`)
-// can index into icon-only structures without a cast.
+// Type guard: narrows `ButtonSize` to `IconButtonSize`, so an icon-mode button can be
+// told from a text-mode one without a cast.
 // eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
 export function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
   return size?.startsWith('icon-') ?? false;
@@ -220,11 +213,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
 
     const content = iconMode ? (
-      <Icon size={iconChildSizeMap[size]}>{children}</Icon>
+      <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
     ) : (
       <>
         {icon ? (
-          <Icon data-slot="button-icon" size={textIconSizeMap[resolvedSize as TextButtonSize]}>
+          <Icon data-slot="button-icon" size={iconSizeMap[resolvedSize]}>
             {icon}
           </Icon>
         ) : null}
@@ -241,8 +234,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       'aria-label': ariaLabel,
       // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
       // (filled buttons have an opaque background that hides a border seam, so the group
-      // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
+      // paints their divider as an inset box-shadow instead — see buttons-group.css).
       'data-variant': variant,
+      // Icon-mode is a square: a group that overrides the rung has to move the width with
+      // the height or the circle turns into a pill (see buttons-group.css).
+      'data-shape': iconMode ? 'icon' : undefined,
       className: cn(buttonVariants({ variant, size: resolvedSize }), className),
       ...props,
     };

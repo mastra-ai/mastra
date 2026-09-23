@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 export function MetricsKpiCardLoading({ className }: { className?: string }) {
   return (
-    <span className={cn('text-ui-md', className)}>
+    <span className={cn('text-body', className)}>
       <Spinner size="md" variant="pulse" className="text-placeholder" />
     </span>
   );

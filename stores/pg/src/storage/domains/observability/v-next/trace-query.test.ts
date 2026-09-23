@@ -1,17 +1,28 @@
+import { coreFeatures } from '@mastra/core/features';
 import {
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryValues,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import type { TraceQueryResponse, TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
-import { compilePostgresThreadQuery, compilePostgresTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compilePostgresThreadQuery,
+  compilePostgresTraceQuery,
+  compilePostgresTraceQueryValues,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 import { ObservabilityStoragePostgresVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -25,6 +36,15 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('Postgres advanced trace query', () => {
+  let wasEnabled: boolean;
+  beforeEach(() => {
+    wasEnabled = coreFeatures.has('observability-delta-polling');
+    coreFeatures.delete('observability-delta-polling');
+  });
+  afterEach(() => {
+    if (wasEnabled) coreFeatures.add('observability-delta-polling');
+    vi.restoreAllMocks();
+  });
   it('rejects invalid trace-query timeout configuration at construction', () => {
     expect(
       () =>
@@ -183,6 +203,39 @@ describe('Postgres advanced trace query', () => {
     ]);
   });
 
+  it('compiles tag collection predicates against the text[] column and discovers tags per trace', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'alpha' },
+            { op: 'notIncludes', path: 'tags', value: 'beta' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).toContain(`(r."tags" @> ARRAY[$3]::text[])`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0 AND NOT (r."tags" @> ARRAY[$4]::text[]))`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0)`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") = 0)`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'alpha', 'beta', 101]);
+
+    const values = compilePostgresTraceQueryValues(
+      'public',
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', limit: 10 }),
+      ),
+    );
+    expect(values.text).toContain(`SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r`);
+    expect(values.text).toContain('GROUP BY value');
+    expect(values.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 11]);
+  });
+
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
     const spanClause = {
       spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } },
@@ -210,6 +263,53 @@ describe('Postgres advanced trace query', () => {
     expect(repeated.match(/current_scores AS MATERIALIZED/g)).toHaveLength(1);
     expect(repeated.match(/FROM current_spans s/g)).toHaveLength(2);
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
+  });
+
+  it('ANDs the tenant scope into root_scope and every related scan with parameters numbered before predicates', () => {
+    const scopedPlan = planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange: TIME_RANGE,
+        where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+      }),
+      { scope: { organizationId: 'org-1', resourceId: 'res-1' } },
+    );
+    const compiled = compilePostgresTraceQuery('public', scopedPlan);
+
+    expect(compiled.values.slice(0, 4)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-1', 'res-1']);
+    expect(compiled.values[4]).toBe('factuality');
+    const rootScope = compiled.text.slice(
+      compiled.text.indexOf('root_scope AS'),
+      compiled.text.indexOf('current_scores AS'),
+    );
+    expect(rootScope).toContain('AND r."organizationId" = $3');
+    expect(rootScope).toContain('AND r."resourceId" = $4');
+    const scores = compiled.text.slice(
+      compiled.text.indexOf('current_scores AS'),
+      compiled.text.indexOf('candidates AS'),
+    );
+    expect(scores).toContain('AND s."organizationId" = $3');
+    expect(scores).toContain('AND s."resourceId" = $4');
+    expect(compiled.text).toContain('s."scorerId" IS NOT DISTINCT FROM $5');
+
+    const orgOnly = compilePostgresTraceQuery(
+      'public',
+      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE }), { scope: { organizationId: 'org-1' } }),
+    );
+    expect(orgOnly.values.slice(0, 3)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-1']);
+    expect(orgOnly.text).toContain('AND r."organizationId" = $3');
+    expect(orgOnly.text).not.toContain('"resourceId" = $4');
+  });
+
+  it('emits no tenant conditions for an unscoped plan', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } } }),
+    );
+
+    expect(compiled.values.slice(0, 2)).toEqual([TIME_RANGE.from, TIME_RANGE.to]);
+    expect(compiled.text).not.toContain('"organizationId" =');
+    expect(compiled.text).not.toContain('"resourceId" =');
+    expect(compiled.text).toContain('s."spanType" IS NOT DISTINCT FROM $3');
   });
 
   it('filters null-ended roots before projection and pagination', () => {
@@ -613,3 +713,152 @@ function traceRow(traceId: string, startedAt: string) {
     status: 'success',
   };
 }
+
+describe('Postgres advanced trace delta polling', () => {
+  let wasEnabled: boolean;
+  beforeEach(() => {
+    wasEnabled = coreFeatures.has('observability-delta-polling');
+    coreFeatures.add('observability-delta-polling');
+  });
+  afterEach(() => {
+    if (!wasEnabled) coreFeatures.delete('observability-delta-polling');
+    vi.restoreAllMocks();
+  });
+
+  function deltaPlan(watermark?: string, adapter = 'pg') {
+    const initial = plan({ mode: 'delta', limit: 1 });
+    return plan({
+      mode: 'delta',
+      limit: 1,
+      ...(watermark === undefined
+        ? {}
+        : {
+            after: encodeTraceQueryDeltaCursor(initial, adapter, watermark),
+          }),
+    });
+  }
+
+  function nativeCursor(response: TraceQueryResponse) {
+    if (!('deltaCursor' in response)) throw new Error('Expected delta cursor');
+    const continuation = plan({ mode: 'delta', after: response.deltaCursor });
+    if (continuation.paginationMode !== 'delta') throw new Error('Expected delta plan');
+    return getTraceQueryDeltaWatermark(continuation, 'pg');
+  }
+
+  it('bootstraps at the safe horizon without selecting roots', async () => {
+    const one = vi.fn().mockResolvedValue({ xactId: '100' });
+    const any = vi.fn();
+    const query = vi.fn();
+    const tx = vi.fn(async callback => callback({ one, any, query }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan(), 15000);
+    expect(response).toMatchObject({ traces: [], delta: { limit: 1, hasMore: false } });
+    expect(nativeCursor(response)).toBe('100:0');
+    expect(any).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledWith('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+  });
+
+  it('filters and deduplicates completed roots before watermark ordering and limiting', () => {
+    const compiled = compilePostgresTraceQuery('public', deltaPlan('100:4'), 'data', '200');
+    expect(compiled.text).toContain('newer."cursorId" > r."cursorId"');
+    expect(compiled.text).toContain('NOT r."isPending"');
+    expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
+    expect(compiled.text).toContain('(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)');
+    expect(compiled.text).toContain('"xactId" < $5::xid8');
+    expect(compiled.text).toContain('ORDER BY "xactId" ASC, "cursorId" ASC');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, '100', '4', '200', 2]);
+  });
+
+  it('continues from the last emitted pair when more matching roots remain', async () => {
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi.fn().mockResolvedValue([
+      { ...traceRow('a', '2026-01-01T10:00:00.000Z'), xactId: '120', cursorId: '8' },
+      { ...traceRow('b', '2026-01-01T10:00:00.000Z'), xactId: '120', cursorId: '9' },
+    ]);
+    const tx = vi.fn(async callback => callback({ one, any, query: vi.fn() }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan('100:0'), 15000);
+    expect(response).toMatchObject({ traces: [{ traceId: 'a' }], delta: { limit: 1, hasMore: true } });
+    expect(nativeCursor(response)).toBe('120:8');
+    expect(response).not.toHaveProperty('page');
+    expect(response).not.toHaveProperty('pagination');
+  });
+
+  it('advances empty continuations to the safely observed horizon', async () => {
+    const tx = vi.fn(async callback =>
+      callback({
+        one: vi.fn().mockResolvedValue({ xactId: '200' }),
+        any: vi.fn().mockResolvedValue([]),
+        query: vi.fn(),
+      }),
+    );
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan('100:0'), 15000);
+    expect(nativeCursor(response)).toBe('200:0');
+  });
+
+  it('captures the numbered handoff before count and data in the same snapshot', async () => {
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi
+      .fn()
+      .mockResolvedValueOnce([{ count: '0' }])
+      .mockResolvedValueOnce([]);
+    const tx = vi.fn(async callback => callback({ one, any, query: vi.fn() }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', plan({ pagination: {} }), 15000);
+    expect(nativeCursor(response)).toBe('200:0');
+    expect(one.mock.invocationCallOrder[0]).toBeLessThan(any.mock.invocationCallOrder[0]!);
+    expect(response).toMatchObject({ traces: [], pagination: { total: 0 } });
+  });
+
+  it('rejects invalid native watermarks and adapter mismatches before opening a transaction', async () => {
+    const tx = vi.fn();
+    for (const invalid of [deltaPlan('invalid'), deltaPlan('100:0', 'duckdb')]) {
+      await expect(queryTraces({ tx } as unknown as DbClient, 'public', invalid, 15000)).rejects.toThrow();
+    }
+    expect(tx).not.toHaveBeenCalled();
+  });
+
+  it.each(['delta', 'page'] as const)('uses the remaining %s deadline for the horizon read', async mode => {
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValue(2250.25);
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi.fn().mockResolvedValue([]);
+    const query = vi.fn();
+    const tx = vi.fn(async callback => callback({ one, any, query }));
+    const request = mode === 'delta' ? deltaPlan() : plan({ pagination: {} });
+
+    await queryTraces({ tx } as unknown as DbClient, 'public', request, 15000);
+
+    expect(query).toHaveBeenNthCalledWith(3, `SELECT set_config('statement_timeout', $1, true)`, ['13749ms']);
+    expect(query.mock.invocationCallOrder[2]).toBeLessThan(one.mock.invocationCallOrder[0]!);
+  });
+
+  it.each(['delta', 'page'] as const)('skips the horizon read when the %s deadline has expired', async mode => {
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValue(16000);
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi.fn().mockResolvedValue([]);
+    const tx = vi.fn(async callback => callback({ one, any, query: vi.fn() }));
+    const request = mode === 'delta' ? deltaPlan() : plan({ pagination: {} });
+
+    await expect(queryTraces({ tx } as unknown as DbClient, 'public', request, 15000)).rejects.toBeInstanceOf(
+      TraceQueryExecutionError,
+    );
+    expect(one).not.toHaveBeenCalled();
+    expect(any).not.toHaveBeenCalled();
+  });
+
+  it('preserves the feature gate and the shared deadline after reading the horizon', async () => {
+    coreFeatures.delete('observability-delta-polling');
+    await expect(queryTraces({} as DbClient, 'public', deltaPlan(), 15000)).rejects.toThrow();
+    coreFeatures.add('observability-delta-polling');
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(2000).mockReturnValue(16000);
+    const any = vi.fn();
+    const tx = vi.fn(async callback =>
+      callback({
+        one: vi.fn().mockResolvedValue({ xactId: '200' }),
+        any,
+        query: vi.fn(),
+      }),
+    );
+    await expect(
+      queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan('100:0'), 15000),
+    ).rejects.toBeInstanceOf(TraceQueryExecutionError);
+    expect(any).not.toHaveBeenCalled();
+  });
+});

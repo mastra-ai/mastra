@@ -30,8 +30,8 @@ interface MCPClientFormSidebarProps {
 
 // Pin these fields to a solid surface. The filled Input/Textarea default otherwise swaps the
 // background to a translucent overlay on hover/focus, which leaks through the forced solid bg —
-// re-stating it for hover/focus-visible keeps the whole form a uniform surface3 (incl. the Select).
-const SOLID_FIELD = 'bg-surface3 hover:bg-surface3 focus-visible:bg-surface3';
+// re-stating it for hover/focus-visible keeps the whole form a uniform card (incl. the Select).
+const SOLID_FIELD = 'bg-card hover:bg-card focus-visible:bg-card';
 
 export function MCPClientFormSidebar({
   form,
@@ -151,7 +151,7 @@ export function MCPClientFormSidebar({
               control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
-                  <SelectTrigger className="bg-surface3">
+                  <SelectTrigger className="bg-card">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -255,7 +255,7 @@ export function MCPClientFormSidebar({
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
+                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
                       Add variable
                     </Button>
                   )}
@@ -279,13 +279,7 @@ export function MCPClientFormSidebar({
                     : undefined;
 
               return tooltipContent ? (
-                <Button
-                  variant="outline"
-                  onClick={onTryConnect}
-                  disabled={isDisabled}
-                  className="w-full"
-                  tooltip={tooltipContent}
-                >
+                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full" tooltip={tooltipContent}>
                   {isTryingConnect ? (
                     <>
                       <Spinner className="h-4 w-4" />
@@ -296,7 +290,7 @@ export function MCPClientFormSidebar({
                   )}
                 </Button>
               ) : (
-                <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
+                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full">
                   {isTryingConnect ? (
                     <>
                       <Spinner className="h-4 w-4" />

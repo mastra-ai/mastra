@@ -35,6 +35,11 @@ function createMockState() {
     globalBackgroundNotice: { setActivities: vi.fn() },
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
+    gradientAnimator: { stop: vi.fn() },
+    githubPrGradientAnimator: { stop: vi.fn() },
+    githubPrPollingActive: true,
+    agentRunStartedAt: 1_700_000_000_000,
+    agentRunLastStreamPartAt: 1_700_000_000_500,
     session: {
       state: { set: vi.fn(async () => {}) },
       thread: { detachFromCurrent: vi.fn() },
@@ -118,5 +123,20 @@ describe('handleNewCommand', () => {
     expect(state.ui.terminal.setTitle).toHaveBeenCalledWith(`Mastra Code - ${basename(process.cwd())}`);
     expect(ctx.updateStatusLine).toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('stops status bar animations from the thread being left', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+
+    await handleNewCommand(ctx);
+
+    // A thread owned by another instance never delivers a local agent_end on
+    // detach, so /new has to stop the run animation itself.
+    expect(state.gradientAnimator.stop).toHaveBeenCalled();
+    expect(state.githubPrGradientAnimator.stop).toHaveBeenCalled();
+    expect(state.githubPrPollingActive).toBe(false);
+    expect(state.agentRunStartedAt).toBeUndefined();
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
   });
 });

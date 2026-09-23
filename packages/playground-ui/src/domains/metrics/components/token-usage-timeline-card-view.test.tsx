@@ -37,7 +37,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     expect(screen.getByText('Token usage over time')).toBeTruthy();
     expect(screen.getByText('Input and output tokens per hour.')).toBeTruthy();
-    expect(screen.getByText('2.5K')).toBeTruthy();
+    expect(screen.getByText('2.5k')).toBeTruthy();
     expect(screen.getByText('Total tokens')).toBeTruthy();
     expect(screen.getByText('Input tokens')).toBeTruthy();
     expect(screen.getByText('Output tokens')).toBeTruthy();
@@ -88,7 +88,7 @@ describe('TokenUsageTimelineCardView', () => {
     render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError={false} />);
 
     // 1200 + 800 input, 300 + 200 output — not one combined figure.
-    expect(screen.getByText('2.0K')).toBeTruthy();
+    expect(screen.getByText('2k')).toBeTruthy();
     expect(screen.getByText('500')).toBeTruthy();
   });
 

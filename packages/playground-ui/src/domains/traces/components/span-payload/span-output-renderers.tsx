@@ -15,14 +15,13 @@ import {
   SpanPayloadMarkdown,
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
-import { asCoreSpan, pickRenderer } from './span-payload-registry';
+import { SpanPayloadProcessor } from './span-payload-processor';
+import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
 import { Reasoning } from '@/domains/chat/messages/reasoning';
 import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { Notice } from '@/ds/components/Notice';
-
-const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;
@@ -65,7 +64,7 @@ function SpanAgentRunResultRenderer({ value }: { value: AgentRunResult }) {
         <Notice variant="destructive" title="Tripwire">
           {value.tripwire.reason && <Notice.Message>{value.tripwire.reason}</Notice.Message>}
           {value.tripwire.processorId && (
-            <div className="text-ui-sm">
+            <div className="text-caption">
               Processor <code className="font-mono">{value.tripwire.processorId}</code>
             </div>
           )}
@@ -164,6 +163,7 @@ const SPAN_OUTPUT_RENDERERS = {
   'agent-run-result': SpanAgentRunResultRenderer,
   'model-generation-result': SpanModelGenerationResultRenderer,
   'model-step-result': SpanModelStepResultRenderer,
+  processor: SpanPayloadProcessor,
   text: SpanTextRenderer,
   json: SpanPayloadJson,
 } satisfies PayloadRegistry<SpanOutputDescription>;
@@ -179,12 +179,7 @@ export function SpanOutputRenderer({ span }: SpanOutputRendererProps) {
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_OUTPUT_RENDERERS, description);
   return (
-    <Card
-      data-slot="span-output-card"
-      appearance="surface"
-      elevation="raised"
-      className="border-border1 min-w-0 border"
-    >
+    <Card data-slot="span-output-card" className="min-w-0">
       <CardContent>
         <Renderer value={description.value} />
       </CardContent>

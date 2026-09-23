@@ -116,12 +116,14 @@ describe('tool event handlers', () => {
 
   it('keeps a deferred background tool row pending until its authoritative result arrives', () => {
     const { ctx, updateResult } = createShellOutputContext();
+    ctx.state.options = { backgroundToolsEnabled: true };
 
     handleToolEnd(
       ctx,
       'call-1',
       'Background task started. Task ID: task-1. The tool "view" is running in the background.',
       false,
+      { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
     );
 
     expect(updateResult).toHaveBeenCalledWith(
@@ -275,6 +277,7 @@ describe('tool event handlers', () => {
       addChildBeforeFollowUps: vi.fn(child => ctx.state.chatContainer.children.push(child)),
       state: {
         quietMode: false,
+        options: { backgroundToolsEnabled: true },
         pluginManager: {
           getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
         },
@@ -329,6 +332,7 @@ describe('tool event handlers', () => {
       'call-1',
       'Background task started. Task ID: task-1. The tool "mastra_expert" is running in the background.',
       false,
+      { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
     );
 
     expect(ctx.state.pendingSubagents.has('call-1')).toBe(true);

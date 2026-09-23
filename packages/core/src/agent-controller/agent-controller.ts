@@ -763,7 +763,7 @@ export class AgentController<TState = {}> {
       this.#sessionsBeingDeleted.add(session);
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
-      session.abort();
+      session.abort({ localOnly: true });
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
@@ -1740,7 +1740,7 @@ export class AgentController<TState = {}> {
    * Load observational memory progress for the current thread.
    * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
-  async loadOMProgress(session: Session<TState>): Promise<void> {
+  async loadOMProgress(session: Session<TState>, isCurrent: () => boolean = () => true): Promise<void> {
     const threadId = session.thread.getId();
     if (!threadId) return;
 
@@ -1824,6 +1824,7 @@ export class AgentController<TState = {}> {
       // and picks up the real step number from the next live status update.
       const stepNumber = 0;
 
+      if (!isCurrent()) return;
       session.emit({
         type: 'om_status',
         windows: {
@@ -1927,6 +1928,7 @@ export class AgentController<TState = {}> {
     tracingOptions,
     untilIdle,
     abortSignal,
+    threadId,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
@@ -1934,8 +1936,11 @@ export class AgentController<TState = {}> {
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
     abortSignal?: AbortSignal;
+    threadId?: string;
   }): Promise<Record<string, unknown>> {
-    const runThreadId = session.thread.getId();
+    // A caller may name the thread the run belongs to (a claimed thread woken by
+    // a peer); otherwise the run belongs to whichever thread the session holds.
+    const runThreadId = threadId ?? session.thread.getId();
     if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }

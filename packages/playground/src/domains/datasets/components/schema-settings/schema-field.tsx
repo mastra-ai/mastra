@@ -98,7 +98,7 @@ export function SchemaField({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
-        <label htmlFor={`${schemaType}-schema-toggle`} className="text-ui-sm font-medium">
+        <label htmlFor={`${schemaType}-schema-toggle`} className="text-column">
           {label}
         </label>
       </div>
@@ -113,7 +113,7 @@ export function SchemaField({
             value={jsonText}
             onChange={handleJsonChange}
             showCopyButton={false}
-            className={cn('h-48 border rounded-md', errorMessage && 'border-destructive')}
+            className={cn('h-48 rounded-md border', errorMessage && 'border-destructive')}
           />
           {errorMessage && <FieldBlock.ErrorMsg name={fieldName}>{errorMessage}</FieldBlock.ErrorMsg>}
         </div>

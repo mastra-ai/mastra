@@ -103,7 +103,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/lib/resize', 'resize'),
         ...fileEntries('src/lib/keyboard', 'keyboard'),
         ...fileEntries('src/lib/sort', 'sort'),
-        'lib/springs': resolve(srcDir, 'lib/springs.ts'),
         ...fileEntries('src/components', 'components'),
         ...fileEntries('src/store', 'store'),
         ...fileEntries('src/ds/icons', 'icons'),
@@ -119,7 +118,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     target: 'esnext',
     minify: false,
     rollupOptions: {
-      external: ['motion/react', 'framer-motion'],
       output: {
         hoistTransitiveImports: false,
       },
