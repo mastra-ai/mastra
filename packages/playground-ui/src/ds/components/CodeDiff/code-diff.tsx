@@ -153,7 +153,7 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
 
   return (
     <div className={`${raisedSurfaceStyle} relative overflow-auto rounded-xl`}>
-      <div className="bg-border absolute top-0 left-1/2 z-10 h-full w-px dark:bg-white/10" />
+      <div className="absolute top-0 left-1/2 z-10 h-full w-px bg-border dark:bg-white/10" />
       <div
         ref={containerRef}
         className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:py-3 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"

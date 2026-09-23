@@ -1,4 +1,5 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
@@ -10,7 +11,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CircleSlashIcon, StarIcon } from 'lucide-react';
+import { StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -89,7 +90,6 @@ export default function AgentBuilderFavoritePage() {
         return (
           <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
               titleSlot="No favorite agents yet"
               descriptionSlot="Star agents to keep them here for quick access."
             />
@@ -106,7 +106,6 @@ export default function AgentBuilderFavoritePage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No favorite skills yet"
             descriptionSlot="Star skills to keep them here for quick access."
           />
@@ -118,51 +117,61 @@ export default function AgentBuilderFavoritePage() {
 
   return (
     <>
-      <PageLayout height="full" className="px-4 md:px-10">
-        <PageLayout.TopArea>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-            <PageHeader>
-              <PageHeader.Title>
-                <StarIcon /> Favorites
-              </PageHeader.Title>
-              <PageHeader.Description>
-                {tab === 'agents'
-                  ? "Agents you've starred in Agent Builder."
-                  : "Skills you've starred in Agent Builder."}
-              </PageHeader.Description>
-            </PageHeader>
-          </div>
-          <div className="flex items-center gap-4">
-            {features.skills && (
-              <div className="border-border flex overflow-hidden rounded-lg border">
-                <button
-                  onClick={() => setTab('agents')}
-                  className={cn(
-                    'text-column px-3 py-1.5',
-                    controlStateColorTransition,
-                    tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
-                  )}
-                >
-                  Agents
-                </button>
-                <button
-                  onClick={() => setTab('skills')}
-                  className={cn(
-                    'text-column px-3 py-1.5',
-                    controlStateColorTransition,
-                    tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
-                  )}
-                >
-                  Skills
-                </button>
-              </div>
-            )}
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter favorites" placeholder="Filter by name or description" />
-            </div>
-          </div>
-        </PageLayout.TopArea>
-
+      <PageLayout
+        actionRow={
+          <>
+            <ActionRow className="items-start">
+              <ActionRow.Start>
+                <PageHeader>
+                  <PageHeader.Title>
+                    <StarIcon /> Favorites
+                  </PageHeader.Title>
+                  <PageHeader.Description>
+                    {tab === 'agents'
+                      ? "Agents you've starred in Agent Builder."
+                      : "Skills you've starred in Agent Builder."}
+                  </PageHeader.Description>
+                </PageHeader>
+              </ActionRow.Start>
+            </ActionRow>
+            <ActionRow>
+              <ActionRow.Start>
+                {features.skills && (
+                  <div className="flex overflow-hidden rounded-lg border border-border">
+                    <button
+                      onClick={() => setTab('agents')}
+                      className={cn(
+                        'px-3 py-1.5 text-column',
+                        controlStateColorTransition,
+                        tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                      )}
+                    >
+                      Agents
+                    </button>
+                    <button
+                      onClick={() => setTab('skills')}
+                      className={cn(
+                        'px-3 py-1.5 text-column',
+                        controlStateColorTransition,
+                        tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                      )}
+                    >
+                      Skills
+                    </button>
+                  </div>
+                )}
+                <div className="max-w-120 flex-1">
+                  <ListSearch
+                    onSearch={setSearch}
+                    label="Filter favorites"
+                    placeholder="Filter by name or description"
+                  />
+                </div>
+              </ActionRow.Start>
+            </ActionRow>
+          </>
+        }
+      >
         {body}
       </PageLayout>
     </>

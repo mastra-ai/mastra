@@ -1,5 +1,43 @@
 # @mastra/client-js
 
+## 1.48.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+
+## 1.48.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
+## 1.48.0-alpha.0
+
+### Minor Changes
+
+- Added `transports` to MCP server info responses so consumers can tell which endpoints a server serves. MCP v2 servers report `['streamable-http']` only; MCP 1.x servers also report `'sse'`. Servers that predate the field omit it, so treat absence as 1.x. ([#24388](https://github.com/mastra-ai/mastra/pull/24388))
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const { servers } = await client.getMcpServers();
+
+  for (const server of servers) {
+    const hasSse = server.transports?.includes('sse') ?? true;
+    const path = hasSse ? 'sse' : 'mcp';
+    console.log(`${server.name}: http://localhost:4111/api/mcp/${server.id}/${path}`);
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed)]:
+  - @mastra/core@1.69.0-alpha.0
+
 ## 1.47.0
 
 ### Minor Changes

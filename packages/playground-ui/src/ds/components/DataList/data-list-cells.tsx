@@ -181,7 +181,7 @@ export interface DataListIdCellProps {
 }
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
-  return <DataListCell className="text-muted-foreground tracking-wide">{getShortId(id)}</DataListCell>;
+  return <DataListCell className="tracking-wide text-muted-foreground">{getShortId(id)}</DataListCell>;
 }
 
 export interface DataListSelectCellProps {
@@ -261,7 +261,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-muted-foreground flex tabular-nums">
+    <DataListCell className="flex text-muted-foreground tabular-nums">
       {date ? (
         <>
           {format(date, 'h:mm:ss')}

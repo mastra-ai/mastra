@@ -180,19 +180,19 @@ export function DuplicateDatasetDialog({
               />
             </div>
 
-            <p className="text-muted-foreground text-body">
+            <p className="text-body text-muted-foreground">
               All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset
             </p>
 
             {isDuplicating && (
               <div className="space-y-2">
-                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-body">{getProgressText()}</p>
+                <p className="text-body text-muted-foreground">{getProgressText()}</p>
               </div>
             )}
 

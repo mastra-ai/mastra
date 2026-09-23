@@ -281,6 +281,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.1
         version: 2.31.1(@types/node@22.19.15)
+      '@clack/prompts':
+        specifier: ^1.7.0
+        version: 1.7.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -332,6 +335,9 @@ importers:
       semver:
         specifier: ^7.7.4
         version: 7.8.5
+      tinyexec:
+        specifier: ^1.2.4
+        version: 1.2.4
       tsc-files:
         specifier: ^1.1.4
         version: 1.1.4(typescript@7.0.2)
@@ -4623,8 +4629,8 @@ importers:
         specifier: npm:@ai-sdk/provider@3.0.14
         version: '@ai-sdk/provider@3.0.14'
       '@ai-sdk/provider-v7':
-        specifier: npm:@ai-sdk/provider@4.0.4
-        version: '@ai-sdk/provider@4.0.4'
+        specifier: npm:@ai-sdk/provider@4.0.17
+        version: '@ai-sdk/provider@4.0.17'
       '@isaacs/ttlcache':
         specifier: ^2.1.5
         version: 2.1.5
@@ -5911,9 +5917,6 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
-      framer-motion:
-        specifier: ^13.4.0
-        version: 13.4.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0(supports-color@10.2.2)
@@ -10880,6 +10883,10 @@ packages:
   '@ai-sdk/provider@3.0.14':
     resolution: {integrity: sha512-5X1k57JBJ4H7H1QjX7CnJYAB1I19r/trVZTMcSms7/kLNZ8RaU4Nt2agcwZzv82Hfx6Q7/TOLU7agAKeFfc8cA==}
     engines: {node: '>=18'}
+
+  '@ai-sdk/provider@4.0.17':
+    resolution: {integrity: sha512-VYMBxIQdcHqbIf1j+YZlI9Ati6LZ4wJe0GGd4z4a5H/KxTggjeOiyaVYTnfF7LHZK5jMQ+rofmzz4QPqf++NUw==}
+    engines: {node: '>=22'}
 
   '@ai-sdk/provider@4.0.4':
     resolution: {integrity: sha512-tbHKNLirllUNF3ZlkCsXnwab2ZV1Sl4b1H/Cp9ruCce15IBmskE8Gwkk0yo9xDWY+jho2of7lVXtwSsyrq7cwQ==}
@@ -25933,17 +25940,6 @@ packages:
   fraction.js@5.3.4:
     resolution: {integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==}
 
-  framer-motion@13.4.0:
-    resolution: {integrity: sha512-HCpqKM9BTu6UYKtj0u6J1QNxojnnirNcghcSDZ+SkpiL3myxvtsgXPS3ZGEELC2eSma7YiA937rAEXtRyydSXQ==}
-    peerDependencies:
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      react:
-        optional: true
-      react-dom:
-        optional: true
-
   fresh@0.5.2:
     resolution: {integrity: sha512-zJ2mQYM18rEFOudeV4GShTGIQ7RbzA7ozbU9I/XBpm7kqgMywgmylMwXHxZJmkVoYkna9d2pVXVXPdYTP9ej8Q==}
     engines: {node: '>= 0.6'}
@@ -28235,12 +28231,6 @@ packages:
         optional: true
       socks:
         optional: true
-
-  motion-dom@13.3.0:
-    resolution: {integrity: sha512-AmAnB6pHdZ1vHGzWzuzteG6Q3j1lHKeX/lbST6jGlgm0cjvLUgaCk1xhOuPMOy5SgovN6wnnUdwFrkcsus7Ftg==}
-
-  motion-utils@13.3.0:
-    resolution: {integrity: sha512-sgSschQp7EseHInIlR7hBbMuvet3RA0bs28KPZAXJcGKGdxHGvh1ogpYDilY3bOMtl73EqPNmp75sAKHYPU5sg==}
 
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
@@ -33704,6 +33694,10 @@ snapshots:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@3.0.14':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@4.0.17':
     dependencies:
       json-schema: 0.4.0
 
@@ -51286,15 +51280,6 @@ snapshots:
 
   fraction.js@5.3.4: {}
 
-  framer-motion@13.4.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
-    dependencies:
-      motion-dom: 13.3.0
-      motion-utils: 13.3.0
-      tslib: 2.8.1
-    optionalDependencies:
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-
   fresh@0.5.2: {}
 
   fresh@2.0.0: {}
@@ -54251,12 +54236,6 @@ snapshots:
       '@aws-sdk/credential-providers': 3.1104.0
       '@mongodb-js/zstd': 7.0.0
       socks: 2.8.9
-
-  motion-dom@13.3.0:
-    dependencies:
-      motion-utils: 13.3.0
-
-  motion-utils@13.3.0: {}
 
   mri@1.2.0: {}
 

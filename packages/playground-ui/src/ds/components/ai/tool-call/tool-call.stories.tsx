@@ -31,7 +31,7 @@ export default meta;
 type Story = StoryObj<typeof ToolCall>;
 
 const Code = ({ children }: { children: string }) => (
-  <pre className="text-muted-foreground bg-sidebar text-caption m-0 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono whitespace-pre-wrap">
+  <pre className="m-0 max-h-60 overflow-auto rounded-md bg-sidebar px-3 py-2 font-mono text-caption whitespace-pre-wrap text-muted-foreground">
     {children}
   </pre>
 );
@@ -120,7 +120,7 @@ function ControlledExample() {
         </ToolCallHeader>
       </ToolCallTrigger>
       <ToolCallContent>
-        <div className="border-border bg-sidebar text-body rounded-md border p-3">
+        <div className="rounded-md border border-border bg-sidebar p-3 text-body">
           Arbitrary consumer-rendered content
         </div>
       </ToolCallContent>

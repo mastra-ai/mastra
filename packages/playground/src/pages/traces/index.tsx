@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
@@ -48,7 +49,9 @@ import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
@@ -60,6 +63,8 @@ import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
+const crumbs = [navCrumb('/traces')];
+
 type TracesPageProps = {
   scopedEntityId?: string;
   scopedEntityType?: EntityType;
@@ -70,6 +75,8 @@ const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
+  // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
+  const breadcrumbs = isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />;
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
@@ -324,41 +331,43 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     url.datePreset !== 'last-7d' ||
     !!url.selectedDateTo;
 
-  const toolbarControls = (
-    <>
-      <FilterBar
-        fields={filterBarFields}
-        operators={TRACE_FILTER_BAR_OPERATORS}
-        value={filterBarValue}
-        onValueChange={handleFilterBarChange}
-        // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
-        // draft that id so the chip survives the round trip without remounting.
-        createItemId={fieldId => fieldId}
-        maxDepth={3}
-        aria-label="Trace filters"
-        className="min-w-64 flex-1"
-      >
-        <FilterBar.Chips
-          renderChip={item =>
-            item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-              <TraceTimeRangeChip
-                preset={url.datePreset}
-                onPresetChange={url.handleDatePresetChange}
-                dateFrom={url.selectedDateFrom}
-                dateTo={url.selectedDateTo}
-                onDateChange={url.handleDateChange}
-                onDateRangeChange={url.handleDateRangeChange}
-                disabled={isTracesLoading}
-                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-              />
-            ) : (
-              <FilterBar.Chip item={item} />
-            )
-          }
-        />
-        <FilterBar.Input placeholder="Filter traces…" />
-      </FilterBar>
-      <div className="min-h-control-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+  const actionRow = (
+    <ActionRow>
+      <ActionRow.Start>
+        <FilterBar
+          fields={filterBarFields}
+          operators={TRACE_FILTER_BAR_OPERATORS}
+          value={filterBarValue}
+          onValueChange={handleFilterBarChange}
+          // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
+          // draft that id so the chip survives the round trip without remounting.
+          createItemId={fieldId => fieldId}
+          maxDepth={3}
+          aria-label="Trace filters"
+          className="min-w-64 flex-1"
+        >
+          <FilterBar.Chips
+            renderChip={item =>
+              item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+                <TraceTimeRangeChip
+                  preset={url.datePreset}
+                  onPresetChange={url.handleDatePresetChange}
+                  dateFrom={url.selectedDateFrom}
+                  dateTo={url.selectedDateTo}
+                  onDateChange={url.handleDateChange}
+                  onDateRangeChange={url.handleDateRangeChange}
+                  disabled={isTracesLoading}
+                  presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+                />
+              ) : (
+                <FilterBar.Chip item={item} />
+              )
+            }
+          />
+          <FilterBar.Input placeholder="Filter traces…" />
+        </FilterBar>
+      </ActionRow.Start>
+      <ActionRow.End>
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
           availableMetadataKeys={availableMetadataKeys}
@@ -379,18 +388,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           />
           <Label htmlFor="auto-refetch">Auto refresh</Label>
         </div>
-      </div>
-    </>
-  );
-
-  const pageTopArea = (
-    <PageLayout.TopArea>
-      <PageLayout.Row>
-        <PageLayout.Column className="flex w-full flex-wrap items-start justify-start gap-2">
-          {toolbarControls}
-        </PageLayout.Column>
-      </PageLayout.Row>
-    </PageLayout.TopArea>
+      </ActionRow.End>
+    </ActionRow>
   );
 
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
@@ -398,21 +397,22 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isDiscoveryLoading) {
     return (
-      <PageLayout width="wide" height="full">
-        <PageLayout.MainArea>
+      <PageLayout breadcrumbs={breadcrumbs}>
+        <h1 className="sr-only">Traces</h1>
+        <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
 
   if (tracesError) {
     return (
-      <PageLayout width="wide" height="full">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        <div className="flex h-full items-center justify-center">
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
@@ -422,19 +422,16 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
-      <PageLayout width="wide" height="full">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
-          <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </PageLayout.MainArea>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      {pageTopArea}
-
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+      <h1 className="sr-only">Traces</h1>
       <TracesListView
         traces={traces}
         isLoading={isTracesLoading}

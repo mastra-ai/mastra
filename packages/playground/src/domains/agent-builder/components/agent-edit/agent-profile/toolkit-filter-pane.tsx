@@ -49,7 +49,7 @@ const ToolkitFilterRow = memo(
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground hover:bg-fill-subtle',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
             disabled && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -212,7 +212,7 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="border-border flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
+      className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
       <InputGroup size="md" className="flex-none" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
@@ -227,7 +227,7 @@ export const ToolkitFilterPane = ({
         />
       </InputGroup>
 
-      <div className="text-meta flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 text-meta">
         <button
           type="button"
           onClick={onSelectAll}

@@ -242,7 +242,7 @@ function ObservationItem({
   const borderColor = observation.priority ? PRIORITY_BORDER[observation.priority] : 'border-l-transparent';
 
   return (
-    <div className={cn('py-0.5', observation.isNested && 'border-border/50 ml-4 border-l pl-2')}>
+    <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
       <div
         className={cn(
           'flex items-start gap-1.5 text-caption',
@@ -254,7 +254,7 @@ function ObservationItem({
         {observation.isNested && (
           <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
         )}
-        <span className="[&_code]:text-meta flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
+        <span className="flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-meta">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
@@ -327,7 +327,7 @@ function ThreadSection({
         <div
           className={cn(
             'mb-1 inline-block rounded px-1 py-0.5 font-mono text-meta',
-            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'text-muted-foreground bg-muted/50',
+            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50 text-muted-foreground',
           )}
         >
           Thread {thread.threadId}
@@ -367,7 +367,7 @@ export function ObservationRenderer({
     parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0]?.threadId !== 'default');
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return <div className={cn('text-muted-foreground text-caption italic', className)}>No observations</div>;
+    return <div className={cn('text-caption text-muted-foreground italic', className)}>No observations</div>;
   }
 
   return (
@@ -387,16 +387,16 @@ export function ObservationRenderer({
       </div>
 
       {showCurrentTask && parsed.currentTask && (
-        <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground text-meta mb-1 tracking-wide uppercase">Current Task</div>
-          <div className="text-foreground text-caption whitespace-pre-wrap">{parsed.currentTask}</div>
+        <div className="mt-2 border-t border-border pt-2">
+          <div className="mb-1 text-meta tracking-wide text-muted-foreground uppercase">Current Task</div>
+          <div className="text-caption whitespace-pre-wrap text-foreground">{parsed.currentTask}</div>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
-        <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground text-meta mb-1 tracking-wide uppercase">Suggested Response</div>
-          <div className="text-foreground/80 text-caption whitespace-pre-wrap italic">{parsed.suggestedResponse}</div>
+        <div className="mt-2 border-t border-border pt-2">
+          <div className="mb-1 text-meta tracking-wide text-muted-foreground uppercase">Suggested Response</div>
+          <div className="text-caption whitespace-pre-wrap text-foreground/80 italic">{parsed.suggestedResponse}</div>
         </div>
       )}
     </div>

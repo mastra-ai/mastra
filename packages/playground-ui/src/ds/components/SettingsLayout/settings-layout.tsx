@@ -40,7 +40,7 @@ export function SettingsLayout({
         <div className={cn('flex min-w-0 flex-wrap items-start justify-between gap-4', inset && 'pl-4')}>
           <div className="grid min-w-0 gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <Txt as="h1" variant="heading" tone="muted" className="font-body min-w-0 truncate tracking-normal">
+              <Txt as="h1" variant="heading" tone="muted" className="min-w-0 truncate font-body tracking-normal">
                 {title}
               </Txt>
               {titleAccessory !== undefined && titleAccessory !== null ? (

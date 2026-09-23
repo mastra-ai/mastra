@@ -27,3 +27,12 @@ export const CustomCopy: Story = {
     description: 'Your Studio session ended while this page was open.',
   },
 };
+
+export const Fill: Story = {
+  args: { variant: 'fill' },
+  render: args => (
+    <div className="h-120 border border-dashed border-border">
+      <SessionExpired {...args} />
+    </div>
+  ),
+};

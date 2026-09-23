@@ -10,7 +10,7 @@ export function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetW
 
   return (
     <div className="flex w-full items-center gap-2 px-5">
-      <Icon className="text-muted-foreground shrink-0">
+      <Icon className="shrink-0 text-muted-foreground">
         <WorkflowIcon />
       </Icon>
       <Txt as="span" variant="subheading" tone="ink" className="truncate">
