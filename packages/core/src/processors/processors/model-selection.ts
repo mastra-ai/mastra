@@ -48,7 +48,7 @@ export interface ModelSelectionDecision {
 }
 
 interface ModelSelectionCommonOptions {
-  /** Identifier used in errors and logs. Defaults to `model-router`. */
+  /** Identifier used in errors and logs. Defaults to `model-selection`. */
   id?: string;
   /**
    * Called once per request with the decision, including when the router abstains.

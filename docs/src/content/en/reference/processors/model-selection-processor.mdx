@@ -7,15 +7,15 @@ packages:
 
 # ModelSelectionProcessor
 
-`ModelSelectionProcessor` classifies the incoming request once, then overrides which model serves the run. It's intended for cost routing: keep a capable model as the agent's configured default and let the router downgrade to a cheaper model when an evaluation model is confident the cheaper model can handle the request.
+`ModelSelectionProcessor` classifies the incoming request once, then overrides which model serves the run. It's intended for cost routing: keep a capable model as the agent's configured default and let the processor downgrade to a cheaper model when an evaluation model is confident the cheaper model can handle the request.
 
 :::warning
 Routing can cost more than it saves. Provider prompt caches aren't shared between models. Each switch pays full price for the conversation again, and a cheaper model can take more steps to finish a task. Measure cost and quality on your own traffic before enabling it. See [Cost tradeoffs](#cost-tradeoffs).
 :::
 
-Describe each model alongside the kind of request it should handle. The processor builds the [Classifier](/reference/classifier/classifier) for you:
+Describe each model alongside the kind of request it should handle. The processor builds the [Classifier](/reference/classifier/classifier) for you. The examples on this page assume `model` is an AI SDK `EvaluationModelV4` implementation, the same evaluation model type `Classifier` accepts. A `'provider/model'` string isn't supported for this option:
 
-```typescript
+```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { ModelSelectionProcessor } from '@mastra/core/processors'
 
@@ -58,7 +58,28 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
     type: 'ModelChoice[]',
     required: false,
     description:
-      'Two or more { model, criteria } pairs. The processor builds a classifier from them, using each criteria string to describe when that model should be chosen. Mutually exclusive with classifier.',
+      'Two or more choices. The processor builds a classifier from them, using each criteria string to describe when that model should be chosen. Mutually exclusive with classifier.',
+    properties: [
+      {
+        type: 'ModelChoice',
+        parameters: [
+          { name: 'model', type: 'SelectableModel', description: 'The model to use when this choice is selected.' },
+          {
+            name: 'criteria',
+            type: 'string',
+            description:
+              'The kind of request this model should handle. The classifier judges the request against this text.',
+          },
+          {
+            name: 'name',
+            type: 'string',
+            isOptional: true,
+            description:
+              'Name reported in onDecision. Defaults to the model ID. Set it when the same model appears in two choices.',
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'model',
@@ -72,14 +93,14 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
     type: 'string',
     required: false,
     description:
-      'The objective the router optimizes for, used with choices. Defaults to choosing the least capable model that can handle the request correctly. Set it to state a different objective, such as favoring accuracy over cost.',
+      'The objective the processor optimizes for, used with choices. Defaults to choosing the least capable model that can handle the request correctly. Set it to state a different objective, such as favoring accuracy over cost.',
   },
   {
     name: 'onDecision',
     type: '(decision: ModelSelectionDecision) => void | Promise<void>',
     required: false,
     description:
-      'Called once per request with the routing decision, including abstentions. See Observing the decision. Errors thrown here are logged and do not fail the request.',
+      'Called once per request with the routing decision, including abstentions. See Decision callback. Errors thrown here are logged and do not fail the request.',
   },
   {
     name: 'classifier',
@@ -90,10 +111,10 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
   },
   {
     name: 'select',
-    type: '(answers) => SelectableModel | undefined',
+    type: '(answers, { result }) => SelectableModel | undefined | Promise<SelectableModel | undefined>',
     required: false,
     description:
-      'Maps the classifier answers to a model. Receives the full typed answers and returns a model, or undefined to abstain. Required with classifier.',
+      'Maps the classifier answers to a model. Receives the typed answers and the full classifier result, and returns a model, or undefined to abstain. Required with classifier.',
   },
   {
     name: 'minProbability',
@@ -101,6 +122,13 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
     required: false,
     description:
       'Used with choices. Require a probability at least this high before applying the chosen model. Omit it to route on the selected choice alone. See the note below, because this option fails closed.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    required: false,
+    defaultValue: "'model-selection'",
+    description: 'Identifier used in errors and logs.',
   },
   {
     name: 'scope',
@@ -112,18 +140,23 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
   },
   {
     name: 'providerOptions',
-    type: 'Record<string, unknown>',
+    type: 'SharedV4ProviderOptions',
     required: false,
-    description: 'Provider-specific options forwarded to the classifier evaluation.',
+    description: 'Provider-specific options forwarded to Classifier.evaluate().',
   },
 ]}
 />
 
-## Observing the decision
+## Decision callback
 
-`onDecision` fires once per request with the decision, including when the router abstains. Use it to log which model served a request and how confident the choice was:
+`onDecision` fires once per request with the decision, including when the processor abstains. Use it to log which model served a request and how confident the choice was:
 
 ```typescript
+import { ModelSelectionProcessor } from '@mastra/core/processors'
+import { PinoLogger } from '@mastra/loggers'
+
+const logger = new PinoLogger({ name: 'model-selection' })
+
 new ModelSelectionProcessor({
   model,
   choices: [
@@ -136,7 +169,7 @@ new ModelSelectionProcessor({
 })
 ```
 
-The decision carries the model that was applied, the criterion that was chosen, the confidence in that choice, and, when no model was applied, why:
+The decision carries the model that was applied, the criterion that was chosen, the confidence in that choice, and, when no model was applied, why. With `select`, the decision reports only `model`, which is absent when `select` returns `undefined`:
 
 <PropertiesTable
   content={[
@@ -144,13 +177,13 @@ The decision carries the model that was applied, the criterion that was chosen, 
     name: 'model',
     type: 'SelectableModel',
     required: false,
-    description: 'The model the run was routed to. Absent when the router abstained.',
+    description: 'The model the run was routed to. Absent when the processor abstained.',
   },
   {
     name: 'choice',
     type: 'string',
     required: false,
-    description: 'The criterion the classifier selected. Absent when the classifier failed.',
+    description: 'The choice the classifier selected. Absent when the classifier failed and with select.',
   },
   {
     name: 'probability',
@@ -163,12 +196,12 @@ The decision carries the model that was applied, the criterion that was chosen, 
     name: 'abstained',
     type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error'",
     required: false,
-    description: 'Why no model was applied, when the router abstained. Absent on a successful routing decision.',
+    description: 'Why no model was applied. Absent on a successful routing decision and with select.',
   },
 ]}
 />
 
-## Using a classifier you already own
+## Existing classifiers
 
 Pass `classifier` instead of `choices` to route on a [Classifier](/reference/classifier/classifier) you configured yourself, which is useful when the same classifier also backs a scorer or another processor. Use `select` to map its answers to a model:
 
@@ -208,7 +241,7 @@ On a four-step run the opening call holds roughly 14% of the input tokens, so ro
 
 Single-step runs are unaffected, because the two scopes are identical when there is only one model call.
 
-## Routing on more than one dimension
+## Multiple dimensions
 
 Choice criteria are mutually exclusive, which is the wrong shape when routing depends on independent dimensions. Ask several questions and combine the answers in `select`. It receives the fully typed answers, and the routing policy is your code:
 
@@ -251,9 +284,9 @@ A choice answer carries a distribution over the criteria, and the confidence in 
 This is why `minProbability` has no default. Each setting behaves explicitly:
 
 - **Omitted**: route on the selected choice. The classifier's answer is the decision.
-- **Set**: require a probability at or above the threshold. If the model returns no distribution at all, the router **abstains**, because a threshold that can't be evaluated must not pass.
+- **Set**: require a probability at or above the threshold. If the model returns no distribution at all, the processor **abstains**, because a threshold that can't be evaluated must not pass.
 
-If your evaluation model doesn't report choice distributions, the router abstains on every request once `minProbability` is set. Log `onDecision` to check: an `abstained` value of `below-threshold` with no `probability` means the distribution is missing rather than the confidence being low.
+If your evaluation model doesn't report choice distributions, the processor abstains on every request once `minProbability` is set. Log `onDecision` to check: an `abstained` value of `below-threshold` with no `probability` means the distribution is missing rather than the confidence being low.
 
 ## Failure behavior
 
@@ -272,14 +305,14 @@ Routing trades a classifier call on every request for a cheaper model on some re
 
 Routing is only useful when the models you route between actually differ on your traffic. If the cheaper model answers your requests as accurately as the capable one, configure the cheaper model directly instead.
 
-Before enabling routing, run a sample of your traffic with and without the router and compare the total cost per completed task, not the price per token. Include cache reads and writes, classifier calls, extra steps, and follow-up requests, and check the answers on requests the router downgraded. The [token usage metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics) report cache read and write tokens for each model call.
+Before enabling routing, run a sample of your traffic with and without the processor and compare the total cost per completed task, not the price per token. Include cache reads and writes, classifier calls, extra steps, and follow-up requests, and check the answers on requests the processor downgraded. The [token usage metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics) report cache read and write tokens for each model call.
 
-## Cost and behavior notes
+## Behavior notes
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read on each step.
 - Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns aren't sent to the classifier, which keeps the routing call flat as context grows. A terse follow-up such as `"now apply that to the rest"` is therefore routed on that sentence alone. If your follow-ups often re-open hard reasoning rather than applying an earlier result, keep them on the capable model by leaving it as the default.
-- Only downgrade. Keep the capable model as the agent's configured default and use the router to move down, so an incorrect decision costs quality on that request. With the default `scope: 'run'`, a bad downgrade applies to every step of the run, so a run that turns out harder than its first message stays on the cheaper model.
-- The router adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on.
+- Only downgrade. Keep the capable model as the agent's configured default and use the processor to move down, so an incorrect decision costs quality on that request. With the default `scope: 'run'`, a bad downgrade applies to every step of the run, so a run that turns out harder than its first message stays on the cheaper model.
+- The processor adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on.
 - With `choices`, each criterion is named after its model, so `onDecision` reports the chosen model as the `choice`.
 
 ## Related
