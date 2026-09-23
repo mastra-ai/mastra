@@ -3019,6 +3019,7 @@ export class Session<TState = unknown> {
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Whether the in-flight abort teardown must stay local to this process. */
   #localOnlyAbort = false;
+  #deferredAbortOrigin: { bindingGeneration: number; localOnly: boolean } | undefined;
   /** Thread-settings persistence handle, injected by the AgentController via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
   /** Resolves a tool name to its category, injected by the AgentController via {@link setCategoryResolver} (the category map is AgentController config). */
@@ -3360,6 +3361,9 @@ export class Session<TState = unknown> {
     const wasGated = this.approval.isArmed();
     if (wasGated) {
       this.run.requestAbort({ deferSignal: true });
+      // The engine completes this teardown after its decline await; a rebind can
+      // start a successor run in that window, so bind it to this binding too.
+      this.#deferredAbortOrigin = { bindingGeneration: this.run.bindingGeneration(), localOnly: this.#localOnlyAbort };
       if (suspendedToolCalls.length === 0) {
         this.approval.cancel();
         return;
@@ -3393,12 +3397,16 @@ export class Session<TState = unknown> {
    * a tool-approval gate: abort the live subscription and the run's controller.
    * Called by the run engine once the gated call's decline has been driven
    * through the agent, so the denial is persisted before the run is torn down.
-   * When `origin` is given, the teardown is skipped if the session's binding was
+   * `origin` defaults to the one captured when a gated abort was armed. When
+   * present, the teardown is skipped if the session's binding was
    * torn down since, because a successor run may now own the stream and run
    * state. (The abort-requested flag is not a usable guard: the denial's own
    * resumed run resets it before settlement resolves.)
    */
-  completeDeferredAbort(origin?: { bindingGeneration: number; localOnly: boolean }): void {
+  completeDeferredAbort(
+    origin: { bindingGeneration: number; localOnly: boolean } | undefined = this.#deferredAbortOrigin,
+  ): void {
+    this.#deferredAbortOrigin = undefined;
     if (origin && this.run.bindingGeneration() !== origin.bindingGeneration) return;
     this.stream.abort({ localOnly: origin?.localOnly ?? this.#localOnlyAbort });
     this.run.requestAbort();

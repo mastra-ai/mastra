@@ -585,4 +585,54 @@ describe('deferred abort completion for suspended tool calls (#24735)', () => {
       expect(session.run.hasAbortController()).toBe(false);
     },
   );
+
+  it.each([true, false])(
+    'Given a gated run and a successor started before the decline lands, When the decline lands, Then the successor is not aborted (localOnly=%s)',
+    async localOnly => {
+      const { session, agent } = await createHarness(`deferred-gated-successor-${localOnly}`, false);
+
+      // Hold the decline's persistence open so the rebind lands inside it.
+      let release!: () => void;
+      const barrier = new Promise<void>(resolve => (release = resolve));
+      const sendToolApproval = agent.sendToolApproval.bind(agent);
+      let declined!: () => void;
+      const declineLanded = new Promise<void>(resolve => (declined = resolve));
+      vi.spyOn(agent, 'sendToolApproval').mockImplementation(async (...args: Parameters<typeof sendToolApproval>) => {
+        await barrier;
+        try {
+          return await sendToolApproval(...args);
+        } finally {
+          declined();
+        }
+      });
+
+      const gated = new Promise<void>(resolve =>
+        session.subscribe((event: AgentControllerEvent) => {
+          if (event.type === 'tool_approval_required') resolve();
+        }),
+      );
+      void session.sendMessage({ content: 'find dero' }).catch(() => {});
+      await gated;
+
+      session.abort({ localOnly });
+      expect(session.run.isAbortRequested()).toBe(true);
+      await vi.waitFor(() => expect(agent.sendToolApproval).toHaveBeenCalled());
+
+      // `/new` rebinds the session, then run B starts.
+      await session.thread.create();
+      session.run.nextOperation();
+      const controllerB = session.run.ensureAbortController();
+      const streamAbort = vi.spyOn(session.stream, 'abort');
+
+      release();
+      await declineLanded.catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(streamAbort).not.toHaveBeenCalled();
+      expect(session.run.isAbortRequested()).toBe(false);
+      expect(controllerB.signal.aborted).toBe(false);
+
+      controllerB.abort();
+    },
+  );
 });
