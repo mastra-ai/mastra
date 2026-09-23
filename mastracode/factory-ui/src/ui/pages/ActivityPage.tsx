@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useCallback, useMemo, useState } from 'react';
 
 import { useAuditEvents } from '../../hooks/useAuditEvents';
@@ -25,7 +25,16 @@ export function ActivityPage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout {...slots}>
+    <PageLayout
+      {...slots}
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>Activity</PageHeader.Title>
+          <PageHeader.Description>Everything the Factory did, newest first.</PageHeader.Description>
+        </PageHeader>
+      }
+    >
       <ActivityContent factoryId={factory.id} />
     </PageLayout>
   );
@@ -59,16 +68,7 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
   }, [auditQuery]);
 
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="activity-heading">
-      <div>
-        <h1 id="activity-heading" className="text-heading text-foreground m-0 font-semibold">
-          Activity
-        </h1>
-        <Txt as="p" variant="caption" className="text-muted-foreground mt-1 mb-0">
-          Everything the Factory did, newest first.
-        </Txt>
-      </div>
-
+    <div className="mt-6 flex flex-col gap-6 pb-16">
       {itemsQuery.isPending || auditQuery.isPending ? (
         <SkeletonRows label="Loading activity" rows={6} rowClassName="h-10 w-full" />
       ) : itemsQuery.isError || auditQuery.isError ? (
@@ -101,6 +101,6 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
           />
         </>
       )}
-    </section>
+    </div>
   );
 }
