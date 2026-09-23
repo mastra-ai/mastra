@@ -26,7 +26,7 @@ export const NoResults: Story = {
   args: {
     titleSlot: 'No results found',
     descriptionSlot: 'Try adjusting your search or filters to find what you are looking for.',
-    actionSlot: <Button variant="outline">Clear filters</Button>,
+    actionSlot: <Button>Clear filters</Button>,
   },
 };
 
@@ -69,7 +69,7 @@ export const Fill: Story = {
   args: {
     titleSlot: 'Your inbox is empty',
     descriptionSlot: 'The fill variant centers the block in the full height of its parent.',
-    actionSlot: <Button variant="outline">Go to traces</Button>,
+    actionSlot: <Button>Go to traces</Button>,
     variant: 'fill',
   },
   render: args => (

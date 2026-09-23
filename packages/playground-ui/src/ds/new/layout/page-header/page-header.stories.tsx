@@ -201,9 +201,7 @@ export const TallAction: Story = {
         <PageHeader.Action>
           <div className="flex flex-col gap-2">
             <Button size="sm">Create environment</Button>
-            <Button size="sm" variant="outline">
-              Import
-            </Button>
+            <Button size="sm">Import</Button>
           </div>
         </PageHeader.Action>
       </PageHeader>

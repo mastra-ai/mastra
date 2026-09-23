@@ -98,7 +98,7 @@ function EntityIndexControls({
         <ButtonsGroup aria-label="Entities view">
           <Button
             type="button"
-            variant={view === 'list' ? 'primary' : 'outline'}
+            variant={view === 'list' ? 'primary' : 'default'}
             size="icon-md"
             tooltip="List view"
             aria-pressed={view === 'list'}
@@ -108,7 +108,7 @@ function EntityIndexControls({
           </Button>
           <Button
             type="button"
-            variant={view === 'compact' ? 'primary' : 'outline'}
+            variant={view === 'compact' ? 'primary' : 'default'}
             size="icon-md"
             tooltip="Compact view"
             aria-pressed={view === 'compact'}

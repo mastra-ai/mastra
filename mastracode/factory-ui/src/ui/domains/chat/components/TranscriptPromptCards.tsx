@@ -166,7 +166,6 @@ function AskUserCard({
           {options.map(opt => (
             <Button
               key={opt.label}
-              variant="outline"
               size="sm"
               className="justify-start"
               aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}

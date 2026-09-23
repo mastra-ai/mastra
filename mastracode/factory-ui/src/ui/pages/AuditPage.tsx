@@ -61,7 +61,7 @@ function AuditLogEmptyState({
       descriptionSlot={state.description}
       actionSlot={
         state.reset ? (
-          <Button variant="outline" size="sm" onClick={state.reset.onClick}>
+          <Button size="sm" onClick={state.reset.onClick}>
             {state.reset.label}
           </Button>
         ) : undefined
@@ -127,7 +127,6 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
       <div className="min-h-control-sm flex items-center justify-end">
         {portalUrl ? (
           <Button
-            variant="outline"
             size="sm"
             onClick={() => {
               window.open(portalUrl, '_blank', 'noopener,noreferrer');
