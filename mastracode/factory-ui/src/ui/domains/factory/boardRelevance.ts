@@ -171,6 +171,43 @@ function matchesRelations(
   return [...selectedTypes].some(type => relations[type].has(participantId));
 }
 
+/**
+ * Board's `@me` resolution: the acting user's claimed external accounts,
+ * one set per integration. Sourced from `useResolvedMe`; only the ids the
+ * user has claimed count as "me" here — a GitHub login the user hasn't
+ * claimed doesn't match even if it happens to be theirs on the provider.
+ *
+ * The board's `participantId` scheme prefixes ids by source
+ * (`github:octocat`, `linear:user-uuid`, etc.), so `@me` translates into a
+ * set of those prefixed ids and reuses the existing relations map.
+ */
+export type ResolvedMe = ReadonlyMap<string, ReadonlySet<string>>;
+
+/** Expand `@me` into the same `source:externalId` keys the relations map uses. */
+function participantIdsForMe(resolvedMe: ResolvedMe): Set<string> {
+  const ids = new Set<string>();
+  for (const [integrationId, externalIds] of resolvedMe) {
+    for (const externalId of externalIds) {
+      ids.add(`${integrationId}:${externalId.toLowerCase()}`);
+    }
+  }
+  return ids;
+}
+
+function matchesRelationsAny(
+  relations: Record<BoardRelevanceType, Set<string>>,
+  participantIds: ReadonlySet<string>,
+  selectedTypes: ReadonlySet<BoardRelevanceType>,
+): boolean {
+  if (participantIds.size === 0) return false;
+  for (const type of selectedTypes) {
+    for (const id of relations[type]) {
+      if (participantIds.has(id)) return true;
+    }
+  }
+  return false;
+}
+
 export function workItemMatchesRelevance(
   item: WorkItem,
   activityPage: AuditEventPage | undefined,
@@ -183,6 +220,24 @@ export function workItemMatchesRelevance(
   return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantId, selectedTypes) : false;
 }
 
+/**
+ * `@me` predicate: work-item variant. `resolvedMe` comes from the identity
+ * service; an empty map (no claims) always returns false so the chip acts
+ * like the teammate selector — no selection filters out everything.
+ */
+export function workItemMatchesMe(
+  item: WorkItem,
+  activityPage: AuditEventPage | undefined,
+  resolvedMe: ResolvedMe,
+  selectedTypes: ReadonlySet<BoardRelevanceType>,
+  liveCandidate?: BoardCandidate,
+): boolean {
+  const ids = participantIdsForMe(resolvedMe);
+  if (ids.size === 0) return false;
+  if (matchesRelationsAny(workItemRelevance(item, activityPage), ids, selectedTypes)) return true;
+  return liveCandidate ? matchesRelationsAny(candidateRelevance(liveCandidate), ids, selectedTypes) : false;
+}
+
 export function candidateMatchesRelevance(
   candidate: BoardCandidate,
   participantId: string | undefined,
@@ -190,6 +245,17 @@ export function candidateMatchesRelevance(
 ): boolean {
   if (!participantId) return true;
   return matchesRelations(candidateRelevance(candidate), participantId, selectedTypes);
+}
+
+/** `@me` predicate: candidate variant. */
+export function candidateMatchesMe(
+  candidate: BoardCandidate,
+  resolvedMe: ResolvedMe,
+  selectedTypes: ReadonlySet<BoardRelevanceType>,
+): boolean {
+  const ids = participantIdsForMe(resolvedMe);
+  if (ids.size === 0) return false;
+  return matchesRelationsAny(candidateRelevance(candidate), ids, selectedTypes);
 }
 
 export function boardParticipants({

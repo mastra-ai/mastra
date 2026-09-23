@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { ListFilter, RotateCcw, Tag, UsersRound } from 'lucide-react';
+import { AtSign, ListFilter, RotateCcw, Tag, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
 import type { BoardKind } from '../boardStages';
@@ -11,6 +11,12 @@ import { boardRelevanceOptions } from '../boardRelevance';
 import type { BoardParticipant, BoardRelevanceType } from '../boardRelevance';
 
 const ALL_TEAMMATES = 'all';
+/**
+ * Sentinel value paired with `@me` in the `teammate` query param. Selecting it
+ * matches any card whose external author/assignee/reviewer is one of the
+ * acting user's claimed accounts (see `useResolvedMe` and `workItemMatchesMe`).
+ */
+export const AT_ME_TEAMMATE = '@me';
 
 export function BoardRelevanceFilters({
   kind,
@@ -22,6 +28,7 @@ export function BoardRelevanceFilters({
   availableLabels,
   selectedLabels,
   currentUserId,
+  hasIdentityClaims = false,
   onParticipantChange,
   onTypeChange,
   onLabelChange,
@@ -37,6 +44,8 @@ export function BoardRelevanceFilters({
   availableLabels: readonly string[];
   selectedLabels: ReadonlySet<string>;
   currentUserId?: string;
+  /** True when the acting user has at least one claimed external account; hides the `@me` chip when false. */
+  hasIdentityClaims?: boolean;
   onParticipantChange: (participantId: string | undefined) => void;
   onTypeChange: (type: BoardRelevanceType, selected: boolean) => void;
   onLabelChange: (label: string, selected: boolean) => void;
@@ -68,6 +77,16 @@ export function BoardRelevanceFilters({
       value: ALL_TEAMMATES,
       start: <UsersRound size={14} aria-hidden />,
     },
+    ...(hasIdentityClaims
+      ? [
+          {
+            label: '@me',
+            value: AT_ME_TEAMMATE,
+            description: 'Cards matching accounts you claimed on any integration',
+            start: <AtSign size={14} aria-hidden />,
+          },
+        ]
+      : []),
     ...participants.map(participant => ({
       label: participant.name,
       value: participant.id,

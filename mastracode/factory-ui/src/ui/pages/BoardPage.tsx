@@ -10,6 +10,7 @@ import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
+import { useResolvedMe } from '../../hooks/useIdentityClaims';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -42,8 +43,10 @@ import {
   boardRelevanceFromQuery,
   boardRelevanceQueryValue,
   candidateMatchesLabels,
+  candidateMatchesMe,
   candidateMatchesRelevance,
   workItemMatchesLabels,
+  workItemMatchesMe,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
@@ -143,12 +146,20 @@ function BoardContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
-  const selectedParticipantId = searchParams.get('teammate') || undefined;
+  const teammateParam = searchParams.get('teammate') || undefined;
+  /**
+   * `teammate=@me` is a sentinel that expands, at match time, into every
+   * external-user id the acting user has claimed across every integration.
+   * See `workItemMatchesMe` for the resolution rules.
+   */
+  const meSelected = teammateParam === '@me';
+  const selectedParticipantId = meSelected ? undefined : teammateParam;
   const search = searchParams.get('q') ?? '';
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
   const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
 
   const auth = useFactoryAuth();
+  const resolvedMe = useResolvedMe();
   const items = useBoardItems({ factoryProjectId, kind });
   const intake = useBoardIntake({
     factoryProjectId,
@@ -181,7 +192,9 @@ function BoardContent({
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const filteredCandidates = intake.candidates.filter(
     candidate =>
-      candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
+      (meSelected
+        ? candidateMatchesMe(candidate, resolvedMe.data, selectedRelevanceTypes)
+        : candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes)) &&
       candidateMatchesLabels(candidate, selectedLabels) &&
       cardMatchesSearch(candidate, search),
   );
@@ -255,7 +268,15 @@ function BoardContent({
     unfilteredWorkItemsForStage(stage).filter(item => {
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
-        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
+        (meSelected
+          ? workItemMatchesMe(item, activityPage, resolvedMe.data, selectedRelevanceTypes, liveCandidate)
+          : workItemMatchesRelevance(
+              item,
+              activityPage,
+              selectedParticipantId,
+              selectedRelevanceTypes,
+              liveCandidate,
+            )) &&
         workItemMatchesLabels(item, selectedLabels, liveCandidate) &&
         cardMatchesSearch(item, search)
       );
@@ -287,7 +308,8 @@ function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0 || search !== '';
+  const anyFilterActive =
+    selectedParticipantId !== undefined || meSelected || selectedLabels.size > 0 || search !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   const stageViews = stages.map(stage => {
@@ -330,11 +352,12 @@ function BoardContent({
                 participants={participants}
                 search={search}
                 onSearchChange={setSearch}
-                selectedParticipantId={selectedParticipantId}
+                selectedParticipantId={meSelected ? '@me' : selectedParticipantId}
                 selectedTypes={selectedRelevanceTypes}
                 availableLabels={availableLabels}
                 selectedLabels={selectedLabels}
                 currentUserId={auth.data?.user?.userId}
+                hasIdentityClaims={resolvedMe.data.size > 0}
                 onParticipantChange={setParticipant}
                 onTypeChange={setRelevanceType}
                 onLabelChange={setLabel}
