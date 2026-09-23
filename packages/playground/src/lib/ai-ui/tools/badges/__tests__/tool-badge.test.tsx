@@ -44,7 +44,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('SearchDocs'));
+    fireEvent.click(screen.getByRole('button', { name: /SearchDocs/ }));
 
     const toolArgs = screen.getByTestId('tool-args');
 
@@ -70,7 +70,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('GetWeather'));
+    fireEvent.click(screen.getByRole('button', { name: /GetWeather/ }));
 
     const toolResult = screen.getByTestId('tool-result');
 
@@ -92,7 +92,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('CheckAccess'));
+    fireEvent.click(screen.getByRole('button', { name: /CheckAccess/ }));
 
     expect(screen.getByTestId('tool-result').textContent).toBe('false');
   });
@@ -116,7 +116,7 @@ describe('ToolBadge edit body', () => {
         />,
       );
 
-      fireEvent.click(screen.getByText('Edit'));
+      fireEvent.click(screen.getByRole('button', { name: /Edit/ }));
 
       expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
       expect(screen.getByTestId('tool-result').textContent).toBe(result);
@@ -143,7 +143,7 @@ describe('ToolBadge edit body', () => {
         />,
       );
 
-      fireEvent.click(screen.getByText('Run'));
+      fireEvent.click(screen.getByRole('button', { name: /Run/ }));
 
       expect(screen.getByTestId('tool-args').textContent).toContain('"cwd": "/workspace"');
       expect(screen.getByTestId('tool-args').textContent).toContain('"timeout": 30000');
@@ -166,7 +166,7 @@ describe('ToolBadge edit body', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Edit'));
+    fireEvent.click(screen.getByRole('button', { name: /Edit/ }));
 
     expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
     expect(screen.queryByTestId('tool-args')).toBeNull();

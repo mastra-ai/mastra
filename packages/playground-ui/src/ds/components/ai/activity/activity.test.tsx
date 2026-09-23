@@ -283,3 +283,67 @@ describe('ActivityItem', () => {
     expect(screen.getByText('Instructions')).toBeTruthy();
   });
 });
+
+describe('a body landing on a line', () => {
+  const Line = ({ body }: { body?: string }) => (
+    <ArrivalScope>
+      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+        {body}
+      </ActivityItem>
+    </ArrivalScope>
+  );
+
+  it('keeps the line mounted, so its detail does not fade in a second time', () => {
+    const { rerender } = render(<Line />);
+    const label = screen.getByText('Searched files');
+
+    rerender(<Line body="3 matches" />);
+
+    expect(screen.getByText('Searched files')).toBe(label);
+    expect(screen.getByText('src/**/*.ts').classList.contains(ARRIVING_CLASS)).toBe(false);
+    expect(screen.getByRole('button', { name: /Searched files/ })).toBeTruthy();
+  });
+
+  it('reserves the chevron slot before there is anything to fold', () => {
+    render(<Line />);
+
+    expect(document.querySelector('.lucide-chevron-right')?.parentElement?.className).toContain('opacity-0');
+  });
+});
+
+describe('an Activity with nothing to fold', () => {
+  it('stays closed and offers no disclosure, even when asked to open by default', () => {
+    render(
+      <Activity foldable={false} defaultOpen aria-label="Tool: view">
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+        </ActivityTrigger>
+        <ActivityContent>
+          <span>rail</span>
+        </ActivityContent>
+      </Activity>,
+    );
+
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByText('rail')).toBeNull();
+  });
+
+  it('opens on its own once it has something to fold', () => {
+    const Tool = ({ foldable }: { foldable: boolean }) => (
+      <Activity foldable={foldable} defaultOpen aria-label="Tool: view">
+        <ActivityTrigger>
+          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+        </ActivityTrigger>
+        <ActivityContent>
+          <span>arguments</span>
+        </ActivityContent>
+      </Activity>
+    );
+    const { rerender } = render(<Tool foldable={false} />);
+
+    rerender(<Tool foldable />);
+
+    expect(screen.getByRole('button', { name: /Read/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('arguments')).toBeTruthy();
+  });
+});

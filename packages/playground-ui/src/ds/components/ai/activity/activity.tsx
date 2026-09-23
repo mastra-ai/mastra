@@ -11,6 +11,7 @@ type ActivityStatus = 'idle' | 'running' | 'error';
 
 interface ActivityContextValue {
   open: boolean;
+  foldable: boolean;
   status: ActivityStatus;
 }
 
@@ -32,6 +33,7 @@ export interface ActivityProps extends Omit<
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  foldable?: boolean;
   status?: ActivityStatus;
 }
 
@@ -39,13 +41,14 @@ export function Activity({
   open: controlledOpen,
   defaultOpen = false,
   onOpenChange = noopOpenChange,
+  foldable = true,
   status = 'idle',
   className,
   children,
   ...props
 }: ActivityProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
-  const open = controlledOpen ?? uncontrolledOpen;
+  const open = controlledOpen ?? (foldable && uncontrolledOpen);
   const statusId = useId();
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -54,7 +57,7 @@ export function Activity({
   };
 
   return (
-    <ActivityContext.Provider value={{ open, status }}>
+    <ActivityContext.Provider value={{ open, foldable, status }}>
       <Collapsible
         open={open}
         onOpenChange={handleOpenChange}
@@ -77,15 +80,31 @@ export function Activity({
   );
 }
 
-export const ActivityTrigger = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
-  <CollapsibleTrigger
-    className={cn(
-      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-fill focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden motion-reduce:transition-none',
-      className,
-    )}
-    {...props}
-  />
-);
+// The button overlays the line instead of wrapping it: a line that gains a body keeps its
+// subtree mounted, so its shimmer and arrival fade do not replay.
+export const ActivityTrigger = ({ className, children, ...props }: ComponentProps<'div'>) => {
+  const { foldable } = useActivity();
+  const lineId = useId();
+
+  return (
+    <div
+      className={cn(
+        'group/row relative w-full min-w-0 rounded-md transition-colors motion-reduce:transition-none',
+        foldable && 'hover:bg-fill',
+        className,
+      )}
+      {...props}
+    >
+      <div id={lineId}>{children}</div>
+      {foldable && (
+        <CollapsibleTrigger
+          aria-labelledby={lineId}
+          className="absolute inset-0 cursor-pointer rounded-md focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
+        />
+      )}
+    </div>
+  );
+};
 
 export const ActivityHeader = ({ className, children, ...props }: ComponentProps<'span'>) => {
   const { status } = useActivity();
@@ -107,7 +126,7 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   return (
     <span
       className={cn(
-        '[&_svg]:stroke-[1.75] flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0',
+        'flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:stroke-[1.75]',
         status === 'error' ? 'text-error/80' : 'text-placeholder',
         className,
       )}
@@ -161,7 +180,7 @@ export const ActivityTrailing = ({ className, ...props }: ComponentProps<'span'>
 );
 
 export const ActivityDisclosure = ({ className, children, ...props }: ComponentProps<'span'>) => {
-  const { open } = useActivity();
+  const { open, foldable } = useActivity();
 
   return (
     <span className={cn('flex size-4 shrink-0 items-center justify-center', className)} {...props}>
@@ -169,8 +188,9 @@ export const ActivityDisclosure = ({ className, children, ...props }: ComponentP
         aria-hidden
         className={cn(
           'flex shrink-0 items-center text-muted-foreground/60 transition duration-150 motion-reduce:transition-none',
-          'group-hover/row:text-muted-foreground group-focus-visible/row:text-muted-foreground',
+          'group-hover/row:text-muted-foreground group-has-focus-visible/row:text-muted-foreground',
           open && 'rotate-90 text-muted-foreground',
+          !foldable && 'opacity-0',
         )}
       >
         {children ?? <ChevronRight size={13} />}
@@ -187,7 +207,6 @@ export interface ActivityHeadlineProps extends Omit<ComponentProps<typeof Activi
   detailFont?: ActivityDetailProps['font'];
   wrapDetail?: boolean;
   badges?: ReactNode;
-  disclosure?: boolean;
 }
 
 export const ActivityHeadline = ({
@@ -198,14 +217,13 @@ export const ActivityHeadline = ({
   detailFont,
   wrapDetail,
   badges,
-  disclosure = true,
   ...props
 }: ActivityHeadlineProps) => {
   const { status } = useActivity();
 
   return (
     <ActivityHeader {...props}>
-      {leading}
+      {leading && <span className="relative z-10 flex shrink-0">{leading}</span>}
       <ActivityIcon>{icon}</ActivityIcon>
       <ActivityLabel>{label}</ActivityLabel>
       {badges}
@@ -220,7 +238,7 @@ export const ActivityHeadline = ({
           <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
         </ActivityTrailing>
       )}
-      {disclosure && <ActivityDisclosure />}
+      <ActivityDisclosure />
     </ActivityHeader>
   );
 };
@@ -238,7 +256,7 @@ export const ActivityContent = ({ className, children, ...props }: ComponentProp
   </CollapsibleContent>
 );
 
-export interface ActivityItemProps extends Omit<ActivityProps, 'children' | 'open' | 'onOpenChange'> {
+export interface ActivityItemProps extends Omit<ActivityProps, 'children' | 'open' | 'onOpenChange' | 'foldable'> {
   icon: ReactNode;
   label: string;
   detail?: string;
@@ -260,31 +278,20 @@ export function ActivityItem({
   ...props
 }: ActivityItemProps) {
   const folds = collapsible && Boolean(children);
-  const headline = (
-    <ActivityHeadline
-      icon={icon}
-      label={label}
-      detail={detail}
-      detailFont={detailFont}
-      wrapDetail={!folds}
-      badges={badges}
-      disclosure={folds}
-    />
-  );
-
-  if (!folds) {
-    return (
-      <Activity {...props} open>
-        {headline}
-        {children && <ActivityContent>{children}</ActivityContent>}
-      </Activity>
-    );
-  }
 
   return (
-    <Activity {...props}>
-      <ActivityTrigger>{headline}</ActivityTrigger>
-      <ActivityContent>{children}</ActivityContent>
+    <Activity {...props} foldable={folds} open={collapsible ? undefined : true}>
+      <ActivityTrigger>
+        <ActivityHeadline
+          icon={icon}
+          label={label}
+          detail={detail}
+          detailFont={detailFont}
+          wrapDetail={!folds}
+          badges={badges}
+        />
+      </ActivityTrigger>
+      {children && <ActivityContent>{children}</ActivityContent>}
     </Activity>
   );
 }

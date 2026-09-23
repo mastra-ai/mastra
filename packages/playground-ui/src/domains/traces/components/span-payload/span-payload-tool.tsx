@@ -18,6 +18,7 @@ export function SpanPayloadTool({ value, showLabel = true }: { value: unknown; s
   const error = call.isError === true || call.state === 'output-error';
   const errorText = typeof call.errorText === 'string' ? call.errorText : undefined;
   const { icon: ToolIcon, label, detail } = presentTool(call.toolName, input);
+  const hasBody = input !== undefined || output !== undefined || errorText !== undefined;
   return (
     <div data-slot="span-payload-tool" className="flex flex-col gap-2">
       {showLabel && <SpanPayloadLabel>{value.type === 'tool-result' ? 'Tool result' : 'Tool call'}</SpanPayloadLabel>}
@@ -25,23 +26,25 @@ export function SpanPayloadTool({ value, showLabel = true }: { value: unknown; s
         status={error ? 'error' : 'idle'}
         header={<ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />}
       >
-        <div className="flex flex-col gap-3">
-          {input !== undefined && (
-            <SpanPayloadField label="Arguments">
-              <SpanPayloadJson value={input} />
-            </SpanPayloadField>
-          )}
-          {output !== undefined && (
-            <SpanPayloadField label="Result">
-              <SpanPayloadJson value={output} />
-            </SpanPayloadField>
-          )}
-          {errorText !== undefined && (
-            <SpanPayloadField label="Error">
-              <SpanPayloadJson value={errorText} />
-            </SpanPayloadField>
-          )}
-        </div>
+        {hasBody && (
+          <div className="flex flex-col gap-3">
+            {input !== undefined && (
+              <SpanPayloadField label="Arguments">
+                <SpanPayloadJson value={input} />
+              </SpanPayloadField>
+            )}
+            {output !== undefined && (
+              <SpanPayloadField label="Result">
+                <SpanPayloadJson value={output} />
+              </SpanPayloadField>
+            )}
+            {errorText !== undefined && (
+              <SpanPayloadField label="Error">
+                <SpanPayloadJson value={errorText} />
+              </SpanPayloadField>
+            )}
+          </div>
+        )}
       </BadgeWrapper>
     </div>
   );

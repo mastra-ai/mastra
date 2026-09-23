@@ -1,6 +1,7 @@
 import { ActivityHeadline } from '@mastra/playground-ui/components/ai/activity';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import {
+  hasToolArguments,
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
@@ -62,6 +63,13 @@ export const ToolBadge = ({
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
+  const awaitsApproval = Boolean(toolApprovalMetadata) && !toolCalled;
+  const hasBody =
+    hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
+    Boolean(suspendPayload) ||
+    Boolean(resultPretty) ||
+    toolOutput.length > 0 ||
+    awaitsApproval;
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -85,44 +93,48 @@ export const ToolBadge = ({
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
-      <ToolCallArguments
-        toolName={toolName}
-        args={argsObject}
-        argsText={argsPretty}
-        hideArguments={withoutArgs}
-        data-testid="tool-args"
-      />
+      {hasBody && (
+        <>
+          <ToolCallArguments
+            toolName={toolName}
+            args={argsObject}
+            argsText={argsPretty}
+            hideArguments={withoutArgs}
+            data-testid="tool-args"
+          />
 
-      {suspendPayload !== undefined && suspendPayload && (
-        <div>
-          <SectionLabel>Suspend payload</SectionLabel>
-          {typeof suspendPayload === 'string' ? (
-            <ToolCallOutput text={suspendPayload} />
-          ) : (
-            <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+          {suspendPayload !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Suspend payload</SectionLabel>
+              {typeof suspendPayload === 'string' ? (
+                <ToolCallOutput text={suspendPayload} />
+              ) : (
+                <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+              )}
+            </div>
           )}
-        </div>
+
+          {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
+
+          {toolOutput.length > 0 && (
+            <div>
+              <SectionLabel>Tool output</SectionLabel>
+              <div className="h-40 overflow-y-auto">
+                <CodeEditor data={toolOutput} data-testid="tool-output" />
+              </div>
+            </div>
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </>
       )}
-
-      {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
-
-      {toolOutput.length > 0 && (
-        <div>
-          <SectionLabel>Tool output</SectionLabel>
-          <div className="h-40 overflow-y-auto">
-            <CodeEditor data={toolOutput} data-testid="tool-output" />
-          </div>
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
     </BadgeWrapper>
   );
 };

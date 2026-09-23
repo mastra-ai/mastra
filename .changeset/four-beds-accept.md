@@ -60,6 +60,26 @@ The card presentation of `ChatSignal` and the notice presentation of `ChatNotifi
 
 A short single-line message fits in the preview, so opening a disclosure used to reveal a copy of the line above it. Such a line now has no disclosure and wraps its detail instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a line that folds shows a dimmed chevron at rest instead of only on hover.
 
+The same rule covers a composed `Activity`: pass `foldable={false}` when there is nothing to open, and the line drops its disclosure button and its empty body. A tool call with no arguments, no output and no result is one example. `hasToolArguments` tells you whether `ToolCallArguments` would render anything.
+
+```tsx
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '@mastra/playground-ui/components/ai/activity';
+import { hasToolArguments, ToolCallArguments } from '@mastra/playground-ui/components/ai/tool-call';
+
+const foldable = hasToolArguments({ toolName, args }) || output !== undefined;
+
+<Activity foldable={foldable} status={status}>
+  <ActivityTrigger>
+    <ActivityHeadline icon={<Search aria-hidden />} label={label} detail={detail} />
+  </ActivityTrigger>
+  <ActivityContent>
+    <ToolCallArguments toolName={toolName} args={args} />
+  </ActivityContent>
+</Activity>;
+```
+
+A line that gains a body as its arguments stream in keeps its headline mounted: its shimmer does not restart, its detail does not fade in again, and the chevron fades into a slot that was already reserved, so the text does not shift sideways.
+
 **`ChatTimeGap` is replaced by `TranscriptDivider`**
 
 The transcript separator is a `role="separator"` rule, not an event, and it no longer parses a time string. It takes the label and, separately, the timestamp that belongs in `title`, and renders nothing when the label is empty.

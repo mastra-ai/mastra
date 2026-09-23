@@ -64,7 +64,11 @@ describe('BadgeWrapper', () => {
   });
 
   it('renders extraInfo outside the collapse trigger', () => {
-    render(<BadgeWrapper title="Ran tool" extraInfo={<button type="button">Extra</button>} />);
+    render(
+      <BadgeWrapper title="Ran tool" extraInfo={<button type="button">Extra</button>}>
+        output
+      </BadgeWrapper>,
+    );
 
     const extra = screen.getByRole('button', { name: 'Extra' });
     const trigger = screen.getByRole('button', { name: /ran tool/i });

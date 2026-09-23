@@ -668,7 +668,7 @@ describe('ToolCard dispatch', () => {
     );
 
     // Agent badge starts collapsed; expand it to reveal the suspend payload.
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('Agent suspend payload')).toBeTruthy();
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
   });
@@ -689,7 +689,7 @@ describe('ToolCard dispatch', () => {
       }),
     );
 
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('Agent suspend payload')).toBeTruthy();
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
   });
@@ -713,7 +713,7 @@ describe('ToolCard dispatch', () => {
         metadata: sharedMetadata,
       }),
     );
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2003?')).toBeNull();
     unmount();
@@ -726,7 +726,7 @@ describe('ToolCard dispatch', () => {
         metadata: sharedMetadata,
       }),
     );
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('approve refund ord_2003?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2001?')).toBeNull();
   });

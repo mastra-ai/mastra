@@ -6,7 +6,7 @@ import { ToolCallArguments } from './tool-call-arguments';
 import { ToolCallGroup } from './tool-call-group';
 import type { ToolCallGroupStep } from './tool-call-group';
 import { ToolCallOutput } from './tool-call-output';
-import { presentTool } from './tool-presentation';
+import { hasToolArguments, presentTool } from './tool-presentation';
 
 interface ToolPreviewProps extends ToolCallGroupStep {
   argsText?: string;
@@ -29,13 +29,15 @@ function ToolPreview({
   defaultOpen,
 }: ToolPreviewProps) {
   const { icon: ToolIcon, label, detail, command } = presentTool(toolName, args);
+  const showsCommand = Boolean(commandOnly && command);
+  const hasBody = showsCommand || output !== undefined || hasToolArguments({ toolName, args, argsText, hideArguments });
   return (
-    <Activity status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
+    <Activity status={status} defaultOpen={defaultOpen} foldable={hasBody} aria-label={`Tool: ${toolName}`}>
       <ActivityTrigger>
         <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
       </ActivityTrigger>
       <ActivityContent>
-        {commandOnly && command ? (
+        {showsCommand && command ? (
           <ToolCallCommand command={command} />
         ) : (
           <ToolCallArguments toolName={toolName} args={args} argsText={argsText} hideArguments={hideArguments} />
@@ -134,7 +136,17 @@ export const ResultOnly: Story = {
 
 export const EmptyArguments: Story = {
   args: { args: undefined },
-  parameters: { docs: { description: { story: 'No argument block renders before any input is available.' } } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Nothing to show yet, so the line has no disclosure. Its chevron slot stays reserved, so the line does not shift when arguments stream in.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('button')).not.toBeInTheDocument();
+  },
 };
 
 export const LongOutput: Story = {

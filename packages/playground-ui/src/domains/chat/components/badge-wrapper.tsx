@@ -48,29 +48,25 @@ export const BadgeWrapper = ({
     setOpen(!initialCollapsed);
   }, [initialCollapsed]);
 
-  const header = headerOverride ?? (
-    <ActivityHeadline icon={icon} label={title} detail={detail} disclosure={collapsible} />
-  );
+  const header = headerOverride ?? <ActivityHeadline icon={icon} label={title} detail={detail} />;
 
+  const hasBody = Boolean(children);
   const bodyOpen = !collapsible || open;
 
   return (
     <Activity
       open={bodyOpen}
+      foldable={collapsible && hasBody}
       onOpenChange={setOpen}
       status={status}
       className={cn(arrivedLive && 'fade-in-0 slide-in-from-bottom-1 motion-safe:animate-in')}
       data-testid={dataTestId}
     >
-      <span className="flex w-full min-w-0 items-center">
-        {collapsible ? (
-          <ActivityTrigger className="min-w-0 flex-1">{header}</ActivityTrigger>
-        ) : (
-          <span className="min-w-0 flex-1">{header}</span>
-        )}
+      <div className="flex w-full min-w-0 items-center">
+        <ActivityTrigger className="min-w-0 flex-1">{header}</ActivityTrigger>
         {extraInfo && <ActivityTrailing className="gap-1 pr-1">{extraInfo}</ActivityTrailing>}
-      </span>
-      <ActivityContent>{children}</ActivityContent>
+      </div>
+      {hasBody && <ActivityContent>{children}</ActivityContent>}
     </Activity>
   );
 };
