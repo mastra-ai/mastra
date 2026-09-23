@@ -134,19 +134,36 @@ function waitForTermination(termination: Promise<boolean>): Promise<void> {
 }
 
 /**
- * Polls `exec.inspect()` until the exec reports it is no longer running, bounded
- * by TERMINATION_CONFIRMATION_DEADLINE_MS. A stream can close without 'end'
- * while the process is still alive, and settling from inspect then would publish
- * an exit for a process that never exited — but waiting unbounded could leave
- * wait() pending forever. Returns the last inspect result, which may still
- * report Running: true if the bound was reached.
+ * Resolves with `work`'s value, or `fallback` if it has not settled within `ms`.
+ * Never rejects. Bounds a single daemon round-trip, so one call that never
+ * answers cannot leave wait() pending past its deadline.
  */
-async function waitForExecToStop(exec: Exec): Promise<ExecInspectInfo> {
-  const deadline = Date.now() + TERMINATION_CONFIRMATION_DEADLINE_MS;
-  let info = await exec.inspect();
-  while (info.Running && Date.now() < deadline) {
+function withDeadline<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>(resolve => {
+    const timer = setTimeout(() => resolve(fallback), Math.max(0, ms));
+    const done = (value: T) => {
+      clearTimeout(timer);
+      resolve(value);
+    };
+    work.then(done, () => done(fallback));
+  });
+}
+
+/**
+ * Polls `exec.inspect()` until the exec reports it is no longer running, bounded
+ * by `deadline` (an absolute `Date.now()` timestamp). A stream can close without
+ * 'end' while the process is still alive, and settling from inspect then would
+ * publish an exit for a process that never exited — but waiting unbounded could
+ * leave wait() pending forever, so each call is bounded too. Returns the last
+ * inspect result, which may still report Running: true if the bound was reached,
+ * or undefined if no call settled in time.
+ */
+async function waitForExecToStop(exec: Exec, deadline: number): Promise<ExecInspectInfo | undefined> {
+  let info: ExecInspectInfo | undefined;
+  while (Date.now() < deadline) {
+    info = await withDeadline<ExecInspectInfo | undefined>(exec.inspect(), deadline - Date.now(), undefined);
+    if (!info || !info.Running) return info;
     await new Promise(resolve => setTimeout(resolve, 10));
-    info = await exec.inspect();
   }
   return info;
 }
@@ -514,6 +531,10 @@ export class DockerProcessManager extends SandboxProcessManager {
       // `_killed`, so a close that races an unconfirmed kill still observes the
       // final state instead of returning while the confirmation is pending.
       stream.on('close', async () => {
+        // One deadline covers the whole path, so waiting on an in-flight kill
+        // confirmation cannot stack on top of a fresh exec poll: the bound the
+        // settlement is documented to have is the bound it actually has.
+        const deadline = Date.now() + TERMINATION_CONFIRMATION_DEADLINE_MS;
         if (handle._terminationPromise) {
           await waitForTermination(handle._terminationPromise);
         }
@@ -530,9 +551,17 @@ export class DockerProcessManager extends SandboxProcessManager {
         // while it is still running rather than publishing an exit for a live
         // process; settle afterwards so wait() cannot hang once the bound elapses.
         try {
-          const info = await waitForExecToStop(exec);
+          const info = await waitForExecToStop(exec, deadline);
           if (settled) return;
-          settle(info.ExitCode ?? 1);
+          // A termination can land while the poll is running (a timeout path records
+          // `_killed` before kill() confirms, and kill() itself sets it once the
+          // helper has verified the process group is gone). Report the termination
+          // rather than a bare exit code, or the result drops `killed`/`timedOut`.
+          if (handle._killed) {
+            settleTerminated();
+            return;
+          }
+          settle(info?.ExitCode ?? 1);
         } catch {
           settle(1);
         }

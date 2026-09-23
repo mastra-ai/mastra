@@ -1689,6 +1689,148 @@ describe('DockerSandbox', () => {
       }
     });
 
+    it('should settle wait() when inspect never answers during the close-only fallback', async () => {
+      // A daemon that stops answering inspect() must not leave wait() pending
+      // forever: each poll is bounded, so the settlement bound still holds.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100');
+        const waitPromise = handle.wait();
+
+        let settled = false;
+        void waitPromise.then(() => {
+          settled = true;
+        });
+
+        mockExec.inspect.mockImplementation(() => new Promise<never>(() => {}));
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => Promise<void>;
+        const closePromise = closeHandler();
+
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(settled).toBe(false);
+
+        // The bound elapses even though inspect() never settled.
+        await vi.advanceTimersByTimeAsync(1);
+        await closePromise;
+        expect(settled).toBe(true);
+
+        const result = await waitPromise;
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(1);
+        expect(result.killed).toBeUndefined();
+        expect(result.timedOut).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not stack the termination wait and the exec poll beyond one deadline', async () => {
+      // The wait for an in-flight kill confirmation and the close-only exec poll
+      // share a single deadline, so a wedged kill cannot push settlement out to
+      // twice the documented bound.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100');
+        const waitPromise = handle.wait();
+
+        let settled = false;
+        void waitPromise.then(() => {
+          settled = true;
+        });
+
+        // Gate the kill helper so its confirmation never arrives in time.
+        let releaseKillHelper!: () => void;
+        const killHelperGate = new Promise<void>(resolve => {
+          releaseKillHelper = resolve;
+        });
+        mockContainer.exec.mockImplementationOnce(async () => {
+          await killHelperGate;
+          return {
+            id: 'kill-exec',
+            start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+            inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+          };
+        });
+
+        // The exec never reports itself stopped either.
+        mockExec.inspect.mockResolvedValue({ Running: true });
+
+        const killPromise = handle.kill();
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => Promise<void>;
+        const closePromise = closeHandler();
+
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(settled).toBe(false);
+
+        // One deadline — not the termination wait plus a second full poll.
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+
+        await closePromise;
+
+        const result = await waitPromise;
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(1);
+        expect(result.killed).toBeUndefined();
+        expect(result.timedOut).toBeUndefined();
+
+        releaseKillHelper();
+        await killPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should preserve termination metadata when a kill lands during the close-only poll', async () => {
+      // A kill or timeout can confirm while the close-only poll is still running.
+      // Settling from the inspected exit code then would drop killed/timedOut —
+      // the exact loss this fix exists to prevent.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100');
+        const waitPromise = handle.wait();
+
+        // The exec never reports itself stopped, so the poll runs to its bound.
+        mockExec.inspect.mockResolvedValue({ Running: true });
+
+        // The kill helper confirms normally.
+        mockContainer.exec.mockImplementationOnce(async () => ({
+          id: 'kill-exec',
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+        }));
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => Promise<void>;
+        const closePromise = closeHandler();
+
+        // The kill confirms while the poll is in flight.
+        await vi.advanceTimersByTimeAsync(10);
+        await handle.kill();
+
+        // The poll reaches its bound and must report the termination, not a bare exit.
+        await vi.advanceTimersByTimeAsync(9_990);
+        await closePromise;
+
+        const result = await waitPromise;
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(true);
+        expect(result.timedOut).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should preserve killed metadata when the stream errors while kill is still confirming', async () => {
       // Tearing the hijacked exec socket down can surface as ECONNRESET instead of
       // 'end'; the error path must await the in-flight confirmation for the same
