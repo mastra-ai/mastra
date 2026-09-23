@@ -497,6 +497,44 @@ describe('AgentController signal messages', () => {
     expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(true);
   });
 
+  it('honors a response to a detached thread gate while this thread is aborting', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-approval-cross-thread-abort-response',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+
+    void session.approval.arm({ toolName: 'request_access', toolCallId: 'call-current', threadId });
+    const background = session.approval.arm({
+      toolName: 'request_access',
+      toolCallId: 'call-background',
+      threadId: 'thread-background',
+    });
+
+    session.abort();
+    expect(session.run.isAbortRequested()).toBe(true);
+    expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(true);
+
+    // The abort flag is session-wide, but an abort only tears down this thread's
+    // gates. Swallowing a response aimed at another thread's gate would strand
+    // that gate forever.
+    session.respondToToolApproval({ decision: 'approve', toolCallId: 'call-background' });
+
+    await expect(background).resolves.toEqual(expect.objectContaining({ decision: 'approve' }));
+    expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(false);
+  });
+
   it('forwards untilIdle into idle-run stream options', async () => {
     const agent = createAgentMock(() => null);
     const controller = new AgentController({

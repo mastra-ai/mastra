@@ -17,5 +17,9 @@ import type { TUIState } from './state.js';
  */
 export function isEventRoutedToCurrentThread(event: AgentControllerEvent, state: TUIState): boolean {
   if (!('toolCallId' in event) || !('threadId' in event) || !event.threadId) return true;
-  return state.pendingNewThread || event.threadId === state.session.thread.getId();
+  // A new thread has no id until it is created, so no thread-tagged event can be
+  // attributed to it yet — routing one would let a detached thread's approval
+  // drive the new thread's UI.
+  if (state.pendingNewThread) return false;
+  return event.threadId === state.session.thread.getId();
 }

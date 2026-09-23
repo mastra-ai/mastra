@@ -187,6 +187,28 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.agentRunLastStreamPartAt).toBeUndefined();
   });
 
+  it('ignores a current-thread tool event while waiting to create a new thread', async () => {
+    // The new thread has no id yet, so a thread-tagged event cannot belong to it.
+    // Routing one here would let a detached thread's approval drive the new
+    // thread's UI.
+    state.pendingNewThread = true;
+    state.backgroundToolContexts = new Map();
+    state.backgroundActivities = new Map();
+    state.pendingTools = new Map();
+    state.pendingSubagents = new Map();
+    state.seenToolCallIds = new Set();
+
+    await dispatchEvent(
+      { type: 'tool_start', toolCallId: 'late-call', toolName: 'view', args: {}, threadId: 'current-thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.seenToolCallIds.size).toBe(0);
+    expect(state.pendingTools.size).toBe(0);
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
+  });
+
   it('updates the active and terminal titles when a generated title arrives', async () => {
     await dispatchEvent(
       { type: 'thread_title_updated', threadId: 'current-thread', title: 'Generated demo title' } as any,

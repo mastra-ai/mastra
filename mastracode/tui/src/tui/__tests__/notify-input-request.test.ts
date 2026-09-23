@@ -334,6 +334,28 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
     await blocked;
   });
 
+  it('does not notify for a thread-tagged approval while a new thread is being created', async () => {
+    const { listener, releaseBlocker, state } = createHarness();
+    state.pendingNewThread = true;
+
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    // No event can be attributed to the thread being created before it exists,
+    // so notifying here would surface a prompt the user cannot act on.
+    void listener({
+      type: 'tool_approval_required',
+      toolCallId: 'call-late',
+      toolName: 'execute_command',
+      args: {},
+      threadId: 'thread-current',
+    });
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+
+    releaseBlocker.resolve();
+    await blocked;
+  });
+
   it('keeps delivering events when notification state access throws', async () => {
     let listener: ((event: any) => Promise<void>) | undefined;
     const poisonedState = {

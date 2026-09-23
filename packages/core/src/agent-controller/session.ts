@@ -3552,7 +3552,8 @@ export class Session<TState = unknown> {
    * Respond to the parked tool-approval gate named by `toolCallId` with the
    * user's decision. The id is required: a response can only release the gate it
    * names, so a stale or id-less response can never resolve a different pending
-   * gate. A no-op when that gate is not parked or the run is already aborting.
+   * gate. A no-op when that gate is not parked, or when the run is aborting and
+   * the gate belongs to the aborting thread.
    * "always_allow_category" grants the gated tool's category for the rest of the
    * session (resolved via the injected {@link setCategoryResolver}) and then
    * approves; "approve"/"decline" release the run as-is.
@@ -3568,7 +3569,16 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
-    if (this.run.isAbortRequested()) return;
+    // An abort tears down only this thread's gates, so only a response to one of
+    // them is ignored. A gate parked on a detached thread must still accept its
+    // own response — the abort flag is session-wide and would otherwise strand
+    // that gate permanently.
+    if (
+      this.run.isAbortRequested() &&
+      this.approval.isArmed({ toolCallId, threadId: this.thread.getId() ?? undefined })
+    ) {
+      return;
+    }
     this.approval.respond({
       decision,
       toolCallId,
