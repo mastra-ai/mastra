@@ -39,8 +39,6 @@ describe('useDatasetMutations delete experiment', () => {
         ['review-items'],
         ['completed-items'],
         ['experiment-review-summary'],
-        ['inbox-dataset-review-items'],
-        ['inbox-dataset-review-count'],
       ] as const;
       for (const queryKey of affectedQueryKeys) {
         queryClient.setQueryData(queryKey, { cached: true });
