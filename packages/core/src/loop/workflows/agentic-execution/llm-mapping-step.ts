@@ -190,7 +190,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     }
     const { chunk, stepNumber, steps } = args;
     try {
-      await processorRunner.runProcessToolResult({
+      const toolResultRun = await processorRunner.runProcessToolResult({
         steps,
         messages: rest.messageList.get.all.db(),
         messageList: rest.messageList,
@@ -207,8 +207,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         abortSignal: rest.options?.abortSignal,
       });
 
-      // Sync any processor mutation back into the chunk so streaming clients see
-      // the post-processor value, not the raw tool return.
+      // Sync any processor replacement back into the chunk so streaming clients see the
+      // post-processor value, not the raw tool return. The caller persists this chunk value
+      // to the message list, so this also bounds history and the next model call.
+      if (toolResultRun.result !== chunk.payload.result) {
+        (chunk.payload as { result: unknown }).result = toolResultRun.result;
+      }
+
+      // A processor may instead have edited the tool-invocation part directly; prefer that
+      // value when it diverges from the chunk.
       const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
       if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;

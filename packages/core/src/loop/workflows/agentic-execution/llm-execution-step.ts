@@ -1020,7 +1020,7 @@ async function processOutputStream<OUTPUT = undefined>({
           // own processToolResult invocation site.
           if ((outputProcessors && outputProcessors.length > 0) || toolResultInputProcessors.length > 0) {
             try {
-              await getToolResultProcessorRunner().runProcessToolResult({
+              const toolResultRun = await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
                 messages: messageList.get.all.db(),
                 messageList,
@@ -1037,8 +1037,18 @@ async function processOutputStream<OUTPUT = undefined>({
                 abortSignal: options?.abortSignal,
               });
 
-              // Sync any processor mutation back into the chunk so streaming clients
-              // see the post-processor value, not the raw tool return.
+              // Sync any processor replacement back into the chunk so streaming clients see
+              // the post-processor value, not the raw tool return. The chunk is also what
+              // buildMessagesFromChunks assembles history from, and what the next model call
+              // replays, so writing it here covers all three for same-stream provider results
+              // where no tool-invocation part exists yet.
+              if (toolResultRun.result !== chunk.payload.result) {
+                (chunk.payload as { result: unknown }).result = toolResultRun.result;
+              }
+
+              // A processor may instead have edited an existing tool-invocation part
+              // directly (possible for deferred results, where the call landed in an
+              // earlier step). Prefer that value when it diverges from the chunk.
               const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
               if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;

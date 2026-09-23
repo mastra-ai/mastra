@@ -535,6 +535,21 @@ export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends Proc
    * from the provider stream, which is not run through `ensureSerializable`.
    */
   result: unknown;
+  /**
+   * Replace the tool result the runtime carries forward.
+   *
+   * This is the reliable way to rewrite a result: it updates the emitted stream chunk,
+   * the assembled history, and the value handed to the next model call, for both
+   * provider-executed and client-executed tools.
+   *
+   * `messageList.updateToolInvocation` also works, but only once a tool-invocation part
+   * exists. When a provider emits the call and the result in a single stream, history is
+   * assembled from the chunks after this hook runs, so there is no part to update yet and
+   * the call is a no-op. Prefer `setResult` and use `messageList` for wider edits.
+   *
+   * The last value set wins, and later processors in the chain receive it as their `result`.
+   */
+  setResult?: (result: unknown) => void;
   /** Whether this result came from a provider-executed tool (e.g. Anthropic web_search) */
   providerExecuted?: boolean;
   /** All system messages */
@@ -808,11 +823,14 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * hook to scan tool output for prompt injection / sensitive data, redact fields,
    * or abort the run with abort({ retry: true }).
    *
-   * To replace the tool's result, mutate messageList in place via
-   * messageList.updateToolInvocation. The runtime re-reads the post-processor
-   * result from the message list and overwrites the downstream tool-result
-   * stream chunk before it's enqueued, so streaming clients see the processed
-   * value, not the raw one.
+   * To replace the tool's result, call args.setResult(value). The runtime applies it to
+   * the emitted stream chunk, the assembled history, and the next model call, for both
+   * provider-executed and client-executed tools.
+   *
+   * Mutating messageList in place via messageList.updateToolInvocation is also supported
+   * and is re-read back into the stream chunk, but it only applies once a tool-invocation
+   * part exists — for a provider call and result arriving in the same stream, history is
+   * built from chunks after this hook, so there is nothing to update yet.
    *
    * Note: this hook does not fire when tool.execute() throws — it is called only
    * for successful tool executions where a result is available.
@@ -948,11 +966,16 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
   /**
-   * @internal Ids of the plain processors this framework-generated workflow wraps, so a
+   * @internal The plain processor instances this framework-generated workflow wraps, so a
    * processor registered on two phases is still recognizable as the same instance after
    * the phases have been combined into separate workflows.
+   *
+   * Holds object references rather than ids: `id` is a public, user-chosen string that two
+   * distinct instances routinely share (every `new TokenLimiterProcessor()` is
+   * `'token-limiter'`), so id-based matching would treat unrelated instances as the same
+   * registration.
    */
-  __sourceProcessorIds?: string[];
+  __sourceProcessors?: Processor[];
 };
 
 /**

@@ -2277,9 +2277,11 @@ export class ProcessorRunner {
    * the message list / fed to the next LLM call.
    *
    * Symmetric with runProcessOutputStep — same TripWire/abort/state plumbing.
-   * Processors mutate via messageList.updateToolInvocation. The caller is
-   * responsible for re-reading the post-mutation result and syncing it into
-   * the downstream stream chunk so streaming clients see the processed value.
+   *
+   * Processors replace the result via `setResult`, and the final value is returned as
+   * `result` so the caller can apply it to the stream chunk and to history. Processors
+   * may also mutate `messageList` directly; the caller still re-reads that route for
+   * cases where a tool-invocation part already exists.
    */
   async runProcessToolResult(
     args: {
@@ -2297,7 +2299,7 @@ export class ProcessorRunner {
       writer?: ProcessorStreamWriter;
       abortSignal?: AbortSignal;
     } & Partial<ObservabilityContext>,
-  ): Promise<MessageList> {
+  ): Promise<{ messageList: MessageList; result: unknown }> {
     const {
       steps,
       messageList,
@@ -2314,11 +2316,20 @@ export class ProcessorRunner {
     } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
+    // The value carried forward between processors and back to the caller. Each processor
+    // sees the previous processor's replacement, and the caller applies the final value to
+    // the stream chunk and to history.
+    let currentResult = result;
+
     // Run through every registered processor that implements processToolResult.
     // Input-registered processors participate too (mirrors runProcessAPIError) so a
     // processor that guards what reaches the next LLM call does not have to be
     // registered as an output processor to see tool results.
-    const toolResultProcessors = [...this.inputProcessors, ...this.outputProcessors];
+    // Dedupe by object identity: the same instance registered on both phases must run
+    // once per tool result. Ids are not identity — distinct instances commonly share one
+    // (every `new TokenLimiterProcessor()` is `'token-limiter'`), so two separate
+    // instances that share an id are both kept and both run.
+    const toolResultProcessors = [...new Set([...this.inputProcessors, ...this.outputProcessors])];
     for (const [index, processorOrWorkflow] of toolResultProcessors.entries()) {
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
@@ -2339,7 +2350,7 @@ export class ProcessorRunner {
             args: toolArgs,
             // Carry the tool return value via toolResultValue to avoid colliding
             // with the OutputResult `result` field used by outputResult phase.
-            toolResultValue: result,
+            toolResultValue: currentResult,
             providerExecuted,
             systemMessages: currentSystemMessages,
             steps,
@@ -2402,7 +2413,10 @@ export class ProcessorRunner {
           toolName,
           toolCallId,
           args: toolArgs,
-          result,
+          result: currentResult,
+          setResult: (value: unknown) => {
+            currentResult = value;
+          },
           providerExecuted,
           systemMessages: currentSystemMessages,
           steps,
@@ -2474,7 +2488,7 @@ export class ProcessorRunner {
       }
     }
 
-    return messageList;
+    return { messageList, result: currentResult };
   }
 
   /**

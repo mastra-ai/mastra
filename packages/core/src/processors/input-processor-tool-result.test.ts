@@ -11,6 +11,7 @@ import {
   mockDate,
   testUsage,
 } from '../loop/test-utils/utils';
+import { getToolResultInputProcessors } from '../loop/workflows/agentic-execution/tool-result-processors';
 import type { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { createTool } from '../tools';
@@ -186,6 +187,8 @@ describe('input-registered processors receive provider-executed tool results', (
       }
     }
 
+    const capturing = new CapturingProcessor();
+
     const settings = defaultSettings();
     const result = await loop({
       ...settings,
@@ -193,8 +196,10 @@ describe('input-registered processors receive provider-executed tool results', (
       methodType: 'stream',
       runId: 'provider-tool-result-run',
       messageList: createMessageListWithUserMessage(),
-      inputProcessors: [new CapturingProcessor()],
-      llmRequestInputProcessors: [new CapturingProcessor()],
+      // One instance across both lists, mirroring the agent: inputProcessors and
+      // llmRequestInputProcessors are two views of the same resolved registrations.
+      inputProcessors: [capturing],
+      llmRequestInputProcessors: [capturing],
       models: createTestModels({
         stream: convertArrayToReadableStream([
           { type: 'tool-input-start', id: 'call-1', toolName: 'web_search', providerExecuted: true },
@@ -235,6 +240,240 @@ describe('input-registered processors receive provider-executed tool results', (
     expect(calls[0]!.toolName).toBe('web_search');
     expect(calls[0]!.providerExecuted).toBe(true);
     expect(calls[0]!.result).toBe(`{ "value": "result1" }`);
+  });
+});
+
+describe('cross-phase deduplication is by instance, not id', () => {
+  /**
+   * `id` is a public, user-chosen string that distinct instances routinely share:
+   * every `new TokenLimiterProcessor()` reports 'token-limiter'. Deduplicating on it
+   * silently dropped an input-registered processor whenever an unrelated output
+   * processor happened to share the name.
+   */
+  it('keeps two distinct instances that share an id and drops a genuine repeat', async () => {
+    const calls: string[] = [];
+
+    class Tagged implements Processor {
+      readonly id = 'shared-id';
+      constructor(private tag: string) {}
+      async processToolResult() {
+        calls.push(this.tag);
+      }
+    }
+
+    const onInput = new Tagged('input');
+    const onOutput = new Tagged('output');
+    const shared = new Tagged('shared');
+
+    const selected = getToolResultInputProcessors({
+      // `shared` appears twice across the two input lists: one registration, runs once.
+      inputProcessors: [onInput, shared],
+      llmRequestInputProcessors: [shared],
+      outputProcessors: [onOutput],
+    });
+
+    // onInput and shared survive; onOutput is reached through the output list instead.
+    expect(selected).toHaveLength(2);
+    expect(selected).toContain(onInput);
+    expect(selected).toContain(shared);
+    expect(selected).not.toContain(onOutput);
+  });
+
+  it('drops an instance already registered as an output processor', () => {
+    class Noop implements Processor {
+      readonly id = 'noop';
+      async processToolResult() {}
+    }
+
+    const both = new Noop();
+    expect(getToolResultInputProcessors({ inputProcessors: [both], outputProcessors: [both] })).toHaveLength(0);
+  });
+});
+
+describe('tool results that resist serialization', () => {
+  let mastraRef: { current?: Mastra } = {};
+  let dispose: (() => Promise<void>) | undefined;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(mockDate);
+    const created = await createTestMastra();
+    mastraRef.current = created.mastra;
+    dispose = created.dispose;
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await dispose?.();
+    mastraRef.current = undefined;
+    dispose = undefined;
+  });
+
+  /**
+   * A provider-executed result is whatever the provider put on the wire, and
+   * ProcessToolResultArgs types it as unknown. Measuring it with a bare
+   * JSON.stringify throws on a BigInt or a cycle, which would turn an oversized-result
+   * guard into a crash on the run it was meant to protect.
+   */
+  it.each([
+    ['a BigInt', () => ({ total: 10n })],
+    [
+      'a circular reference',
+      () => {
+        const node: any = { name: 'root' };
+        node.self = node;
+        return node;
+      },
+    ],
+    [
+      'a throwing toJSON',
+      () => ({
+        toJSON() {
+          throw new Error('nope');
+        },
+      }),
+    ],
+  ])('does not throw when a tool returns %s', async (_label, makeResult) => {
+    const tool = createTool({
+      id: 'hostileTool',
+      description: 'returns something awkward',
+      inputSchema: z.object({}),
+      execute: async () => makeResult(),
+    });
+
+    const agent = new Agent({
+      name: 'hostile-result-agent',
+      instructions: 'test',
+      model: makeMockToolCallModel('hostileTool', 'call-hostile', {}),
+      inputProcessors: [new TokenLimiterProcessor({ limit: 500, maxToolResultTokens: 10 })],
+    });
+
+    const stream = await agent.stream('go', { toolsets: { default: { hostileTool: tool } } });
+    await expect(stream.text).resolves.toBeDefined();
+  });
+});
+
+describe('setResult replaces the tool result everywhere it travels', () => {
+  let mastraRef: { current?: Mastra } = {};
+  let dispose: (() => Promise<void>) | undefined;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(mockDate);
+    const created = await createTestMastra();
+    mastraRef.current = created.mastra;
+    dispose = created.dispose;
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await dispose?.();
+    mastraRef.current = undefined;
+    dispose = undefined;
+  });
+
+  /**
+   * A provider that emits the call and the result in one stream has no tool-invocation
+   * part to edit while processToolResult runs — history is assembled from the chunks
+   * afterwards. messageList.updateToolInvocation is a no-op there, so a processor that
+   * used it bounded nothing: the raw result still reached history and the next call.
+   * setResult has to land in all three places.
+   */
+  it('applies a provider-executed replacement to the stream chunk, history, and the next model call', async () => {
+    const RAW = 'RAW_PROVIDER_PAYLOAD';
+    const REPLACED = 'REPLACED_BY_PROCESSOR';
+
+    class ReplacingProcessor implements Processor {
+      readonly id = 'replacing';
+      async processToolResult({ setResult }: any) {
+        setResult(REPLACED);
+      }
+    }
+
+    const prompts: any[] = [];
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        call++;
+        if (call === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'tool-input-start', id: 'call-1', toolName: 'web_search', providerExecuted: true },
+              { type: 'tool-input-delta', id: 'call-1', delta: '{ "value": "v" }' },
+              { type: 'tool-input-end', id: 'call-1' },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'web_search',
+                input: '{ "value": "v" }',
+                providerExecuted: true,
+              },
+              {
+                type: 'tool-result',
+                toolCallId: 'call-1',
+                toolName: 'web_search',
+                result: RAW,
+                providerExecuted: true,
+              },
+              { type: 'finish', finishReason: 'tool-calls', usage: testUsage },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'v1' },
+            { type: 'text-delta', id: 'v1', delta: 'done' },
+            { type: 'text-end', id: 'v1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const memory = new MockMemory();
+    const agent = new Agent({
+      name: 'provider-replacement-agent',
+      instructions: 'test',
+      model,
+      memory,
+      inputProcessors: [new ReplacingProcessor()],
+    });
+
+    const stream = await agent.stream('search please', {
+      memory: { thread: 'thread-replace', resource: 'resource-replace' },
+    });
+
+    const toolResultChunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-result') toolResultChunks.push(chunk);
+    }
+    await stream.text;
+
+    // 1. the stream chunk the client sees
+    const chunkValues = toolResultChunks.map(c => c.payload.result);
+    expect(chunkValues).toContain(REPLACED);
+    expect(chunkValues).not.toContain(RAW);
+
+    // 2. the next model call
+    expect(prompts).toHaveLength(2);
+    const secondPrompt = JSON.stringify(prompts[1]);
+    expect(secondPrompt).toContain(REPLACED);
+    expect(secondPrompt).not.toContain(RAW);
+
+    // 3. persisted history
+    const recalled = await memory.recall({ threadId: 'thread-replace', resourceId: 'resource-replace' });
+    const persisted = JSON.stringify(recalled.messages);
+    expect(persisted).toContain(REPLACED);
+    expect(persisted).not.toContain(RAW);
   });
 });
 

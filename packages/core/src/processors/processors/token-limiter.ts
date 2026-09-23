@@ -2,10 +2,10 @@ import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
-import { sanitizeToolName } from '../../agent/message-list/utils/tool-name';
 import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
+import { boundedStringify, safeStringify } from '../../utils/safe-stringify';
 import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
 import type {
   ProcessInputArgs,
@@ -117,6 +117,30 @@ function estimateMediaTokens(data: unknown, mediaType?: string): number {
   if (byteLength === undefined) return TOKENS_PER_MEDIA_FALLBACK;
 
   return Math.max(1, Math.floor(byteLength / BYTES_PER_TOKEN));
+}
+
+/**
+ * Render a non-string tool result as text for token counting, or `undefined` when it has
+ * no meaningful textual form.
+ *
+ * Tool results are arbitrary data, so serialization has to be total: `boundedStringify`
+ * absorbs BigInts, cycles, a throwing `toJSON`, and shared-reference graphs that
+ * `JSON.stringify` would expand exponentially, returning `undefined` instead of throwing.
+ * Cycles are still worth measuring, so fall back to `safeStringify`, which renders them
+ * as `[Circular]`.
+ */
+function serializeToolResult(result: unknown): string | undefined {
+  const bounded = boundedStringify(result);
+  if (bounded !== undefined) return bounded;
+
+  try {
+    const fallback = safeStringify(result);
+    // safeStringify yields 'null' for values with no JSON form (undefined, functions,
+    // symbols); there is nothing to measure or truncate in that case.
+    return fallback === 'null' ? undefined : fallback;
+  } catch {
+    return undefined;
+  }
 }
 
 export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
@@ -497,11 +521,15 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const limit = this.maxToolResultTokens;
     if (limit === undefined) return;
 
-    const { result, messageList, toolCallId, toolName, args: toolArgs } = args;
+    const { result, setResult } = args;
     if (result === undefined || result === null) return;
 
-    const text = typeof result === 'string' ? result : JSON.stringify(result);
-    if (typeof text !== 'string') return;
+    // A tool result is arbitrary user/provider data, so it can carry BigInts, cycles,
+    // a throwing toJSON, or a shared-reference graph that JSON.stringify expands
+    // exponentially. Measuring it must never take down the run: bail out and leave the
+    // result untouched rather than throw on a value we cannot represent.
+    const text = typeof result === 'string' ? result : serializeToolResult(result);
+    if (text === undefined) return;
 
     const tokens = this.countTokens(text);
     if (tokens <= limit) return;
@@ -510,18 +538,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // the persisted thread) can tell the result was cut rather than empty.
     const truncated = `${sliceByTokensSafe(text, 0, limit)}\n\n[truncated: showing ${limit} of ${tokens} tokens]`;
 
-    // Write through messageList so both persistence and the next model input
-    // carry the bounded value; the runtime reads this back to sync the stream chunk.
-    messageList.updateToolInvocation({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'result',
-        toolCallId,
-        toolName: sanitizeToolName(toolName),
-        args: toolArgs,
-        result: truncated,
-      },
-    });
+    // setResult, not messageList: for a provider that emits the call and the result in
+    // one stream there is no tool-invocation part to update yet, because history is
+    // assembled from the chunks after this hook runs. setResult covers the stream chunk,
+    // history, and the next model call for both provider- and client-executed tools.
+    setResult?.(truncated);
   }
 
   private async countTokensInChunk(part: ChunkType): Promise<number> {

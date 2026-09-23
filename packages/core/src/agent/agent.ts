@@ -1935,8 +1935,8 @@ export class Agent<
 
     const committedWorkflow = workflow.commit() as T;
     if (isProcessorWorkflow(committedWorkflow)) {
-      committedWorkflow.__sourceProcessorIds = validProcessors.flatMap(processor =>
-        isProcessorWorkflow(processor) ? (processor.__sourceProcessorIds ?? []) : [processor.id],
+      committedWorkflow.__sourceProcessors = validProcessors.flatMap<Processor>(processor =>
+        isProcessorWorkflow(processor) ? (processor.__sourceProcessors ?? []) : [processor as Processor],
       );
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,

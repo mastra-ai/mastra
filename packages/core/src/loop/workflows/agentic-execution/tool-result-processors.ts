@@ -1,4 +1,4 @@
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, Processor } from '../../../processors';
 import { isProcessorWorkflow } from '../../../processors/index';
 
 /**
@@ -12,7 +12,12 @@ import { isProcessorWorkflow } from '../../../processors/index';
  * workflow again in the tool-result phase would re-run unrelated input steps.
  *
  * Processors already present in `outputProcessors` are dropped so a processor
- * registered on both sides runs once per tool result.
+ * registered on both sides runs once per tool result. Matching is by object
+ * identity, never by `id`: `id` is a public, user-chosen string that distinct
+ * instances routinely share (every `new TokenLimiterProcessor()` reports
+ * `'token-limiter'`). Matching on it would drop an input instance configured
+ * with `maxToolResultTokens` because an unrelated output instance happened to
+ * share the name.
  */
 export function getToolResultInputProcessors({
   inputProcessors,
@@ -27,22 +32,22 @@ export function getToolResultInputProcessors({
   if (!candidates.length) return [];
 
   // Output processors are combined into a workflow too, so a processor registered on
-  // both sides is only recognizable through the ids the workflow records for its steps.
-  const outputProcessorIds = new Set(
+  // both sides is only reachable through the instances the workflow recorded for its steps.
+  const outputProcessorInstances = new Set<Processor>(
     (outputProcessors ?? []).flatMap(processor =>
-      isProcessorWorkflow(processor) ? (processor.__sourceProcessorIds ?? []) : [processor.id],
+      isProcessorWorkflow(processor) ? (processor.__sourceProcessors ?? []) : [processor as Processor],
     ),
   );
 
-  const seen = new Set<string>();
+  const seen = new Set<Processor>();
   const selected: InputProcessorOrWorkflow[] = [];
 
   for (const processor of candidates) {
     if (isProcessorWorkflow(processor)) continue;
     if (!processor.processToolResult) continue;
-    if (outputProcessorIds.has(processor.id)) continue;
-    if (seen.has(processor.id)) continue;
-    seen.add(processor.id);
+    if (outputProcessorInstances.has(processor as Processor)) continue;
+    if (seen.has(processor as Processor)) continue;
+    seen.add(processor as Processor);
     selected.push(processor);
   }
 
