@@ -99,6 +99,7 @@ export const TracePage: Story = {
   args: {
     placement: 'trace-page',
     size: 'wide',
+    usage: undefined,
   },
 };
 
