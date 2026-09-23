@@ -85,13 +85,13 @@ function AgentThread() {
   const collapseThreadsPanel =
     isNewThread && hasMemory && !isAgentLoading && !isThreadsLoading && sidebarThreads.length === 0;
   const hasThread = !isNewThread || sidebarThreads.length > 0;
-  const collapsedForAgent = useRef<string | null>(null);
+  const collapsedForAgent = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     if (collapseThreadsPanel && collapsedForAgent.current !== agentId) {
       collapsedForAgent.current = agentId;
       threadsPanel.current?.collapse();
     } else if (hasThread && collapsedForAgent.current === agentId) {
-      collapsedForAgent.current = null;
+      collapsedForAgent.current = undefined;
       threadsPanel.current?.expand();
     }
   }, [collapseThreadsPanel, hasThread, agentId]);
