@@ -22,7 +22,12 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type {
+  FactoryIntegration,
+  IntegrationContext,
+  IntegrationIdentityCapability,
+  IntegrationTools,
+} from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildGitLabAgentTools } from './agent-tools.js';
 import {
@@ -35,6 +40,7 @@ import {
 import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
+import { buildGitlabIdentity } from './identity.js';
 import { attachGitLabReconciler } from './reconciler.js';
 import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes } from './routes.js';
@@ -115,6 +121,18 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
   readonly rules: GitLabEventRules;
+
+  /**
+   * Identity capability — walks every project in every active connection
+   * and returns the union of their inherited members (which includes
+   * ancestor-group membership). See `./identity.ts` for the rationale.
+   */
+  readonly identity: IntegrationIdentityCapability = buildGitlabIdentity({
+    activeContexts: async () => {
+      const contexts = await this.activeContexts();
+      return contexts.map(ctx => ({ api: ctx.api, host: ctx.host }));
+    },
+  });
 
   constructor(rules?: GitLabRuleOverrides) {
     this.rules = resolveGitLabRules(rules);

@@ -591,6 +591,28 @@ export class GitLabApiClient {
     );
   }
 
+  /**
+   * List all members inherited into a group (including sub-groups and shared
+   * projects). Used by the identity capability to build the roster of
+   * teammates a factory user can claim.
+   */
+  async listGroupMembers(
+    groupId: string,
+    options: { query?: string; page?: number } = {},
+  ): Promise<GitLabMember[]> {
+    return this.#request<GitLabMember[]>(
+      'GET',
+      `/api/v4/groups/${encodeURIComponent(groupId)}/members/all`,
+      {
+        query: {
+          query: options.query,
+          page: options.page ?? 1,
+          per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
+        },
+      },
+    );
+  }
+
   async #request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,

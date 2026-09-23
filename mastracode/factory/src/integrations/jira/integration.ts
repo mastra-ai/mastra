@@ -39,13 +39,13 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
-import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
 import { JiraApiClient, JiraApiError } from './api.js';
 import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
 import { resolveJiraRules } from './default-rules.js';
+import { buildJiraIdentity } from './identity.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
@@ -111,10 +111,12 @@ export class JiraIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../base.ts`). */
   readonly id = 'jira';
   /**
-   * Identity capability — source (a) from persisted comment authors keyed
-   * by `platform === 'jira'`. Source (b) roster deferred.
+   * Identity capability — paginates `GET /rest/api/3/users/search` against
+   * the connected Atlassian site directly. Filters inactive accounts and
+   * non-atlassian account types so only real teammates appear as `@me`
+   * candidates. Empty when Jira is not configured.
    */
-  readonly identity = buildCommentAuthorsIdentity('jira');
+  readonly identity = buildJiraIdentity({ apiClient: () => this.api });
 
   readonly #config: JiraIntegrationConfig;
   /** Typed REST client bound to the deployment credentials. */

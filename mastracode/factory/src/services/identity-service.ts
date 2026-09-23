@@ -1,13 +1,13 @@
 /**
- * Aggregation service for integration identity claims and the `@me` filter.
+ * Aggregation service for cross-integration user identity.
  *
  * The service is the one place the HTTP routes, filter primitives, and any
  * future consumer (memory search, agent tools) resolve identity questions
- * through. It sits between the storage domain and the per-integration
- * capability so consumers stay ignorant of which integrations happen to be
- * registered: whether an integration is present, whether it opts into
- * `identity`, and whether it has a source-(b) roster are private details
- * behind these method calls.
+ * through. It sits between the storage domain (which tracks what the acting
+ * user has claimed) and the per-integration capability (which asks the
+ * provider "who's on this installation?"). Consumers stay ignorant of which
+ * integrations happen to be registered and whether an integration opts into
+ * `identity`: those are private details behind these method calls.
  */
 
 import type { FactoryIntegration, IntegrationCandidateAccount, IntegrationContext } from '../integrations/base.js';
@@ -47,6 +47,17 @@ export interface IdentityClaimInput {
 }
 
 /**
+ * Merged provider-known account across every identity-capable integration,
+ * pre-tagged with the acting user's claim state. The `/web/identity` endpoint
+ * returns this shape directly so the UI can render a single dropdown without
+ * a second cross-reference call.
+ */
+export interface IntegrationIdentity extends IntegrationCandidateAccount {
+  integrationId: string;
+  claimed: boolean;
+}
+
+/**
  * The resolved `@me` set. Keyed by `integrationId`, each entry is the set of
  * external-user ids that identify the acting user on that integration. Empty
  * entries and absent keys mean "not me on this integration"; consumers must
@@ -72,54 +83,67 @@ export class IdentityService {
 
   /**
    * All claims the acting user has made in this org, across every
-   * integration — the settings UI reads this to populate initial checkbox
-   * state, and the resolver builds `@me` from the same set.
+   * integration. Consumers that need only claims (the board `@me` and Cmd+K
+   * `@me` expansion) use this to avoid provider round-trips.
    */
   async listMyClaims(orgId: string, userId: string): Promise<IntegrationIdentityClaim[]> {
     return this.#storage.listByUser({ orgId, userId });
   }
 
   /**
-   * Ask an integration for its candidate accounts. Returns `[]` when the
-   * integration isn't registered or hasn't opted into the capability rather
-   * than throwing — the settings UI polls per-integration and would otherwise
-   * have to special-case each missing integration in the client.
+   * Merged provider-member feed across every identity-capable integration.
+   * Every row is tagged with its `integrationId` and its `claimed` state for
+   * the acting user. Errors from one integration do not fail the whole call —
+   * the merged feed drops the failing integration and continues, and any
+   * account the user has already claimed but the provider no longer surfaces
+   * is still returned (checked) so an in-flight roster change never hides
+   * one of the user's claims.
    */
-  async listCandidates(orgId: string, integrationId: string, query?: string): Promise<IntegrationCandidateAccount[]> {
-    const registration = this.#integrations().find(entry => entry.integration.id === integrationId);
-    if (!registration || !registration.integration.identity) return [];
-    return registration.integration.identity.listCandidateAccounts(registration.context, {
-      orgId,
-      ...(query !== undefined ? { query } : {}),
-    });
-  }
-
-  /**
-   * Merged candidate feed across every identity-capable integration. Each
-   * result is tagged with its `integrationId` so a single-dropdown UI can
-   * key the (integrationId, externalUserId) pair without a second lookup.
-   * Errors from one integration do not fail the whole call — the merged
-   * feed drops the failing integration and continues.
-   */
-  async listAllCandidates(
-    orgId: string,
-    query?: string,
-  ): Promise<Array<IntegrationCandidateAccount & { integrationId: string }>> {
+  async listIdentities(orgId: string, userId: string, query?: string): Promise<IntegrationIdentity[]> {
     const registrations = this.#integrations().filter(entry => Boolean(entry.integration.identity));
-    const results = await Promise.all(
-      registrations.map(async registration => {
-        try {
-          const accounts = await registration.integration.identity!.listCandidateAccounts(registration.context, {
-            orgId,
-            ...(query !== undefined ? { query } : {}),
-          });
-          return accounts.map(account => ({ ...account, integrationId: registration.integration.id }));
-        } catch {
-          return [];
-        }
-      }),
-    );
-    return results.flat();
+    const [providerRows, claims] = await Promise.all([
+      Promise.all(
+        registrations.map(async registration => {
+          try {
+            const accounts = await registration.integration.identity!.listCandidateAccounts(registration.context, {
+              orgId,
+              ...(query !== undefined ? { query } : {}),
+            });
+            return accounts.map(account => ({ ...account, integrationId: registration.integration.id }));
+          } catch {
+            return [];
+          }
+        }),
+      ),
+      this.#storage.listByUser({ orgId, userId }),
+    ]);
+    const claimedKey = (integrationId: string, externalUserId: string) => `${integrationId}\u0000${externalUserId}`;
+    const claimedByKey = new Map(claims.map(claim => [claimedKey(claim.integrationId, claim.externalUserId), claim]));
+    const seen = new Set<string>();
+    const merged: IntegrationIdentity[] = [];
+    for (const account of providerRows.flat()) {
+      const key = claimedKey(account.integrationId, account.externalUserId);
+      seen.add(key);
+      merged.push({ ...account, claimed: claimedByKey.has(key) });
+    }
+    // Any claim the provider no longer surfaces (e.g. a workspace roster
+    // change since the claim was made) still needs to appear as checked so
+    // the user can see and unclaim it. Skip claims whose integrationId isn't
+    // registered — they'd be dangling rows.
+    const registeredIds = new Set(registrations.map(r => r.integration.id));
+    for (const claim of claims) {
+      const key = claimedKey(claim.integrationId, claim.externalUserId);
+      if (seen.has(key)) continue;
+      if (!registeredIds.has(claim.integrationId)) continue;
+      merged.push({
+        integrationId: claim.integrationId,
+        externalUserId: claim.externalUserId,
+        label: claim.label,
+        ...(claim.email ? { email: claim.email } : {}),
+        claimed: true,
+      });
+    }
+    return merged;
   }
 
   /**

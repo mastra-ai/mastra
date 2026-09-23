@@ -210,17 +210,23 @@ export interface IntegrationCandidateAccount {
   label: string;
   /** Provider-reported email, when available. Display-only. */
   email?: string;
-  /** Which sources contributed this candidate. Non-empty, de-duplicated. */
-  sources: Array<'observed' | 'api-listed'>;
+  /**
+   * Which installation this candidate belongs to. A factory org can have
+   * multiple installations per integration (three GitHub orgs, two Linear
+   * workspaces, etc.). The label is provider-native (`myorg` for GitHub,
+   * `acme` for Linear url-key, cloud-id for Jira) so the UI can render
+   * disambiguating context when the same display name appears twice.
+   */
+  installation?: string;
 }
 
 /**
  * Optional capability an integration mounts to power identity claims and the
- * `@me` filter. The capability owns discovery — merging observed accounts
- * from its own stored records with any provider-side user roster — and
- * returns a de-duplicated list keyed by `externalUserId`. Claim writes and
- * `@me` resolution stay in the factory's identity service; the capability
- * only produces the candidate list the user picks from.
+ * `@me` filter. The capability owns discovery — it hits the provider's
+ * user-list endpoint for every installation the acting org has connected
+ * and returns a de-duplicated list keyed by `externalUserId`. Claim writes
+ * and `@me` resolution stay in the factory's identity service; the
+ * capability only produces the roster the user picks from.
  */
 export interface IntegrationIdentityCapability {
   listCandidateAccounts(

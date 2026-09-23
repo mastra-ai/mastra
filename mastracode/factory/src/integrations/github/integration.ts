@@ -47,9 +47,9 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { buildGithubIdentity } from './identity.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -196,14 +196,14 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #rules: GithubEventRules;
 
   /**
-   * Identity capability — source (a) reads distinct external comment
-   * authors carried on `author_external.platform === 'github'`. Source
-   * (b) (org members via `GET /orgs/{org}/members`) is not implemented in
-   * this iteration: no GitHub HTTP helper for a per-org roster exists yet,
-   * and standing one up plus paginating + rate-limit handling exceeds
-   * Phase 3's scope. Tracked as a follow-up in the progress file.
+   * Identity capability — paginates `GET /orgs/{org}/members` for every
+   * Organization-typed installation this org has connected. User-account
+   * installations are skipped (they have no roster). Members are deduped
+   * by GitHub login across installations and tagged with their installation
+   * account name so the UI can disambiguate when the same login appears on
+   * multiple orgs.
    */
-  readonly identity = buildCommentAuthorsIdentity('github');
+  readonly identity = buildGithubIdentity(this);
 
   get rules(): GithubEventRules {
     return this.#rules;

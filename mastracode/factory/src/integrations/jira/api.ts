@@ -114,6 +114,20 @@ export interface JiraUser {
   displayName: string;
 }
 
+/**
+ * Reduced Jira user record — the fields the identity capability consumes
+ * from `GET /rest/api/3/users/search`. Jira may return app-user accounts
+ * alongside atlassian ones; the identity roster keeps only real accounts
+ * (`accountType === 'atlassian'`).
+ */
+export interface JiraUserRecord {
+  accountId: string;
+  accountType?: string;
+  active?: boolean;
+  displayName?: string;
+  emailAddress?: string | null;
+}
+
 export interface JiraComment {
   id: string;
   author?: JiraUser | null;
@@ -317,6 +331,24 @@ export class JiraApiClient {
   async applyTransition(keyOrId: string, transitionId: string): Promise<void> {
     await this.#request<void>('POST', `/rest/api/3/issue/${encodeURIComponent(keyOrId)}/transitions`, {
       body: { transition: { id: transitionId } },
+    });
+  }
+
+  /**
+   * Users visible to the caller. Used by the identity capability.
+   *
+   * Uses `GET /rest/api/3/users/search`, which despite the name returns all
+   * accounts the API token can see. The empty `query` returns every visible
+   * account; pagination is classic `startAt`/`maxResults` (Jira caps
+   * `maxResults` at 1000).
+   */
+  async listUsers(options: { startAt?: number; maxResults?: number; query?: string } = {}): Promise<JiraUserRecord[]> {
+    return this.#request<JiraUserRecord[]>('GET', '/rest/api/3/users/search', {
+      query: {
+        query: options.query ?? '',
+        startAt: options.startAt ?? 0,
+        maxResults: options.maxResults ?? 100,
+      },
     });
   }
 }

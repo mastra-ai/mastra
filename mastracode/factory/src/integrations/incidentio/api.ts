@@ -534,6 +534,21 @@ export class IncidentioApiClient {
     return result.team;
   }
 
+  /**
+   * List users on the incident.io workspace. Used by the identity capability
+   * to build the `@me` roster. Paginates via the standard `pagination_meta.after`
+   * cursor.
+   */
+  async listUsers(options: IncidentioListOptions = {}): Promise<IncidentioPage<IncidentioUser>> {
+    const result = await this.#request<{
+      users: IncidentioUser[];
+      pagination_meta?: IncidentioPaginationMeta;
+    }>('GET', '/v2/users', {
+      query: { page_size: options.pageSize ?? 100, after: options.cursor },
+    });
+    return this.#page(result.users, result.pagination_meta);
+  }
+
   async listSchedules(options: IncidentioListOptions = {}): Promise<IncidentioPage<IncidentioSchedule>> {
     const result = await this.#request<{
       schedules: IncidentioSchedule[];

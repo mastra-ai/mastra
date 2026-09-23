@@ -1,10 +1,23 @@
 /**
- * Factory-owned HTTP routes for integration identity claims and candidate
- * discovery. Every route mounts on `/web/identity/*`, uses the shared
- * `RouteAuth` seam, and returns tenant errors uniformly (`401` unsigned,
- * `403` when the caller has no org). Claims and candidates are always
- * scoped by the request's `orgId`, never by any client-supplied value —
- * this is how cross-org bleed is prevented.
+ * Factory-owned HTTP surface for cross-integration user identity: one
+ * endpoint (`/web/identity`) that lists every provider-known account across
+ * every identity-capable integration, plus write ops for the acting user's
+ * claims. Claims and identities are always scoped by the request's `orgId`,
+ * never by any client-supplied value — this is how cross-org bleed is
+ * prevented.
+ *
+ * - `GET  /web/identity` — merged provider member list across every
+ *   identity-capable integration. Each row is tagged with its
+ *   `integrationId`, a per-integration `installation` label (e.g. GitHub
+ *   org slug, Linear workspace url-key) so a user with three "alice"
+ *   accounts can tell them apart, and `claimed: boolean` reflecting the
+ *   acting user's current claim state.
+ * - `POST /web/identity` — assert a claim on one `(integrationId,
+ *   externalUserId)` pair. Idempotent by key; first-time claim returns
+ *   `201`, replay returns `200`. Rejects unknown integrations up front so
+ *   dangling rows never enter storage.
+ * - `DELETE /web/identity` — remove a claim, keyed by `integrationId` +
+ *   `externalUserId` query params. Always returns `204`.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -15,12 +28,6 @@ import type { IdentityService } from '../services/identity-service.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
-/**
- * Maximum length for a claim's display metadata. The label/email are
- * user-controllable via the settings UI (label is the provider-reported
- * name), so a byte cap keeps a runaway upstream from writing megabytes of
- * text into the claim table.
- */
 const MAX_LABEL_LENGTH = 512;
 const MAX_EMAIL_LENGTH = 320;
 const MAX_EXTERNAL_USER_ID_LENGTH = 512;
@@ -41,12 +48,6 @@ async function readJson(context: Context): Promise<unknown | undefined> {
   }
 }
 
-/**
- * Reject `undefined`/non-string/empty-after-trim/too-long/control-char cases
- * up front so bogus writes never touch the storage layer. Returns the
- * normalized string on success and `null` on failure so callers can convert
- * to a single `400 invalid_body` response.
- */
 function parseRequiredString(value: unknown, maxLength: number): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -89,49 +90,12 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
   routes(): ApiRoute[] {
     return [
       /**
-       * List every identity-capable integration registered on the factory.
-       * Powers the settings UI's per-integration expander list; the UI needs
-       * this before it can call `/web/identity/candidates/:integrationId`.
+       * Merged provider-member feed across every identity-capable
+       * integration. Each row already carries the acting user's `claimed`
+       * state, so the UI's single dropdown never needs a second call to
+       * cross-reference claims against candidates.
        */
-      registerApiRoute('/web/identity/integrations', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async routeContext => {
-          const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          return context.json({ integrations: this.deps.service.listIdentityIntegrations() });
-        },
-      }),
-      /**
-       * All claims the acting user has made in the current org, across every
-       * integration. Returned in the storage-native shape so the UI can
-       * cross-reference against candidate lists by `(integrationId,
-       * externalUserId)`.
-       */
-      registerApiRoute('/web/identity/claims', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async routeContext => {
-          const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          const claims = await this.deps.service.listMyClaims(tenant.orgId, tenant.userId);
-          return context.json({ claims });
-        },
-      }),
-      /**
-       * Candidate accounts for a single integration, optionally text-filtered
-       * server-side. Unknown/absent integrations return an empty list rather
-       * than 404 so the UI can render an empty state without special-casing
-       * missing integrations.
-       */
-      /**
-       * Merged candidate feed across every identity-capable integration —
-       * powers the single-dropdown UI in Settings. Each row is tagged with
-       * its `integrationId`.
-       */
-      registerApiRoute('/web/identity/candidates', {
+      registerApiRoute('/web/identity', {
         method: 'GET',
         requiresAuth: false,
         handler: async routeContext => {
@@ -141,34 +105,18 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
           const rawQuery = context.req.query('query');
           const query = parseOptionalString(rawQuery, MAX_QUERY_LENGTH);
           if (query === false) return context.json({ error: 'invalid_query' }, 400);
-          const candidates = await this.deps.service.listAllCandidates(tenant.orgId, query);
-          return context.json({ candidates });
-        },
-      }),
-      registerApiRoute('/web/identity/candidates/:integrationId', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async routeContext => {
-          const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          const integrationId = parseRequiredString(context.req.param('integrationId'), MAX_INTEGRATION_ID_LENGTH);
-          if (!integrationId) return context.json({ error: 'invalid_integration_id' }, 400);
-          const rawQuery = context.req.query('query');
-          const query = parseOptionalString(rawQuery, MAX_QUERY_LENGTH);
-          if (query === false) return context.json({ error: 'invalid_query' }, 400);
-          const candidates = await this.deps.service.listCandidates(tenant.orgId, integrationId, query);
-          return context.json({ candidates });
+          const [identities, integrations] = await Promise.all([
+            this.deps.service.listIdentities(tenant.orgId, tenant.userId, query),
+            Promise.resolve(this.deps.service.listIdentityIntegrations()),
+          ]);
+          return context.json({ integrations, identities });
         },
       }),
       /**
-       * Claim an external account. Idempotent by `(integrationId,
-       * externalUserId)` — replaying with the same key refreshes the
-       * display metadata and returns `200`; a first-time claim returns
-       * `201`. The client distinguishes the two only when it wants to
-       * animate a fresh insertion.
+       * Claim an external account. Body: `{ integrationId, externalUserId,
+       * label, email? }`. Idempotent by key.
        */
-      registerApiRoute('/web/identity/claims', {
+      registerApiRoute('/web/identity', {
         method: 'POST',
         requiresAuth: false,
         handler: async routeContext => {
@@ -185,10 +133,6 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
           if (!integrationId || !externalUserId || !label || email === false) {
             return context.json({ error: 'invalid_body' }, 400);
           }
-          // Refuse claims against integrations that don't advertise the
-          // identity capability. Prevents an authenticated tenant from
-          // writing thousands of dangling claim rows against arbitrary
-          // provider ids that no consumer would ever surface.
           const known = this.deps.service.listIdentityIntegrations();
           if (!known.some(descriptor => descriptor.id === integrationId)) {
             return context.json({ error: 'unknown_integration' }, 400);
@@ -209,20 +153,21 @@ export class IdentityRoutes extends Route<IdentityRoutesDeps> {
         },
       }),
       /**
-       * Delete a claim. Always returns `204`, whether or not the row
-       * existed, so the client can call it as a fire-and-forget after
-       * unchecking a candidate.
+       * Unclaim an external account. Uses query params so the URL is
+       * portable and re-issuable: `DELETE
+       * /web/identity?integrationId=X&externalUserId=Y`. Always `204`,
+       * whether or not the row existed.
        */
-      registerApiRoute('/web/identity/claims/:integrationId/:externalUserId', {
+      registerApiRoute('/web/identity', {
         method: 'DELETE',
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const integrationId = parseRequiredString(context.req.param('integrationId'), MAX_INTEGRATION_ID_LENGTH);
-          const externalUserId = parseRequiredString(context.req.param('externalUserId'), MAX_EXTERNAL_USER_ID_LENGTH);
-          if (!integrationId || !externalUserId) return context.json({ error: 'invalid_path' }, 400);
+          const integrationId = parseRequiredString(context.req.query('integrationId'), MAX_INTEGRATION_ID_LENGTH);
+          const externalUserId = parseRequiredString(context.req.query('externalUserId'), MAX_EXTERNAL_USER_ID_LENGTH);
+          if (!integrationId || !externalUserId) return context.json({ error: 'invalid_query' }, 400);
           await this.deps.service.unclaim({
             orgId: tenant.orgId,
             userId: tenant.userId,

@@ -24,10 +24,10 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
-import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
+import { buildSlackIdentity } from './identity.js';
 import { createSlackChannelsConfig } from './slack.js';
 
 /**
@@ -98,10 +98,11 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
 export class SlackIntegration implements FactoryIntegration {
   readonly id = 'slack';
   /**
-   * Identity capability — source (a) from persisted comment authors on
-   * `platform === 'slack'`. Source (b) (`users.list`) deferred.
+   * Identity capability — paginates Slack's `users.list` on the workspace
+   * bot token. Empty when Slack was constructed without a bot token
+   * (webhook-only setups) — we do not want to block the roster on it.
    */
-  readonly identity = buildCommentAuthorsIdentity('slack');
+  readonly identity = buildSlackIdentity({ botToken: () => this.#config.botToken });
   /**
    * The OIDC connect flow round-trips a signed `state` through Slack, so the
    * replica handling the callback must be able to verify a state a different

@@ -5,13 +5,18 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type {
+  FactoryIntegration,
+  IntegrationContext,
+  IntegrationIdentityCapability,
+  IntegrationTools,
+} from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
-import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import { buildIncidentioAgentTools } from './agent-tools.js';
 import { IncidentioApiClient } from './api.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from './default-rules.js';
+import { buildIncidentioIdentity } from './identity.js';
 import { createIncidentioIntake } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
 import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
@@ -32,13 +37,14 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export class IncidentioIntegration implements FactoryIntegration {
   readonly id = 'incidentio';
   /**
-   * Identity capability — source (a) from persisted comment authors on
-   * `platform === 'incidentio'`. Source (b) deferred.
+   * Identity capability — paginates `GET /v2/users` directly against the
+   * connected incident.io workspace using the deployment API key.
    */
-  readonly identity = buildCommentAuthorsIdentity('incidentio');
+  readonly identity: IntegrationIdentityCapability;
   readonly intake;
   readonly #endpointHost: string;
   readonly #rules: IncidentioEventRules;
+  #api: IncidentioApiClient | undefined;
 
   /** Bound once by the factory via `initialize()` before any surface is used. */
   #projects: FactoryProjectsStorage | undefined;
@@ -58,6 +64,11 @@ export class IncidentioIntegration implements FactoryIntegration {
       baseUrl,
       accessToken: apiKey,
       ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
+    });
+    this.#api = api;
+    this.identity = buildIncidentioIdentity({
+      apiClient: () => this.#api ?? null,
+      installationHost: () => this.#endpointHost,
     });
     this.intake = createIncidentioIntake({
       api,

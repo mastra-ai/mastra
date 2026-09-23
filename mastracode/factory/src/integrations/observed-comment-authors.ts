@@ -55,7 +55,6 @@ export async function listObservedCommentAuthors(
   const candidates: IntegrationCandidateAccount[] = rows.map(row => ({
     externalUserId: row.externalUserId,
     label: row.label,
-    sources: ['observed' as const],
     ...(row.email ? { email: row.email } : {}),
   }));
   const trimmedQuery = args.query?.trim();
@@ -82,40 +81,4 @@ export function buildCommentAuthorsIdentity(platform: string): IntegrationIdenti
   };
 }
 
-/**
- * Merge helper for capabilities that also fetch a source-(b) API roster.
- * De-duplicates on `externalUserId`; when both sources produce the same id,
- * the observed record's label is kept (it reflects text the person used in
- * a comment, which is often more current than the provider's display name)
- * and both source tags are attached.
- */
-export function mergeCandidates(
-  observed: IntegrationCandidateAccount[],
-  apiListed: IntegrationCandidateAccount[],
-): IntegrationCandidateAccount[] {
-  const byId = new Map<string, IntegrationCandidateAccount>();
-  for (const candidate of observed) {
-    byId.set(candidate.externalUserId, {
-      ...candidate,
-      sources: ['observed'],
-    });
-  }
-  for (const candidate of apiListed) {
-    const existing = byId.get(candidate.externalUserId);
-    if (!existing) {
-      byId.set(candidate.externalUserId, {
-        ...candidate,
-        sources: ['api-listed'],
-      });
-      continue;
-    }
-    const sources = new Set<'observed' | 'api-listed'>([...existing.sources, 'api-listed']);
-    byId.set(candidate.externalUserId, {
-      ...existing,
-      sources: [...sources],
-      // Prefer email from api-listed if observed did not carry one.
-      ...(existing.email ? {} : candidate.email ? { email: candidate.email } : {}),
-    });
-  }
-  return [...byId.values()];
-}
+

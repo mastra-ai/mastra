@@ -38,10 +38,10 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
-import { buildCommentAuthorsIdentity } from '../observed-comment-authors.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
+import { buildLinearIdentity } from './identity.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
@@ -292,11 +292,16 @@ export class LinearIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../base.ts`). */
   readonly id = 'linear';
   /**
-   * Identity capability — source (a) reads distinct external comment
-   * authors on `author_external.platform === 'linear'`. Source (b) (Linear
-   * workspace-members roster) is not implemented in this iteration.
+   * Identity capability — paginates Linear's `users` GraphQL query for the
+   * acting org's connected workspace. Filters out guest accounts and
+   * deactivated members so the roster only surfaces plausible `@me`
+   * candidates. Empty when the org has no Linear connection.
    */
-  readonly identity = buildCommentAuthorsIdentity('linear');
+  readonly identity = buildLinearIdentity({
+    loadConnection: (orgId: string) => this.loadConnection(orgId),
+    getFreshAccessToken: connection => this.getFreshAccessToken(connection as LinearConnectionRow),
+    linearGraphql,
+  });
   /** Bound once by the factory via `initialize()` before any surface is used. */
   #storage: LinearStorageHandle | undefined;
   #projects: FactoryProjectsStorage | undefined;
