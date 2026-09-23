@@ -103,7 +103,7 @@ describe('AgentLayout tool tabs', () => {
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
       const editor = screen.getByRole('button', { name: 'Editor' });
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat']);
-      expect(editor.hasAttribute('disabled')).toBe(true);
+      expect(editor.getAttribute('aria-disabled')).toBe('true');
       fireEvent.click(editor);
       expect(navigateSpy).not.toHaveBeenCalled();
     });
@@ -112,7 +112,7 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers());
       renderLayout();
       const editor = await screen.findByRole('button', { name: 'Editor' });
-      if (editor.parentElement) fireEvent.focus(editor.parentElement);
+      fireEvent.focus(editor);
 
       const tooltip = await screen.findByRole('tooltip');
       expect(within(tooltip).queryByText('Editor')).toBeNull();
@@ -123,7 +123,7 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers());
       renderLayout();
       const editor = await screen.findByRole('button', { name: 'Editor' });
-      if (editor.parentElement) fireEvent.focus(editor.parentElement);
+      fireEvent.focus(editor);
 
       const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
       expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/editor/overview');
@@ -139,14 +139,14 @@ describe('AgentLayout tool tabs', () => {
 
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Editor']);
-      expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
     });
 
     it('links to the observability documentation from the Traces tooltip', async () => {
       server.use(...commonHandlers({ ...enabledPackages, observabilityEnabled: false }));
       renderLayout();
       const traces = await screen.findByRole('button', { name: 'Traces' });
-      if (traces.parentElement) fireEvent.focus(traces.parentElement);
+      fireEvent.focus(traces);
 
       const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
       expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/observability/overview');
@@ -215,7 +215,7 @@ describe('AgentLayout tool tabs', () => {
 
     const chatTab = await screen.findByRole('tab', { name: 'Chat' });
     expect(chatTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {

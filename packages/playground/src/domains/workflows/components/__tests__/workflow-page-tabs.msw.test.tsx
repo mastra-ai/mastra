@@ -87,7 +87,7 @@ describe('WorkflowPageTabs', () => {
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
       expect(tabNames()).toEqual(['Graph', 'Traces']);
-      expect(screen.getByRole('button', { name: 'Schedules' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Schedules' }).getAttribute('aria-disabled')).toBe('true');
       expect(traces.getAttribute('aria-selected')).toBe('true');
       expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('false');
     });
@@ -125,7 +125,7 @@ describe('WorkflowPageTabs', () => {
       );
       const disabledSchedules = screen.getByRole('button', { name: 'Schedules' });
       expect(screen.queryByRole('tab', { name: 'Schedules' })).toBeNull();
-      expect(disabledSchedules.hasAttribute('disabled')).toBe(true);
+      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
       fireEvent.click(disabledSchedules);
       expect(navigateSpy).not.toHaveBeenCalled();
     });
@@ -139,8 +139,8 @@ describe('WorkflowPageTabs', () => {
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
       const disabledSchedules = screen.getByRole('button', { name: 'Schedules' });
-      expect(disabledSchedules.hasAttribute('disabled')).toBe(true);
-      if (disabledSchedules.parentElement) fireEvent.focus(disabledSchedules.parentElement);
+      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.focus(disabledSchedules);
       const tooltip = await screen.findByRole('tooltip');
       expect(within(tooltip).queryByText('Schedules')).toBeNull();
       expect(tooltip.textContent).toContain('Configure a schedule');
@@ -153,7 +153,7 @@ describe('WorkflowPageTabs', () => {
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
       const schedules = screen.getByRole('button', { name: 'Schedules' });
-      if (schedules.parentElement) fireEvent.focus(schedules.parentElement);
+      fireEvent.focus(schedules);
 
       const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
       expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/workflows/scheduled-workflows');
@@ -202,7 +202,7 @@ describe('WorkflowPageTabs', () => {
       renderLayout(`/workflows/${WORKFLOW_ID}/schedules`);
 
       const traces = await screen.findByRole('button', { name: 'Traces' });
-      expect(traces.hasAttribute('disabled')).toBe(true);
+      expect(traces.getAttribute('aria-disabled')).toBe('true');
       expect(screen.queryByRole('tab', { name: 'Traces' })).toBeNull();
     });
 
@@ -212,7 +212,7 @@ describe('WorkflowPageTabs', () => {
 
       await screen.findByRole('tab', { name: 'Schedules (2)' });
       expect(tabNames()).toEqual(['Graph', 'Schedules (2)']);
-      expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
     });
   });
 

@@ -1,3 +1,4 @@
+import { DisabledFeatureButton } from '@mastra/playground-ui/components/DisabledFeatureButton';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -5,7 +6,6 @@ import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { CalendarClockIcon } from 'lucide-react';
 
-import { DisabledFeatureButton } from '@/components/ui/disabled-feature-button';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 import { useLinkComponent } from '@/lib/framework';
 

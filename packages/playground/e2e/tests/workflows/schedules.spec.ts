@@ -160,7 +160,7 @@ test.describe('Workflow schedules', () => {
       await expect(schedulesButton).toBeDisabled();
       await expect(page.getByRole('tab', { name: /^Schedules$/ })).toHaveCount(0);
 
-      await schedulesButton.locator('..').hover();
+      await schedulesButton.hover();
       await expect(page.getByRole('tooltip')).toContainText('Configure a schedule on this workflow');
       await expect(page).toHaveURL(/\/workflows\/complexWorkflow\/graph$/);
     });

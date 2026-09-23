@@ -90,7 +90,7 @@ test.describe('Agent observability tabs', () => {
       await expect(tracesButton).toBeDisabled();
       await expect(page.getByRole('tab', { name: 'Traces' })).toHaveCount(0);
 
-      await tracesButton.locator('..').hover();
+      await tracesButton.hover();
       await expect(page.getByRole('tooltip')).toContainText('Add @mastra/observability to enable Traces.');
     });
   });
