@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { InMemoryBlobStore } from '../../storage/domains/blobs/inmemory';
 import type { StorageSkillFileNode } from '../../storage/types';
 import { collectSkillForPublish, collectSkillForPublishFromFiles } from './publish';
 import type { SkillSource } from './skill-source';
+import { VersionedSkillSource } from './versioned-skill-source';
 
 const skillMd = `---
 name: stored-skill
@@ -79,20 +81,32 @@ describe('collectSkillForPublishFromFiles', () => {
   });
 
   it.each([
-    ['UTF-8 first', [file('text.txt', 'abc'), file('binary.bin', 'YWJj', { encoding: 'base64' })]],
-    ['Base64 first', [file('binary.bin', 'YWJj', { encoding: 'base64' }), file('text.txt', 'abc')]],
-  ])('deduplicates identical raw bytes with canonical blob content when %s', async (_name, sharedFiles) => {
-    const result = await collectSkillForPublishFromFiles([file('SKILL.md', skillMd), ...sharedFiles]);
-    const textEntry = result.tree.entries['text.txt'];
-    const binaryEntry = result.tree.entries['binary.bin'];
+    ['UTF-8 first', [file('text.txt', 'abc'), file('binary.bin', 'YWJj', { encoding: 'base64' })], 'abc'],
+    ['Base64 first', [file('binary.bin', 'YWJj', { encoding: 'base64' }), file('text.txt', 'abc')], 'YWJj'],
+  ])(
+    'deduplicates identical raw bytes while preserving logical result types when %s',
+    async (_name, sharedFiles, storedContent) => {
+      const result = await collectSkillForPublishFromFiles([file('SKILL.md', skillMd), ...sharedFiles]);
+      const textEntry = result.tree.entries['text.txt']!;
+      const binaryEntry = result.tree.entries['binary.bin']!;
 
-    expect(textEntry?.blobHash).toBe(binaryEntry?.blobHash);
-    expect(textEntry).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
-    expect(binaryEntry).toMatchObject({ encoding: 'base64', sourceEncoding: 'base64' });
-    expect(result.blobs.filter(blob => blob.hash === textEntry?.blobHash)).toEqual([
-      expect.objectContaining({ content: 'YWJj', size: 3 }),
-    ]);
-  });
+      expect(textEntry.blobHash).toBe(binaryEntry.blobHash);
+      expect(textEntry).toMatchObject({ sourceEncoding: 'utf-8' });
+      expect(textEntry.encoding).toBeUndefined();
+      expect(binaryEntry).toMatchObject({ encoding: 'base64', sourceEncoding: 'base64' });
+      expect(result.blobs.filter(blob => blob.hash === textEntry.blobHash)).toEqual([
+        expect.objectContaining({ content: storedContent, size: 3 }),
+      ]);
+
+      // A single hash cannot carry two representations for pre-PR readers. The current
+      // reader uses the raw-byte hash plus sourceEncoding to preserve both logical types.
+      const blobStore = new InMemoryBlobStore();
+      await blobStore.putMany(result.blobs);
+      const source = new VersionedSkillSource(result.tree, blobStore, new Date());
+      await expect(source.readFile('text.txt')).resolves.toBe('abc');
+      await expect(source.readFile('binary.bin')).resolves.toEqual(Buffer.from('abc'));
+    },
+  );
 
   it('decodes only explicitly base64-encoded files and preserves their metadata', async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
@@ -118,6 +132,30 @@ describe('collectSkillForPublishFromFiles', () => {
     });
   });
 
+  it('rejects explicit binary MIME content without base64 encoding', async () => {
+    const files: StorageSkillFileNode[] = [
+      file('SKILL.md', skillMd),
+      file('logo.png', 'not-base64', { mimeType: 'image/png' }),
+    ];
+
+    await expect(collectSkillForPublishFromFiles(files)).rejects.toThrow(/image\/png.*base64/i);
+  });
+
+  it.each(['text/plain', 'application/json', 'image/svg+xml'])(
+    'preserves explicit text-safe MIME content as UTF-8 for %s',
+    async mimeType => {
+      const content = mimeType === 'application/json' ? '{"ok":true}' : 'text content';
+      const result = await collectSkillForPublishFromFiles([
+        file('SKILL.md', skillMd),
+        file('document.txt', content, { mimeType }),
+      ]);
+      const entry = result.tree.entries['document.txt']!;
+
+      expect(entry.sourceEncoding).toBe('utf-8');
+      expect(result.blobs.find(blob => blob.hash === entry.blobHash)?.size).toBe(Buffer.byteLength(content));
+    },
+  );
+
   it('treats legacy string content as UTF-8 even when the extension is binary', async () => {
     const files: StorageSkillFileNode[] = [
       file('SKILL.md', skillMd),
@@ -127,11 +165,10 @@ describe('collectSkillForPublishFromFiles', () => {
     const result = await collectSkillForPublishFromFiles(files);
     const entry = result.tree.entries['assets/legacy.png'];
 
-    expect(entry).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
+    expect(entry).toMatchObject({ sourceEncoding: 'utf-8' });
+    expect(entry?.encoding).toBeUndefined();
     expect(entry?.size).toBe(Buffer.byteLength('not-base64'));
-    expect(result.blobs.find(blob => blob.hash === entry?.blobHash)?.content).toBe(
-      Buffer.from('not-base64').toString('base64'),
-    );
+    expect(result.blobs.find(blob => blob.hash === entry?.blobHash)?.content).toBe('not-base64');
   });
 
   it('rejects malformed or non-canonical base64 content', async () => {
@@ -182,7 +219,8 @@ describe('collectSkillForPublishFromFiles', () => {
     const entry = result.tree.entries['empty.txt'];
 
     expect(entry?.size).toBe(0);
-    expect(entry).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
+    expect(entry).toMatchObject({ sourceEncoding: 'utf-8' });
+    expect(entry?.encoding).toBeUndefined();
     expect(result.blobs.find(blob => blob.hash === entry?.blobHash)?.content).toBe('');
   });
 

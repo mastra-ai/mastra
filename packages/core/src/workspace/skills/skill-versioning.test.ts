@@ -331,7 +331,7 @@ describe('publishSkillFromSource', () => {
     const skillMdHash = result.tree.entries['SKILL.md']!.blobHash;
     const storedSkillMd = await blobStore.get(skillMdHash);
     expect(storedSkillMd).not.toBeNull();
-    expect(storedSkillMd!.content).toBe(Buffer.from(skillMd).toString('base64'));
+    expect(storedSkillMd!.content).toBe(skillMd);
   });
 
   it('should deduplicate blobs across publishes', async () => {
@@ -356,7 +356,7 @@ describe('publishSkillFromSource', () => {
     const hash = sha256(skillMd);
     const stored = await blobStore.get(hash);
     expect(stored).not.toBeNull();
-    expect(stored!.content).toBe(Buffer.from(skillMd).toString('base64'));
+    expect(stored!.content).toBe(skillMd);
   });
 });
 
@@ -1020,11 +1020,10 @@ describe('Binary asset support', () => {
         encoding: 'base64',
         sourceEncoding: 'base64',
       });
-      expect(result.tree.entries['SKILL.md']).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
-      expect(result.tree.entries['references/doc.md']).toMatchObject({
-        encoding: 'base64',
-        sourceEncoding: 'utf-8',
-      });
+      expect(result.tree.entries['SKILL.md']).toMatchObject({ sourceEncoding: 'utf-8' });
+      expect(result.tree.entries['SKILL.md']?.encoding).toBeUndefined();
+      expect(result.tree.entries['references/doc.md']).toMatchObject({ sourceEncoding: 'utf-8' });
+      expect(result.tree.entries['references/doc.md']?.encoding).toBeUndefined();
     });
 
     it('should store base64-encoded content for binary blobs', async () => {

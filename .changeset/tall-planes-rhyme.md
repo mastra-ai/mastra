@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Added core APIs for converting stored skill file snapshots into blob-backed publication data and safely activating an exact immutable version. Published blobs use a canonical Base64 representation while tree entries preserve whether callers should read each file as UTF-8 text or binary data. Legacy pinned and rollback versions remain readable when existing blobs use either the UTF-8 or canonical Base64 representation.
+Added core APIs for converting stored skill file snapshots into blob-backed publication data and safely activating an exact immutable version. Publication preserves the established UTF-8 text and Base64 binary blob representations, while readers validate and tolerate either supported representation in existing rows. Legacy pinned and rollback versions remain readable across upgrades, rolling deployments, and downgrades.
 
 ```ts
 import { randomUUID } from 'node:crypto';

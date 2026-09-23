@@ -241,11 +241,7 @@ export class LibSQLDB extends MastraBase {
     return this.executeWriteOperationWithRetry(async () => {
       const filteredRecord = await this.filterRecordToKnownColumns(args.tableName, args.record);
       if (Object.keys(filteredRecord).length === 0) return;
-      const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord });
-      if (!statement.sql.startsWith('INSERT OR REPLACE')) {
-        throw new Error(`Unexpected insert statement generated for table ${args.tableName}`);
-      }
-      statement.sql = statement.sql.replace('INSERT OR REPLACE', 'INSERT');
+      const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord, onConflict: 'error' });
       await withClientWriteLock(this.client, () => this.client.execute(statement));
     }, `insert into table ${args.tableName}`);
   }
@@ -300,16 +296,7 @@ export class LibSQLDB extends MastraBase {
     // Skip records that have no known columns after filtering
     const nonEmptyRecords = filteredRecords.filter(r => Object.keys(r).length > 0);
     if (nonEmptyRecords.length === 0) return;
-    const batchStatements = nonEmptyRecords.map(r => {
-      const statement = prepareStatement({ tableName, record: r });
-      if (onConflict === 'ignore') {
-        if (!statement.sql.startsWith('INSERT OR REPLACE')) {
-          throw new Error(`Unexpected insert statement generated for table ${tableName}`);
-        }
-        statement.sql = statement.sql.replace('INSERT OR REPLACE', 'INSERT OR IGNORE');
-      }
-      return statement;
-    });
+    const batchStatements = nonEmptyRecords.map(record => prepareStatement({ tableName, record, onConflict }));
     await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 

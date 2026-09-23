@@ -1,4 +1,5 @@
 import type { StorageSkillFileNode } from '../../storage/types';
+import { isBinaryMimeType } from './mime-type';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 
 const ROOT_PATH = 'stored-skill';
@@ -63,6 +64,11 @@ export class StoredFilesSkillSource implements SkillSource {
 
       if (node.children !== undefined) {
         throw new Error(`Invalid stored skill file node at "${path}": files cannot have children`);
+      }
+      if (isBinaryMimeType(node.mimeType) && node.encoding !== 'base64') {
+        throw new Error(
+          `Stored skill file "${path}" with binary MIME type "${node.mimeType}" must use base64 encoding`,
+        );
       }
       const stringContent = node.content ?? '';
       const content = node.encoding === 'base64' ? decodeBase64(stringContent, path) : stringContent;

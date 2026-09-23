@@ -7,6 +7,7 @@ import type {
   StorageSkillFileNode,
   StorageSkillSnapshotType,
 } from '../../storage/types';
+import { isBinaryMimeType } from './mime-type';
 import type { SkillSource, SkillSourceEntry } from './skill-source';
 import { StoredFilesSkillSource } from './stored-files-skill-source';
 
@@ -62,21 +63,6 @@ function detectMimeType(filename: string): string | undefined {
     '.svg': 'image/svg+xml',
   };
   return mimeTypes[ext];
-}
-
-/**
- * Whether a MIME type represents binary content that cannot be safely stored as UTF-8 text.
- */
-function isBinaryMimeType(mimeType: string | undefined): boolean {
-  if (!mimeType) return false;
-  // Text-based types are safe for UTF-8
-  if (mimeType.startsWith('text/')) return false;
-  // JSON and YAML are text-safe
-  if (mimeType === 'application/json') return false;
-  // SVG is XML-based text
-  if (mimeType === 'image/svg+xml') return false;
-  // Everything else (image/png, image/jpeg, application/octet-stream, etc.) is binary
-  return true;
 }
 
 interface WalkedFile {
@@ -286,14 +272,14 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
       blobHash: hash,
       size,
       mimeType,
-      encoding: 'base64',
+      ...(file.isBinary ? { encoding: 'base64' as const } : {}),
       sourceEncoding: file.isBinary ? 'base64' : 'utf-8',
     };
 
     if (!blobMap.has(hash)) {
       blobMap.set(hash, {
         hash,
-        content: content.toString('base64'),
+        content: file.isBinary ? content.toString('base64') : content.toString('utf-8'),
         size,
         mimeType,
         createdAt: now,

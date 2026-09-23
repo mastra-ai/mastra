@@ -36,6 +36,11 @@ export interface CreateSkillVersionInput extends StorageSkillSnapshotType, Creat
 /** Input for publishing a collected snapshot as an exact version. */
 export interface PublishSkillVersionInput {
   skillId: string;
+  /**
+   * Existing version used as publication provenance. The fallback verifies only
+   * that it exists and belongs to `skillId`; the caller must derive `snapshot`
+   * from this version.
+   */
   sourceVersionId: string;
   versionId: string;
   snapshot: StorageSkillSnapshotType;
@@ -138,7 +143,15 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
       throw new Error(`Skill "${input.skillId}" has no versions`);
     }
 
-    const snapshot = Object.fromEntries(Object.entries(input.snapshot).filter(([, value]) => value !== undefined));
+    const strippedSnapshot = Object.fromEntries(
+      Object.entries(input.snapshot).filter(([, value]) => value !== undefined),
+    ) as Partial<StorageSkillSnapshotType>;
+    const snapshot: StorageSkillSnapshotType = {
+      ...strippedSnapshot,
+      name: input.snapshot.name,
+      description: input.snapshot.description,
+      instructions: input.snapshot.instructions,
+    };
     const version = await this.createVersion({
       ...snapshot,
       id: input.versionId,
@@ -146,7 +159,7 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
       versionNumber: latestVersion.versionNumber + 1,
       changedFields: Object.keys(snapshot),
       changeMessage: `Published from version ${input.sourceVersionId}`,
-    } as CreateSkillVersionInput);
+    });
 
     try {
       await this.update({
