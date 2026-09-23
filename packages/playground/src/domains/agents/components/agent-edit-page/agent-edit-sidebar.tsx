@@ -249,7 +249,7 @@ export function AgentEditSidebar({
                 </JSONSchemaForm.FieldList>
 
                 <div className="p-2">
-                  <JSONSchemaForm.AddField variant="outline" size="sm">
+                  <JSONSchemaForm.AddField size="sm">
                     <PlusIcon className="mr-2 h-4 w-4" />
                     Add variable
                   </JSONSchemaForm.AddField>

@@ -573,6 +573,38 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
 }
 
 /**
+ * Pipeline phase a processor span is created for. One value per site where a
+ * processor executor creates a span, so a processor that runs in more than one
+ * phase can name, describe and narrow each of them separately.
+ *
+ * Re-exported from `@mastra/core/processors` as `ProcessorSpanPhase`; it lives
+ * here because `ProcessorPipelineAttributes` records it and observability types
+ * cannot import from `processors`.
+ */
+export type ProcessorSpanPhase =
+  | 'input'
+  | 'inputStep'
+  | 'llmRequest'
+  | 'llmResponse'
+  | 'output'
+  | 'outputStep'
+  | 'toolResult'
+  | 'requestError';
+
+/**
+ * Phase recorded on a processor span, and the discriminant its payloads narrow
+ * on.
+ *
+ * Finer-grained than `ProcessorSpanPhase`, which collapses the two output hooks
+ * into one `'output'` because a processor naming its span does not care which
+ * ran. A reader does: `outputStream` records chunk counts and accumulated text,
+ * `outputResult` records messages and a summarized result. One value for both
+ * would leave the payload ambiguous, which is the whole reason this attribute
+ * exists.
+ */
+export type ProcessorSpanPayloadPhase = Exclude<ProcessorSpanPhase, 'output'> | 'outputStream' | 'outputResult';
+
+/**
  * Attributes recorded for every processor the processor runner executes,
  * independent of the span type that processor declares.
  *
@@ -589,6 +621,17 @@ export interface ProcessorPipelineAttributes {
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
+  /**
+   * Pipeline phase the span was created for. The discriminant a reader narrows
+   * a processor span's payloads on: `entityType` cannot serve, because
+   * `llmRequest`/`llmResponse` share `INPUT_PROCESSOR` and
+   * `outputStep`/`requestError` share `OUTPUT_STEP_PROCESSOR`.
+   *
+   * Absent on spans recorded before this attribute existed, which is why the
+   * typed payload views fall back to the untyped shape rather than assuming a
+   * phase.
+   */
+  processorPhase?: ProcessorSpanPayloadPhase;
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk of the stream. Only set on output stream processor spans. The
@@ -1104,11 +1147,128 @@ export interface ModelStepResult {
 /** Output recorded on `MODEL_STEP` spans. `MODEL_INFERENCE` spans record a `ModelStepResult` only. */
 export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
 
+/** Model a processor saw or swapped in, summarized to the fields worth tracing. */
+export interface ProcessorModelSummary {
+  modelId?: string;
+  provider?: string;
+  specificationVersion?: string;
+}
+
+/** A tool as a processor span records it. */
+export interface ProcessorToolSummary {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+/** A tool named in `activeTools`, resolved against the tool registry where possible. */
+export interface ProcessorActiveToolSummary {
+  id: string;
+  name: string;
+}
+
+/** The step's tool choice as a processor span records it. */
+export interface ProcessorToolChoiceSummary {
+  type: string;
+  tool?: ProcessorActiveToolSummary;
+}
+
+/**
+ * Messages and system messages a processor changed. Both executors omit a key
+ * when the processor left it untouched, so an absent key means "unchanged"
+ * rather than "empty" — the diff is the point, not the full list again.
+ */
+export interface ProcessorMessageChanges {
+  messages?: unknown[];
+  systemMessages?: unknown[];
+}
+
+/** The model-call configuration an `inputStep` processor saw. */
+interface ProcessorStepConfig {
+  model?: ProcessorModelSummary;
+  tools?: ProcessorToolSummary[];
+  toolChoice?: ProcessorToolChoiceSummary;
+  activeTools?: ProcessorActiveToolSummary[];
+}
+
+/**
+ * `input` payload a processor span records, per phase.
+ *
+ * Every member is what the executors actually write today; a field either
+ * executor omits conditionally is optional here. `llmRequest`, `llmResponse`
+ * and `requestError` come from the legacy runner only — the processor workflow
+ * has no step for them.
+ */
+export interface ProcessorRunInputByPhase {
+  input: { messages: unknown[]; systemMessages?: unknown[]; retryCount?: number };
+  inputStep: {
+    messages: unknown[];
+    systemMessages?: unknown[];
+    stepNumber?: number;
+    messageId?: string;
+    retryCount?: number;
+  } & ProcessorStepConfig;
+  outputStream: { totalChunks: number; accumulatedText?: string };
+  outputResult: { messages: unknown[]; result?: Record<string, unknown>; retryCount?: number };
+  outputStep: {
+    messages: unknown[];
+    systemMessages?: unknown[];
+    stepNumber?: number;
+    finishReason?: string;
+    text?: string;
+    toolCalls?: unknown[];
+    retryCount?: number;
+  };
+  toolResult: {
+    stepNumber?: number;
+    toolName?: string;
+    toolCallId?: string;
+    providerExecuted?: boolean;
+    retryCount?: number;
+  };
+  llmRequest: { prompt?: unknown; stepNumber?: number; retryCount?: number };
+  llmResponse: { stepNumber?: number; retryCount?: number; fromCache?: boolean; chunkCount?: number };
+  requestError: { messages: unknown[]; error: string; stepNumber?: number; messageId?: string; retryCount?: number };
+}
+
+/**
+ * `output` payload a processor span records, per phase.
+ *
+ * Most phases record only what the processor changed, so an absent key means
+ * unchanged. The output-stream hook is the exception: it has no message list to
+ * diff, so it records the chunk totals it produced.
+ */
+export interface ProcessorRunOutputByPhase {
+  input: ProcessorMessageChanges;
+  inputStep: { messageId?: string; retryCount?: number } & ProcessorMessageChanges & ProcessorStepConfig;
+  /** The processor workflow records only `totalChunks`; the legacy runner also records the text. */
+  outputStream: { totalChunks: number; accumulatedText?: string };
+  outputResult: ProcessorMessageChanges;
+  outputStep: ProcessorMessageChanges;
+  toolResult: ProcessorMessageChanges;
+  llmRequest: ProcessorMessageChanges;
+  llmResponse: ProcessorMessageChanges;
+  requestError: ProcessorMessageChanges;
+}
+
+/** `input` of a processor span before its phase is known. */
+export type ProcessorRunInput = ProcessorRunInputByPhase[ProcessorSpanPayloadPhase];
+
+/** `output` of a processor span before its phase is known. */
+export type ProcessorRunOutput = ProcessorRunOutputByPhase[ProcessorSpanPayloadPhase];
+
 /**
  * Span types whose `input` Mastra writes itself with a fixed shape. Every
  * other span type keeps `any`, as before: tool arguments, workflow data and
  * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
  * on one span type, and `GENERIC` is the escape hatch for custom spans.
+ *
+ * `PROCESSOR_RUN` is absent on purpose. Three executors emit processor spans —
+ * the legacy runner, the processor workflow, and the Inngest workflow — and they
+ * record different shapes, so a mapped type here would type the write side
+ * against a contract two of them do not meet. The read side is where the shape
+ * is known: `describeSpanInput` / `describeSpanOutput` narrow a payload by the
+ * phase the span recorded, and fall back to JSON when it recorded none.
  */
 export interface SpanInputMap {
   [SpanType.AGENT_RUN]: AgentRunInput;
@@ -1399,7 +1559,10 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
+  isInternal?: boolean;
+}
 
 /**
  * Options for ending a model generation span
@@ -1818,6 +1981,12 @@ export interface TraceState {
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  rootSpanName?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**

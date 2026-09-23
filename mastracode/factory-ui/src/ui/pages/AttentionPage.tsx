@@ -13,7 +13,9 @@ import { AttentionItemRow, KindIcon } from '../domains/factory/components/Attent
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { attentionCountsIn, attentionGroupOf } from '../domains/factory/services/attention';
 import type {
   FactoryAttentionGroup,
@@ -78,7 +80,13 @@ function AttentionRail({
 }
 
 export function AttentionPage() {
-  return <DocumentFactoryPageShell>{factory => <AttentionContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout {...slots}>
+      <AttentionContent factoryId={factory.id} />
+    </PageLayout>
+  );
 }
 
 export function AttentionContent({ factoryId }: { factoryId: string }) {
@@ -108,13 +116,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           <p className="text-caption text-muted-foreground mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
         {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={markAllRead.isPending}
-            onClick={() => markAllRead.mutate()}
-          >
+          <Button type="button" size="sm" disabled={markAllRead.isPending} onClick={() => markAllRead.mutate()}>
             {markAllRead.isPending ? 'Marking…' : 'Mark all open as read'}
           </Button>
         ) : null}
@@ -128,7 +130,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
               <Button
                 key={option.value}
                 type="button"
-                variant={view === option.value ? 'primary' : 'outline'}
+                variant={view === option.value ? 'primary' : 'default'}
                 aria-pressed={view === option.value}
                 onClick={() => setSearchParams(option.value === 'open' ? {} : { view: option.value })}
               >

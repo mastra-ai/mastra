@@ -284,6 +284,10 @@ export function TraceDataPanelView({
     onSpanSelect?.(newId);
   };
 
+  const traceSummary = rootSpan && (
+    <TraceSummaryDescription rootSpan={rootSpan} usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />
+  );
+
   const traceActionsMenu = traceId && (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -358,7 +362,10 @@ export function TraceDataPanelView({
           <DataPanel.Header>
             {isOnTracePage ? (
               <>
-                <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                <DataPanel.HeaderContent>
+                  <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                  {traceSummary}
+                </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
               </>
             ) : (
@@ -369,14 +376,7 @@ export function TraceDataPanelView({
                     Trace
                     <TraceIdButton id={traceId} />
                   </DataPanel.Heading>
-                  {rootSpan && (
-                    <TraceSummaryDescription
-                      rootSpan={rootSpan}
-                      usage={usage}
-                      entityHref={entityHref}
-                      LinkComponent={LinkComponent}
-                    />
-                  )}
+                  {traceSummary}
                 </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>
                   {onEvaluateTrace && (

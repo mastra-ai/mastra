@@ -46,7 +46,7 @@ export const Default: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="grid gap-4">
-      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
         <div key={variant} className="flex items-center gap-2">
           {(['sm', 'md', 'lg'] as const).map(size => (
             <Popover key={size}>
@@ -76,13 +76,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger
-        render={
-          <Button variant="outline" size="md">
-            Open Popover
-          </Button>
-        }
-      />
+      <PopoverTrigger render={<Button size="md">Open Popover</Button>} />
       <PopoverContent>
         <p className="text-body">Popover content.</p>
       </PopoverContent>

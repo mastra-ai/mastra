@@ -60,6 +60,9 @@ export const unwrapInnerEntry = (
   if (inner.type === 'mapping') {
     return { id: inner.id, description: undefined, component: undefined, mapConfig: inner.mapConfig };
   }
+  if (inner.type === 'classifier') {
+    return { id: inner.id, description: undefined, component: undefined };
+  }
   return { id: inner.id, description: inner.description, component: undefined };
 };
 
@@ -101,6 +104,12 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
     case 'tool':
       return {
         kind: 'tool-step',
+        id: flow.id,
+        flow,
+      };
+    case 'classifier':
+      return {
+        kind: 'classifier-step',
         id: flow.id,
         flow,
       };

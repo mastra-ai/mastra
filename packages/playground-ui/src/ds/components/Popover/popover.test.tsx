@@ -40,25 +40,25 @@ describe('PopoverTrigger', () => {
   it('lets a custom render element own the look', () => {
     render(
       <Popover>
-        <PopoverTrigger variant="ghost" render={<Button variant="outline">Open</Button>} />
+        <PopoverTrigger variant="ghost" render={<Button variant="primary">Open</Button>} />
       </Popover>,
     );
 
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('primary');
   });
 
   it('still supports the legacy asChild prop', () => {
     render(
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline">Open</Button>
+          <Button variant="primary">Open</Button>
         </PopoverTrigger>
       </Popover>,
     );
 
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('primary');
   });
 
   it('uses tooltip as the accessible name of an icon-only trigger', () => {

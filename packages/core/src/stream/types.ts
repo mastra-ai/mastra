@@ -203,6 +203,7 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
+  title?: string;
   /**
    * W3C trace context carrier for client-side tool execution.
    *
@@ -235,6 +236,7 @@ interface ToolCallInputStreamingStartPayload {
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
+  title?: string;
   observability?: ClientObservabilityCarrier;
 }
 

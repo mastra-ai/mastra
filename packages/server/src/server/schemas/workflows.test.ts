@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { workflowInfoSchema } from './workflows';
 
 describe('workflow serialized step-graph schema', () => {
-  it('accepts declarative agent / tool / mapping step graph entries', () => {
+  it('accepts declarative agent / tool / classifier / mapping step graph entries', () => {
     const result = workflowInfoSchema.safeParse({
       steps: {},
       allSteps: {},
       stepGraph: [
         { type: 'agent', id: 'writer', agentId: 'writer-agent' },
         { type: 'tool', id: 'double', toolId: 'double-tool' },
+        { type: 'classifier', id: 'route', classifierId: 'ticket-router' },
         { type: 'mapping', id: 'map-1', mapConfig: '{ value: ... }' },
         { type: 'step', id: 'plain' },
       ],
