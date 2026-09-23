@@ -150,4 +150,114 @@ describe('durable agent resume after a suspend in a later loop iteration (#24749
     expect(resumedResult.types).toContain('finish');
     await vi.waitFor(() => expect(approvals).toEqual([true]), { timeout: 30_000, interval: 250 });
   });
+
+  it('resumes repeated later-iteration suspensions in one run', async () => {
+    const agentId = `resume-multi-${Date.now()}`;
+    const threadId = `thread-${agentId}`;
+    const resourceId = `resource-${agentId}`;
+    const lookups: string[] = [];
+    const executions: Array<{ action: string; approved: boolean }> = [];
+    // Unique tool ids: resumed tool calls fall back to the Mastra-wide tool registry by id, which
+    // would otherwise resolve the previous test's same-named tools (#24795).
+    const lookupId = `lookup-${agentId}`;
+    const approvalId = `request-approval-${agentId}`;
+
+    // lookup -> approval(cancel) -> lookup -> approval(refund) -> text
+    const script = [
+      toolCallChunks('0', lookupId, { orderId: '123' }),
+      toolCallChunks('1', approvalId, { action: 'cancel' }),
+      toolCallChunks('2', lookupId, { orderId: '456' }),
+      toolCallChunks('3', approvalId, { action: 'refund' }),
+    ];
+    let call = 0;
+    const model: any = {
+      specificationVersion: 'v2',
+      provider: 'mock',
+      modelId: 'mock-model',
+      supportedUrls: {},
+      async doStream() {
+        const chunks = script[call++] ?? [
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-final', modelId: 'mock-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 't1' },
+          { type: 'text-delta', id: 't1', delta: 'All done.' },
+          { type: 'text-end', id: 't1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+        ];
+        return {
+          stream: simulateReadableStream({ chunks: chunks as any }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+
+    const lookup = createTool({
+      id: lookupId,
+      description: 'Look up an order by id',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async ({ orderId }) => {
+        lookups.push(orderId);
+        return { orderId, status: 'shipped' };
+      },
+    });
+    const approval = createTool({
+      id: approvalId,
+      description: 'Ask a human to approve the action',
+      inputSchema: z.object({ action: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ action }, context: any) => {
+        if (!context?.agent?.resumeData) {
+          return context.agent.suspend({ action });
+        }
+        executions.push({ action, approved: context.agent.resumeData.approved });
+        return { approved: context.agent.resumeData.approved };
+      },
+    });
+
+    const storage = new DefaultStorage({ id: `resume-multi-${agentId}`, url: dbUrl });
+    const agent = new Agent({
+      id: agentId,
+      name: 'Resume Multi Agent',
+      instructions: 'Follow the scripted tool calls.',
+      model,
+      tools: { [lookupId]: lookup, [approvalId]: approval },
+      memory: new Memory({ storage }),
+    });
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const first = await inngestAgent.stream([{ role: 'user', content: 'Cancel 123 and refund 456' }], {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    const firstResult = await drain(first.output.fullStream, 60_000);
+    first.cleanup();
+    expect(firstResult.errors).toEqual([]);
+    expect(firstResult.types).toContain('tool-call-suspended');
+
+    // Resume immediately; the run must continue into a second suspension (iteration 4).
+    const second = await inngestAgent.resume(first.runId, { approved: true });
+    const secondResult = await drain(second.output.fullStream, 60_000);
+    second.cleanup();
+    expect(secondResult.errors).toEqual([]);
+    expect(secondResult.types).toContain('tool-call-suspended');
+    expect(secondResult.types).not.toContain('finish');
+
+    // Resume the second suspension immediately with a denial.
+    const third = await inngestAgent.resume(first.runId, { approved: false });
+    const thirdResult = await drain(third.output.fullStream, 60_000, false);
+    third.cleanup();
+    expect(thirdResult.errors).toEqual([]);
+    expect(thirdResult.types).toContain('finish');
+
+    // Each suspended tool ran exactly once with its own resume data; nothing re-ran from scratch.
+    await vi.waitFor(
+      () =>
+        expect(executions).toEqual([
+          { action: 'cancel', approved: true },
+          { action: 'refund', approved: false },
+        ]),
+      { timeout: 30_000, interval: 250 },
+    );
+    expect(lookups).toEqual(['123', '456']);
+  });
 });
