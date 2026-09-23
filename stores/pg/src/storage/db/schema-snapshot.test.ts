@@ -142,7 +142,8 @@ describe('init catalog snapshot', () => {
     expect(count(statements, /pg_catalog\.pg_attribute/i)).toBe(2);
     expect(count(statements, /pg_catalog\.pg_index\b/i)).toBe(1);
 
-    expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
+    const columnProbes = statements.filter(statement => INFORMATION_SCHEMA_COLUMN_PROBE.test(statement));
+    expect(columnProbes.map(statement => statement.replace(/\s+/g, ' ').slice(0, 400))).toEqual([]);
     expect(count(statements, NO_OP_ALTER)).toBe(0);
     expect(createdTableNames(statements).sort()).toEqual([...WORKFLOW_BOOTSTRAP_TABLES].sort());
     expect(count(statements, INDEX_PROBE)).toBe(0);
@@ -353,7 +354,8 @@ describe('init catalog snapshot', () => {
 
     // The extra objects neither reintroduce probes nor provoke DDL beyond the
     // seven workflow bootstrap statements that PF-3554 and native handoff own.
-    expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
+    const columnProbes = statements.filter(statement => INFORMATION_SCHEMA_COLUMN_PROBE.test(statement));
+    expect(columnProbes.map(statement => statement.replace(/\s+/g, ' ').slice(0, 400))).toEqual([]);
     expect(count(statements, INDEX_PROBE)).toBe(0);
     expect(createdTableNames(statements).sort()).toEqual([...WORKFLOW_BOOTSTRAP_TABLES].sort());
     expect(count(statements, CREATE_INDEX)).toBe(0);
