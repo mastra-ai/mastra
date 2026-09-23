@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { overlaySurfaceStyle, raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -55,9 +56,9 @@ export function BrowserViewPanel() {
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center p-8',
+        'fixed inset-0 z-50 flex items-center justify-center p-5',
         'bg-black/60 backdrop-blur-sm transition-opacity duration-200',
-        isModal ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        isModal ? 'opacity-100' : 'pointer-events-none opacity-0',
       )}
       onClick={handleBackdropClick}
       aria-hidden={!isModal}
@@ -69,17 +70,23 @@ export function BrowserViewPanel() {
         aria-label="Browser view"
         tabIndex={-1}
         className={cn(
-          'flex flex-col w-full max-w-5xl max-h-full',
-          'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
+          'flex max-h-full w-full max-w-5xl flex-col',
+          overlaySurfaceStyle,
+          'overflow-hidden rounded-xl',
           'transition-transform duration-200 outline-none',
           isModal ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}
       >
-        <div className="border-border1 flex shrink-0 items-center gap-3 border-b px-4 py-3">
-          <Globe className="text-neutral4 h-4 w-4 shrink-0" />
-          <div className="bg-surface3 border-border1 min-w-0 flex-1 rounded-md border px-3 py-1.5">
-            <span className={cn('text-sm truncate block', currentUrl ? 'text-neutral5' : 'text-neutral3 italic')}>
+        <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+          <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className={cn(raisedSurfaceStyle, 'min-w-0 flex-1 rounded-md px-3 py-1.5')}>
+            <span
+              className={cn(
+                'block truncate text-body',
+                currentUrl ? 'text-foreground' : 'text-muted-foreground italic',
+              )}
+            >
               {currentUrl || 'No URL'}
             </span>
           </div>

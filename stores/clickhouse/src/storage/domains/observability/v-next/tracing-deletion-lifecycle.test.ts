@@ -7,6 +7,7 @@ import {
   TABLE_LOG_EVENTS,
   TABLE_METRIC_EVENTS,
   TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS,
@@ -55,7 +56,7 @@ describe('batchDeleteTraces deletion requests', () => {
       ],
     });
 
-    expect(command).toHaveBeenCalledTimes(7);
+    expect(command).toHaveBeenCalledTimes(8);
     const calls = command.mock.calls.map(
       ([call]) =>
         call as {
@@ -72,6 +73,7 @@ describe('batchDeleteTraces deletion requests', () => {
         TABLE_METRIC_EVENTS,
         TABLE_LOG_EVENTS,
         TABLE_SCORE_EVENTS,
+        TABLE_SCORE_EVENTS_CURRENT,
         TABLE_FEEDBACK_EVENTS,
       ].sort(),
     );
@@ -100,6 +102,6 @@ describe('batchDeleteTraces deletion requests', () => {
     await expect(batchDeleteTraces(client, { traceIds: ['trace-1'] })).rejects.toThrow('delete failed');
 
     expect(insert).toHaveBeenCalledTimes(1);
-    expect(command).toHaveBeenCalledTimes(7);
+    expect(command).toHaveBeenCalledTimes(8);
   });
 });

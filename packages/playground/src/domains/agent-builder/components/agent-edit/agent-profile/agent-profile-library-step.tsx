@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ArrowRightIcon, CheckIcon, LibraryIcon } from 'lucide-react';
+import { ArrowRightIcon, CheckIcon, LibraryIcon, Plus } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -41,14 +41,14 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       }
     >
       <div
-        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-6 text-center"
+        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-4 py-4 text-center"
         data-testid="agent-builder-library-step"
       >
-        <Icon size="lg" className="text-neutral4">
+        <Icon size="lg" className="text-muted-foreground">
           <LibraryIcon />
         </Icon>
         {isInLibrary ? (
-          <p className="text-neutral2 flex items-center gap-2" data-testid="agent-builder-library-added">
+          <p className="flex items-center gap-2 text-placeholder" data-testid="agent-builder-library-added">
             <Icon>
               <CheckIcon />
             </Icon>
@@ -56,6 +56,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
           </p>
         ) : (
           <Button
+            icon={<Plus />}
             variant="primary"
             onClick={() => requestChange('public')}
             disabled={isStreaming}
@@ -64,7 +65,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
             Add to library
           </Button>
         )}
-        <p className="text-neutral3 max-w-md">
+        <p className="max-w-md text-muted-foreground">
           You can change this at any time from the agent&apos;s visibility settings — adding to the library now is
           optional.
         </p>

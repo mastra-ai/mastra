@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
@@ -45,6 +45,7 @@ function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV
 
 const OPENAI_WS_ALLOWLIST = new Set(['openai']);
 const OPENAI_API_HOST = 'api.openai.com';
+let cacheKeyHmacSecret: Buffer | undefined;
 
 type GatewayModelCache = {
   modelInstances: Map<string, GatewayLanguageModel>;
@@ -140,6 +141,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       url?: string;
       apiKey?: string;
       headers?: Record<string, string>;
+      api?: 'chat' | 'responses';
     };
 
     if (typeof config === 'string') {
@@ -151,6 +153,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         url: config.url,
         apiKey: config.apiKey,
         headers: config.headers,
+        api: config.api,
       };
     } else {
       // config has 'id' field
@@ -159,6 +162,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         url: config.url,
         apiKey: config.apiKey,
         headers: config.headers,
+        api: config.api,
       };
     }
 
@@ -168,6 +172,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       url?: string;
       apiKey?: string;
       headers?: Record<string, string>;
+      api?: 'chat' | 'responses';
     } = {
       ...normalizedConfig,
       routerId: normalizedConfig.id,
@@ -213,8 +218,20 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return this._supportedUrlsPromise;
     }
 
-    this._supportedUrlsPromise = this._fetchSupportedUrls();
-    return this._supportedUrlsPromise;
+    const supportedUrlsPromise = this._fetchSupportedUrls().catch(error => {
+      console.warn(
+        `[ModelRouter] Failed to resolve supportedUrls for "${this.config.routerId}". Retrying on next access.`,
+        error,
+      );
+
+      if (this._supportedUrlsPromise === supportedUrlsPromise) {
+        this._supportedUrlsPromise = null;
+      }
+
+      return {};
+    });
+    this._supportedUrlsPromise = supportedUrlsPromise;
+    return supportedUrlsPromise;
   }
 
   /**
@@ -222,35 +239,28 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * @internal
    */
   private async _fetchSupportedUrls(): Promise<Record<string, RegExp[]>> {
-    let apiKey: string;
-    try {
-      const resolved = this.#manager.resolveModelId(this.config.routerId);
-      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
-      apiKey = auth.apiKey ?? '';
-      const model = await this.resolveLanguageModel({
-        apiKey,
-        auth,
-        headers: mergeHeaders(this.config.headers, auth.headers),
-        ...resolved,
-      });
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    const model = await this.resolveLanguageModel({
+      apiKey: auth.apiKey ?? '',
+      auth,
+      headers: mergeHeaders(this.config.headers, auth.headers),
+      ...resolved,
+    });
 
-      // Get supportedUrls from the underlying model
-      const modelSupportedUrls = model.supportedUrls;
-      if (!modelSupportedUrls) {
-        return {};
-      }
-
-      // Handle both Promise and plain object supportedUrls
-      if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
-        const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
-        return resolved ?? {};
-      }
-
-      return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
-    } catch {
-      // If model resolution fails, return empty supportedUrls
+    // Get supportedUrls from the underlying model
+    const modelSupportedUrls = model.supportedUrls;
+    if (!modelSupportedUrls) {
       return {};
     }
+
+    // Handle both Promise and plain object supportedUrls
+    if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+      const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+      return resolved ?? {};
+    }
+
+    return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
   }
 
   /** @internal */
@@ -477,6 +487,48 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return streamResult;
   }
 
+  static computeModelCacheKey({
+    gatewayId,
+    modelId,
+    providerId,
+    url,
+    apiKey,
+    headersKey,
+    resolvedTransport,
+    websocketKey,
+    authScopeKey,
+    api,
+  }: {
+    gatewayId: string;
+    modelId: string;
+    providerId: string;
+    url: string;
+    apiKey: string;
+    headersKey: string;
+    resolvedTransport: OpenAITransport;
+    websocketKey: string;
+    authScopeKey: string;
+    api: 'chat' | 'responses';
+  }): string {
+    cacheKeyHmacSecret ??= randomBytes(32);
+    return createHmac('sha256', cacheKeyHmacSecret)
+      .update(
+        JSON.stringify([
+          gatewayId,
+          modelId,
+          providerId,
+          url,
+          apiKey,
+          headersKey,
+          resolvedTransport,
+          websocketKey,
+          authScopeKey,
+          api,
+        ]),
+      )
+      .digest('hex');
+  }
+
   private async resolveLanguageModel({
     modelId,
     providerId,
@@ -502,35 +554,41 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     const useInstanceCache = this.shouldUseInstanceGatewayCache(auth);
     const cache = useInstanceCache ? this.instanceGatewayCache : this.getGatewayCache();
     const authScopeKey = useInstanceCache ? `${auth.source ?? ''}` : '';
-    const key = createHash('sha256')
-      .update(
-        JSON.stringify([
-          this.gatewayId,
-          modelId,
-          providerId,
-          this.config.url || '',
-          apiKey,
-          stableHeaderKey(headers),
-          resolvedTransport,
-          websocketKey,
-          authScopeKey,
-        ]),
-      )
-      .digest('hex');
+    const key = ModelRouterLanguageModel.computeModelCacheKey({
+      gatewayId: this.gatewayId,
+      modelId,
+      providerId,
+      url: this.config.url || '',
+      apiKey,
+      headersKey: stableHeaderKey(headers),
+      resolvedTransport,
+      websocketKey,
+      authScopeKey,
+      api: this.config.api || 'chat',
+    });
     if (cache.modelInstances.has(key)) {
       this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
       return cache.modelInstances.get(key)!;
     }
 
-    // If custom URL is provided, use it directly with openai-compatible
+    // If custom URL is provided, use it directly.
     if (this.config.url) {
-      const modelInstance = createOpenAICompatible({
-        name: providerId,
-        apiKey,
-        baseURL: this.config.url,
-        headers,
-        supportsStructuredOutputs: true,
-      }).chatModel(modelId);
+      // The openai-compatible provider only exposes Chat Completions. To reach the
+      // OpenAI Responses API on a custom endpoint, use the openai provider's responses().
+      const modelInstance =
+        this.config.api === 'responses'
+          ? createOpenAI({
+              apiKey,
+              baseURL: this.config.url,
+              headers,
+            }).responses(modelId)
+          : createOpenAICompatible({
+              name: providerId,
+              apiKey,
+              baseURL: this.config.url,
+              headers,
+              supportsStructuredOutputs: true,
+            }).chatModel(modelId);
       cache.modelInstances.set(key, modelInstance);
       this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
       return modelInstance;

@@ -69,12 +69,71 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 
 Relative paths are resolved under `/workspace`. Absolute paths must also resolve within `/workspace`. Each file is sent as its own bridge request, and the bridge caps a single file at 32 MiB.
 
+The Cloudflare sandbox cannot set per-file permissions, so a `writeFiles` call that includes a `mode` is rejected rather than silently ignored.
+
 ```typescript
 await workspace.sandbox?.writeFiles?.([
   { path: 'src/index.ts', content: "console.log('hello')\n" },
   { path: '/workspace/package.json', content: JSON.stringify({ type: 'module' }) },
 ])
 ```
+
+## Read files
+
+Read a single file back from `/workspace` as raw bytes. Relative paths resolve under `/workspace`, and absolute paths must also resolve within it.
+
+```typescript
+const bytes = await workspace.sandbox?.readFile?.('src/index.ts')
+const source = new TextDecoder().decode(bytes)
+```
+
+## Keep files across container sleep
+
+Cloudflare stops an idle container after `sleepAfter` (10 minutes by default). The next command starts a fresh container, so anything written under `/workspace` is gone. Treat `/workspace` as scratch space, and put files that must survive on a mounted bucket.
+
+Mount an S3-compatible bucket such as Cloudflare R2 through the Workspace `mounts` option. The sandbox mounts it on `start()`. A slept container boots without its mounts, so the sandbox re-mounts any dropped paths before the next filesystem operation, keeping mounted data durable across sleep.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { CloudflareSandbox } from '@mastra/cloudflare-sandbox'
+
+const workspace = new Workspace({
+  sandbox: new CloudflareSandbox({
+    baseUrl: process.env.CLOUDFLARE_SANDBOX_BRIDGE_URL!,
+    apiToken: process.env.CLOUDFLARE_SANDBOX_BRIDGE_TOKEN!,
+  }),
+  mounts: {
+    '/workspace/data': new S3Filesystem({
+      bucket: 'agent-data',
+      region: 'auto',
+      endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    }),
+  },
+})
+```
+
+The bridge mounts buckets with s3fs, so only `type: 's3'` mount configs are accepted. GCS and Azure filesystems, and S3 credentials that include a `sessionToken`, return a failed `MountResult` without contacting the bridge.
+
+The default `getInstructions()` text tells the model that `/workspace` does not survive between commands and lists the mounted paths to write to instead.
+
+## Persist and restore the workspace
+
+`persistWorkspace()` archives `/workspace` and returns the raw tar bytes; `hydrateWorkspace()` restores it from those bytes. Use this for one-off backups. It is not a substitute for mounts: restoring must happen before the first command after a wake, and a persist taken from a freshly woken container overwrites the archive with an empty workspace.
+
+```typescript
+// Back up before the container can sleep
+const archive = await workspace.sandbox?.persistWorkspace?.({ excludes: ['node_modules'] })
+await myStorage.put('workspace-backup', archive)
+
+// Later, on a fresh or reconnected sandbox
+const archive = await myStorage.get('workspace-backup')
+await workspace.sandbox?.hydrateWorkspace?.(archive)
+```
+
+For execution sessions, use the `CloudflareSandboxBridgeClient` methods (`createSession`, `deleteSession`) directly.
 
 ## Constructor parameters
 
@@ -141,10 +200,10 @@ await workspace.sandbox?.writeFiles?.([
 
 ## Lifecycle behavior
 
-- `start()`: Reconnects to `sandboxId` or creates a remote sandbox.
+- `start()`: Reconnects to `sandboxId` or creates a remote sandbox, then mounts any Workspace `mounts`.
 - `stop()`: Detaches the Mastra lifecycle without deleting the remote sandbox because the bridge doesn't expose a suspend operation.
 - `destroy()`: Deletes the remote sandbox.
 
 ## Limitations
 
-The provider supports command execution, streamed output, and file writes. It doesn't currently expose the bridge's bucket mounts, sessions, PTY terminals, or workspace persistence routes, and it doesn't support background process management, stdin, snapshots, or port URLs.
+The provider surfaces command execution, streamed output, file reads and writes, S3-compatible bucket mounts, and workspace persistence directly on the sandbox. Sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals are not exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.

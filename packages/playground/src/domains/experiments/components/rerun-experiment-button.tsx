@@ -37,8 +37,8 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
         variant="primary"
         onClick={() => setOpen(true)}
         tooltip="Run this experiment again with the same configuration"
+        icon={<Play />}
       >
-        <Play />
         Rerun
       </Button>
       {/* Mounted on demand and keyed on the resolved scorers so the dialog seeds its state

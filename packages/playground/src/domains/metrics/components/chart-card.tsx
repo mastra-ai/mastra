@@ -1,3 +1,4 @@
+import { ChartTooltip } from '@mastra/playground-ui/components/ChartTooltip';
 import type { ReactNode } from 'react';
 
 export function ChartCard({
@@ -16,16 +17,16 @@ export function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`border-border1 bg-surface2 flex flex-col rounded-lg border ${className}`}>
+    <div className={`flex flex-col rounded-lg border border-border bg-background ${className}`}>
       <div className="flex shrink-0 items-start justify-between px-4 py-3">
         <div>
-          <h3 className="text-icon6 text-base font-semibold">{title}</h3>
-          {description && <p className="text-icon2 mt-0.5 text-xs">{description}</p>}
+          <h3 className="text-subheading text-foreground">{title}</h3>
+          {description && <p className="mt-0.5 text-caption text-placeholder">{description}</p>}
         </div>
         {summary && (
           <div className="text-right">
-            <span className="text-icon6 font-mono text-base font-semibold">{summary}</span>
-            {summaryLabel && <p className="text-icon2 text-xs">{summaryLabel}</p>}
+            <span className="font-mono text-subheading text-foreground">{summary}</span>
+            {summaryLabel && <p className="text-caption text-placeholder">{summaryLabel}</p>}
           </div>
         )}
       </div>
@@ -47,10 +48,10 @@ export function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="border-border1 bg-surface2 rounded-md border px-3 py-2 text-xs shadow-lg">
-      <p className="text-icon6 mb-1 font-medium">{label}</p>
+    <ChartTooltip>
+      <p className="mb-1 font-medium text-foreground">{label}</p>
       {payload.map(entry => (
-        <p key={entry.name} className="text-icon2">
+        <p key={entry.name} className="text-placeholder">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}:{' '}
           <span className="font-mono">
@@ -59,6 +60,6 @@ export function CustomTooltip({
           </span>
         </p>
       ))}
-    </div>
+    </ChartTooltip>
   );
 }

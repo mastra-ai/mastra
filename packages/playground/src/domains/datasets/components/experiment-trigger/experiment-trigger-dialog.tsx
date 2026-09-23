@@ -14,10 +14,11 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
@@ -67,7 +68,11 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return (
+      <div role="alert">
+        <Notice variant="destructive">Failed to parse request context schema</Notice>
+      </div>
+    );
   }
 
   return (
@@ -95,15 +100,15 @@ function PipelineStep({
         <span
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-ui-xs font-medium',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border1 text-neutral3',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
+            done ? 'border-accent1 bg-accent1 text-white' : 'border-border text-muted-foreground',
           )}
         >
           {index}
         </span>
-        {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
+        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
-      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>{children}</div>
+      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
   );
 }
@@ -246,14 +251,14 @@ export function ExperimentTriggerDialog({
         className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="border-border1 border-b px-6 py-4">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
+        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="experiment-name">Name *</Label>
@@ -300,7 +305,7 @@ export function ExperimentTriggerDialog({
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
-                <p className="text-ui-xs text-neutral3">
+                <p className="text-meta text-muted-foreground">
                   {itemCount} {itemCount === 1 ? 'item' : 'items'}
                 </p>
               )}
@@ -315,7 +320,7 @@ export function ExperimentTriggerDialog({
                 container={contentRef}
               />
               {targetType && !targetId && (
-                <p className="text-ui-xs text-neutral3">
+                <p className="text-meta text-muted-foreground">
                   Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
                 </p>
               )}
@@ -337,7 +342,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="text-ui-sm flex items-center gap-2">
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
@@ -362,14 +367,14 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-6 py-4 sm:justify-between">
+        <DialogFooter className="items-center border-t border-border px-4 py-4 sm:justify-between">
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
                 <Badge variant="green" indicator="dot">
                   Ready
                 </Badge>
-                <span className="text-ui-xs text-neutral3">
+                <span className="text-meta text-muted-foreground">
                   {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>
@@ -380,7 +385,7 @@ export function ExperimentTriggerDialog({
             )}
           </p>
           <div className="flex items-center gap-2">
-            <Button onClick={handleClose} disabled={isRunning}>
+            <Button icon={<X />} onClick={handleClose} disabled={isRunning}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>

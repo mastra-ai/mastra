@@ -160,7 +160,7 @@ const AgentBuilderSkillEditReady = ({ id, initialUserMessage }: ReadyProps) => {
         />
       }
       form={
-        <div className="h-full min-h-0 overflow-y-auto p-4 md:p-6">
+        <div className="h-full min-h-0 overflow-y-auto p-4 md:p-4">
           <SkillSimpleForm
             name={name}
             onNameChange={setName}

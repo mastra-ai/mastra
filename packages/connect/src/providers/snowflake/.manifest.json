@@ -1,0 +1,28 @@
+{
+  "providerId": "snowflake-jwt",
+  "localId": "snowflake",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-15T21:15:54.551Z",
+  "toolCount": 15,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "840d4c81a2025e8fa9f63ba63c65d81f9df0bb8048e28989ceac036d4fc2e6f8",
+    "tools.ts": "6026d12be296e916a955b5084bc3e072a75a3aa179df42ab1218056853098309",
+    "tools/cancel-statement.ts": "3d5cb3a3270d42344dafe0364ab4eafb52f1ed62a5aa6a1a0b008a5c7d43b031",
+    "tools/execute-statement.ts": "810e828325339f018219f1797f3d05bcbc30598b692b45502ba55137db23d115",
+    "tools/get-statement-result.ts": "7d4616fc0bd846b77476ebf03cd0ba24db60caf63ac501a8c280493899b5cb30",
+    "tools/get-statement-status.ts": "e0afd27516ddd23da8794681ebc215ca378c7ae988def0b621559ca724506e16",
+    "tools/list-columns.ts": "fd91edb5123e2315ce5d4f8ee78d5df40020518019c976d0f689ebf51957721d",
+    "tools/list-databases.ts": "e19a66b79992456b8c42e456b762bd677d5928af684bac792f021320ec809efc",
+    "tools/list-roles.ts": "d02d68cea69521e59e0e7237bb1b8cb1dc56a1151bcea8c22f7ad85e20ab18a7",
+    "tools/list-schemas.ts": "c12ab75edde2bd2eef38b7db6a42e01b077e82ee284361e388cc943ccaedf551",
+    "tools/list-stages.ts": "13789c279b081308c5dc58621932bbed556d87f6d7fc5b52a1d3c16906e3fd96",
+    "tools/list-streams.ts": "0bd9fbee8dbc17cdd348210e42645ac426bbc7b165f61e97397b1661c935cc7d",
+    "tools/list-tables.ts": "b56383a809c5b25b08f3a954a96ac03c0ea87e881b96e1afbcdc3372332e919f",
+    "tools/list-tasks.ts": "d66aa66b7445fbd570a2a0cc32cb41a56e75e05c9bb8eb00e247bae9793f86be",
+    "tools/list-users.ts": "3d47cb0a107e82ca8a12e8ad5ee74af80c4b2c4b192c7f28f4fd6980ab7fe100",
+    "tools/list-views.ts": "2a986ddd933a0721ec2687e72502c5a8b0458c7fbb534ff32a451143fba46b24",
+    "tools/list-warehouses.ts": "b6bbac45853f7a5d967218891a4d3bdd3d7b9dd3e2b4f502f4155f9249da7290"
+  }
+}

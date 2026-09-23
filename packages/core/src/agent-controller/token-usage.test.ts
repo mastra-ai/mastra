@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
+import { createEmptyTokenUsage } from './types';
 import type { AgentControllerEvent } from './types';
 
 function createController(storage = new InMemoryStore()) {
@@ -263,5 +264,115 @@ describe('step-finish token usage extraction', () => {
     const tokenUsage = session.getTokenUsage();
     expect(tokenUsage.cachedInputTokens).toBe(0);
     expect(tokenUsage.cacheCreationInputTokens).toBe(0);
+  });
+
+  it('does not fabricate a tally or event for an empty usage object', async () => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    await (session as any).processStream({ fullStream: mockStream({}) });
+
+    expect(session.getTokenUsage()).toEqual(createEmptyTokenUsage());
+    expect(events.find(event => event.type === 'usage_update')).toBeUndefined();
+  });
+
+  it('does not fabricate a tally for a nested-object usage shape', async () => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    await (session as any).processStream({ fullStream: mockStream({ inputTokens: {}, outputTokens: {} }) });
+
+    expect(session.getTokenUsage()).toEqual(createEmptyTokenUsage());
+    expect(events.find(event => event.type === 'usage_update')).toBeUndefined();
+  });
+
+  it('does not persist a false zero tally for an empty usage step', async () => {
+    const storage = new InMemoryStore();
+    controller = createController(storage);
+    await controller.init();
+    session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const thread = await session.thread.create();
+
+    await (session as any).processStream({ fullStream: mockStream({}) });
+
+    const memory = await storage.getStore('memory');
+    const savedThread = await memory?.getThreadById({ threadId: thread.id });
+    expect(savedThread?.metadata?.tokenUsage).toBeUndefined();
+  });
+
+  it('preserves a measured zero (explicit numeric fields still emit and tally)', async () => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    await (session as any).processStream({
+      fullStream: mockStream({ promptTokens: 0, completionTokens: 0, totalTokens: 0 }),
+    });
+
+    const usage = session.getTokenUsage();
+    expect(usage.promptTokens).toBe(0);
+    expect(usage.completionTokens).toBe(0);
+    expect(usage.totalTokens).toBe(0);
+    expect(events.find(event => event.type === 'usage_update')).toBeDefined();
+  });
+
+  it('skips empty usage steps but tallies measured steps in a multi-step run', async () => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    async function* mixedStepStream() {
+      yield {
+        type: 'step-finish',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: {
+          output: { usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+          stepResult: { reason: 'tool-calls' },
+          metadata: {},
+        },
+      };
+      yield {
+        type: 'step-finish',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: {
+          output: { usage: {} },
+          stepResult: { reason: 'stop' },
+          metadata: {},
+        },
+      };
+      yield {
+        type: 'finish',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: {},
+          metadata: {},
+        },
+      };
+    }
+
+    await (session as any).processStream({ fullStream: mixedStepStream() });
+
+    expect(session.getTokenUsage().totalTokens).toBe(150);
+    expect(events.filter(event => event.type === 'usage_update')).toHaveLength(1);
+  });
+
+  it('preserves the running tally when metadata read fails', async () => {
+    const storage = new InMemoryStore();
+    controller = createController(storage);
+    await controller.init();
+    session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.create();
+
+    session.setTokenUsage({ promptTokens: 500, completionTokens: 250, totalTokens: 750 });
+
+    const memory = await storage.getStore('memory');
+    const spy = vi.spyOn(memory as any, 'getThreadById').mockRejectedValue(new Error('transient read failure'));
+
+    await session.thread.loadMetadata();
+
+    expect(session.getTokenUsage().totalTokens).toBe(750);
+    spy.mockRestore();
   });
 });

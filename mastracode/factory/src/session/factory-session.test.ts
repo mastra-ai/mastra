@@ -3,19 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
+  createSourceControlSessionLookup,
   ensureFactorySourceSession,
   hydrateFactorySession,
+  refreshFactorySessionMemorySettings,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
+  resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from './factory-session.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
-async function seedLinkedRepository(options?: { pinnedBranch?: string }) {
+async function seedLinkedRepository(options?: { pinnedBranch?: string; integrationId?: string }) {
   const seeded = await createFactoryStorageForTests();
-  const sourceControl = seeded.sourceControl.forIntegration('github');
+  const sourceControl = seeded.sourceControl.forIntegration(options?.integrationId ?? 'github');
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
   const installation = await sourceControl.installations.upsert({
     orgId: 'org-1',
@@ -56,6 +59,67 @@ function createSessionDouble() {
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
 }
+
+describe('provider-aware source-control resolution', () => {
+  it("chooses the Factory's linked GitLab repository even when GitHub is also registered", async () => {
+    const { seeded, sourceControl: gitlab, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    const github = seeded.sourceControl.forIntegration('github');
+
+    await expect(
+      resolveFactorySourceControl({
+        sourceControls: [github, gitlab],
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+      }),
+    ).resolves.toBe(gitlab);
+  });
+
+  it('finds a GitLab session through the cross-provider lookup', async () => {
+    const { seeded, sourceControl: gitlab, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    const github = seeded.sourceControl.forIntegration('github');
+    const session = await ensureFactorySourceSession({
+      sourceControl: gitlab,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/gitlab-issue',
+    });
+    const sessions = createSourceControlSessionLookup([github, gitlab]);
+
+    await expect(sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      sessionId: session.sessionId,
+      orgId: 'org-1',
+    });
+  });
+
+  it('propagates connection-list storage failures instead of selecting another provider', async () => {
+    const { seeded, sourceControl: gitlab, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    const github = seeded.sourceControl.forIntegration('github');
+    vi.spyOn(github.connections, 'list').mockRejectedValueOnce(new Error('connection storage unavailable'));
+
+    await expect(
+      resolveFactorySourceControl({
+        sourceControls: [github, gitlab],
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+      }),
+    ).rejects.toThrow('connection storage unavailable');
+  });
+
+  it('propagates repository-list storage failures', async () => {
+    const { sourceControl, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    vi.spyOn(sourceControl.projectRepositories, 'list').mockRejectedValueOnce(
+      new Error('repository storage unavailable'),
+    );
+
+    await expect(
+      resolveFactorySourceControl({
+        sourceControls: [sourceControl],
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+      }),
+    ).rejects.toThrow('repository storage unavailable');
+  });
+});
 
 describe('ensureFactorySourceSession', () => {
   it('creates a source-control session on the requested branch', async () => {
@@ -255,6 +319,57 @@ describe('hydrateFactorySession', () => {
       error: 'storage down',
     });
     expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    warn.mockRestore();
+  });
+});
+
+describe('refreshFactorySessionMemorySettings', () => {
+  it("reapplies the project's current OM models to a reused session", async () => {
+    const { session, double } = createSessionDouble();
+    const memorySettings = {
+      get: vi.fn(async () => ({
+        observerModelId: 'anthropic/claude-fable-5',
+        reflectorModelId: 'anthropic/claude-opus-5',
+        observationThreshold: 3,
+        reflectionThreshold: 7,
+        observeAttachments: true,
+      })),
+    };
+    const projects = { get: vi.fn(async () => ({ defaultModelId: 'anthropic/claude-opus-5' })) };
+
+    await refreshFactorySessionMemorySettings(session, {
+      orgId: 'org-1',
+      factoryProjectId: 'proj-1',
+      projects: projects as never,
+      memorySettings: memorySettings as never,
+    });
+
+    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
+    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
+    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    // Reuse only reapplies OM/memory settings — it must not touch the run model.
+    expect(double.model.switch).not.toHaveBeenCalled();
+  });
+
+  it('swallows and logs a settings lookup failure so the reused run still proceeds', async () => {
+    const { session } = createSessionDouble();
+    const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
+    const projects = { get: vi.fn(async () => null) };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(
+      refreshFactorySessionMemorySettings(session, {
+        orgId: 'org-1',
+        factoryProjectId: 'proj-1',
+        projects: projects as never,
+        memorySettings: memorySettings as never,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory dispatch] Failed to reapply observational-memory settings on session reuse',
+      { error: 'storage down' },
+    );
     warn.mockRestore();
   });
 });

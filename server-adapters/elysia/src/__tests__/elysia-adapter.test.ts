@@ -1,10 +1,8 @@
 import type { Server } from 'node:http';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -14,11 +12,13 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
   createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MastraServer } from '../index';
@@ -83,10 +83,10 @@ describe('Elysia Server Adapter', () => {
       const req = new Request(url, {
         method: request.method,
         headers: {
-          'Content-Type': 'application/json',
+          ...(request.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(request.headers || {}),
         },
-        body: request.body ? JSON.stringify(request.body) : undefined,
+        body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
       });
 
       // Execute request through Elysia - app.fetch() always returns Promise<Response>

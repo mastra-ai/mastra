@@ -51,4 +51,30 @@ describe('useExperimentsForDatasetFilter', () => {
     expect(result.current.data?.experiments).toHaveLength(1);
     expect(urls).toEqual([`${TEST_BASE_URL}/api/datasets/dataset-1/experiments?perPage=${EXPERIMENTS_PAGE_SIZE}`]);
   });
+
+  it('forwards the target scope to the global list', async () => {
+    const urls = trackRequests();
+    const { result } = renderHook(
+      () => useExperimentsForDatasetFilter(undefined, { targetType: 'agent', targetId: 'agent-1' }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(urls).toEqual([
+      `${TEST_BASE_URL}/api/experiments?perPage=${EXPERIMENTS_PAGE_SIZE}&targetType=agent&targetId=agent-1`,
+    ]);
+  });
+
+  it('forwards the target scope to the dataset list and omits empty values', async () => {
+    const urls = trackRequests();
+    const { result } = renderHook(
+      () => useExperimentsForDatasetFilter('dataset-1', { targetType: 'workflow', targetId: '' }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(urls).toEqual([
+      `${TEST_BASE_URL}/api/datasets/dataset-1/experiments?perPage=${EXPERIMENTS_PAGE_SIZE}&targetType=workflow`,
+    ]);
+  });
 });

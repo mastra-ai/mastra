@@ -7,7 +7,7 @@ description: "Browse Umans AI model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/umans-ai.svg" alt="Umans AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Umans AI
 
-Access 7 Umans AI models through Mastra's model router. Authentication is handled automatically using the `UMANS_AI_API_KEY` environment variable.
+Access 6 Umans AI models through Mastra's model router. Authentication is handled automatically using the `UMANS_AI_API_KEY` environment variable.
 
 Learn more in the [Umans AI documentation](https://app.umans.ai/offers/code/docs/orgs).
 
@@ -49,13 +49,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "model": "umans-ai/umans-coder",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": 0.95,
-    "outputCost": 4
+    "contextWindow": 1048576,
+    "maxOutput": 131071,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "umans-ai/umans-deepseek-v4-flash-0731",
@@ -94,28 +94,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "umans-ai/umans-glm-5.2",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 405504,
-    "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
-  },
-  {
-    "model": "umans-ai/umans-kimi-k2.7",
+    "model": "umans-ai/umans-glm-5.3-flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": 0.95,
-    "outputCost": 4
+    "contextWindow": 1048576,
+    "maxOutput": 131071,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "umans-ai/umans-kimi-k3",

@@ -67,16 +67,20 @@ describe('stream ↔ persisted message identity', () => {
 
     await session.sendMessage({ content: 'It seems to work well actually' });
 
+    const streamedStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.role === 'assistant',
+    );
+    expect(streamedStart).toBeDefined();
     const streamedEnd = events.find(
       (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.role === 'assistant',
+        event.type === 'message_end' && event.id === streamedStart!.message.id,
     );
-    expect(streamedEnd).toBeDefined();
-    expect(streamedEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Good to hear.' }]);
+    expect(streamedEnd).toEqual({ type: 'message_end', id: streamedStart!.message.id });
 
     const persisted = await session.thread.listMessages({ threadId });
     const persistedAssistant = persisted.filter(message => message.role === 'assistant');
     expect(persistedAssistant).toHaveLength(1);
-    expect(streamedEnd!.message.id).toBe(persistedAssistant[0]!.id);
+    expect(streamedStart!.message.id).toBe(persistedAssistant[0]!.id);
   }, 30000);
 });

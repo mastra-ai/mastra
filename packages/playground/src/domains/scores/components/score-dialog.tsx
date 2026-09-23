@@ -1,11 +1,9 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { format } from 'date-fns/format';
 import {
   HashIcon,
@@ -101,10 +99,13 @@ export function ScoreDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-          <Button size="lg" className="mr-8 ml-auto" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
-            <Icon>
-              <SaveIcon />
-            </Icon>
+          <Button
+            size="lg"
+            className="mr-8 ml-auto"
+            disabled={!score}
+            onClick={() => setDatasetDialogOpen(true)}
+            icon={<SaveIcon />}
+          >
             Save as Dataset Item
           </Button>
         </SideDialog.Top>
@@ -119,7 +120,7 @@ export function ScoreDialog({
             </TextAndIcon>
           </SideDialog.Header>
 
-          <Sections>
+          <div className="grid gap-6">
             <KeyValueList
               data={[
                 ...(usageContext === 'SpanDialog'
@@ -227,7 +228,7 @@ export function ScoreDialog({
               }
               simplified={true}
             />
-          </Sections>
+          </div>
         </SideDialog.Content>
       </SideDialog>
 

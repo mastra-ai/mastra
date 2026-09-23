@@ -1,6 +1,6 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import { useMemo } from 'react';
 import { formatHierarchicalSpans } from '../components/format-hierarchical-spans';
+import type { LightSpanRecord } from '../types';
 import { getAllSpanIds } from './get-all-span-ids';
 
 /**

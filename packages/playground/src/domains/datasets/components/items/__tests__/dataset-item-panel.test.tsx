@@ -49,7 +49,7 @@ const useScorerHandler = () => {
 };
 
 const enterEditMode = async () => {
-  fireEvent.click(screen.getByRole('button', { name: 'Actions menu' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open actions menu' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
 };
 

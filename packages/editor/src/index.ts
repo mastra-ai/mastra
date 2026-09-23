@@ -8,6 +8,8 @@ import type {
   BlobStoreProvider,
   BrowserProvider,
   WorkspaceProvider,
+  WorkflowBuilderOptions,
+  IWorkflowBuilder,
 } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
@@ -70,6 +72,9 @@ export class MastraEditor implements IMastraEditor {
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
   private __builderResolved = false;
+  private readonly __workflowBuilderConfig?: WorkflowBuilderOptions;
+  private __workflowBuilderInstance?: IWorkflowBuilder;
+  private __workflowBuilderResolved = false;
 
   /**
    * @internal — exposed for namespace classes to hydrate stored workspace configs.
@@ -169,6 +174,7 @@ export class MastraEditor implements IMastraEditor {
 
     // Store builder config for EE feature
     this.__builderConfig = config?.builder;
+    this.__workflowBuilderConfig = config?.workflowBuilder;
   }
 
   /**
@@ -337,6 +343,28 @@ export class MastraEditor implements IMastraEditor {
     }
   }
 
+  /** Sync. OSS-safe. Does NOT import @mastra/editor/ee. */
+  hasEnabledWorkflowBuilderConfig(): boolean {
+    if (!this.__workflowBuilderConfig) return false;
+    return this.__workflowBuilderConfig.enabled !== false;
+  }
+
+  /** Resolve the hidden workflow builder without adding its agent to Mastra. */
+  async resolveWorkflowBuilder(): Promise<IWorkflowBuilder | undefined> {
+    if (this.__workflowBuilderResolved) return this.__workflowBuilderInstance;
+
+    if (!this.hasEnabledWorkflowBuilderConfig()) {
+      this.__workflowBuilderResolved = true;
+      return undefined;
+    }
+
+    await this.assertBuilderLicensed('Workflow Builder');
+    const { EditorWorkflowBuilder } = await import('./ee');
+    this.__workflowBuilderInstance = new EditorWorkflowBuilder(this.__workflowBuilderConfig, this.__mastra);
+    this.__workflowBuilderResolved = true;
+    return this.__workflowBuilderInstance;
+  }
+
   /**
    * Sync. OSS-safe. Does NOT import @mastra/editor/ee.
    * Returns true if builder config is present and enabled.
@@ -360,7 +388,7 @@ export class MastraEditor implements IMastraEditor {
       return undefined;
     }
 
-    await this.assertAgentBuilderLicensed();
+    await this.assertBuilderLicensed('Agent Builder');
 
     const { EditorAgentBuilder } = await import('./ee');
     this.__builderInstance = new EditorAgentBuilder(this.__builderConfig);
@@ -395,13 +423,13 @@ export class MastraEditor implements IMastraEditor {
    * builder cannot be instantiated outside the server boot path without a
    * valid EE license. Dev environments bypass via `isEEEnabled()`.
    */
-  private async assertAgentBuilderLicensed(): Promise<void> {
+  private async assertBuilderLicensed(builderName: string): Promise<void> {
     try {
       const { isEEEnabled } = await import('@mastra/core/auth/ee');
       if (!isEEEnabled()) {
         throw new Error(
-          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
-            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+          `[mastra/auth-ee] ${builderName} is configured but no valid EE license was found.\n` +
+            `${builderName} requires a Mastra Enterprise License for production use.\n` +
             'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
             'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
         );
@@ -411,7 +439,7 @@ export class MastraEditor implements IMastraEditor {
         throw err;
       }
       throw new Error(
-        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+        `[mastra/auth-ee] ${builderName} is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }

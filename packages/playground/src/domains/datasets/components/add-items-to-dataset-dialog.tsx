@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@m
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { useDatasets } from '../hooks/use-datasets';
@@ -103,7 +104,9 @@ export function AddItemsToDatasetDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="text-neutral4 px-2 py-4 text-center text-sm">No other datasets available</div>
+                    <div className="px-2 py-4 text-center text-body text-muted-foreground">
+                      No other datasets available
+                    </div>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>
@@ -115,29 +118,30 @@ export function AddItemsToDatasetDialog({
               </Select>
             </div>
 
-            <p className="text-muted-foreground text-sm">
+            <p className="text-body text-muted-foreground">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
             </p>
 
             {isAdding && (
               <div className="space-y-2">
-                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-body text-muted-foreground">
                   Adding items: {progress} / {items.length}
                 </p>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isAdding}>
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isAdding}>
                 Cancel
               </Button>
               <Button
+                icon={<Plus />}
                 type="submit"
                 variant="primary"
                 disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}

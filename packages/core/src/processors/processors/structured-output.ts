@@ -11,14 +11,24 @@ import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON } from '../../schema';
+import { standardSchemaToJSONSchema } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
-import type { ProcessOutputStreamArgs, Processor } from '../index';
+import type { ProcessOutputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
 export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
+
+type StructuredOutputRequestState = {
+  isStructuringAgentStreamStarted: boolean;
+  structuredOutputError?: {
+    reason: string;
+    error: unknown;
+  };
+  streamPartsStartIndex: number;
+};
 
 /**
  * StructuredOutputProcessor transforms unstructured agent output into structured JSON
@@ -44,10 +54,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private useAgent = false;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
-  private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
+  private readonly requestStates = new WeakMap<object, StructuredOutputRequestState>();
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -86,18 +96,31 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         tracingPolicy: { internal: InternalSpans.ALL },
       },
     });
+    if (this.logger) {
+      this.structuringAgent.__registerPrimitives({ logger: this.logger });
+    }
   }
 
   __registerMastra(mastra: Mastra) {
     this.structuringAgent.__registerMastra(mastra);
+    this.structuringAgent.__registerPrimitives({ logger: this.logger ?? mastra.getLogger() });
   }
 
   setAgent(agent: Agent<any, any, any>) {
     this.agent = agent;
   }
 
+  private getRequestState(state: object): StructuredOutputRequestState {
+    let requestState = this.requestStates.get(state);
+    if (!requestState) {
+      requestState = { isStructuringAgentStreamStarted: false, streamPartsStartIndex: 0 };
+      this.requestStates.set(state, requestState);
+    }
+    return requestState;
+  }
+
   async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, requestContext, messageList, ...rest } = args;
+    const { part, state, streamParts, requestContext, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
@@ -110,7 +133,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         await this.processAndEmitStructuredOutput(
           streamParts,
           controller,
-          abort,
+          state,
           observabilityContext,
           requestContext,
           messageList,
@@ -122,19 +145,40 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
   }
 
+  processOutputStep({ state, abort, messages }: ProcessOutputStepArgs) {
+    const requestState = this.requestStates.get(state);
+    if (requestState?.structuredOutputError) {
+      const { reason, error } = requestState.structuredOutputError;
+      delete requestState.structuredOutputError;
+      requestState.isStructuringAgentStreamStarted = false;
+      abort(reason, { retry: true, metadata: { error } });
+    }
+    return messages;
+  }
+
   private async processAndEmitStructuredOutput(
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined,
-    abort: ProcessOutputStreamArgs['abort'],
+    state: ProcessOutputStreamArgs['state'],
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
   ): Promise<void> {
-    if (this.isStructuringAgentStreamStarted) return;
-    this.isStructuringAgentStreamStarted = true;
+    const requestState = this.getRequestState(state);
+    if (requestState.isStructuringAgentStreamStarted) return;
+    requestState.isStructuringAgentStreamStarted = true;
     try {
+      const attemptParts = streamParts.slice(requestState.streamPartsStartIndex);
+      // On a retry the message list's response messages still include the rejected attempt,
+      // so feed only the current attempt's own output instead.
+      const responseContext: MessageInput[] =
+        requestState.streamPartsStartIndex > 0
+          ? [{ role: 'assistant', content: [{ type: 'text', text: this.buildStructuringPrompt(attemptParts) }] }]
+          : messageList?.get?.response?.db() || [];
+
       const structuringAgentStream = await this.getStructuringStream(
-        streamParts,
+        attemptParts,
+        responseContext,
         requestContext,
         messageList,
         observabilityContext,
@@ -156,9 +200,9 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', chunk.payload.error, abort);
+          this.handleError('Structuring failed', chunk.payload.error, requestState);
 
-          if (this.errorStrategy === 'warn') {
+          if (this.errorStrategy === 'strict' || this.errorStrategy === 'warn') {
             // avoid enqueuing the error chunk to the main agent stream
             break;
           }
@@ -181,13 +225,17 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         const newChunk = {
           ...chunk,
           metadata: {
+            ...chunk.metadata,
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
         controller?.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError('Structured output processing failed', error, abort);
+      this.handleError('Structured output processing failed', error, requestState);
+    }
+    if (requestState.structuredOutputError) {
+      requestState.streamPartsStartIndex = streamParts.length;
     }
   }
 
@@ -197,10 +245,21 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    */
   private async getStructuringStream(
     streamParts: ChunkType[],
+    responseContext: MessageInput[],
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
   ) {
+    const structuredOutput: StructuredOutputOptions<OUTPUT> = {
+      schema: this.schema,
+      jsonPromptInjection: this.jsonPromptInjection,
+      ...(this.errorStrategy === 'fallback' && this.fallbackValue !== undefined
+        ? { errorStrategy: 'fallback', fallbackValue: this.fallbackValue }
+        : {
+            // Without a fallback value, preserve the processor's existing error handling.
+            errorStrategy: this.errorStrategy === 'fallback' ? 'strict' : this.errorStrategy,
+          }),
+    };
     const requestThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
     const requestResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
     const serializedMemoryInfo = messageList?.serialize().memoryInfo;
@@ -231,11 +290,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         ],
       };
 
-      const messages: MessageListInput = [
-        ...(messageList?.get?.input?.db() || []),
-        ...(messageList?.get?.response?.db() || []),
-        promptMessage,
-      ];
+      const messages: MessageListInput = [...(messageList?.get?.input?.db() || []), ...responseContext, promptMessage];
 
       const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
 
@@ -243,10 +298,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         model: this.structuringModel,
         requestContext: structuringRequestContext,
         toolChoice: 'none',
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput,
         memory: {
           thread: threadId,
           ...(resourceId ? { resource: resourceId } : {}),
@@ -261,10 +313,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     return this.structuringAgent.stream(
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput,
         providerOptions: this.providerOptions,
         ...observabilityContext,
       },
@@ -340,9 +389,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    * Generate instructions for the structuring agent based on the schema
    */
   private generateInstructions(): string {
+    const jsonSchema = standardSchemaToJSONSchema(this.schema);
+
     return `You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.
 
 TASK: Convert the provided unstructured text into valid JSON that matches the following schema:
+${JSON.stringify(jsonSchema, null, 2)}
 
 REQUIREMENTS:
 - Return ONLY valid JSON, no additional text or explanation
@@ -357,14 +409,15 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+  private handleError(context: string, error: unknown, requestState: StructuredOutputRequestState): void {
     const errorMessage = this.getErrorMessage(error);
     const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
         this.logger?.error(message, error);
-        abort(message);
+        // Only output-step tripwires participate in the processor retry loop.
+        requestState.structuredOutputError = { reason: message, error };
         break;
       case 'warn':
         this.logger?.warn(message, error);

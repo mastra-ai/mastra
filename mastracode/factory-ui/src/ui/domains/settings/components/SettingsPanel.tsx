@@ -4,7 +4,6 @@ import { Link, useLocation, useParams } from 'react-router';
 import { Brain } from 'lucide-react';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
@@ -24,14 +23,13 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
-import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { ScopeSwap, useScopeControl } from './SettingsScope';
 import type { SettingsScope } from './SettingsScope';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -51,13 +49,11 @@ export function SettingsPanel() {
   const { hash } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
 
-  // Deep links like `/settings/models#model-packs` scroll to the subsection.
   useEffect(() => {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
@@ -67,8 +63,7 @@ export function SettingsPanel() {
     baseUrl,
     enabled: resourceEnabled,
   };
-  // Session-independent: pickers (Factory default model, packs) need the
-  // catalog even before any chat session exists.
+
   const modelsQuery = useAvailableModelsQuery();
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
@@ -78,53 +73,49 @@ export function SettingsPanel() {
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();
-    // Returned so a control can hold its pending value until the write settles.
-    // No success toast: the control already shows the new value.
+
     return updateSettingsMutation
       .mutateAsync(updates)
       .catch(error => toast.error(getSettingsUpdateErrorMessage(error)));
   };
 
   return (
-    <section aria-label="Settings" className="flex flex-1 flex-col lg:px-5 lg:pb-5">
-      <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)] py-3">
-        {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
-        {section === 'account' && <AccountSettingsSection />}
-        {section === 'preferences' && <GeneralSettings />}
-        {section === 'factory' && <FactoryManagementSection />}
-        {section === 'connections' && (
-          <SettingsSubsection
-            scope="personal"
-            title="Connected accounts"
-            description="Connect your account to use Factory from Slack."
-          >
-            <ConnectedAccountsSection />
-          </SettingsSubsection>
-        )}
-        {section === 'repositories' && <RepositoriesSection />}
-        {section === 'intake' && <IntakeSection />}
-        {section === 'models' && (
-          <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
-        )}
-        {section === 'memory' && (
-          <MemorySettingsSection
-            factoryId={factoryId}
-            models={models}
-            sessionResourceId={sessionResourceId}
-            sessionScope={sessionScope}
-          />
-        )}
-        {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
-        {section === 'behavior' && (
-          <BehaviorSettings
-            settings={settings}
-            onBehaviorChange={onBehaviorChange}
-            permissions={permissions ?? null}
-            pendingPermissionCategory={pendingPermissionCategory}
-            setPermissionForCategory={setPermissionForCategory}
-          />
-        )}
-      </div>
+    <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+      {section === 'account' && <AccountSettingsSection />}
+      {section === 'preferences' && <GeneralSettings />}
+      {section === 'factory' && <FactoryManagementSection />}
+      {section === 'connections' && (
+        <SettingsSubsection
+          scope="personal"
+          title="Connected accounts"
+          description="Connect your account to use Factory from Slack."
+        >
+          <ConnectedAccountsSection />
+        </SettingsSubsection>
+      )}
+      {section === 'repositories' && <RepositoriesSection />}
+      {section === 'intake' && <IntakeSection />}
+      {section === 'models' && (
+        <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
+      )}
+      {section === 'memory' && (
+        <MemorySettingsSection
+          factoryId={factoryId}
+          models={models}
+          sessionResourceId={sessionResourceId}
+          sessionScope={sessionScope}
+        />
+      )}
+      {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'behavior' && (
+        <BehaviorSettings
+          settings={settings}
+          onBehaviorChange={onBehaviorChange}
+          permissions={permissions ?? null}
+          pendingPermissionCategory={pendingPermissionCategory}
+          setPermissionForCategory={setPermissionForCategory}
+        />
+      )}
     </section>
   );
 }
@@ -142,11 +133,6 @@ interface MemorySettingsSectionProps {
   sessionScope: string | undefined;
 }
 
-/**
- * Observational-memory settings for one scope at a time. OM models are useless
- * without a provider credential, so until one is connected the page is a
- * zero state pointing at the Models page.
- */
 function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionScope }: MemorySettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
@@ -159,7 +145,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
     return (
       <EmptyState
         as="h2"
-        iconSlot={<Brain size={40} className="text-icon3" />}
+        iconSlot={<Brain />}
         titleSlot="No models configured"
         descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
         actionSlot={
@@ -186,24 +172,18 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
       scope={scopeControl}
     >
       <ScopeSwap control={scopeControl}>
-        <SettingsCard>
+        <SettingsContainer>
           {factoryView ? (
             <OMSection key="factory" factoryId={factoryId} models={models} />
           ) : (
             <OMSection key="personal" resourceId={sessionResourceId} scope={sessionScope} models={models} />
           )}
-        </SettingsCard>
+        </SettingsContainer>
       </ScopeSwap>
     </SettingsSubsection>
   );
 }
 
-/**
- * Layered setup: until at least one provider credential is usable, model and
- * OM pickers are pointless, so the page leads with the connect step alone.
- * Once connected, model selection moves to the top and provider management
- * drops to the bottom.
- */
 function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
@@ -219,14 +199,13 @@ function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSet
         }
       />
       <SettingsSubsection scope="org" title="Custom providers">
-        <SettingsCard className="p-4">
+        <SettingsContainer className="p-4">
           <CustomProvidersSection />
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
     </>
   );
 
-  // Nothing connected yet: show only the connect step.
   if (providersKnown && !anyConnected) {
     return <div className="flex flex-col gap-8">{providerSubsections}</div>;
   }
@@ -238,28 +217,28 @@ function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSet
         title="Factory defaults"
         description="Applied to Factory runs (triage, board work items) and channel sessions."
       >
-        <SettingsCard>
+        <SettingsContainer>
           <FactoryDefaultModelSection models={models} />
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection
         scope="deployment"
         title="Thinking defaults"
         description="Fallback for every run without its own level. One settings file, shared by every Factory on this server."
       >
-        <SettingsCard>
+        <SettingsContainer>
           <BaseThinkingSection />
           <ModeThinkingDefaultsSection />
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection
         scope="factory"
         title="Chat defaults"
         description="Applied to chats opened from this Factory, and shared with everyone working in it."
       >
-        <SettingsCard>
+        <SettingsContainer>
           <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection
         scope="personal"
@@ -267,11 +246,11 @@ function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSet
         title="Your defaults"
         description="The pack you run with. Creating or removing a pack changes the list for your whole org."
       >
-        <SettingsCard>
+        <SettingsContainer>
           <div className="p-4">
             <ModelPacksSection models={models} />
           </div>
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
       {providerSubsections}
     </div>

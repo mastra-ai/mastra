@@ -4,7 +4,7 @@ import { CommandPaletteInput } from '@mastra/playground-ui/components/CommandPal
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { CREATE_FACTORY_STEPS, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
@@ -13,13 +13,10 @@ export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
   title: string;
   placeholder: string;
-  searchLabel: string;
   /** The name step types into the field instead of searching it. */
   searchable?: boolean;
   value: string;
   onValueChange: (value: string) => void;
-  /** Absent once the commit started: what the earlier steps picked is already on the server. */
-  onBack?: () => void;
   /** Steps that can be left out show it as chrome, so it never scrolls away with the rows. */
   onSkip?: () => void;
   children: ReactNode;
@@ -35,11 +32,9 @@ export function CreateFactoryPalette({
   step,
   title,
   placeholder,
-  searchLabel,
   searchable = true,
   value,
   onValueChange,
-  onBack,
   onSkip,
   children,
 }: CreateFactoryPaletteProps) {
@@ -49,43 +44,31 @@ export function CreateFactoryPalette({
     <Command
       loop
       shouldFilter={false}
-      label="Create Factory"
-      className="mx-auto flex h-[min(34rem,100%)] w-full max-w-2xl flex-col gap-2 overflow-visible bg-transparent"
+      label={title}
+      className="flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent"
     >
-      <div className="flex min-h-8 shrink-0 items-center">
-        {onBack && (
-          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onBack}>
-            <ArrowLeft aria-hidden="true" />
-            Back
-          </Button>
-        )}
+      <div className="flex shrink-0 items-center gap-3">
+        <Txt
+          key={step}
+          as="p"
+          aria-hidden="true"
+          variant="body"
+          className={cn('text-foreground min-w-0 flex-1 truncate', stepTransition)}
+        >
+          {title}
+        </Txt>
         {onSkip && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onMouseDown={event => event.preventDefault()}
-            onClick={onSkip}
-          >
+          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
             Skip
             <ArrowRight aria-hidden="true" />
           </Button>
         )}
-      </div>
-
-      <div className="flex shrink-0 items-center gap-3 px-1">
-        <Txt key={step} as="h1" variant="ui-md" className={cn('text-icon6 min-w-0 flex-1 truncate', stepTransition)}>
-          {title}
-        </Txt>
         <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
           {CREATE_FACTORY_STEPS.map((item, index) => (
             <li
               key={item}
               aria-current={item === step ? 'step' : undefined}
-              className={cn(
-                'h-1 w-6 rounded-full transition-colors',
-                index <= stepIndex ? 'bg-accent1' : 'bg-surface4',
-              )}
+              className={cn('h-1 w-6 rounded-full transition-colors', index <= stepIndex ? 'bg-accent1' : 'bg-fill')}
             />
           ))}
         </ol>
@@ -93,15 +76,11 @@ export function CreateFactoryPalette({
 
       <CommandPaletteInput
         autoFocus
-        aria-label={searchLabel}
         placeholder={placeholder}
         value={value}
         onValueChange={onValueChange}
         rightSlot={<Kbd size="sm">Esc</Kbd>}
-        wrapperClassName={cn(
-          'border-border1 bg-surface3 h-14 shrink-0 rounded-xl border px-4',
-          !searchable && '[&>svg]:hidden',
-        )}
+        wrapperClassName={cn('h-14 px-4', !searchable && '[&>svg]:hidden')}
       />
 
       <div className="flex shrink-0 items-center justify-end gap-1.5 px-1">
@@ -128,7 +107,7 @@ export function CreateFactoryPalette({
 
 export function CreateFactoryPaletteAlert({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" role="alert" variant="ui-sm" className="text-notice-destructive-fg m-0 px-3 py-2">
+    <Txt as="p" role="alert" variant="caption" className="text-notice-destructive-fg m-0 px-3 py-2">
       {children}
     </Txt>
   );
@@ -136,7 +115,7 @@ export function CreateFactoryPaletteAlert({ children }: { children: ReactNode })
 
 export function CreateFactoryPaletteMessage({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="ui-sm" className="text-icon3 m-0 px-3 py-2">
+    <Txt as="p" variant="caption" className="text-muted-foreground m-0 px-3 py-2">
       {children}
     </Txt>
   );

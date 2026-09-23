@@ -27,4 +27,5 @@ Playwright E2E (`e2e-tests-studio` skill) only when MSW can't model the journey
 (multi-page, real server, streaming, real browser concerns).
 
 Attach mobile/tablet/desktop screenshots when handing off UI changes.
+Typography: use DS tokens only (`Txt` variants, or `text-ui-*` / `text-header-*` classes). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
 Coordinate with packages/playground-ui for cross-boundary changes.

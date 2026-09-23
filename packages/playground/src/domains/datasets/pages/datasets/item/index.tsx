@@ -2,7 +2,6 @@
 
 import type { DatasetItem } from '@mastra/client-js';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
@@ -18,7 +17,7 @@ export interface DatasetItemPageProps {
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4">
       <DatasetItemContent item={item} />
     </div>
   );
@@ -34,7 +33,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-lg font-medium">
+        <h3 className="flex items-center gap-2 text-heading">
           <FileInputIcon className="h-5 w-5" /> Dataset Item
         </h3>
         <TextAndIcon>
@@ -42,7 +41,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         </TextAndIcon>
       </div>
 
-      <Sections>
+      <div className="grid gap-6">
         <KeyValueList
           data={[
             {
@@ -83,7 +82,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         />
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-      </Sections>
+      </div>
     </>
   );
 }

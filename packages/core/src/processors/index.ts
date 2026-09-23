@@ -10,7 +10,13 @@ import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap, TracingContext } from '../observability';
+import type {
+  ObservabilityContext,
+  ProcessorSpanPhase as ObservabilityProcessorSpanPhase,
+  ProcessorSpanType,
+  SpanTypeMap,
+  TracingContext,
+} from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
@@ -173,6 +179,8 @@ export interface ProcessOutputResultArgs<
  * The actual schema type is only known at the generate()/stream() call site.
  */
 export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The active agent run ID, when this processor is running inside an agent loop */
+  runId?: string;
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
@@ -342,6 +350,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   prompt: LanguageModelV2Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
+  /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
+  messageList?: MessageList;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */
@@ -594,16 +604,11 @@ export interface ProcessorViolation<TDetail = unknown> {
  * Pipeline phase a processor span is created for. One value per site where the
  * processor runner creates a span, so a processor that runs in more than one
  * phase can name and describe each of them differently.
+ *
+ * Defined in the observability types because `ProcessorPipelineAttributes`
+ * records it on the span; re-exported here as the name processors use.
  */
-export type ProcessorSpanPhase =
-  | 'input'
-  | 'inputStep'
-  | 'llmRequest'
-  | 'llmResponse'
-  | 'output'
-  | 'outputStep'
-  | 'toolResult'
-  | 'requestError';
+export type ProcessorSpanPhase = ObservabilityProcessorSpanPhase;
 
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
@@ -624,9 +629,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * declared span type labels the span with the subsystem it came from, so the
    * trace shows where it originated instead of an anonymous processor entry.
    *
-   * The runner keeps setting `entityType` (which phase the processor ran in)
-   * and the `ProcessorPipelineAttributes` fields either way, so retyping never
-   * loses the processor's position in the chain or its mutation log.
+   * The runner keeps setting `entityType` and the `ProcessorPipelineAttributes`
+   * fields either way — including `processorPhase`, which is what a reader
+   * narrows the span's payloads on — so retyping never loses the processor's
+   * position in the chain, its mutation log, or the readable view of its
+   * input and output.
    */
   readonly spanType?: ProcessorSpanType;
   /**
@@ -969,7 +976,12 @@ export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
-export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
+export {
+  ProviderHistoryCompat,
+  anthropicToolIdFormat,
+  cerebrasStripReasoningContent,
+  openaiOrphanItemId,
+} from './provider-history-compat';
 export {
   isBadRequestError,
   isRetryableOpenAIResponsesStreamError,
@@ -983,6 +995,13 @@ export {
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export { createProcessorSendSignal } from './send-signal';
+export { createBackgroundWorkSignalProcessor } from './background-work-signals';
+export type {
+  BackgroundWorkDisposition,
+  BackgroundWorkInvocationKind,
+  BackgroundWorkLifecyclePayload,
+  BackgroundWorkTerminalStatus,
+} from './background-work-signals';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

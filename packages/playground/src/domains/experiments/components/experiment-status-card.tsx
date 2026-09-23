@@ -5,7 +5,7 @@ import { Colors } from '@mastra/playground-ui/tokens';
 import { useMemo } from 'react';
 
 const STATUS_COLORS = {
-  completed: Colors.neutral3,
+  completed: Colors['muted-foreground'],
   running: '#facc15',
   pending: '#fb923c',
   failed: '#f87171',
@@ -44,7 +44,7 @@ export function ExperimentStatusCard({ experiments, datasets, isLoading, isError
         byDataset.set(key, { completed: 0, running: 0, pending: 0, failed: 0 });
       }
       const counts = byDataset.get(key)!;
-      const status = exp.status as keyof typeof counts;
+      const status = exp.status;
       if (status in counts) {
         counts[status]++;
       }

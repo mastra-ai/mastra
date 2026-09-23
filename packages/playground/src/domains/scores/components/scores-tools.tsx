@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { XIcon } from 'lucide-react';
 
@@ -15,7 +14,7 @@ type ScoresToolsProps = {
 
 export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOptions, isLoading }: ScoresToolsProps) {
   return (
-    <ButtonsGroup>
+    <div className="flex items-center gap-2">
       <SelectFieldBlock
         label="Filter by Entity"
         labelIsHidden={true}
@@ -34,10 +33,10 @@ export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOpt
       />
 
       {selectedEntity && selectedEntity.value !== 'all' && (
-        <Button onClick={onReset} disabled={isLoading} size="sm" variant="default">
-          <XIcon className="size-3" /> Reset
+        <Button onClick={onReset} disabled={isLoading} size="sm" variant="default" icon={<XIcon />}>
+          Reset
         </Button>
       )}
-    </ButtonsGroup>
+    </div>
   );
 }

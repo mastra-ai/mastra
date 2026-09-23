@@ -174,7 +174,6 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(SECONDARY_TITLE, 'i'), terminal);
     terminal.write('Knowledge E2E Secondary');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: Knowledge E2E Secondary/i, terminal);
 
     terminal.submit('/knowledge');
     await runtime.waitForScreenText(/\[scopes\]/i, terminal);

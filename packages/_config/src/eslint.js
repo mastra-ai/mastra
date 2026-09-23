@@ -74,20 +74,6 @@ export const createConfig = async ({ e18e = false } = {}) =>
       },
     },
 
-    // Suggest replacing dependencies for native or smaller ones
-    // https://e18e.dev/docs/replacements/
-    e18e
-      ? {
-          files: ['**/*.ts?(x)', '**/*.js?(x)'],
-          plugins: {
-            depend: (await import('eslint-plugin-depend')).default,
-          },
-          rules: {
-            'depend/ban-dependencies': ERROR,
-          },
-        }
-      : null,
-
     // non-test files only - console and debugger rules
     {
       files: ['**/*.ts?(x)', '**/*.js?(x)'],

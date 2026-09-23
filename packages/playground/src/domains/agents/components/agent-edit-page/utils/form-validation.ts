@@ -234,7 +234,8 @@ export const agentFormSchema = z.object({
   workspace: z
     .discriminatedUnion('type', [
       z.object({ type: z.literal('id'), workspaceId: z.string() }),
-      z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
+      z.object({ type: z.literal('inline'), config: z.object({ name: z.string() }).catchall(z.unknown()) }),
+      z.object({ type: z.literal('provider'), provider: z.string(), config: z.record(z.string(), z.unknown()) }),
     ])
     .optional(),
 });

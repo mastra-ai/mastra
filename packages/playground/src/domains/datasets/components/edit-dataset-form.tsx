@@ -1,7 +1,9 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, X } from 'lucide-react';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
@@ -167,17 +169,22 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
       />
 
-      {formState.validationError && (
-        <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
-          <p className="text-sm text-red-200">{formState.validationError}</p>
+      {formState.validationError ? (
+        <div role="alert">
+          <Notice variant="destructive">{formState.validationError}</Notice>
         </div>
-      )}
+      ) : null}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" onClick={onCancel}>
+        <Button icon={<X />} type="button" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" disabled={updateDataset.isPending || !formState.name.trim()}>
+        <Button
+          icon={<Check />}
+          type="submit"
+          variant="primary"
+          disabled={updateDataset.isPending || !formState.name.trim()}
+        >
           {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>

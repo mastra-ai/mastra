@@ -1,4 +1,3 @@
-import { CircleSlashIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '../../../ds/components/Checkbox';
 import { CodeDiff } from '../../../ds/components/CodeDiff';
@@ -43,40 +42,40 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   if (nested) {
     return {
       card: 'bg-transparent border-transparent',
-      text: 'text-neutral3',
-      time: 'text-icon3',
+      text: 'text-muted-foreground',
+      time: 'text-muted-foreground',
     };
   }
   switch (priority) {
     case 'high':
       return {
         card: 'border-purple-400/30 bg-purple-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-purple-200/80',
       };
     case 'medium':
       return {
         card: 'border-blue-400/30 bg-blue-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-blue-200/80',
       };
     case 'low':
       return {
         card: 'border-emerald-400/30 bg-emerald-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-emerald-200/80',
       };
     case 'complete':
       return {
         card: 'border-green-400/30 bg-green-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-green-200/80',
       };
     default:
       return {
-        card: 'border-border1 bg-surface2',
-        text: 'text-neutral6',
-        time: 'text-icon3',
+        card: 'border-border bg-background',
+        text: 'text-foreground',
+        time: 'text-muted-foreground',
       };
   }
 }
@@ -185,7 +184,7 @@ function parseObservations(raw: string): ParsedSection[] {
 
 function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nested?: boolean }) {
   return (
-    <div className={nested ? 'border-border1 space-y-2 border-l pl-4' : 'space-y-3'}>
+    <div className={nested ? 'space-y-2 border-l border-border pl-4' : 'space-y-3'}>
       {items.map((item, i) => {
         const styles = priorityClasses(item.priority, nested);
         return (
@@ -193,11 +192,11 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
             <div className="flex items-start gap-3">
               <div className="w-12 shrink-0 pt-2 text-right">
                 {item.time && (
-                  <span className={`text-ui-xs font-mono ${styles.time}`}>{formatObservationTime(item.time)}</span>
+                  <span className={`font-mono text-meta ${styles.time}`}>{formatObservationTime(item.time)}</span>
                 )}
               </div>
               <div className={cn('min-w-0 flex-1 rounded-md border px-3 py-2', styles.card)}>
-                <p className={cn('text-sm leading-6 break-words whitespace-pre-wrap', styles.text)}>{item.text}</p>
+                <p className={cn('text-body break-words whitespace-pre-wrap', styles.text)}>{item.text}</p>
                 {item.children.length > 0 && (
                   <div className="mt-3">
                     <ObservationItems items={item.children} nested />
@@ -215,16 +214,16 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
 function ObservationContent({ observations }: { observations: string }) {
   const sections = useMemo(() => parseObservations(observations), [observations]);
   if (sections.length === 0) {
-    return <p className="text-icon3 text-xs italic">Initialized</p>;
+    return <p className="text-caption text-muted-foreground italic">Initialized</p>;
   }
   return (
     <div className="space-y-5">
       {sections.map((section, i) => (
         <section key={`${section.title}-${i}`} className="space-y-3">
-          <div className="border-border1 flex items-baseline justify-between gap-3 border-b pb-2">
+          <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
             <div className="min-w-0">
-              <h3 className="text-neutral6 text-xs font-medium">{section.title}</h3>
-              {section.relativeTime && <p className="text-icon3 text-ui-xs">{section.relativeTime}</p>}
+              <h3 className="text-column text-foreground">{section.title}</h3>
+              {section.relativeTime && <p className="text-meta text-muted-foreground">{section.relativeTime}</p>}
             </div>
           </div>
           <ObservationItems items={section.items} />
@@ -246,9 +245,9 @@ function ObservationHistoryPanel({
   if (records.length <= 1) return null;
 
   return (
-    <div className="border-border1 flex w-50 min-w-45 flex-col overflow-hidden border-l">
-      <div className="border-border1 border-b px-4 py-2">
-        <p className="text-neutral6 text-sm font-normal">History</p>
+    <div className="flex w-50 min-w-45 flex-col overflow-hidden border-l border-border">
+      <div className="border-b border-border px-4 py-2">
+        <p className="text-body text-foreground">History</p>
       </div>
       <div className="flex-1 overflow-y-auto">
         {records.map(record => {
@@ -258,13 +257,13 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-xs transition-all hover:bg-surface3/50',
-                isSelected && 'border-l-accent1 bg-surface3/50',
+                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
+                isSelected && 'border-l-accent1 bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
               {record.activeObservations || (
-                <span className="text-icon3 italic">
+                <span className="text-muted-foreground italic">
                   {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
                 </span>
               )}
@@ -319,13 +318,11 @@ export function ObservationDetailView({
 
   if (!selected) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="size-4" />}
-          titleSlot="No observations"
-          descriptionSlot="No observational memory snapshots available for this thread."
-        />
-      </div>
+      <EmptyState
+        titleSlot="No observations"
+        descriptionSlot="No observational memory snapshots available for this thread."
+        variant="fill"
+      />
     );
   }
 
@@ -336,11 +333,11 @@ export function ObservationDetailView({
       {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {previousRecord && (
-          <div className="border-border1 border-b px-4 py-2">
+          <div className="border-b border-border px-4 py-2">
             <div className="flex items-start justify-end gap-3">
-              <label className="flex cursor-pointer items-center gap-1.5">
+              <label className="flex cursor-pointer items-center gap-1.5 text-caption">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <span className="text-icon3 text-xs">Show diff</span>
+                <span className="text-caption text-muted-foreground">Show diff</span>
               </label>
             </div>
           </div>
@@ -355,7 +352,7 @@ export function ObservationDetailView({
           ) : activeObservations ? (
             <ObservationContent observations={activeObservations} />
           ) : (
-            <p className="text-icon3 text-xs italic">
+            <p className="text-caption text-muted-foreground italic">
               {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
             </p>
           )}

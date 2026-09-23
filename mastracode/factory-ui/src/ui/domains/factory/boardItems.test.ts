@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { workItemMeta } from './boardItems';
+import { externalLinkLabel, metadataLabelColors, workItemMeta } from './boardItems';
 import type { WorkItem } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -51,5 +51,45 @@ describe('workItemMeta', () => {
       metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: 'not-a-date' },
     });
     expect(workItemMeta(item)).toBe('#22765 · LekoArts · just now');
+  });
+
+  it('shows the Jira assignee instead of the reporter', () => {
+    const item = workItem({
+      source: 'jira-issue',
+      sourceKey: 'jira-issue-1',
+      metadata: { identifier: 'ENG-42', author: 'Grace', assignee: 'Ada' },
+    });
+    expect(workItemMeta(item)).toBe('ENG-42 · Ada · just now');
+  });
+
+  it('shows the incident.io identifier and assignee like other issue sources', () => {
+    const item = workItem({
+      source: 'incidentio-follow-up',
+      sourceKey: 'incidentio:follow-up:01HFOLLOWUP',
+      metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
+    });
+    expect(workItemMeta(item)).toBe('INC-42 · Grace Hopper · just now');
+  });
+
+  it('names a GitLab merge request by its IID and links to GitLab', () => {
+    expect(
+      workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
+    ).toBe('!5 · Rhys · just now');
+    expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
+  });
+});
+
+describe('metadataLabelColors', () => {
+  it('keeps safe provider colors and rejects arbitrary CSS values', () => {
+    expect(
+      metadataLabelColors({
+        labelColors: {
+          bug: '#d73a4a',
+          documentation: 'rebeccapurple',
+          unsafe: 'url(https://example.com/tracker)',
+          malformed: '#12345',
+        },
+      }),
+    ).toEqual({ bug: '#d73a4a', documentation: 'rebeccapurple' });
   });
 });

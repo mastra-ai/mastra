@@ -1,4 +1,17 @@
-const RETRYABLE_NETWORK_ERROR_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND']);
+const RETRYABLE_NETWORK_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'EAI_AGAIN',
+  'EPIPE',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
 
 export function isRetryablePollingError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
@@ -15,6 +28,10 @@ export function isRetryablePollingError(error: unknown): boolean {
   ) {
     return true;
   }
+
+  // A specific non-retryable cause (for example a certificate error) takes
+  // precedence over fetch's generic TypeError message.
+  if (code !== undefined || causeCode !== undefined) return false;
 
   return error instanceof TypeError && error.message.toLowerCase().includes('fetch failed');
 }
@@ -44,7 +61,30 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export async function withPollingRetries<T>(fn: () => Promise<T>, maxRetries = 3, signal?: AbortSignal): Promise<T> {
+export interface PollingRetryOptions {
+  /** Retries after the initial attempt. Use Infinity with a deadline signal to retry until cancellation. */
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  shouldRetry?: (error: unknown) => boolean;
+  onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
+}
+
+export async function withPollingRetries<T>(
+  fn: () => Promise<T>,
+  retries: number | PollingRetryOptions = 3,
+  signal?: AbortSignal,
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    initialDelayMs = 500,
+    maxDelayMs = Infinity,
+    shouldRetry = isRetryablePollingError,
+    onRetry,
+  } = typeof retries === 'number' ? { maxRetries: retries } : retries;
+  if (maxRetries === Infinity && !signal) {
+    throw new Error('Unlimited polling retries require an AbortSignal');
+  }
   let retryCount = 0;
 
   while (true) {
@@ -59,12 +99,30 @@ export async function withPollingRetries<T>(fn: () => Promise<T>, maxRetries = 3
         throw abortReason(signal);
       }
 
-      if (!isRetryablePollingError(error) || retryCount >= maxRetries) {
+      if (!shouldRetry(error) || retryCount >= maxRetries) {
         throw error;
       }
 
-      await delay(500 * Math.pow(2, retryCount), signal);
+      const delayMs = Math.min(initialDelayMs * Math.pow(2, retryCount), maxDelayMs);
+      onRetry?.(error, retryCount + 1, delayMs);
+      await delay(delayMs, signal);
       retryCount += 1;
     }
   }
+}
+
+/** Sleep that resolves early, without throwing, when the signal aborts. */
+export function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal?.aborted) return resolve();
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }

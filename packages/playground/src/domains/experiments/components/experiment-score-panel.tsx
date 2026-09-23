@@ -2,25 +2,18 @@
 
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { ChevronsDownUpIcon, ChevronsUpDownIcon, GaugeIcon, ReceiptText } from 'lucide-react';
-import { useState } from 'react';
+import { GaugeIcon, ReceiptText } from 'lucide-react';
 
 export type ExperimentScorePanelProps = {
-  score: ClientScoreRowData;
+  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
+  score?: ClientScoreRowData;
   onNext?: () => void;
   onPrevious?: () => void;
   onClose: () => void;
   /** When provided, a Trace button appears in the header; hidden when `score.traceId` is absent. */
   onShowTrace?: () => void;
-  /** Controlled collapsed state. When omitted, the panel manages its own state. */
-  collapsed?: boolean;
-  /** When provided, the collapse button appears in the header and notifies the parent on toggle. */
-  onCollapsedChange?: (collapsed: boolean) => void;
-  /** Extra classes applied to the panel root (e.g. when rendered inside the result panel split). */
-  className?: string;
 };
 
 function isCodeBasedScorer(score: ClientScoreRowData): boolean {
@@ -30,98 +23,96 @@ function isCodeBasedScorer(score: ClientScoreRowData): boolean {
   return !score.preprocessPrompt && !score.analyzePrompt && !score.generateScorePrompt && !score.generateReasonPrompt;
 }
 
-export function ExperimentScorePanel({
+export function ExperimentScorePanel({ score, onNext, onPrevious, onClose, onShowTrace }: ExperimentScorePanelProps) {
+  return (
+    <DataPanel open={!!score} onClose={onClose} title={score ? `Score ${score.scorerId}` : 'Score'} depth={2}>
+      {score && (
+        <ExperimentScorePanelBody
+          score={score}
+          onNext={onNext}
+          onPrevious={onPrevious}
+          onClose={onClose}
+          onShowTrace={onShowTrace}
+        />
+      )}
+    </DataPanel>
+  );
+}
+
+function ExperimentScorePanelBody({
   score,
   onNext,
   onPrevious,
   onClose,
   onShowTrace,
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
-  className,
-}: ExperimentScorePanelProps) {
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = controlledCollapsed ?? internalCollapsed;
-  const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
-
+}: Omit<ExperimentScorePanelProps, 'score'> & { score: ClientScoreRowData }) {
   const isCodeBased = isCodeBasedScorer(score);
   const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
 
   return (
-    <DataPanel collapsed={collapsed} className={className}>
+    <>
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close score panel" />
         <DataPanel.Heading>
-          Score <b>{score.scorerId}</b>
+          Score
+          <DataPanel.CopyId id={score.scorerId} />
         </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
-          {onCollapsedChange && (
-            <Button
-              size="md"
-              tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+        <DataPanel.HeaderActions>
+          {onShowTrace && score.traceId && (
+            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+              <TraceIcon />
             </Button>
           )}
           {(onPrevious || onNext) && (
             <DataPanel.NextPrevNav
               onPrevious={onPrevious}
               onNext={onNext}
-              previousLabel="Previous score"
-              nextLabel="Next score"
+              previousLabel="Go to previous score"
+              nextLabel="Go to next score"
             />
           )}
-          {onShowTrace && score.traceId && (
-            <Button size="md" onClick={onShowTrace}>
-              <TraceIcon />
-              Trace
-            </Button>
-          )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close score panel" />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
-      {!collapsed && (
-        <DataPanel.Content>
-          <div className="grid gap-3">
-            <DataPanel.CodeSection
-              title={`Score: ${score.score}`}
-              icon={<GaugeIcon />}
-              codeStr={score.reason || naText}
-              simplified
-            />
+      <DataPanel.Content>
+        <div className="grid gap-3">
+          <DataPanel.CodeSection
+            title={`Score: ${score.score}`}
+            icon={<GaugeIcon />}
+            codeStr={score.reason || naText}
+            simplified
+          />
 
-            {!isCodeBased && (
-              <>
-                <DataPanel.CodeSection
-                  title="Preprocess Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.preprocessPrompt || naText}
-                  simplified
-                />
-                <DataPanel.CodeSection
-                  title="Analyze Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.analyzePrompt || naText}
-                  simplified
-                />
-                <DataPanel.CodeSection
-                  title="Generate Score Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.generateScorePrompt || naText}
-                  simplified
-                />
-                <DataPanel.CodeSection
-                  title="Generate Reason Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.generateReasonPrompt || naText}
-                  simplified
-                />
-              </>
-            )}
-          </div>
-        </DataPanel.Content>
-      )}
-    </DataPanel>
+          {!isCodeBased && (
+            <>
+              <DataPanel.CodeSection
+                title="Preprocess Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.preprocessPrompt || naText}
+                simplified
+              />
+              <DataPanel.CodeSection
+                title="Analyze Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.analyzePrompt || naText}
+                simplified
+              />
+              <DataPanel.CodeSection
+                title="Generate Score Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.generateScorePrompt || naText}
+                simplified
+              />
+              <DataPanel.CodeSection
+                title="Generate Reason Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.generateReasonPrompt || naText}
+                simplified
+              />
+            </>
+          )}
+        </div>
+      </DataPanel.Content>
+    </>
   );
 }

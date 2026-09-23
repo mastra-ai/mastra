@@ -11,15 +11,19 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { createObservabilityContext } from '@mastra/core/observability';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
+import { skillResultRedactor } from '../hooks';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
+import { ObserverRunner } from '../observer-runner';
 import type { ContinuationHintsConfig, ObserveHooks } from '../types';
 
 // =============================================================================
@@ -71,6 +75,61 @@ function createWorkingMemoryStateSignal(id: string, createdAt = new Date()): Mas
       },
     },
   };
+}
+
+/**
+ * Build an assistant message that activates a skill the way the pipeline
+ * persists it: the call streams in first, the result then merges into it, so a
+ * single terminal `state: 'result'` part carries the tool name and arguments.
+ * Returning it through `MessageList` keeps the fixture honest instead of
+ * hand-writing a call part + result part pair that never reaches storage.
+ */
+function createPersistedSkillMessage(
+  id: string,
+  threadId: string,
+  result = 'SECRET_SKILL_INSTRUCTIONS',
+): MastraDBMessage {
+  const messageList = new MessageList();
+  const createdAt = new Date();
+  messageList.add(
+    {
+      ...createTestMessage('', 'assistant', id, createdAt),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'skill-call', toolName: 'skill', args: { name: 'pdf' } },
+          },
+        ],
+      } as MastraMessageContentV2,
+    },
+    'response',
+  );
+  messageList.add(
+    {
+      ...createTestMessage('', 'assistant', id, createdAt),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'skill-call',
+              toolName: 'skill',
+              args: { name: 'pdf' },
+              result,
+            },
+          },
+        ],
+      } as MastraMessageContentV2,
+    },
+    'response',
+  );
+  return messageList.get.all.db()[0]!;
 }
 
 /** Generate N messages with padding to exceed token thresholds. */
@@ -839,6 +898,34 @@ name: Tyler
       expect(onObservationEnd).toHaveBeenCalledOnce();
       const record = await transformOm.getRecord(threadId);
       expect(record?.observedMessageIds).toContain(messages[0]!.id);
+    });
+
+    it('skillResultRedactor keeps skill results out of the observer prompt end-to-end', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: skillResultRedactor() } });
+      const messages = createBulkMessages(10, threadId);
+      // Build the skill message the way the pipeline persists it: the call
+      // streams first, the result then merges into it, leaving a single
+      // terminal `state: 'result'` part carrying the arguments. A hand-written
+      // call part + result part pair never reaches persistence, and the
+      // Observer reads the `Tool Call` line off the terminal part.
+      const skillMessage = createPersistedSkillMessage(`${threadId}-skill`, threadId);
+      // Guard the fixture itself: if the call and result did not collapse, the
+      // test would pass without exercising the shape production persists.
+      const skillParts = skillMessage.content.parts as Array<{ toolInvocation?: { state?: string } }>;
+      expect(skillParts).toHaveLength(1);
+      expect(skillParts[0]!.toolInvocation?.state).toBe('result');
+      messages.push(skillMessage);
+
+      await transformOm.observe({ threadId, resourceId: 'res-1', messages });
+
+      expect(prompts()).toContain('Message 0');
+      expect(prompts()).toContain('Tool Call skill');
+      expect(prompts()).not.toContain('SECRET_SKILL_INSTRUCTIONS');
+      // Filtered messages are still marked as observed.
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(`${threadId}-skill`);
     });
 
     it('afterObservation can replace the observation text before it is persisted', async () => {
@@ -4237,6 +4324,35 @@ describe('config-level hooks', () => {
       }),
     );
     expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
+  });
+
+  it('forwards the caller observability context through triggerAsyncBuffering to the observer', async () => {
+    const observabilityContext = createObservabilityContext({});
+    const observerCall = vi.spyOn(ObserverRunner.prototype, 'call');
+    try {
+      const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+      const messages = createBulkMessages(5, threadId);
+      await storage.saveMessages({ messages });
+      const status = await om.getStatus({ threadId, messages });
+
+      expect(
+        await om.triggerAsyncBuffering({
+          threadId,
+          record: status.record,
+          pendingTokens: status.pendingTokens,
+          unbufferedPendingTokens: status.pendingTokens,
+          unobservedMessages: messages,
+          threshold: status.threshold,
+          observabilityContext,
+        }),
+      ).toBe(true);
+      await om.waitForBuffering(threadId, undefined, 5000);
+
+      expect(observerCall).toHaveBeenCalledOnce();
+      expect(observerCall.mock.calls[0]?.[3]?.observabilityContext).toBe(observabilityContext);
+    } finally {
+      observerCall.mockRestore();
+    }
   });
 
   it('fires config-level hooks on the fire-and-forget triggerAsyncBuffering lane', async () => {

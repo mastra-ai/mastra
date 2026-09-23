@@ -1,14 +1,1 @@
-import type { NoticeVariant } from '@/ds/components/Notice';
-
-export const getNotificationNoticeVariant = (priority: string | undefined): NoticeVariant => {
-  switch (priority) {
-    case 'urgent':
-      return 'destructive';
-    case 'high':
-      return 'warning';
-    case 'medium':
-      return 'info';
-    default:
-      return 'note';
-  }
-};
+export { getNotificationNoticeVariant } from '@/ds/components/ai/chat-event/notification-variant';

@@ -1,10 +1,11 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { WorkflowCardCondition as Condition } from '@mastra/playground-ui/components/Workflow';
 import type { ResolvedWorkflowStep } from '@mastra/react';
 import type { Node } from '@xyflow/react';
-import type { Condition } from './utils';
 
 export const WORKFLOW_STEP_NODE_TYPE = 'workflow-step-node';
-export const WORKFLOW_BOUNDARY_NODE_TYPE = 'workflow-boundary-node';
+export { WORKFLOW_BOUNDARY_NODE_TYPE } from '@mastra/playground-ui/components/Workflow';
+export type { WorkflowBoundaryNodeModel as WorkflowBoundaryNode } from '@mastra/playground-ui/components/Workflow';
 
 export type WorkflowStepNodeData = {
   label: string;
@@ -18,6 +19,8 @@ export type WorkflowStepNodeData = {
   duration?: number;
   date?: Date;
   isParallel?: boolean;
+  parallelGroup?: { id: string; pathCount: number };
+  mapContext?: { label: string; description: string };
   canSuspend?: boolean;
   isForEach?: boolean;
   isLarge?: boolean;
@@ -29,13 +32,6 @@ export type WorkflowStepNodeData = {
 };
 
 export type WorkflowStepNode = Node<WorkflowStepNodeData, typeof WORKFLOW_STEP_NODE_TYPE>;
-
-export type WorkflowBoundaryNodeData = {
-  label: 'Start' | 'End';
-  boundaryRole: 'start' | 'end';
-};
-
-export type WorkflowBoundaryNode = Node<WorkflowBoundaryNodeData, typeof WORKFLOW_BOUNDARY_NODE_TYPE>;
 
 type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
 export type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &
@@ -63,6 +59,9 @@ export const unwrapInnerEntry = (
   }
   if (inner.type === 'mapping') {
     return { id: inner.id, description: undefined, component: undefined, mapConfig: inner.mapConfig };
+  }
+  if (inner.type === 'classifier') {
+    return { id: inner.id, description: undefined, component: undefined };
   }
   return { id: inner.id, description: inner.description, component: undefined };
 };
@@ -105,6 +104,12 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
     case 'tool':
       return {
         kind: 'tool-step',
+        id: flow.id,
+        flow,
+      };
+    case 'classifier':
+      return {
+        kind: 'classifier-step',
         id: flow.id,
         flow,
       };
@@ -167,7 +172,7 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
           description: flow.description,
           component: 'WORKFLOW',
           serializedStepFlow: flow.serializedStepFlow,
-        } as never,
+        },
         flow,
       };
   }

@@ -1,4 +1,4 @@
-import { calculatePagination, normalizePerPage } from '../../base';
+import { calculatePagination, compareByField, normalizePerPage, resolveListOrderBy } from '../../base';
 import type {
   DatasetRecord,
   DatasetItem,
@@ -71,6 +71,10 @@ function toDatasetRecord(record: InternalDatasetRecord): DatasetRecord {
     inputSchema: record.inputSchema ?? undefined,
     groundTruthSchema: record.groundTruthSchema ?? undefined,
     requestContextSchema: record.requestContextSchema ?? undefined,
+    tags: record.tags ?? undefined,
+    targetType: record.targetType ?? undefined,
+    targetIds: record.targetIds ?? undefined,
+    scorerIds: record.scorerIds ?? undefined,
   };
 }
 
@@ -210,8 +214,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    // Sort by createdAt descending (newest first)
-    datasets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    datasets.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
@@ -519,8 +526,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    // Sort by createdAt descending, then by id descending for stability
-    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    items.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);

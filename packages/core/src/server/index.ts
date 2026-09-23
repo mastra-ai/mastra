@@ -1,9 +1,16 @@
-import type { Handler, MiddlewareHandler } from 'hono';
-import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { ApiRoute, ApiRouteHandler, CorsOptions, MastraAuthConfig, Methods } from './types';
+import type {
+  ApiRoute,
+  ApiRouteHandler,
+  CorsOptions,
+  MastraAuthConfig,
+  Methods,
+  Handler,
+  MiddlewareHandler,
+  DescribeRouteOptions,
+} from './types';
 
 export type {
   MastraAuthConfig,
@@ -19,6 +26,9 @@ export type {
   ValidationErrorHook,
   StudioConfig,
   Middleware,
+  Handler,
+  MiddlewareHandler,
+  DescribeRouteOptions,
 } from './types';
 export {
   MastraAuthProvider,

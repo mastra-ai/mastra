@@ -1,3 +1,4 @@
+import { CHART_TICK_FONT_SIZE } from '@mastra/playground-ui/tokens';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from './chart-card';
 const LABEL_COLOR = '#a1a1aa';
@@ -29,12 +30,12 @@ export function DashboardLineChart({
             <div key={s.dataKey}>
               <div className="flex items-center gap-2">
                 <div className="h-0.5 w-3 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="text-ui-xs text-neutral3 uppercase">{s.label}</span>
+                <span className="text-meta text-muted-foreground uppercase">{s.label}</span>
               </div>
               {aggregated && (
-                <p className="text-ui-md text-neutral4 pl-5">
+                <p className="pl-5 text-body text-muted-foreground">
                   {aggregated.value}
-                  {aggregated.suffix && <span className="text-ui-sm text-neutral2"> {aggregated.suffix}</span>}
+                  {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
                 </p>
               )}
             </div>
@@ -47,13 +48,13 @@ export function DashboardLineChart({
             <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               interval={5}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               width={30}

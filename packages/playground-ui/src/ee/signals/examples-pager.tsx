@@ -1,3 +1,4 @@
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 
 export const EXAMPLES_PAGE_SIZE = 5;
@@ -19,18 +20,18 @@ export function ExamplesPager({
   return (
     <nav aria-label="Example pages" className="mt-3 flex items-center gap-3">
       <Button
-        variant="outline"
+        icon={<ChevronLeft />}
         size="sm"
         disabled={page <= 1}
         onClick={() => onOffsetChange((page - 2) * EXAMPLES_PAGE_SIZE)}
       >
         Previous
       </Button>
-      <span className="text-neutral3 font-mono text-xs tabular-nums">
+      <span className="font-mono text-caption text-muted-foreground tabular-nums">
         Page {page} of {totalPages}
       </span>
       <Button
-        variant="outline"
+        icon={<ChevronRight />}
         size="sm"
         disabled={page >= totalPages}
         onClick={() => onOffsetChange(page * EXAMPLES_PAGE_SIZE)}

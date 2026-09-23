@@ -14,6 +14,7 @@ import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { observationalMemory, threadMessages } from '../../__tests__/fixtures/memory-panel';
 import { MemorySidebar } from '../memory-sidebar';
 import {
+  cappedTokenLimitedMemoryConfig,
   memoryDisabledStatus,
   memoryEnabledStatus,
   observationalMemoryConfig,
@@ -22,6 +23,7 @@ import {
   observationalMemoryWithRecord,
   semanticRecallConfig,
   threadMessagesSpan,
+  tokenLimitedMemoryConfig,
 } from './fixtures/memory';
 import {
   ObservationalMemoryProvider,
@@ -203,6 +205,33 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('MemorySidebar', () => {
+  describe.each([
+    {
+      name: 'history is token-limited without a message cap',
+      config: tokenLimitedMemoryConfig,
+      description: 'Includes recent message history with a 4000-token context budget, trimming oldest history first.',
+      badge: '',
+    },
+    {
+      name: 'history has both message and token limits',
+      config: cappedTokenLimitedMemoryConfig,
+      description: 'Includes the last 20 messages with a 4000-token context budget, trimming oldest history first.',
+      badge: '20',
+    },
+  ])('when $name', ({ config, description, badge }) => {
+    it('describes the configured history limits rather than rendering an object as a message count', async () => {
+      server.use(http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(config)));
+      renderSidebar([thread({ id: THREAD_ID, title: 'Token-limited chat' })]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('memory-config-badges').textContent).toBe(badge);
+      });
+      expect(screen.getByTestId('memory-config-badges').textContent).not.toContain('[object Object]');
+      fireEvent.click(screen.getByTestId('memory-sidebar-card'));
+      expect(await screen.findByText(description)).not.toBeNull();
+    });
+  });
+
   it('renders the Memory card as an overlay above the thread list by default', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
@@ -219,13 +248,12 @@ describe('MemorySidebar', () => {
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
-    expect(card.className).toContain('bg-transparent');
     expect(screen.getByTestId('memory-config-badges')).not.toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
     // The sidebar is still a single standalone bordered block with no nested container.
-    const blocks = container.querySelectorAll('.bg-surface3.border-border1\\/50');
+    const blocks = container.querySelectorAll('.bg-card.border-border\\/50');
     expect(blocks.length).toBe(1);
   });
 

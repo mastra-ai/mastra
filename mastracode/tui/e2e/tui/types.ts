@@ -6,8 +6,13 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'account-rotation'
+  | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-expected-reply-watchdog'
+  | 'agent-connections-tool-flow'
+  | 'agent-connections-notification-signal'
   | 'agents-md-autoload'
   | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
@@ -17,6 +22,15 @@ export type ScenarioName =
   | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'automated-chat-unix-pubsub'
+  | 'background-adoption-deferred'
+  | 'background-adoption-awaited'
+  | 'background-adoption-cancel'
+  | 'background-adoption-failure'
+  | 'background-placeholder-opt-in'
+  | 'background-placeholder-opt-out'
+  | 'background-subagents'
+  | 'background-tools-settings'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'
@@ -29,6 +43,7 @@ export type ScenarioName =
   | 'browser-wizard-browserbase'
   | 'browser-wizard-export'
   | 'clipboard-image-paste'
+  | 'connect-command'
   | 'commit-attribution-prompt'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
@@ -39,6 +54,7 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-provider-modal-validation'
   | 'custom-provider-model-selector'
+  | 'cross-agent-settings'
   | 'custom-slash-command'
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'
@@ -60,8 +76,14 @@ export type ScenarioName =
   | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
+  | 'goal-max-runs-ends-goal'
+  | 'goal-resume-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
+  | 'initial-prompt'
+  | 'initial-prompt-skill'
+  | 'initial-prompt-resume'
+  | 'tui-prompt-resume'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
@@ -115,6 +137,7 @@ export type ScenarioName =
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
+  | 'notification-signal-interrupt'
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
@@ -148,8 +171,10 @@ export type ScenarioName =
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
   | 'shell-passthrough-nonpersistent'
+  | 'skill-tab-autocomplete'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
+  | 'status-footer-inline-start'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
@@ -232,7 +257,10 @@ export type McE2eStartMastraCodeAppOptions = {
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<
-    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+    Pick<
+      MastraTUIOptions,
+      'appName' | 'initialMessage' | 'resumeSkipNotice' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'
+    >
   >;
 };
 

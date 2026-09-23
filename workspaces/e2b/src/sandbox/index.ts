@@ -26,7 +26,7 @@ import type {
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type {
   BuildOptions,
@@ -260,7 +260,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager(),
+      processes: new E2BProcessManager({
+        defaultTimeout: options.timeout ?? 300_000,
+      }),
     });
 
     this.id = options.id ?? this.generateId();
@@ -599,8 +601,12 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'E2B');
     await this.ensureRunning();
     await this.e2b.files.write(
       files.map(f => ({
@@ -1013,7 +1019,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     try {
-      return await Sandbox.connect(preferredSandboxId, this.connectionOpts);
+      return await Sandbox.connect(preferredSandboxId, { ...this.connectionOpts, timeoutMs: this.timeout });
     } catch (e) {
       // The sandbox can terminate between getInfo and connect.
       if (this.isSandboxDeadError(e)) {
@@ -1036,7 +1042,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     const info = await this.lookupExistingSandboxInfo();
     if (!info) return null;
     try {
-      return await this.connectSdkSandbox(info.sandboxId, this.connectionOpts);
+      return await this.connectSdkSandbox(info.sandboxId, { ...this.connectionOpts, timeoutMs: this.timeout });
     } catch (e) {
       this.logger.debug(`${LOG_PREFIX} Error connecting to existing sandbox:`, e);
       return null;

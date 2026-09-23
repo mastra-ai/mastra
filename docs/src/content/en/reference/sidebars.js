@@ -146,6 +146,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Classifier',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'classifier/classifier', label: 'Classifier' }],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [
@@ -215,6 +221,8 @@ const sidebars = {
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
+        { type: 'doc', id: 'core/getClassifier', label: '.getClassifier()' },
+        { type: 'doc', id: 'core/getClassifierById', label: '.getClassifierById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
         { type: 'doc', id: 'core/getEditor', label: '.getEditor()' },
         { type: 'doc', id: 'core/getGateway', label: '.getGateway()' },
@@ -233,6 +241,7 @@ const sidebars = {
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
         { type: 'doc', id: 'core/getWorkflow', label: '.getWorkflow()' },
         { type: 'doc', id: 'core/listAgents', label: '.listAgents()' },
+        { type: 'doc', id: 'core/listClassifiers', label: '.listClassifiers()' },
         { type: 'doc', id: 'core/listGateways', label: '.listGateways()' },
         { type: 'doc', id: 'core/listLogs', label: '.listLogs()' },
         { type: 'doc', id: 'core/listLogsByRunId', label: '.listLogsByRunId()' },
@@ -296,9 +305,11 @@ const sidebars = {
       label: 'Evals',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'evals/create-classifier-scorer', label: 'createClassifierScorer()' },
         { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
         { type: 'doc', id: 'evals/filter-run', label: 'filterRun()' },
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
+        { type: 'doc', id: 'evals/not-scorable', label: 'notScorable()' },
         { type: 'doc', id: 'evals/checks', label: 'Quick Checks' },
         { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
@@ -412,6 +423,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
         { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
+        { type: 'doc', id: 'memory/copyThread', label: '.copyThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },
         { type: 'doc', id: 'memory/getThreadById', label: '.getThreadById()' },
@@ -419,6 +431,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/recall', label: '.recall()' },
         { type: 'doc', id: 'memory/settled', label: '.settled()' },
         { type: 'doc', id: 'memory/summarizeThread', label: '.summarizeThread()' },
+        { type: 'doc', id: 'memory/updateThreadResourceId', label: '.updateThreadResourceId()' },
       ],
     },
     {
@@ -426,6 +439,11 @@ const sidebars = {
       label: 'Migrations',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'migrations/mcp-v2',
+          label: '@mastra/mcp v1 to v2',
+        },
         {
           type: 'doc',
           id: 'migrations/agentnetwork',
@@ -673,8 +691,10 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'processors/agents-md-injector', label: 'AgentsMDInjector' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
+        { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
+        { type: 'doc', id: 'processors/model-selection-processor', label: 'ModelSelectionProcessor' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
         { type: 'doc', id: 'processors/prefill-error-handler', label: 'PrefillErrorHandler' },
@@ -880,6 +900,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'vectors/s3vectors', label: 'Amazon S3 Vector Store' },
         { type: 'doc', id: 'vectors/astra', label: 'Astra Vector Store' },
+        { type: 'doc', id: 'vectors/azure-ai-search', label: 'Azure AI Search Vector Store' },
         { type: 'doc', id: 'vectors/chroma', label: 'Chroma Vector Store' },
         { type: 'doc', id: 'vectors/vectorize', label: 'Cloudflare Vector Store' },
         { type: 'doc', id: 'vectors/convex', label: 'Convex Vector Store' },
@@ -896,6 +917,7 @@ const sidebars = {
         { type: 'doc', id: 'vectors/qdrant', label: 'Qdrant Vector Store' },
         { type: 'doc', id: 'vectors/turbopuffer', label: 'Turbopuffer Vector Store' },
         { type: 'doc', id: 'vectors/upstash', label: 'Upstash Vector Store' },
+        { type: 'doc', id: 'vectors/weaviate', label: 'Weaviate Vector Store' },
       ],
     },
     {
@@ -950,6 +972,7 @@ const sidebars = {
           items: [
             { type: 'doc', id: 'workflows/workflow-methods/agent', label: '.agent()' },
             { type: 'doc', id: 'workflows/workflow-methods/branch', label: '.branch()' },
+            { type: 'doc', id: 'workflows/workflow-methods/classifier', label: '.classifier()' },
             { type: 'doc', id: 'workflows/workflow-methods/commit', label: '.commit()' },
             { type: 'doc', id: 'workflows/workflow-methods/create-run', label: '.createRun()' },
             { type: 'doc', id: 'workflows/workflow-methods/dountil', label: '.dountil()' },

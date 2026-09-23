@@ -8,7 +8,6 @@ import type {
   UpdateExperimentResultParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
-  GenerateDatasetItemsParams,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -127,10 +126,6 @@ export const useDatasetMutations = () => {
     },
   });
 
-  const generateItems = useMutation({
-    mutationFn: (params: GenerateDatasetItemsParams) => client.generateDatasetItems(params),
-  });
-
   const triggerExperiment = useMutation({
     mutationFn: (params: TriggerDatasetExperimentParams) => client.triggerDatasetExperiment(params),
     onSuccess: (_, variables) => {
@@ -148,8 +143,6 @@ export const useDatasetMutations = () => {
       void queryClient.invalidateQueries({ queryKey: ['review-items'] });
       void queryClient.invalidateQueries({ queryKey: ['completed-items'] });
       void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
-      void queryClient.invalidateQueries({ queryKey: ['inbox-dataset-review-items'] });
-      void queryClient.invalidateQueries({ queryKey: ['inbox-dataset-review-count'] });
     },
   });
 
@@ -187,7 +180,6 @@ export const useDatasetMutations = () => {
     deleteItems,
     batchInsertItems,
     batchDeleteItems,
-    generateItems,
     triggerExperiment,
     deleteExperiment,
     updateExperiment,

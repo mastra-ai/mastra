@@ -267,6 +267,7 @@ export default { createRequire };
     toolsPaths: (string | string[])[],
     bundlerOptions: BundlerOptions,
     additionalEntries: Record<string, string>,
+    toolProjectRoot: string,
   ) {
     const inputOptions = await super.getBundlerOptions(
       serverFile,
@@ -278,6 +279,7 @@ export default { createRequire };
         enableEsmShim: false,
       },
       additionalEntries,
+      toolProjectRoot,
     );
 
     const hasPostgresStore = (await this.deps.checkDependencies(['@mastra/pg'])) === `ok`;

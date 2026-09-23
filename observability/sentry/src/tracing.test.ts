@@ -307,6 +307,24 @@ describe('SentryExporter', () => {
       expect(SentryMock.startInactiveSpan).not.toHaveBeenCalled();
       expect(SentryMock.addBreadcrumb).not.toHaveBeenCalled();
     });
+
+    it('should skip MODEL_INFERENCE spans so MODEL_GENERATION stays the single chat span', async () => {
+      const inferenceSpan = createMockSpan({
+        id: 'inference-span',
+        name: 'inference: 0',
+        type: SpanType.MODEL_INFERENCE,
+        isRoot: false,
+        attributes: { model: 'gpt-4', usage: { inputTokens: 10, outputTokens: 5 } },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: inferenceSpan,
+      });
+
+      expect(SentryMock.startInactiveSpan).not.toHaveBeenCalled();
+      expect(SentryMock.addBreadcrumb).not.toHaveBeenCalled();
+    });
   });
 
   describe('Span Operation Types', () => {

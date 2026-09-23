@@ -58,8 +58,8 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="px-6 py-12 text-center">
-        <Txt variant="header-md" className="text-neutral3">
+      <div className="px-4 py-8 text-center">
+        <Txt variant="heading" tone="muted">
           Tool not found
         </Txt>
       </div>
@@ -67,8 +67,8 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="px-6 py-12 text-center">
-        <Txt variant="ui-sm" className="text-neutral3">
+      <div className="px-4 py-8 text-center">
+        <Txt variant="caption" tone="muted">
           You don't have permission to execute tools.
         </Txt>
       </div>
@@ -80,7 +80,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       isExecutingTool={isExecutingTool}
       zodInputSchema={zodInputSchema}
       handleExecuteTool={handleExecuteTool}
-      toolDescription={tool.description}
+      toolDescription={tool.description ?? ''}
       toolId={tool.id}
       requestContextSchema={tool.requestContextSchema}
     />

@@ -33,6 +33,19 @@ export type MastraStepStartPart = {
   model?: string;
 } & MastraPartExtensions;
 
+// Persisted record of a terminal agent failure (retries, error processors and
+// fallback models all exhausted). Deliberately stores only JSON-safe identity
+// fields: stack traces, causes and custom enumerable properties stay on the
+// runtime error surfaces (stream chunk, onError, result.error) and are never
+// written to thread history.
+export type MastraErrorPart = {
+  type: 'error';
+  error: {
+    name: string;
+    message: string;
+  };
+} & MastraPartExtensions;
+
 // Approval payload stored alongside tool invocations so v6 approval flows can
 // round-trip through MessageList.
 export type MastraToolApproval = {
@@ -85,6 +98,7 @@ type UIV4NonMastraPart = Exclude<UIMessageV4['parts'][number], { type: 'tool-inv
 export type MastraMessagePart =
   | PartWithProviderMetadata<UIV4NonMastraPart>
   | MastraStepStartPart
+  | MastraErrorPart
   | MastraToolInvocationPart
   | MastraSourceUrlPart
   | MastraSourceDocumentPart

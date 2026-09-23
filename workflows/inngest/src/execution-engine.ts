@@ -57,6 +57,8 @@ function isNonRetryableStepFailure(error: unknown): boolean {
 
 const retryCountStorage = new AsyncLocalStorage<number>();
 
+const BUILTIN_ERROR_TYPES = [TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError, AggregateError];
+
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
@@ -66,6 +68,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestStep: BaseContext<Inngest>['step'],
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
+    private parentStream?: { workflowId: string; runId: string },
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -222,11 +225,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return fnResult;
       } catch (e) {
         const errorInstance = getErrorFromUnknown(e, {
-          serializeStack: false,
+          serializeStack: true,
           fallbackMessage: 'Unknown step execution error',
         });
         const isNonRetryable = isNonRetryableStepFailure(e);
-        throw new Error(errorInstance.message, {
+        const wrapped = new Error(errorInstance.message, {
           cause: {
             status: 'failed',
             error: errorInstance,
@@ -234,6 +237,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             ...(isNonRetryable && { nonRetryable: true as const }),
           },
         });
+        // Report the original failure site to Inngest instead of this wrapper frame.
+        if (errorInstance.stack) {
+          wrapped.stack = errorInstance.stack;
+        }
+        // Inngest derives the reported `name` from the prototype, so keep built-in error types (e.g. TypeError).
+        const builtinErrorType =
+          e instanceof Error
+            ? BUILTIN_ERROR_TYPES.find(ErrorType => Object.getPrototypeOf(e) === ErrorType.prototype)
+            : undefined;
+        if (builtinErrorType) {
+          Object.setPrototypeOf(wrapped, builtinErrorType.prototype);
+        }
+        throw wrapped;
       }
     });
     return result as T;
@@ -313,6 +329,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     // Use the actual parent span's ID if provided (e.g., for steps inside control-flow),
     // otherwise fall back to workflow span
     const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Without observability there is no span to memoize; skip the durable operation.
+    if (!this.mastra?.observability?.getSelectedInstance({})) return undefined;
 
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
@@ -397,6 +416,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     // Use the actual parent span's ID if provided, otherwise fall back to workflow span
     const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Without observability there is no span to memoize; skip the durable operation.
+    if (!this.mastra?.observability?.getSelectedInstance({})) return undefined;
 
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
@@ -520,6 +542,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
       : undefined;
 
+    const parentStream = this.parentStream ?? {
+      workflowId: executionContext.workflowId,
+      runId: executionContext.runId,
+    };
     const isResume = !!resume?.steps?.length;
     // New invocations return compact output; legacy memoized WorkflowResult
     // envelopes are structural supersets of this parent-facing contract.
@@ -528,9 +554,22 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
 
+    // The nested run id must be derivable on every replay pass: core strips
+    // `suspendPayload` (omitPriorCompletionFields) and persists the stripped step
+    // result before this branch runs, so nothing stored on it survives Inngest's
+    // re-execution from the snapshot. The default engine runs nested workflows
+    // under the parent's run id (Workflow.execute → createRun({ runId })), so
+    // derive the same way here; foreach iterations get a per-index suffix so
+    // concurrent iterations don't share a snapshot row (executionContext.foreachIndex
+    // is set per iteration by the foreach handler and is stable across replays).
+    const derivedNestedRunId =
+      executionContext.foreachIndex !== undefined
+        ? `${executionContext.runId}-foreach-${executionContext.foreachIndex}`
+        : executionContext.runId;
+
     try {
       if (isResume) {
-        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
+        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? derivedNestedRunId;
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
@@ -538,19 +577,24 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
 
         const nestedResumeSteps = resume.steps.slice(1);
+        let replayOnly = false;
         if (nestedResumeSteps.length === 0) {
           const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
           if (suspendedStepIds.length === 0) {
-            throw new Error(`No suspended steps found in nested workflow: ${step.id}`);
-          }
-          if (suspendedStepIds.length > 1) {
+            // The child is no longer suspended: step.invoke parks the parent until the
+            // child finishes, so Inngest re-executes this block to deliver the memoized
+            // result. Replay the invoke (same durable id) instead of throwing, which
+            // would discard a child run that already completed.
+            replayOnly = true;
+          } else if (suspendedStepIds.length > 1) {
             const pathStrings = suspendedStepIds.map(stepId => `[${stepId}]`);
             throw new Error(
               `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
                 'Please specify which step to resume using the "step" parameter.',
             );
+          } else {
+            nestedResumeSteps.push(suspendedStepIds[0]!);
           }
-          nestedResumeSteps.push(suspendedStepIds[0]!);
         }
         const nestedResumeStepId = nestedResumeSteps[0];
 
@@ -559,13 +603,20 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             inputData,
             requestContext: forwardedRequestContext,
+            parentStream,
             runId: runId,
-            resume: {
-              runId: runId,
-              steps: nestedResumeSteps,
-              resumePayload: resume.resumePayload,
-              resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
-            },
+            ...(replayOnly
+              ? { initialState: executionContext.state ?? {} }
+              : {
+                  resume: {
+                    runId: runId,
+                    steps: nestedResumeSteps,
+                    resumePayload: resume.resumePayload,
+                    resumePath: nestedResumeStepId
+                      ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any)
+                      : undefined,
+                  },
+                }),
             outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
@@ -597,6 +648,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             timeTravel: timeTravelParams,
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
+            parentStream,
             runId: executionContext.runId,
             outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
@@ -613,13 +665,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         // event against `data.runId` on the trigger, so a nested run invoked
         // without one cannot be cancelled by id — and it would take the
         // unnamed-run branch, warning about advice the caller cannot act on.
-        const nestedRunId = randomUUID();
+        // Derived (not random) so every replay pass addresses the same child
+        // snapshot — see `derivedNestedRunId` above.
+        const nestedRunId = derivedNestedRunId;
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
             inputData,
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
+            parentStream,
             runId: nestedRunId,
             outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
@@ -642,6 +697,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         result = errorCause as Extract<NestedWorkflowResult, { status: 'failed' }>;
         runId = 'runId' in errorCause && typeof errorCause.runId === 'string' ? errorCause.runId : randomUUID();
       } else {
+        // Log before flattening: Error objects don't survive snapshot
+        // serialization (JSON.stringify(new Error('x')) is `{}`), so without
+        // this the real cause never surfaces past "Workflow failed".
+        this.logger?.error(
+          `Nested workflow step ${step.id} failed: ` + (e instanceof Error ? (e.stack ?? e.message) : String(e)),
+        );
         // Fallback: if we can't get the result from error, construct a basic failed result
         runId = randomUUID();
         result = {

@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
+import type { AgentExecutionOptions } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
@@ -41,6 +41,8 @@ import type { MastraOnStepFinishCallback } from '../stream/types';
 import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
+import { isNotScorable } from './not-scorable';
+import type { NotScorable, NotScorableOutcome } from './not-scorable';
 import type { ScoringFilter } from './predicate';
 import type {
   ScoringSamplingConfig,
@@ -85,6 +87,8 @@ export interface ScorerJudgeConfig {
    * Defaults to automatic capability-based routing.
    */
   jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
+  /** @internal Injection placement for the format-error retry; leaves the initial request unchanged. */
+  fallbackJsonPromptInjection?: 'system' | 'inline';
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */
@@ -122,6 +126,13 @@ export interface ScorerJudgeConfig {
    * 10. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
+  /**
+   * Optional model call settings (e.g. temperature, topP, topK, maxOutputTokens,
+   * maxRetries, frequencyPenalty, presencePenalty, timeout) forwarded to the
+   * internal judge agent run. Step-level `judge.modelSettings` replaces this
+   * scorer-level value.
+   */
+  modelSettings?: AgentExecutionOptions['modelSettings'];
   /**
    * Optional request context forwarded to the judge agent execution. When the judge
    * agent has memory with OM observers that read dynamic model config from controller
@@ -270,10 +281,14 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
+  mastra?: Mastra;
 };
 
-// Simplified AccumulatedResults - don't try to resolve Promise types here
-type AccumulatedResults<T extends Record<string, any>, K extends string, V> = T & Record<StepResultKey<K>, V>;
+// Simplified AccumulatedResults - don't try to resolve Promise types here.
+// A step that returns `notScorable()` ends the run, so later steps never see
+// that value in `results`; it's excluded from the accumulated type.
+type AccumulatedResults<T extends Record<string, any>, K extends string, V> = T &
+  Record<StepResultKey<K>, Exclude<V, NotScorable>>;
 
 // Special context type for generateReason that includes the score
 type GenerateReasonContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = StepContext<
@@ -352,13 +367,12 @@ export interface ScorerJudgeStepResult {
 
 export type ScorerJudgeResults = Partial<Record<ScorerJudgeStepName, ScorerJudgeStepResult>>;
 
-export type ScorerRunResult<
+type ScorerRunResultFields<
   TAccumulatedResults extends Record<string, any> = Record<string, any>,
   TInput = any,
   TRunOutput = any,
 > = ScorerRun<TInput, TRunOutput> & {
   scoreTraceId?: string;
-  score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
   reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
 
   // Prompts
@@ -375,6 +389,39 @@ export type ScorerRunResult<
 
   judge?: ScorerJudgeResults;
 } & { runId: string };
+
+/**
+ * Result of `scorer.run()`.
+ *
+ * Either the run was scored (`score` is set) or a step returned `notScorable()`
+ * (`notScorable` is set and `score` is absent). Check `notScorable` before
+ * reading `score`:
+ *
+ * ```ts
+ * const result = await scorer.run(input)
+ * if (result.notScorable) {
+ *   // skipped — no score
+ * } else {
+ *   result.score // number
+ * }
+ * ```
+ */
+export type ScorerRunResult<
+  TAccumulatedResults extends Record<string, any> = Record<string, any>,
+  TInput = any,
+  TRunOutput = any,
+> = ScorerRunResultFields<TAccumulatedResults, TInput, TRunOutput> &
+  (
+    | {
+        score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
+        notScorable?: undefined;
+      }
+    | {
+        score?: undefined;
+        /** Set when a step returned `notScorable()`. The remaining steps did not run. */
+        notScorable: NotScorableOutcome;
+      }
+  );
 
 export type ScorerRunResultSnapshot<TResult extends ScorerRunResult = ScorerRunResult> = Omit<TResult, 'score'> &
   Partial<Pick<TResult, 'score'>>;
@@ -656,8 +703,8 @@ type GenerateReasonFunctionStep<TAccumulated extends Record<string, any>, TInput
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => Promise<any>);
 
 type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number)
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number>);
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number | NotScorable)
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number | NotScorable>);
 
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
@@ -972,7 +1019,7 @@ class MastraScorer<
 
     let runId = prepared.runId;
     if (!runId) {
-      runId = randomUUID();
+      runId = globalThis.crypto.randomUUID();
     }
 
     const normalizedRequestContext = this.normalizeRunRequestContext(prepared.requestContext);
@@ -1113,9 +1160,11 @@ class MastraScorer<
         success: true,
         score: typeof scorerResult.score === 'number' ? scorerResult.score : null,
         reason: typeof scorerResult.reason === 'string' ? scorerResult.reason : null,
+        ...(scorerResult.notScorable ? { notScorable: scorerResult.notScorable } : {}),
       },
     });
 
+    // A not-scorable run produces no score, so nothing is emitted to observability.
     if (
       _internal?.emitObservabilityScore !== false &&
       this.#mastra?.observability.addScore &&
@@ -1197,12 +1246,14 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, ...rest }) => {
+        execute: async ({ inputData, getInitData, bail, ...rest }) => {
           const observabilityContext = resolveObservabilityContext(rest);
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
-          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
+            mastra: this.#mastra,
+          });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
           const scorerRunSpan =
             currentSpan?.type === SpanType.SCORER_RUN
@@ -1263,8 +1314,6 @@ class MastraScorer<
             });
           }
 
-          stepSpan?.end({ output: stepResult });
-
           const newGeneratedPrompts =
             prompt !== undefined
               ? {
@@ -1273,10 +1322,6 @@ class MastraScorer<
                 }
               : generatedPrompts;
 
-          const newAccumulatedResults = {
-            ...accumulatedResults,
-            [`${scorerStep.name}StepResult`]: stepResult,
-          };
           const judgeStepName = scorerStep.name as ScorerJudgeStepName;
           const newJudge = judgeExecution
             ? {
@@ -1286,6 +1331,31 @@ class MastraScorer<
                 },
               }
             : judge;
+
+          if (isNotScorable(stepResult)) {
+            // The step declared the run has nothing to evaluate. End the
+            // pipeline here so no later step (and no judge model call) runs.
+            // Results from steps that already completed are kept.
+            const notScorable: NotScorableOutcome = {
+              step: scorerStep.name as ScorerStepName,
+              ...(stepResult.reason !== undefined ? { reason: stepResult.reason } : {}),
+            };
+            stepSpan?.end({ output: { notScorable } });
+
+            return bail({
+              notScorable,
+              accumulatedResults,
+              generatedPrompts: newGeneratedPrompts,
+              ...(newJudge ? { judge: newJudge } : {}),
+            });
+          }
+
+          stepSpan?.end({ output: stepResult });
+
+          const newAccumulatedResults = {
+            ...accumulatedResults,
+            [`${scorerStep.name}StepResult`]: stepResult,
+          };
 
           return {
             stepResult,
@@ -1305,7 +1375,8 @@ class MastraScorer<
       }),
       outputSchema: z.object({
         run: z.any(),
-        score: z.number(),
+        score: z.number().optional(),
+        notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
         reason: z.string().optional(),
         preprocessResult: z.any().optional(),
         analyzeResult: z.any().optional(),
@@ -1343,13 +1414,14 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
+    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'mastra'>,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;
-      return { run, results: accumulatedResults, score };
+      return { run, results: accumulatedResults, score, ...executionContext };
     }
 
-    return { run, results: accumulatedResults };
+    return { run, results: accumulatedResults, ...executionContext };
   }
 
   private async executeFunctionStep(scorerStep: ScorerStepDefinition, context: any) {
@@ -1372,6 +1444,8 @@ class MastraScorer<
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
+    const fallbackJsonPromptInjection =
+      originalStep.judge?.fallbackJsonPromptInjection ?? this.config.judge?.fallbackJsonPromptInjection;
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
@@ -1386,6 +1460,7 @@ class MastraScorer<
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
     const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
     const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
+    const modelSettings = originalStep.judge?.modelSettings ?? this.config.judge?.modelSettings;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -1595,6 +1670,7 @@ class MastraScorer<
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
       ...(maxSteps ? { maxSteps } : {}),
+      ...(modelSettings ? { modelSettings } : {}),
       ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
     const createJudgeStreamRunOptions = () => ({
@@ -1655,6 +1731,7 @@ class MastraScorer<
         let result;
         if (isSupportedLanguageModel(resolvedModel)) {
           result = await tryStreamWithJsonFallback(judge, prompt, {
+            fallbackJsonPromptInjection,
             structuredOutput: {
               schema: z.object({ score: z.number() }),
               jsonPromptInjection,
@@ -1712,6 +1789,7 @@ class MastraScorer<
         if (isSupportedLanguageModel(resolvedModel)) {
           // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
           result = await tryStreamWithJsonFallback(judge, prompt, {
+            fallbackJsonPromptInjection,
             structuredOutput: {
               schema: standardSchema as any,
               jsonPromptInjection,
@@ -1826,6 +1904,7 @@ class MastraScorer<
     const accumulatedResults = finalStepResult?.accumulatedResults ?? {};
     const generatedPrompts = finalStepResult?.generatedPrompts ?? {};
     const judge = finalStepResult?.judge as ScorerJudgeResults | undefined;
+    const notScorable = finalStepResult?.notScorable as NotScorableOutcome | undefined;
     const score = accumulatedResults.generateScoreStepResult;
     const reason = accumulatedResults.generateReasonStepResult;
     const preprocessStepResult = accumulatedResults.preprocessStepResult;
@@ -1836,9 +1915,11 @@ class MastraScorer<
     const analyzePrompt = generatedPrompts.analyzePrompt;
 
     if (includeUndefinedFields) {
+      // A not-scorable run carries no `score` key at all, so `'score' in result`
+      // checks downstream (storage, thresholds) treat it as unscored.
       return {
         ...originalInput,
-        score,
+        ...(notScorable ? { notScorable } : { score }),
         generateScorePrompt,
         reason,
         generateReasonPrompt,
@@ -1852,7 +1933,7 @@ class MastraScorer<
 
     return {
       ...originalInput,
-      ...(score !== undefined ? { score } : {}),
+      ...(notScorable ? { notScorable } : score !== undefined ? { score } : {}),
       ...(generateScorePrompt !== undefined ? { generateScorePrompt } : {}),
       ...(reason !== undefined ? { reason } : {}),
       ...(generateReasonPrompt !== undefined ? { generateReasonPrompt } : {}),
@@ -2180,7 +2261,7 @@ function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions):
   });
 }
 
-// Export types and interfaces for use in test files
-export type { ScorerConfig, ScorerRun, PromptObject };
+// Export types and interfaces for adapters and test files
+export type { ScorerConfig, ScorerRun, ScorerTypeShortcuts, StepContext, PromptObject };
 
 export { MastraScorer };

@@ -1,9 +1,9 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import { useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
+import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceIdButton } from './trace-id-button';
-import { TraceTimeline } from './trace-timeline';
+import { TraceSpanTree } from './trace-span-tree';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 export interface TraceDetailsViewProps {
@@ -61,7 +61,7 @@ export function TraceDetailsView({
         <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>
       ) : (
         <DataDetailsPanel.Content>
-          <TraceTimeline
+          <TraceSpanTree
             hierarchicalSpans={hierarchicalSpans}
             onSpanClick={handleSpanClick}
             selectedSpanId={selectedSpanId ?? undefined}

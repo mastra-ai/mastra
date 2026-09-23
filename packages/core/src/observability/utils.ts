@@ -229,6 +229,8 @@ export function getEntityTypeForSpan(span: {
     case SpanType.MCP_TOOL_CALL:
     case SpanType.PROVIDER_TOOL_CALL:
       return EntityType.TOOL;
+    case SpanType.MCP_SERVER_REQUEST:
+      return EntityType.MCP_SERVER;
     case SpanType.PROCESSOR_RUN:
       return EntityType.OUTPUT_PROCESSOR;
     default:

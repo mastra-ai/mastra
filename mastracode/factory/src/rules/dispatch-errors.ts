@@ -14,6 +14,8 @@ const FAILURE_METADATA = {
   source_repository_missing: { canRetry: true, label: 'Source repository unavailable' },
   unsupported_provider_item: { canRetry: false, label: 'Unsupported provider work item' },
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
+  run_terminal_event_missing: { canRetry: false, label: 'Agent run terminal event was not observed' },
+  skill_delivery_ambiguous: { canRetry: false, label: 'Factory skill delivery could not be confirmed' },
   run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },
   repository_egress_blocked: { canRetry: false, label: 'Repository network access is blocked' },
@@ -23,6 +25,7 @@ const FAILURE_METADATA = {
   repository_commit_failed: { canRetry: true, label: 'Repository commit failed' },
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
+  run_configuration_invalid: { canRetry: false, label: 'Run configuration rejected by provider' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },

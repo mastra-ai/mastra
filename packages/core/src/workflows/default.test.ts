@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../di';
@@ -247,7 +246,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     const { result } = await runConditional({
       conditions,
       workflowId: 'test-workflow',
-      runId: randomUUID(),
+      runId: globalThis.crypto.randomUUID(),
     });
 
     // Assert: Verify error handling, truthyIndexes, and workflow continuation
@@ -260,7 +259,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     // Arrange: Set up conditions array with one throwing regular Error and one valid
     const regularError = new Error('Test regular error');
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     // Mock the logger to capture trackException calls
     const mockTrackException = vi.fn();
@@ -318,7 +317,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
   describe('conditional time-travel reconciliation', () => {
     it("rewrites a targeted-but-non-truthy arm from 'running' to 'skipped' during time travel", async () => {
       const workflowId = 'test-workflow';
-      const runId = randomUUID();
+      const runId = globalThis.crypto.randomUUID();
 
       // arm step1 (index 0) is truthy, arm step2 (index 1) is NOT truthy.
       const conditions = [async () => true, async () => false];
@@ -358,7 +357,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
 
     it("rewrites a targeted-but-non-truthy declarative arm (agent / mapping) from 'running' to 'skipped'", async () => {
       const workflowId = 'test-workflow';
-      const runId = randomUUID();
+      const runId = globalThis.crypto.randomUUID();
 
       // arm step1 (index 0) is truthy; the declarative arms (indexes 1 and 2) are NOT truthy.
       const conditions = [async () => true, async () => false, async () => false];
@@ -414,7 +413,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
 
     it("leaves a 'running' arm untouched for normal start/resume (no time travel)", async () => {
       const workflowId = 'test-workflow';
-      const runId = randomUUID();
+      const runId = globalThis.crypto.randomUUID();
 
       const conditions = [async () => true, async () => false];
 
@@ -457,7 +456,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
 
   it('should use the suspended step payload when resuming a step with stale previous output', async () => {
     const workflowId = 'resume-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const resumedStep = {
       id: 'needs-approval',
       inputSchema: z.object({ id: z.string() }),
@@ -528,7 +527,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
 
   it('should use a null suspended step payload when resuming a step with stale previous output', async () => {
     const workflowId = 'resume-null-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const resumedStep = {
       id: 'needs-approval',
       inputSchema: z.null(),
@@ -599,7 +598,7 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
 
   it('should use the suspended foreach payload when resuming with stale previous output', async () => {
     const workflowId = 'resume-foreach-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const foreachStep = {
       id: 'process-item',
       inputSchema: z.number(),
@@ -696,7 +695,7 @@ describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
 
   it('should use a null suspended loop payload when resuming with stale previous output', async () => {
     const workflowId = 'resume-loop-null-payload-repro';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const step = {
       id: 'loop-step',
       inputSchema: z.null(),
@@ -778,7 +777,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   // cancelled, even when the user's step does not observe abortSignal.
   it('should stop iterating a dountil loop when abortController is aborted between iterations', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     let iterations = 0;
     const step = {
@@ -843,7 +842,7 @@ describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   // must still surface 'canceled' rather than 'success'.
   it('should surface canceled when abortController is aborted during condition evaluation', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     let stepCalls = 0;
     const step = {
@@ -919,7 +918,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
   // would otherwise let the loop keep iterating.
   it('should return canceled before dispatching the next concurrency chunk', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     let callCount = 0;
     const step = {
@@ -978,7 +977,7 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
   // result and persist 'success' even though the run was cancelled.
   it('should return canceled when abortController is aborted during the final chunk', async () => {
     const workflowId = 'test-workflow';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     const step = {
       id: 'process-item',
@@ -1058,7 +1057,7 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
     prevOutput,
     concurrency,
     workflowId = 'test-workflow',
-    runId = randomUUID(),
+    runId = globalThis.crypto.randomUUID(),
   }: {
     step: any;
     prevOutput: any[];
@@ -1106,7 +1105,7 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
   });
 
   it('keeps concurrency slots filled and preserves ordered results while progress follows completion order', async () => {
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const firstItemGate = deferred();
     const starts: number[] = [];
     const completed: number[] = [];
@@ -1729,7 +1728,183 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
   });
 });
 
+describe('DefaultExecutionEngine retryCount isolation', () => {
+  it.each([
+    { concurrency: 1, retryItems: [] },
+    { concurrency: 2, retryItems: [] },
+    { concurrency: 2, retryItems: ['a', 'b'] },
+    { concurrency: 2, retryItems: ['a'] },
+  ])(
+    'isolates nested children with $concurrency concurrent items and retries for $retryItems',
+    async ({ concurrency, retryItems }) => {
+      const calls: { item: string; runId: string; retryCount: number }[] = [];
+      const inspect = createStep({
+        id: 'inspect',
+        inputSchema: z.string(),
+        outputSchema: z.string(),
+        retries: 1,
+        execute: async ({ inputData, runId, retryCount }) => {
+          const firstAttempt = !calls.some(call => call.runId === runId);
+          calls.push({ item: inputData, runId, retryCount });
+          if (firstAttempt && retryItems.includes(inputData)) throw new Error('transient');
+          return inputData;
+        },
+      });
+      const child = createWorkflow({ id: 'child', inputSchema: z.string(), outputSchema: z.string() })
+        .then(inspect)
+        .commit();
+      const parent = createWorkflow({
+        id: 'parent',
+        inputSchema: z.array(z.string()),
+        outputSchema: z.array(z.string()),
+      })
+        .foreach(child, { id: 'items', concurrency })
+        .commit();
+
+      for (let execution = 0; execution < 2; execution++) {
+        calls.length = 0;
+        const run = await parent.createRun();
+        const result = await run.start({ inputData: ['a', 'b'] });
+        expect(result.status).toBe('success');
+        if (result.status === 'success') expect(result.result).toEqual(['a', 'b']);
+        expect(new Set(calls.map(call => call.runId)).size).toBe(2);
+        for (const item of ['a', 'b']) {
+          expect(calls.filter(call => call.item === item).map(call => call.retryCount)).toEqual(
+            retryItems.includes(item) ? [0, 1] : [0],
+          );
+        }
+      }
+    },
+  );
+
+  it('isolates overlapping runs when another run starts between retries', async () => {
+    let signalStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>(resolve => {
+      signalStarted = resolve;
+    });
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const calls: Record<string, number[]> = { a: [], b: [] };
+    const step = createStep({
+      id: 'inspect',
+      inputSchema: z.string(),
+      outputSchema: z.string(),
+      retries: 1,
+      execute: async ({ inputData, retryCount }) => {
+        calls[inputData]!.push(retryCount);
+        if (inputData === 'a' && calls.a!.length === 1) {
+          signalStarted();
+          await blocked;
+          throw new Error('transient');
+        }
+        return inputData;
+      },
+    });
+    const workflow = createWorkflow({ id: 'overlap', inputSchema: z.string(), outputSchema: z.string() })
+      .then(step)
+      .commit();
+    const first = await workflow.createRun();
+    const second = await workflow.createRun();
+    const pending = first.start({ inputData: 'a' });
+    try {
+      await Promise.race([
+        started,
+        pending.then(() => {
+          throw new Error('First run never reached barrier');
+        }),
+      ]);
+      expect((await second.start({ inputData: 'b' })).status).toBe('success');
+    } finally {
+      release();
+      await pending;
+    }
+    expect((await pending).status).toBe('success');
+    expect(calls).toEqual({ a: [0, 1], b: [0] });
+  });
+
+  it('starts each plain foreach invocation at zero', async () => {
+    const step = createStep({
+      id: 'inspect',
+      inputSchema: z.string(),
+      outputSchema: z.number(),
+      execute: async ({ retryCount }) => retryCount,
+    });
+    const workflow = createWorkflow({
+      id: 'plain-foreach',
+      inputSchema: z.array(z.string()),
+      outputSchema: z.array(z.number()),
+    })
+      .foreach(step, { concurrency: 2 })
+      .commit();
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: ['a', 'b'] });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toEqual([0, 0]);
+  });
+});
+
 describe('DefaultExecutionEngine.executeStepWithRetry', () => {
+  it('keeps reads stable across awaits and restores nested attempt contexts', async () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const params = { retries: 1, delay: 0, workflowId: 'test', runId: 'run' };
+    const outerCounts: number[] = [];
+    const innerCounts: number[] = [];
+    const result = await engine.executeStepWithRetry(
+      'outer',
+      async () => {
+        const attempt = outerCounts.length;
+        outerCounts.push(engine.getOrGenerateRetryCount('outer'));
+        await Promise.resolve();
+        expect(engine.getOrGenerateRetryCount('outer')).toBe(attempt);
+        let innerCalls = 0;
+        const innerResult = await engine.executeStepWithRetry(
+          'inner',
+          async () => {
+            innerCounts.push(engine.getOrGenerateRetryCount('inner'));
+            if (innerCalls++ === 0) throw new Error('inner transient');
+            return 'inner';
+          },
+          params,
+        );
+        expect(innerResult).toEqual({ ok: true, result: 'inner' });
+        expect(engine.getOrGenerateRetryCount('outer')).toBe(attempt);
+        if (attempt === 0) throw new Error('outer transient');
+        return 'outer';
+      },
+      params,
+    );
+    expect(result).toEqual({ ok: true, result: 'outer' });
+    expect(outerCounts).toEqual([0, 1]);
+    expect(innerCounts).toEqual([0, 1, 0, 1]);
+    expect(engine.getOrGenerateRetryCount('outer')).toBe(0);
+  });
+
+  it('preserves the delay between retry attempts', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new DefaultExecutionEngine({ mastra: undefined });
+      const counts: number[] = [];
+      const pending = engine.executeStepWithRetry(
+        'delayed',
+        async () => {
+          counts.push(engine.getOrGenerateRetryCount('delayed'));
+          if (counts.length === 1) throw new Error('transient');
+          return 'done';
+        },
+        { retries: 1, delay: 100, workflowId: 'test', runId: 'run' },
+      );
+      await vi.advanceTimersByTimeAsync(99);
+      expect(counts).toEqual([0]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual({ ok: true, result: 'done' });
+      expect(counts).toEqual([0, 1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not retry when the step throws MastraNonRetryableError', async () => {
     const engine = new DefaultExecutionEngine({
       mastra: undefined,
@@ -1899,7 +2074,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the parallel container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-parallel';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -1932,7 +2107,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('falls back to the structural parallel name when no entry id is present', async () => {
     const workflowId = 'span-parallel-fallback';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -1958,7 +2133,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('uses one canonical trimmed id for both the parallel span name and the entryId attribute', async () => {
     const workflowId = 'span-parallel-trim';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -1985,7 +2160,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('falls back to the structural parallel name when the entry id is whitespace-only', async () => {
     const workflowId = 'span-parallel-whitespace';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeParallel({
       workflowId,
@@ -2012,7 +2187,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the conditional container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-conditional';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeConditional({
       workflowId,
@@ -2044,7 +2219,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the loop container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-loop';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const step = {
       id: 'loop-step',
       inputSchema: z.any(),
@@ -2086,7 +2261,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('names the foreach container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-foreach';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const step = {
       id: 'foreach-step',
       inputSchema: z.any(),
@@ -2125,7 +2300,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('attaches entry identity to the sleep span while keeping the duration name', async () => {
     const workflowId = 'span-sleep';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
 
     await engine.executeSleep({
       workflowId,
@@ -2159,7 +2334,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('attaches entry identity to the sleepUntil span while keeping the date name', async () => {
     const workflowId = 'span-sleep-until';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const date = new Date(Date.now() - 1000);
 
     await engine.executeSleepUntil({
@@ -2192,7 +2367,7 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
 
   it('forwards mapping entry metadata to the step span', async () => {
     const workflowId = 'span-mapping';
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     const stepSpanSpy = vi.spyOn(engine, 'createStepSpan');
 
     await engine.executeMapping({

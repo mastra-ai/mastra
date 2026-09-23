@@ -1,0 +1,209 @@
+import { ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import type { CSSProperties } from 'react';
+import type { WorkflowCardDisplayStatus, WorkflowStepCardViewProps } from '../../types';
+import { WorkflowTiming } from '../timing/workflow-timing';
+import { getNodeIndicators } from '../workflow-card-badge-utils';
+import { getWorkflowCardBadge } from '../workflow-card-kind';
+import { WorkflowClock } from '../workflow-clock';
+import { WorkflowTypeBadge } from '../workflow-type-badge';
+import { ActivityWick } from '@/ds/components/Activity';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Shimmer } from '@/ds/components/Shimmer';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/utils/cn';
+
+type ReportedStatus = NonNullable<WorkflowCardDisplayStatus>;
+
+const statusLabels = {
+  running: 'Running',
+  success: 'Completed',
+  failed: 'Failed',
+  suspended: 'Needs input',
+  waiting: 'Waiting',
+  paused: 'Paused',
+  skipped: 'Skipped',
+  canceled: 'Canceled',
+  tripwire: 'Tripwire blocked',
+} satisfies Record<ReportedStatus, string>;
+
+const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
+  success: 'after:bg-positive1',
+  failed: 'after:bg-negative1',
+  tripwire: 'after:bg-warning1',
+  waiting: 'after:bg-accent5',
+  paused: 'after:bg-muted-foreground',
+  skipped: 'after:bg-muted-foreground',
+};
+
+const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
+  success: 'text-positive1',
+  failed: 'text-negative1',
+  suspended: 'text-warning1',
+  tripwire: 'text-warning1',
+};
+
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+
+export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
+  const {
+    label,
+    description,
+    displayStatus,
+    stepKey,
+    isSelected,
+    isWaiting,
+    isHovered,
+    onHoverChange,
+    onSelect,
+    isForEach,
+    foreachProgress,
+    startedAt,
+    endedAt,
+    actionBar,
+    body,
+  } = props;
+  const [expanded, setExpanded] = useState(props.initiallyOpen ?? false);
+  const isRunning = displayStatus === 'running';
+  const isSuspended = displayStatus === 'suspended';
+  const reportedStatusLabel =
+    displayStatus && Object.hasOwn(statusLabels, displayStatus) ? statusLabels[displayStatus] : undefined;
+  const statusLabel = displayStatus ? (reportedStatusLabel ?? 'Status unavailable') : 'Not started';
+  const kind = getWorkflowCardBadge(props);
+  const capabilities = getNodeIndicators(props)
+    .filter(indicator => indicator.id !== kind.indicator)
+    .map(indicator => indicator.label.replace(/ step$/, ''));
+  const hasActivity = isRunning || isSuspended;
+  const isStacked = isForEach && !expanded;
+  const isBodyExpanded = Boolean(body) && expanded;
+  const Summary = onSelect ? 'button' : 'div';
+
+  return (
+    <div
+      className={cn(
+        'relative isolate w-[274px]',
+        isBodyExpanded && 'w-172',
+        isStacked &&
+          'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border before:bg-card after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border after:bg-card',
+      )}
+    >
+      <Collapsible
+        open={expanded}
+        onOpenChange={setExpanded}
+        className={cn(
+          raisedSurfaceStyle,
+          'relative rounded-xl border border-transparent text-foreground transition-[border-color,background-color,box-shadow] [--card-radius:calc(var(--radius-xl)-2px)] motion-reduce:transition-none',
+          'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
+          displayStatus && statusLineClasses[displayStatus],
+          'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3',
+          isSelected && 'outline-1 outline-offset-4 outline-border-focus',
+          isBodyExpanded && 'border-dashed border-muted-foreground/40 shadow-none',
+          isWaiting && 'border-accent3',
+          isHovered && !isSelected && 'bg-muted',
+        )}
+        data-workflow-node
+        data-workflow-step-key={stepKey}
+        data-workflow-step-status={displayStatus ?? 'idle'}
+        data-workflow-step-active={isSelected || undefined}
+        data-workflow-step-waiting={isWaiting || undefined}
+        data-workflow-step-hovered={isHovered || undefined}
+        data-testid={props.isNestedWorkflowStep ? 'workflow-nested-node' : 'workflow-default-node'}
+        onMouseEnter={() => onHoverChange?.(true)}
+        onMouseLeave={() => onHoverChange?.(false)}
+      >
+        <div className="m-0.5 overflow-hidden rounded-(--card-radius)">
+          <Summary
+            className={cn(
+              'nodrag nopan flex w-full flex-col text-left',
+              onSelect && 'group cursor-pointer focus-visible:outline-hidden',
+            )}
+            type={onSelect ? 'button' : undefined}
+            aria-label={onSelect ? `Inspect ${label}` : undefined}
+            aria-pressed={onSelect ? Boolean(isSelected) : undefined}
+            onClick={onSelect}
+          >
+            <span className="flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3 group-hover:bg-fill-subtle">
+              <span className="min-w-0 text-column wrap-anywhere text-foreground" title={label}>
+                <Shimmer active={isRunning}>{label}</Shimmer>
+              </span>
+              <WorkflowTypeBadge {...props} />
+            </span>
+            <span className="flex flex-col gap-2 rounded-t-(--card-radius) bg-card px-3.5 py-3 empty:py-1.5">
+              {description && <span className="text-caption wrap-anywhere text-muted-foreground">{description}</span>}
+              <WorkflowTiming duration={props.duration} date={props.date} />
+              {isWaiting && <span className="text-meta text-accent3">Next step in debug</span>}
+              {isForEach && foreachProgress && (
+                <span className="flex flex-col gap-2 py-1 text-meta">
+                  <span>
+                    <strong>{foreachProgress.completedCount}</strong> of {foreachProgress.totalCount} items complete
+                  </span>
+                  {foreachProgress.totalCount > 0 ? (
+                    <progress
+                      className="h-1 w-full appearance-none border-0 bg-muted accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive1"
+                      aria-label={`${label} completed items`}
+                      value={foreachProgress.completedCount}
+                      max={foreachProgress.totalCount}
+                    />
+                  ) : (
+                    <span>No items to process</span>
+                  )}
+                </span>
+              )}
+              {capabilities.length > 0 && (
+                <span className="text-meta text-muted-foreground">{capabilities.join(' · ')}</span>
+              )}
+            </span>
+          </Summary>
+          <div
+            className={cn(
+              'nodrag nopan flex min-h-7 items-center justify-between gap-2 bg-card px-3.5 pb-2.5 text-meta text-muted-foreground',
+              displayStatus && footerStatusClasses[displayStatus],
+            )}
+          >
+            <span role="status" className={isRunning ? 'sr-only motion-reduce:not-sr-only' : undefined}>
+              {statusLabel}
+            </span>
+            {startedAt !== undefined && (
+              <span className="ml-auto">
+                <WorkflowClock
+                  startedAt={startedAt}
+                  endedAt={endedAt}
+                  isRunning={isRunning}
+                  spansSuspension={props.spansSuspension}
+                />
+              </span>
+            )}
+            {actionBar}
+          </div>
+
+          {body && (
+            <>
+              <CollapsibleTrigger
+                className={cn(
+                  surfaceStateLayerStyle,
+                  'nodrag nopan flex min-h-11 w-full items-center justify-between border-t border-border bg-card px-3.5 py-2.5 text-caption focus-visible:shadow-none focus-visible:ring-0',
+                )}
+              >
+                <span>
+                  {expanded ? 'Collapse' : 'Expand'} {isForEach ? 'loop' : 'workflow'}
+                </span>
+                <ChevronRight aria-hidden size={14} />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="h-155 overflow-hidden border-t border-dashed border-border">
+                {body}
+              </CollapsibleContent>
+            </>
+          )}
+        </div>
+        {hasActivity && (
+          <ActivityWick
+            status={isSuspended ? 'ready' : 'working'}
+            aria-hidden
+            className="before:hidden"
+            style={isSuspended ? suspendedWickStyle : undefined}
+          />
+        )}
+      </Collapsible>
+    </div>
+  );
+}

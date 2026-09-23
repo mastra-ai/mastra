@@ -2,9 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { ObservabilityStorage } from './base';
 import {
   compareTraceQueryStrings,
+  createTraceQueryObservedFieldDescriptor,
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
+  getTraceQueryCanonicalFieldDescriptors,
+  getTraceQueryFieldsArgsSchema,
+  getTraceQueryFieldsResponseSchema,
+  getTraceQueryValuesArgsSchema,
+  getTraceQueryValuesResponseSchema,
+  isTraceQueryValueSuggestionsPath,
+  parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
+  parseQueryThreadsInput,
   parseTraceQueryRequest,
+  planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
+  planTraceQueryValues,
+  TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+  TRACE_QUERY_DISCOVERY_MAX_LIMIT,
+  TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_LITERAL_UNITS,
   TRACE_QUERY_MAX_NODES,
@@ -14,12 +32,19 @@ import {
   TRACE_QUERY_DEFAULT_TIMEOUT_MS,
   TRACE_QUERY_MAX_STRING_BYTES,
   TRACE_QUERY_MAX_TIMEOUT_MS,
+  queryThreadsInputSchema,
+  queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
+  traceQueryPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryScalarPredicateSchema,
+  traceQueryResponseSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
   TraceQueryValidationError,
   type TraceQueryPredicate,
 } from './trace-query';
@@ -35,6 +60,86 @@ function parsed(request: unknown = baseRequest) {
   return parseTraceQueryRequest(request);
 }
 
+const baseThreadRequest = { traces: baseRequest };
+
+describe('trace delta contract', () => {
+  it.each([
+    { mode: 'delta', page: {} },
+    { mode: 'delta', pagination: {} },
+    { mode: 'delta', group: { by: ['threadId'] } },
+    { mode: 'delta', orderBy: [{ field: 'startedAt', direction: 'desc' }] },
+    { after: 'cursor' },
+    { limit: 10 },
+    { mode: 'delta', limit: 0 },
+    { mode: 'delta', limit: 101 },
+  ])('rejects invalid pagination combinations: %j', fields => {
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, ...fields }).success).toBe(false);
+  });
+
+  it('shares the numbered-page binding with delta while permitting different batch sizes', () => {
+    const page = planTraceQuery(
+      parsed({ ...baseRequest, pagination: {}, orderBy: [{ field: 'endedAt', direction: 'asc' }] }),
+    );
+    if (page.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(page, 'pg', '42:3');
+    const delta = planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }));
+    expect(delta).toMatchObject({
+      paginationMode: 'delta',
+      limit: 10,
+      deltaCursor: { adapter: 'pg', watermark: '42:3' },
+    });
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta');
+    expect(getTraceQueryDeltaWatermark(delta, 'pg')).toBe('42:3');
+    expect(() => getTraceQueryDeltaWatermark(delta, 'duckdb')).toThrow(TraceQueryCursorError);
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after, limit: 100 }))).toMatchObject({ limit: 100 });
+  });
+
+  it('rejects malformed, keyset, predicate, time-range and authorization mismatches', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { authorizationBinding: 'tenant-a' });
+    if (plan.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(plan, 'pg', '42:3');
+    for (const fields of [
+      { after: 'garbage' },
+      { after, where: { op: 'exists', path: 'threadId' } },
+      { after, timeRange: { ...baseRequest.timeRange, to: '2026-08-31T00:00:00Z' } },
+    ]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', ...fields }), { authorizationBinding: 'tenant-a' }),
+      ).toThrow(TraceQueryCursorError);
+    }
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }), { authorizationBinding: 'tenant-b' }),
+    ).toThrow(TraceQueryCursorError);
+    const keyset = planTraceQuery(parsed());
+    if (keyset.result !== 'traces' || keyset.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    const keysetCursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      traceId: 'trace-a',
+      sortValue: '2026-08-01T00:00:00Z',
+    });
+    expect(() => planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: keysetCursor }))).toThrow(
+      TraceQueryCursorError,
+    );
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after } }))).toThrow(TraceQueryCursorError);
+  });
+
+  it('requires exactly one metadata shape and rejects thread delta', () => {
+    const delta = { traces: [], delta: { limit: 10, hasMore: false }, deltaCursor: 'cursor' };
+    expect(traceQueryResponseSchema.safeParse(delta).success).toBe(true);
+    expect(traceQueryResponseSchema.safeParse({ ...delta, page: { next: null } }).success).toBe(false);
+    expect(
+      traceQueryResponseSchema.safeParse({ ...delta, pagination: { total: 0, page: 0, perPage: 10, hasMore: false } })
+        .success,
+    ).toBe(false);
+    expect(traceQueryResponseSchema.safeParse({ traces: [], delta: delta.delta }).success).toBe(false);
+    expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, mode: 'delta' }).success).toBe(false);
+  });
+});
+
+function parsedThreads(request: unknown = baseThreadRequest) {
+  return parseQueryThreadsInput(request);
+}
+
 function validationError(fn: () => unknown): TraceQueryValidationError {
   try {
     fn();
@@ -46,9 +151,61 @@ function validationError(fn: () => unknown): TraceQueryValidationError {
 }
 
 describe('traceQueryRequestSchema', () => {
-  it('normalizes page defaults without coercing values', () => {
-    expect(parsed()).toMatchObject({ page: { limit: 100 } });
+  it('leaves omitted keyset pagination for the planner and normalizes page-mode defaults', () => {
+    expect(parsed()).not.toHaveProperty('page');
+    expect(planTraceQuery(parsed())).toMatchObject({ paginationMode: 'keyset', limit: 100 });
+    expect(parsed({ ...baseRequest, pagination: {} })).toMatchObject({ pagination: { page: 0, perPage: 10 } });
+    expect(parsed({ ...baseRequest, pagination: { page: 2, perPage: 100 } })).toMatchObject({
+      pagination: { page: 2, perPage: 100 },
+    });
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, page: { limit: '10' } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { page: -1 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 0 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 101 } }).success).toBe(false);
+  });
+
+  it('rejects mixed and grouped list-compatible pagination in the request schema', () => {
+    const mixedRequest = { ...baseRequest, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } };
+    const mixedResult = traceQueryRequestSchema.safeParse(mixedRequest);
+    expect(mixedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Trace queries cannot combine keyset and page pagination',
+      }),
+    );
+    const mixed = validationError(() => parsed(mixedRequest));
+    expect(mixed.issues).toContainEqual(
+      expect.objectContaining({ code: 'pagination_mode_conflict', path: ['pagination'] }),
+    );
+
+    const groupedRequest = {
+      ...baseRequest,
+      group: { by: ['threadId'] },
+      pagination: { page: 0, perPage: 10 },
+    };
+    const groupedResult = traceQueryRequestSchema.safeParse(groupedRequest);
+    expect(groupedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Grouped trace queries do not support page pagination',
+      }),
+    );
+    const grouped = validationError(() => parsed(groupedRequest));
+    expect(grouped.issues).toContainEqual(
+      expect.objectContaining({ code: 'group_pagination_not_supported', path: ['pagination'] }),
+    );
+  });
+
+  it('builds a normalized page plan without cursor state', () => {
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 3, perPage: 25 } }))).toMatchObject({
+      result: 'traces',
+      paginationMode: 'page',
+      page: 3,
+      perPage: 25,
+      orderBy: { field: 'startedAt', direction: 'desc' },
+    });
   });
 
   it('rejects unknown and experimental request properties', () => {
@@ -153,6 +310,11 @@ describe('planTraceQuery', () => {
       planTraceQuery(parsed({ timeRange: { from: '2026-08-02T00:00:00Z', to: '2026-08-01T00:00:00Z' } })),
     );
     expect(reversed.issues).toEqual([expect.objectContaining({ code: 'invalid_time_range', path: ['timeRange'] })]);
+
+    expect(planTraceQuery(parsed()).timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    });
 
     const tooLarge = validationError(() =>
       planTraceQuery(parsed({ timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } })),
@@ -773,6 +935,157 @@ describe('planTraceQuery', () => {
     }
   });
 
+  it('carries a normalized trusted tenant scope on every plan and binds it into cursors', () => {
+    const scope = { organizationId: 'org-a', resourceId: undefined };
+    const keyset = planTraceQuery(parsed(), { scope });
+    expect(keyset.scope).toEqual({ organizationId: 'org-a' });
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 0, perPage: 10 } }), { scope }).scope).toEqual({
+      organizationId: 'org-a',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }), { scope }).scope).toEqual({
+      organizationId: 'org-a',
+    });
+    expect(planTraceQuery(parsed(), { scope: { organizationId: 'org-a', resourceId: 'project-1' } }).scope).toEqual({
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    });
+    expect(planTraceQuery(parsed()).scope).toBeUndefined();
+
+    const unscoped = planTraceQuery(parsed());
+    const project = planTraceQuery(parsed(), { scope: { organizationId: 'org-a', resourceId: 'project-1' } });
+    const orgB = planTraceQuery(parsed(), { scope: { organizationId: 'org-b' } });
+    expect(new Set([unscoped.binding, keyset.binding, project.binding, orgB.binding]).size).toBe(4);
+
+    const cursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, page: { after: cursor } }), { scope }).cursor).toEqual({
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    for (const other of [
+      undefined,
+      { organizationId: 'org-b' },
+      { organizationId: 'org-a', resourceId: 'project-1' },
+    ]) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: cursor } }), { scope: other })).toThrow(
+        expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
+
+    const numbered = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { scope });
+    if (numbered.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const deltaAfter = encodeTraceQueryDeltaCursor(numbered, 'pg', '42:3');
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: deltaAfter }), { scope })).toMatchObject({
+      paginationMode: 'delta',
+      scope: { organizationId: 'org-a' },
+    });
+    for (const other of [undefined, { organizationId: 'org-b' }]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: deltaAfter }), { scope: other }),
+      ).toThrow(TraceQueryCursorError);
+    }
+  });
+
+  it('rejects tenant scope fields as predicates in every predicate context', () => {
+    const contexts: Array<(field: string) => TraceQueryPredicate> = [
+      field => ({ op: 'eq', left: { path: field }, right: { literal: 'org-1' } }),
+      field => ({ spans: { some: { op: 'exists', path: field } } }),
+      field => ({ scores: { some: { op: 'exists', path: field } } }),
+      field => ({ feedback: { some: { op: 'exists', path: field } } }),
+    ];
+    for (const field of ['organizationId', 'projectId']) {
+      for (const where of contexts) {
+        const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where: where(field) })));
+        expect(error.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
+      }
+      const threads = validationError(() =>
+        planThreadQuery(
+          parsedThreads({
+            traces: { timeRange: baseRequest.timeRange, where: contexts[0]!(field) },
+          }),
+        ),
+      );
+      expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
+    }
+  });
+
+  it('plans tag collection predicates and rejects scalar operators on tags', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: '${tags}', value: 'manual-review' },
+            { op: 'notIncludes', path: 'tags', value: 'archived' },
+            { op: 'exists', path: 'tags' },
+            { op: 'not', arg: { op: 'notExists', path: 'tags' } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'collection', field: 'tags', operator: 'includes', value: 'manual-review' },
+        { type: 'collection', field: 'tags', operator: 'notIncludes', value: 'archived' },
+        { type: 'collection', field: 'tags', operator: 'notEmpty' },
+        { type: 'not', arg: { type: 'collection', field: 'tags', operator: 'empty' } },
+      ],
+    });
+
+    const scalarOnTags = validationError(() =>
+      planTraceQuery(
+        parsed({ ...baseRequest, where: { op: 'eq', left: { path: 'tags' }, right: { literal: 'manual-review' } } }),
+      ),
+    );
+    expect(scalarOnTags.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+    );
+
+    const membershipOnTags = validationError(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'in', value: { path: 'tags' }, set: ['manual-review'] } })),
+    );
+    expect(membershipOnTags.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+    );
+
+    const includesOnScalar = validationError(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'includes', path: 'environment', value: 'production' } })),
+    );
+    expect(includesOnScalar.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+    );
+
+    for (const op of ['includes', 'notIncludes'] as const) {
+      for (const value of ['', '   ']) {
+        expect(traceQueryPredicateSchema.safeParse({ op, path: 'tags', value }).success).toBe(false);
+        expect(traceQueryScalarPredicateSchema.safeParse({ op, path: 'environment', value }).success).toBe(false);
+        const blankTag = validationError(() => parsed({ ...baseRequest, where: { op, path: 'tags', value } }));
+        expect(blankTag.issues[0]).toMatchObject({ code: 'invalid_request', path: ['where', 'value'] });
+      }
+    }
+    expect(traceQueryPredicateSchema.parse({ op: 'includes', path: 'tags', value: ' alpha ' })).toMatchObject({
+      value: ' alpha ',
+    });
+
+    const spanScope = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { spans: { some: { op: 'includes', path: 'tags', value: 'manual-review' } } },
+        }),
+      ),
+    );
+    expect(spanScope.issues).toContainEqual(
+      expect.objectContaining({ code: 'field_not_allowed', path: ['where', 'spans', 'some', 'path'] }),
+    );
+  });
+
   it('rejects grouped orderBy and fixes grouped ordering', () => {
     const error = validationError(() =>
       planTraceQuery(
@@ -958,6 +1271,251 @@ describe('planTraceQuery', () => {
   });
 });
 
+describe('queryThreads input and planning', () => {
+  const traceExists = { op: 'exists', path: 'traceId' } as const;
+
+  it('normalizes defaults and rejects grouping, aggregation, and malformed thread predicates', () => {
+    expect(parsedThreads()).toEqual({ traces: baseRequest, page: { limit: 100 } });
+    expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, page: { limit: '10' } }).success).toBe(false);
+
+    for (const property of ['timeRange', 'group', 'groupBy', 'by', 'having']) {
+      expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, [property]: {} }).success, property).toBe(false);
+    }
+
+    for (const where of [
+      traceExists,
+      { op: 'and', args: [] },
+      { traces: {} },
+      { traces: { some: traceExists, none: traceExists } },
+    ]) {
+      expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, where }).success).toBe(false);
+    }
+  });
+
+  it('builds separate eligibility and thread predicates with fixed identity ordering', () => {
+    const plan = planThreadQuery(
+      parsedThreads({
+        traces: {
+          ...baseRequest,
+          where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+        },
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  scores: {
+                    some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                  },
+                },
+              },
+            },
+            { traces: { none: { feedback: { some: { op: 'exists', path: 'comment' } } } } },
+          ],
+        },
+        page: { limit: 25 },
+      }),
+    );
+
+    expect(plan).toMatchObject({
+      result: 'threads',
+      traces: {
+        timeRange: {
+          from: '2026-08-01T00:00:00.000Z',
+          to: '2026-09-01T00:00:00.000Z',
+        },
+        where: { type: 'comparison', field: 'environment', operator: 'eq', value: 'production' },
+      },
+      where: {
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          {
+            type: 'relation',
+            collection: 'traces',
+            quantifier: 'some',
+            predicate: { type: 'relation', collection: 'scores', quantifier: 'some' },
+          },
+          {
+            type: 'relation',
+            collection: 'traces',
+            quantifier: 'none',
+            predicate: { type: 'relation', collection: 'feedback', quantifier: 'some' },
+          },
+        ],
+      },
+      orderBy: { field: 'threadId', direction: 'asc' },
+      limit: 25,
+      binding: expect.any(String),
+    });
+  });
+
+  it('validates the nested trace time range and nested trace predicates', () => {
+    const invalidRange = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { timeRange: { from: baseRequest.timeRange.to, to: baseRequest.timeRange.from } },
+        }),
+      ),
+    );
+    expect(invalidRange.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_time_range', path: ['traces', 'timeRange'] }),
+    );
+
+    expect(planThreadQuery(parsedThreads()).traces.timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    });
+
+    const tooLarge = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } },
+        }),
+      ),
+    );
+    expect(tooLarge.issues[0]).toMatchObject({
+      code: 'time_range_too_large',
+      path: ['traces', 'timeRange'],
+    });
+
+    const invalidField = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          ...baseThreadRequest,
+          where: {
+            traces: {
+              some: { scores: { some: { op: 'eq', left: { path: 'unknown' }, right: { literal: 'secret' } } } },
+            },
+          },
+        }),
+      ),
+    );
+    expect(invalidField.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'field_not_allowed',
+        path: ['where', 'traces', 'some', 'scores', 'some', 'left', 'path'],
+      }),
+    );
+    expect(JSON.stringify(invalidField.issues)).not.toContain('secret');
+  });
+
+  it('shares node and literal budgets across eligibility and thread qualification', () => {
+    const values = Array.from({ length: TRACE_QUERY_MAX_SET_VALUES }, (_, index) => `value-${index}`);
+    const membership = { op: 'in', value: { path: 'traceId' }, set: values } as const;
+    const eligibilityArgs = Array.from({ length: 7 }, () => membership);
+    const threadArgs = Array.from({ length: 4 }, () => ({ traces: { some: membership } }) as const);
+
+    const literalError = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'and', args: eligibilityArgs } },
+          where: { op: 'and', args: threadArgs },
+        }),
+      ),
+    );
+    expect(literalError.issues).toContainEqual(expect.objectContaining({ code: 'predicate_too_complex' }));
+
+    const eligibilityNodes = Array.from({ length: 50 }, () => traceExists);
+    const threadNodes = Array.from({ length: 50 }, () => ({ traces: { some: traceExists } }) as const);
+    const nodeError = validationError(() =>
+      parsedThreads({
+        traces: { ...baseRequest, where: { op: 'and', args: eligibilityNodes } },
+        where: { op: 'and', args: threadNodes },
+      }),
+    );
+    expect(nodeError.issues).toContainEqual(expect.objectContaining({ code: 'predicate_too_complex' }));
+  });
+
+  it('shares the related-clause budget across both scopes', () => {
+    const scoreClause = { scores: { some: { op: 'exists', path: 'scorerId' } } } as const;
+    const eligibilityArgs = Array.from({ length: 4 }, () => scoreClause);
+    const threadClause = { traces: { some: scoreClause } } as const;
+
+    expect(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'and', args: eligibilityArgs } },
+          where: { op: 'and', args: [threadClause, threadClause] },
+        }),
+      ),
+    ).not.toThrow();
+
+    const error = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'and', args: eligibilityArgs } },
+          where: { op: 'and', args: [threadClause, threadClause, threadClause] },
+        }),
+      ),
+    );
+    expect(error.issues).toContainEqual(expect.objectContaining({ code: 'predicate_too_complex' }));
+  });
+
+  it('rejects adversarial recursion inside a thread quantifier before schema recursion', () => {
+    let nested: unknown = { op: 'not' };
+    for (let index = 0; index < 10_000; index += 1) nested = { op: 'not', arg: nested };
+
+    const error = validationError(() => parsedThreads({ ...baseThreadRequest, where: { traces: { some: nested } } }));
+    expect(error.issues[0]).toMatchObject({ code: 'predicate_too_complex' });
+  });
+});
+
+describe('thread-query cursors', () => {
+  it('round-trips thread keys and rejects changed query or authorization state', () => {
+    const plan = planThreadQuery(parsedThreads(), { authorizationBinding: 'scope-a' });
+    const cursor = encodeTraceQueryCursor(plan, { result: 'threads', threadId: 'thread-2' });
+
+    expect(
+      planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: cursor } }), {
+        authorizationBinding: 'scope-a',
+      }),
+    ).toMatchObject({ cursor: { threadId: 'thread-2' } });
+
+    expect(() =>
+      planThreadQuery(
+        parsedThreads({
+          ...baseThreadRequest,
+          where: { traces: { some: { op: 'exists', path: 'threadId' } } },
+          page: { after: cursor },
+        }),
+        { authorizationBinding: 'scope-a' },
+      ),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+
+    expect(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'exists', path: 'environment' } },
+          page: { after: cursor },
+        }),
+        { authorizationBinding: 'scope-a' },
+      ),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+
+    expect(() =>
+      planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: cursor } }), {
+        authorizationBinding: 'scope-b',
+      }),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+  });
+
+  it('does not exchange cursors with legacy grouped trace queries', () => {
+    const legacyPlan = planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }));
+    const legacyCursor = encodeTraceQueryCursor(legacyPlan, { result: 'groups', threadId: 'thread-1' });
+    expect(() => planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: legacyCursor } }))).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+    );
+
+    const threadPlan = planThreadQuery(parsedThreads());
+    const threadCursor = encodeTraceQueryCursor(threadPlan, { result: 'threads', threadId: 'thread-1' });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, page: { after: threadCursor } })),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+  });
+});
+
 describe('trace-query cursors', () => {
   it('uses locale-independent ordering and stable cursor bindings', () => {
     expect(['Ω', 'é', 'a', 'A'].sort(compareTraceQueryStrings)).toEqual(['A', 'a', 'é', 'Ω']);
@@ -1023,6 +1581,149 @@ describe('trace-query cursors', () => {
   });
 });
 
+describe('trace-query discovery contract', () => {
+  const discoveryArgs = { ...baseRequest, predicateScope: 'trace' as const };
+
+  it('normalizes bounded requests and permits empty substring searches', () => {
+    expect(parseGetTraceQueryFieldsArgs({ ...discoveryArgs, search: '  ' })).toEqual({
+      ...discoveryArgs,
+      search: '',
+      limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+    });
+    expect(
+      getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, limit: TRACE_QUERY_DISCOVERY_MAX_LIMIT }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, limit: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryFieldsArgsSchema.safeParse({
+        ...discoveryArgs,
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00.001Z' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('bounds observed fields and values in public responses', () => {
+    const observedFields = Array.from({ length: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }, () =>
+      createTraceQueryObservedFieldDescriptor('metadata.region', 1),
+    );
+    const values = Array.from({ length: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }, (_, index) => ({
+      value: `value-${index}`,
+      count: 1,
+    }));
+
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields: observedFields.slice(0, TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+        observedFieldsTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields,
+        observedFieldsTruncated: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: values.slice(0, TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+        valuesTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(getTraceQueryValuesResponseSchema.safeParse({ values, valuesTruncated: true }).success).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: [{ value: 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2), count: 1 }],
+        valuesTruncated: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: [{ value: 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2 + 1), count: 1 }],
+        valuesTruncated: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('derives ordered canonical descriptors and value eligibility from one registry', () => {
+    for (const scope of ['trace', 'spans', 'scores', 'feedback'] as const) {
+      const descriptors = getTraceQueryCanonicalFieldDescriptors(scope);
+      expect(descriptors.map(field => field.path)).toEqual(Object.keys(TRACE_QUERY_FIELD_REGISTRY[scope]));
+      expect(descriptors.every(field => field.operators.length > 0)).toBe(true);
+      for (const descriptor of descriptors) {
+        expect(isTraceQueryValueSuggestionsPath(scope, descriptor.path)).toBe(descriptor.valueSuggestions);
+      }
+    }
+
+    expect(getTraceQueryCanonicalFieldDescriptors('spans', 'DEL')).toEqual([
+      expect.objectContaining({ path: 'model', valueKind: 'string', valueSuggestions: true }),
+    ]);
+  });
+
+  it('accepts only eligible scope and path pairs for value discovery', () => {
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'environment' })).toMatchObject({
+      path: 'environment',
+      limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+    });
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: ' ${metadata.region} ' })).toMatchObject({
+      path: 'metadata.region',
+    });
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: '${metadata.region }' })).toMatchObject({
+      path: 'metadata.region ',
+    });
+    for (const path of ['traceId', 'startedAt', 'metadata', 'metadata.customer.plan']) {
+      expect(getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path }).success, path).toBe(false);
+    }
+    expect(
+      getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, predicateScope: 'spans', path: 'environment' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('produces normalized trusted storage plans', () => {
+    expect(
+      planTraceQueryObservedFields(
+        parseGetTraceQueryFieldsArgs({
+          timeRange: { from: '2026-08-01T02:00:00+02:00', to: '2026-08-02T02:00:00+02:00' },
+          predicateScope: 'scores',
+          search: ' source ',
+          limit: 10,
+        }),
+      ),
+    ).toEqual({
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+      predicateScope: 'scores',
+      search: 'source',
+      limit: 10,
+    });
+    expect(planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'status' }))).toMatchObject({
+      predicateScope: 'trace',
+      path: 'status',
+      limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+    });
+  });
+
+  it('returns only fields that the trace-query planner accepts in the same scope', () => {
+    for (const scope of ['trace', 'spans', 'scores', 'feedback'] as const) {
+      for (const descriptor of getTraceQueryCanonicalFieldDescriptors(scope)) {
+        const predicate = { op: 'exists', path: descriptor.path };
+        const where = scope === 'trace' ? predicate : { [scope]: { some: predicate } };
+        expect(() => planTraceQuery(parsed({ ...baseRequest, where })), `${scope}.${descriptor.path}`).not.toThrow();
+      }
+    }
+
+    const observed = createTraceQueryObservedFieldDescriptor('metadata.region', 3);
+    expect(observed).toMatchObject({ valueKind: 'string', valueSuggestions: true, occurrences: 3 });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: observed.path } })),
+    ).not.toThrow();
+    expect(() => createTraceQueryObservedFieldDescriptor('metadata.customer.plan', 1)).toThrow();
+  });
+});
+
 describe('trace-query execution timeout contract', () => {
   it('uses a conservative default and rejects invalid timeout configuration', () => {
     expect(resolveTraceQueryTimeoutMs()).toBe(TRACE_QUERY_DEFAULT_TIMEOUT_MS);
@@ -1034,19 +1735,29 @@ describe('trace-query execution timeout contract', () => {
     }
   });
 
-  it('exposes a stable timeout identity without a driver message', () => {
+  it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The trace query exceeded its execution timeout',
+    });
+    expect(new TraceQueryResourceLimitError()).toMatchObject({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The trace query exceeded its resource limit',
     });
   });
 });
 
 describe('trace-query responses and storage capability', () => {
-  it('enforces fixed trace and group projections', () => {
+  it('enforces fixed trace, legacy group, and thread projections', () => {
     const trace = {
       traceId: 'trace-1',
       rootSpanId: 'span-1',
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-08-01T00:00:00Z',
+      metadata: { customer: { id: 'customer-1' }, labels: ['support'], count: 2 },
+      inputPreview: 'Help with my order',
       threadId: null,
       resourceId: null,
       startedAt: '2026-08-01T00:00:00Z',
@@ -1058,18 +1769,54 @@ describe('trace-query responses and storage capability', () => {
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
     expect(
+      traceQueryPaginatedTraceResponseSchema.safeParse({
+        traces: [trace],
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [trace],
+        page: { next: null },
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(false);
+    expect(traceQueryPaginatedTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(
+      false,
+    );
+    expect(
       traceQueryTraceResponseSchema.safeParse({ traces: [{ ...trace, scores: [] }], page: { next: null } }).success,
     ).toBe(false);
     expect(
       traceQueryGroupResponseSchema.safeParse({ groups: [{ threadId: 'thread-1', count: 1 }], page: { next: null } })
         .success,
     ).toBe(false);
+    expect(
+      queryThreadsResultSchema.safeParse({ threads: [{ threadId: 'thread-1' }], page: { next: null } }).success,
+    ).toBe(true);
+    expect(
+      queryThreadsResultSchema.safeParse({ threads: [{ threadId: 'thread-1', count: 1 }], page: { next: null } })
+        .success,
+    ).toBe(false);
   });
 
-  it('fails closed for stores that do not implement advanced trace queries', async () => {
+  it('fails closed for stores that do not implement advanced trace or thread queries', async () => {
     const storage = new ObservabilityStorage();
     await expect(storage.queryTraces(planTraceQuery(parsed()))).rejects.toMatchObject({
       id: 'OBSERVABILITY_STORAGE_QUERY_TRACES_NOT_IMPLEMENTED',
     });
+    await expect(storage.queryThreads(planThreadQuery(parsedThreads()))).rejects.toMatchObject({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
+    });
+    await expect(
+      storage.getTraceQueryObservedFields(
+        planTraceQueryObservedFields(parseGetTraceQueryFieldsArgs({ ...baseRequest, predicateScope: 'trace' })),
+      ),
+    ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
+    await expect(
+      storage.getTraceQueryValues(
+        planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...baseRequest, predicateScope: 'trace', path: 'status' })),
+      ),
+    ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
   });
 });

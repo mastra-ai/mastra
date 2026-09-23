@@ -39,6 +39,8 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
+import { traceImportAction } from './commands/traces/import/action.js';
+import { configureTraceImportCommand } from './commands/traces/import/command.js';
 import { parseComponents, parseLlmProvider, parseMcp, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
@@ -102,6 +104,11 @@ program
   .action(initProject);
 
 registerApiCommand(program);
+
+const tracesCommand = program.command('traces').description('Manage observability traces');
+const traceImportCommand = tracesCommand.command('import');
+configureTraceImportCommand(traceImportCommand);
+traceImportCommand.action(wrapAction(traceImportAction));
 
 program
   .command('lint')
@@ -314,9 +321,9 @@ deployCommand
 
 if (coreFeatures.has('deploy-diagnosis')) {
   deployCommand
-    .command('suggestions [deploy-id]')
-    .alias('diagnosis')
-    .description('Show deploy suggestions for a failed deploy')
+    .command('diagnosis [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed deploy and show fix suggestions')
     .action(wrapAction(suggestionsAction));
 }
 
@@ -376,9 +383,9 @@ registerEnvDbCommands(envCommand);
 
 if (coreFeatures.has('deploy-diagnosis')) {
   envCommand
-    .command('suggestions [deploy-id]')
-    .alias('diagnosis')
-    .description('Show deploy suggestions for a failed environment deploy')
+    .command('diagnosis [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed environment deploy and show fix suggestions')
     .option('--project <project>', 'Project name, slug, or ID (default: linked project)')
     .option('--environment <name>', 'Environment name, slug, or ID (default: only env, or required when >1)')
     .action(wrapAction(envSuggestionsAction));
@@ -403,9 +410,9 @@ const serverDeployCommand = serverCommand
 
 if (coreFeatures.has('deploy-diagnosis')) {
   serverDeployCommand
-    .command('suggestions [deploy-id]')
-    .alias('diagnosis')
-    .description('Show deploy suggestions for a failed deploy')
+    .command('diagnosis [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed deploy and show fix suggestions')
     .option('--org <id>', 'Organization ID')
     .action(wrapAction(serverSuggestionsAction));
 }

@@ -32,14 +32,16 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
         aria-expanded={isExpanded}
-        className="hover:bg-surface3 flex w-full shrink-0 items-center gap-2 px-3 py-1 text-left transition-colors"
+        className="flex w-full shrink-0 items-center gap-2 px-3 py-1 text-left hover:bg-fill-subtle"
       >
-        <ChevronDown className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : '')} />
-        <span className="text-neutral4 text-xs font-medium">Browser Actions ({toolCalls.length})</span>
+        <ChevronDown
+          className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', isExpanded ? 'rotate-180' : '')}
+        />
+        <span className="text-column text-muted-foreground">Browser Actions ({toolCalls.length})</span>
       </button>
 
       {isExpanded && (
-        <div ref={listRef} className="bg-surface1 flex-1 overflow-y-auto">
+        <div ref={listRef} className="flex-1 overflow-y-auto bg-sidebar">
           {toolCalls.map(entry => (
             <BrowserToolCallItem key={entry.toolCallId} entry={entry} />
           ))}

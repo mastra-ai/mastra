@@ -79,7 +79,7 @@ async function setup() {
     onAccepted,
   });
   const reconcileAcceptanceLabels = vi.fn().mockResolvedValue(undefined);
-  const signalSession = vi.fn().mockResolvedValue(undefined);
+  const messageSession = vi.fn().mockResolvedValue(undefined);
   const tools = createFactorySupervisorWriteTools({
     scope: SCOPE,
     userId: 'user-supervisor',
@@ -87,10 +87,10 @@ async function setup() {
     audit: seed.audit,
     transitionService,
     reconcileAcceptanceLabels,
-    signalSession,
+    messageSession,
     now: () => NOW,
   });
-  return { ...seed, tools, transitionService, reconcileAcceptanceLabels, signalSession, onAccepted };
+  return { ...seed, tools, transitionService, reconcileAcceptanceLabels, messageSession, onAccepted };
 }
 
 async function latestAudit(audit: Awaited<ReturnType<typeof setup>>['audit']) {
@@ -311,17 +311,36 @@ describe('createFactorySupervisorWriteTools', () => {
     await expect(
       execute(context.tools.factory_signal_session, { sessionId: 'session-6', message: 'Please stop after tests.' }),
     ).resolves.toMatchObject({ delivered: true, workItemId: item.id });
-    expect(context.signalSession).toHaveBeenCalledWith({
+    expect(context.messageSession).toHaveBeenCalledWith({
       sessionId: 'session-6',
       message: 'Please stop after tests.',
       userId: 'user-supervisor',
+      delivery: 'send',
     });
     expect(await latestAudit(context.audit)).toMatchObject({
       actorId: 'user-supervisor',
       actorType: 'human',
       action: 'factory.agent.signaled',
-      metadata: expect.objectContaining({ cause: 'supervisor', workItemId: item.id, role: 'work' }),
+      metadata: expect.objectContaining({ cause: 'supervisor', workItemId: item.id, role: 'work', delivery: 'send' }),
     });
+
+    await expect(
+      execute(context.tools.factory_signal_session, {
+        sessionId: 'session-6',
+        message: 'Wait until the current work completes.',
+        delivery: 'queue',
+      }),
+    ).resolves.toMatchObject({ delivered: true, delivery: 'queue', workItemId: item.id });
+    expect(context.messageSession).toHaveBeenLastCalledWith({
+      sessionId: 'session-6',
+      message: 'Wait until the current work completes.',
+      userId: 'user-supervisor',
+      delivery: 'queue',
+    });
+    expect(
+      (await context.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 })).events,
+    ).toContainEqual(expect.objectContaining({ metadata: expect.objectContaining({ delivery: 'queue' }) }));
+
     await expect(
       execute(context.tools.factory_signal_session, { sessionId: 'foreign', message: 'No.' }),
     ).rejects.toThrow('does not belong to this factory');

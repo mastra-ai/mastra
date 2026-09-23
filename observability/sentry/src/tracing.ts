@@ -22,6 +22,7 @@ import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { BaseExporter } from '@mastra/observability';
 import { getAttributes as getGenAIAttributes, getSpanName as getGenAISpanName } from '@mastra/otel-exporter';
+import type { GenAISemanticsOptions } from '@mastra/otel-exporter';
 import * as Sentry from '@sentry/node';
 
 type SentrySpanOp = { opType: string; opName: string };
@@ -200,11 +201,16 @@ export class SentryExporter extends BaseExporter {
       return;
     }
 
-    // Skip MODEL_CHUNK and MODEL_STEP spans to simplify trace hierarchy.
+    // Skip MODEL_CHUNK, MODEL_STEP and MODEL_INFERENCE spans to simplify trace
+    // hierarchy: MODEL_GENERATION is exported as the single `gen_ai.chat` span.
     // We store them in skippedSpans to preserve parent-child relationships:
     // when a child span references a skipped span as parent, resolveParentSpanId()
     // walks up the chain to find the first non-skipped ancestor.
-    if (exportedSpan.type === SpanType.MODEL_CHUNK || exportedSpan.type === SpanType.MODEL_STEP) {
+    if (
+      exportedSpan.type === SpanType.MODEL_CHUNK ||
+      exportedSpan.type === SpanType.MODEL_STEP ||
+      exportedSpan.type === SpanType.MODEL_INFERENCE
+    ) {
       if (type === TracingEventType.SPAN_STARTED) {
         this.skippedSpans.set(exportedSpan.id, exportedSpan.parentSpanId || '');
       } else if (type === TracingEventType.SPAN_ENDED) {
@@ -249,7 +255,7 @@ export class SentryExporter extends BaseExporter {
 
     const sentrySpan = Sentry.startInactiveSpan({
       op: this.getOperationType(span),
-      name: getGenAISpanName(span),
+      name: getGenAISpanName(span, this.genAIOptions(span)),
       startTime: span.startTime.getTime(),
       forceTransaction: span.isRootSpan,
       parentSpan: resolvedParentId ? this.spanMap.get(resolvedParentId)?.span : undefined,
@@ -367,13 +373,21 @@ export class SentryExporter extends BaseExporter {
     return currentParentId;
   }
 
+  /**
+   * MODEL_GENERATION is Sentry's `gen_ai.chat` span (steps and inference are
+   * skipped), so it always takes the model-call GenAI attributes.
+   */
+  private genAIOptions(span: AnyExportedSpan): GenAISemanticsOptions {
+    return { modelCall: span.type === SpanType.MODEL_GENERATION };
+  }
+
   private getOperationType(span: AnyExportedSpan): string {
     const config = SPAN_TYPE_CONFIG[span.type];
     return config ? config.opType : 'ai.span';
   }
 
   private buildSpanAttributes(span: AnyExportedSpan): Record<string, any> {
-    const attributes = getGenAIAttributes(span) as Record<string, any>;
+    const attributes = getGenAIAttributes(span, this.genAIOptions(span)) as Record<string, any>;
 
     attributes[ATTRIBUTE_KEYS.SPAN_TYPE] = span.type;
     attributes[ATTRIBUTE_KEYS.ORIGIN] = 'auto.ai.mastra';

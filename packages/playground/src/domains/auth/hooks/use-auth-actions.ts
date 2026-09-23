@@ -1,8 +1,9 @@
 import type { MastraClient } from '@mastra/client-js';
+import { makeSSOLoginRequest } from '@mastra/playground-ui/domains/auth/services/sso-login';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import type { SSOLoginResponse, LogoutResponse } from '../types';
+import type { LogoutResponse } from '../types';
 
 /**
  * Hook to initiate SSO login.
@@ -32,47 +33,11 @@ import type { SSOLoginResponse, LogoutResponse } from '../types';
  * }
  * ```
  */
-/**
- * Makes a request to initiate SSO login.
- * Exported for testing purposes.
- *
- * @internal
- */
-export async function makeSSOLoginRequest(
-  client: MastraClient,
-  { redirectUri }: { redirectUri?: string },
-): Promise<SSOLoginResponse> {
-  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
-  const raw = (apiPrefix || '/api').trim();
-  const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
-
-  const params = new URLSearchParams();
-  if (redirectUri) {
-    params.set('redirect_uri', redirectUri);
-  }
-
-  const url = `${baseUrl}${prefix}/auth/sso/login${params.toString() ? `?${params}` : ''}`;
-
-  const response = await fetch(url, {
-    credentials: 'include',
-    headers: {
-      ...clientHeaders,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to initiate SSO login: ${response.status}`);
-  }
-
-  return response.json();
-}
-
 export function useSSOLogin() {
   const client = useMastraClient();
 
-  return useMutation<SSOLoginResponse, Error, { redirectUri?: string }>({
-    mutationFn: ({ redirectUri }) => makeSSOLoginRequest(client, { redirectUri }),
+  return useMutation({
+    mutationFn: ({ redirectUri }: { redirectUri?: string }) => makeSSOLoginRequest(client, { redirectUri }),
   });
 }
 
@@ -117,7 +82,7 @@ export function useSSOLogin() {
  *
  * @internal
  */
-export async function makeLogoutRequest(client: MastraClient): Promise<LogoutResponse> {
+export async function makeLogoutRequest(client: Pick<MastraClient, 'options'>): Promise<LogoutResponse> {
   const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');

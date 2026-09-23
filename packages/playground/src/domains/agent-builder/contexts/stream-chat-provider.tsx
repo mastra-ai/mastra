@@ -119,7 +119,10 @@ export const StreamChatProvider = ({
             : { ...payload.modelSettings, instructions };
       }
 
-      void sendMessage(payload);
+      void sendMessage(payload).catch(error => {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        throw error;
+      });
     },
     [sendMessage, currentUser, extraInstructionsMode],
   );

@@ -306,6 +306,11 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_score_events_tags_gin', table: TABLE_SCORE_EVENTS, columns: '("tags")', using: 'gin' },
+    {
+      name: 'mastra_score_events_scoreid_cursor_idx',
+      table: TABLE_SCORE_EVENTS,
+      columns: '("scoreId", "cursorId" DESC)',
+    },
     { name: 'mastra_score_events_cursor_idx', table: TABLE_SCORE_EVENTS, columns: '("xactId", "cursorId")' },
 
     // feedback_events

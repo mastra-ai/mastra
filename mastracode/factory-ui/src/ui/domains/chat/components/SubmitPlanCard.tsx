@@ -17,7 +17,7 @@ import {
   PlanTitle,
 } from '@mastra/playground-ui/components/ai/plan';
 
-import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
+import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
 
@@ -44,21 +44,33 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
   const path = inline.path;
 
   const workspace = useThreadWorkspacePath();
-  const fetchable = inline.plan === undefined && isPlanReadablePath(path);
-  const file = usePlanFile(workspace.workspacePath, path, toolCallId, { enabled: fetchable });
+  // Absolute artifact paths must be normalized against the authoritative
+  // workspace `.artifacts` root before the file route (which requires a
+  // workspace-relative path) will serve them.
+  const needsRoot = inline.plan === undefined && Boolean(path?.startsWith('/'));
+  const rendered = useWorkspaceRenderedListing(workspace.workspacePath, '.artifacts', { enabled: needsRoot });
+  const readablePath = normalizePlanPath(path, rendered.data?.rootPath);
+  const fetchable = inline.plan === undefined && readablePath !== undefined;
+  const file = usePlanFile(workspace.workspacePath, readablePath, toolCallId, { enabled: fetchable });
   const fetched = fetchable && file.data?.content !== undefined ? parsePlanMarkdown(file.data.content) : undefined;
 
   const title = inline.title ?? fetched?.title ?? 'Plan';
   const plan = inline.plan ?? fetched?.plan ?? '';
   const loading =
-    fetchable &&
+    inline.plan === undefined &&
     !fetched &&
     !file.isError &&
-    (workspace.isPending || (Boolean(workspace.workspacePath) && file.isPending));
+    !rendered.isError &&
+    (workspace.isPending ||
+      (needsRoot && Boolean(workspace.workspacePath) && rendered.isPending) ||
+      (fetchable && Boolean(workspace.workspacePath) && file.isPending));
   const unavailable = inline.plan === undefined && !fetched && !loading;
   // Responding while the plan is still loading would back-fill an empty plan
   // into the durable result — hold responses until the fetch settles.
   const respondDisabled = isSubmitting || loading;
+  // Never approve a plan with no visible body (missing, blank, loading, or
+  // submitting). Reject stays available after a load failure.
+  const approveDisabled = respondDisabled || plan.trim().length === 0;
 
   const respond = (response: PlanResume) =>
     onRespond?.({
@@ -83,11 +95,11 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
         </PlanIntro>
         <PlanMain>
           {loading ? (
-            <p aria-label="Loading plan" className="text-ui-sm text-neutral3 my-2">
+            <p aria-label="Loading plan" className="text-caption text-muted-foreground my-2">
               Loading plan…
             </p>
           ) : unavailable ? (
-            <p role="note" className="text-ui-sm text-neutral3 my-2">
+            <p role="note" className="text-caption text-muted-foreground my-2">
               The plan could not be loaded from {path ?? 'its file'}. You can still respond below.
             </p>
           ) : (
@@ -95,8 +107,8 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
           )}
           {inline.feedback ? (
             <div role="note" aria-label="Plan feedback" className="border-accent1 mt-4 border-l-2 pl-3">
-              <p className="text-ui-xs text-neutral3 mb-1">Feedback</p>
-              <p className="text-ui-sm text-neutral5 whitespace-pre-wrap">{inline.feedback}</p>
+              <p className="text-meta text-muted-foreground mb-1">Feedback</p>
+              <p className="text-caption text-foreground whitespace-pre-wrap">{inline.feedback}</p>
             </div>
           ) : null}
           {onRespond ? (
@@ -109,7 +121,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
                     variant="primary"
                     className="whitespace-nowrap"
                     aria-label="Approve the plan and switch to build"
-                    disabled={respondDisabled}
+                    disabled={approveDisabled}
                     onClick={() => respond({ action: 'approved' })}
                   >
                     Approve & build

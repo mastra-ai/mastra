@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
-import { expectCurrentBreadcrumb, expectRouteDocsLink } from '../__utils__/route-header';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Processors list page', () => {
   test.afterEach(async () => {
@@ -8,12 +8,11 @@ test.describe('Processors list page', () => {
   });
 
   test.describe('when the processors page is visited', () => {
-    test('shows the page header and docs link', async ({ page }) => {
+    test('shows the page header', async ({ page }) => {
       await page.goto('/processors');
 
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectCurrentBreadcrumb(page, 'Processors');
-      await expectRouteDocsLink(page, 'Processors documentation', 'https://mastra.ai/en/docs/agents/processors');
     });
   });
 

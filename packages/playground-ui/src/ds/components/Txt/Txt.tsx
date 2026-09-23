@@ -1,12 +1,13 @@
 import type { HTMLAttributes, ReactNode, Ref } from 'react';
 
-import type { FontSizes } from '../../tokens';
+import type { TextRole } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
 export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'div';
   ref?: Ref<HTMLElement>;
-  variant?: keyof typeof FontSizes;
+  variant?: TextRole;
+  tone?: keyof typeof tones;
   font?: 'mono';
   htmlFor?: string;
   className?: string;
@@ -14,26 +15,42 @@ export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelEleme
   children?: ReactNode;
 }
 
-const variants = {
-  // UI text sizes
-  'ui-xs': 'text-ui-xs leading-ui-xs',
-  'ui-sm': 'text-ui-sm leading-ui-sm',
-  'ui-smd': 'text-ui-smd leading-ui-smd',
-  'ui-md': 'text-ui-md leading-ui-md',
-  'ui-lg': 'text-ui-lg leading-ui-lg',
-  // Header sizes
-  'header-xs': 'text-header-xs leading-header-xs',
-  'header-sm': 'text-header-sm leading-header-sm',
-  'header-md': 'text-header-md leading-header-md',
-  'header-lg': 'text-header-lg leading-header-lg',
-  'header-xl': 'text-header-xl leading-header-xl',
-};
-
 const fonts = {
   mono: 'font-mono',
 };
 
-export const Txt = ({ as: Root = 'p', className, variant = 'ui-md', font, ref, ...props }: TxtProps) => {
+// One class per role, written out so Tailwind's scanner finds it: size, line height,
+// weight and tracking come from the `--text-*` tokens in theme/typography.css, so nothing
+// here can drift from a component that writes the same role by hand. Typed against
+// `TextRole`, so a role added to the token list has to land here too.
+const roles: Record<TextRole, string> = {
+  display: 'text-display',
+  title: 'text-title',
+  heading: 'text-heading',
+  subheading: 'text-subheading',
+  body: 'text-body',
+  label: 'text-label',
+  'body-sm': 'text-body-sm',
+  column: 'text-column',
+  caption: 'text-caption',
+  meta: 'text-meta',
+};
+
+// Three inks, the same ladder every control uses. Omitting `tone` inherits — `body` is
+// already `--foreground`, so ink is written only to lift text back out of a muted block.
+const tones = {
+  ink: 'text-foreground',
+  muted: 'text-muted-foreground',
+  faint: 'text-placeholder',
+};
+
+export const Txt = ({ as: Root = 'p', className, variant = 'body', tone, font, ref, ...props }: TxtProps) => {
   // Cast needed: `Root` is polymorphic, so TS narrows the expected ref to a single element type.
-  return <Root ref={ref as never} className={cn(variants[variant], font && fonts[font], className)} {...props} />;
+  return (
+    <Root
+      ref={ref as never}
+      className={cn(roles[variant], tone && tones[tone], font && fonts[font], className)}
+      {...props}
+    />
+  );
 };

@@ -11,8 +11,9 @@ import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { BufferingCoordinator } from './processors/observational-memory/buffering-coordinator';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 import { Memory } from './index';
 
@@ -3175,6 +3176,109 @@ describe('Memory', () => {
     });
   });
 
+  describe('deleteThread observational-memory coordination', () => {
+    const threadId = 'drain-thread';
+    const resourceId = 'drain-resource';
+
+    async function seedThread(memory: Memory) {
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Drain probe',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      // Static state leaks across tests in this package (`isolate: false`).
+      BufferingCoordinator.asyncBufferingOps.clear();
+    });
+
+    it('waits for an in-flight cycle on the thread before deleting it', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: { observationalMemory: { enabled: true, scope: 'thread' } },
+      });
+      expect(await memory.omEngine).toBeTruthy();
+      await seedThread(memory);
+
+      const memoryStore = (await storage.getStore('memory'))!;
+      const originalDelete = memoryStore.deleteThread.bind(memoryStore);
+      const order: string[] = [];
+      vi.spyOn(memoryStore, 'deleteThread').mockImplementation(async input => {
+        order.push('store-delete');
+        return originalDelete(input);
+      });
+
+      // An in-flight buffered observation cycle for this thread, gated so the
+      // interleaving is deterministic rather than timing-dependent.
+      let releaseCycle!: () => void;
+      const cycleGate = new Promise<void>(resolve => {
+        releaseCycle = resolve;
+      });
+      BufferingCoordinator.asyncBufferingOps.set(
+        `obs:thread:${threadId}`,
+        cycleGate.then(() => {
+          order.push('cycle-finished');
+        }),
+      );
+
+      const deletion = memory.deleteThread(threadId);
+      // Let every pending microtask settle so the drain is reached.
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+
+      // Parked on the drain: nothing destructive has happened yet. Without the
+      // drain this is exactly where the delete used to run ahead of the cycle.
+      expect(order).toEqual([]);
+      expect(await memory.getThreadById({ threadId })).toBeTruthy();
+
+      releaseCycle();
+      await deletion;
+
+      expect(order).toEqual(['cycle-finished', 'store-delete']);
+      expect(await memory.getThreadById({ threadId })).toBeNull();
+    });
+
+    it('bounds the drain with a timeout tighter than the engine default', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const waitForBuffering = vi.fn(async () => {});
+      // @ts-expect-error - injecting a fake engine to observe drain coordination
+      memory._omEngineInstance = { waitForBuffering };
+      await seedThread(memory);
+
+      await memory.deleteThread(threadId);
+
+      expect(waitForBuffering).toHaveBeenCalledTimes(1);
+      const [calledThreadId, calledResourceId, timeoutMs] = waitForBuffering.mock.calls[0]!;
+      expect(calledThreadId).toBe(threadId);
+      expect(calledResourceId).toBe(resourceId);
+      // The engine default is 30s, sized for server endpoints. A user-facing delete
+      // must not be able to stall that long behind one stuck cycle.
+      expect(typeof timeoutMs).toBe('number');
+      expect(timeoutMs).toBeLessThan(30_000);
+    });
+
+    it('does not instantiate an observational-memory engine just to drain it', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      await seedThread(memory);
+
+      const initEngine = vi.spyOn(Memory.prototype as never, '_initOMEngine' as never);
+      await memory.deleteThread(threadId);
+
+      expect(initEngine).not.toHaveBeenCalled();
+      expect(await memory.getThreadById({ threadId })).toBeNull();
+    });
+  });
+
   describe('Memory tracing', () => {
     function createMockSpan() {
       const childSpan = {
@@ -3341,6 +3445,109 @@ describe('Memory', () => {
 
       expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
       expect(childSpan.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateThreadResourceId', () => {
+    it('skips vector migration for a same-resource transfer when semantic recall is not configured', async () => {
+      const mockVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 1536 }),
+        id: 'mock-vector',
+      } as any;
+
+      // No embedder / no semanticRecall => nothing to migrate => storage no-op preserved.
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        options: { lastMessages: 10, generateTitle: false },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: 'noop-thread',
+          resourceId: 'resource-a',
+          title: 'Noop',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.updateThreadResourceId({ threadId: 'noop-thread', resourceId: 'resource-a' });
+
+      expect(result.resourceId).toBe('resource-a');
+      expect(mockVector.deleteVectors).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
+    it('re-runs vector migration on a same-resource call so a failed prior migration can be repaired', async () => {
+      const mockVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 1536 }),
+        id: 'mock-vector',
+      } as any;
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [new Array(1536).fill(0.1)] }),
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: { semanticRecall: { scope: 'resource' }, lastMessages: 10, generateTitle: false },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: 'repair-thread',
+          resourceId: 'resource-a',
+          title: 'Repair',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'repair-msg-1',
+            threadId: 'repair-thread',
+            resourceId: 'resource-a',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'hello repair' }] },
+            createdAt: new Date(),
+          },
+        ] as any,
+      });
+
+      // Ignore the upsert performed by the initial saveMessages so we only assert on the
+      // upsert the retry rebuilds.
+      mockVector.upsert.mockClear();
+      mockVector.deleteVectors.mockClear();
+
+      const result = await memory.updateThreadResourceId({ threadId: 'repair-thread', resourceId: 'resource-a' });
+
+      expect(result.resourceId).toBe('resource-a');
+      // With vector migration configured we must NOT short-circuit, so a retry after a
+      // storage-succeeded/migration-failed state can rebuild the stale vectors.
+      expect(mockVector.deleteVectors).toHaveBeenCalled();
+      // The rebuild must re-embed the thread's messages under the (unchanged) resource so
+      // resource-scoped recall keeps surfacing them — proving the migration actually ran.
+      expect(mockVector.upsert).toHaveBeenCalled();
+      const upsertArg = mockVector.upsert.mock.calls.at(-1)![0];
+      expect(upsertArg.metadata).toEqual(
+        expect.arrayContaining([expect.objectContaining({ resource_id: 'resource-a', thread_id: 'repair-thread' })]),
+      );
     });
   });
 });

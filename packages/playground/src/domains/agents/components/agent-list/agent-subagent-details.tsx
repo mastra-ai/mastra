@@ -34,8 +34,8 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
             size="sm"
             className="pointer-events-auto"
             aria-label={`Show ${agentCount} for ${agentName}`}
+            icon={<AgentIcon aria-hidden="true" />}
           >
-            <AgentIcon aria-hidden="true" />
             <span>{agentEntries.length}</span>
           </Button>
         }
@@ -55,7 +55,7 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
             tabIndex={0}
           >
             {agentEntries.map(([agentKey, agent]) => (
-              <li key={agentKey} className="overflow-wrap-anywhere text-ui-sm text-neutral5 font-medium">
+              <li key={agentKey} className="overflow-wrap-anywhere text-column text-foreground">
                 {agent.name || agent.id || agentKey}
               </li>
             ))}

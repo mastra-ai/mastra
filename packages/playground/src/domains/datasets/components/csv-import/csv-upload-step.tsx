@@ -1,5 +1,6 @@
 'use client';
 
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -76,11 +77,15 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
       {/* Hidden file input */}
       <input
         ref={inputRef}
+        id="input-csv-file"
+        name="csv-file"
         type="file"
         accept=".csv"
         onChange={handleFileChange}
         className="hidden"
         disabled={isParsing}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? fieldErrorId('csv-file') : undefined}
       />
 
       {/* Dropzone */}
@@ -91,10 +96,10 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         onDrop={handleDrop}
         className={cn(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-6',
+          'min-h-[160px] rounded-lg border-2 border-dashed p-4',
           'cursor-pointer transition-colors',
           // Default state
-          'border-surface4 bg-surface2',
+          'border-border bg-background',
           // Drag over state
           isDragOver && 'border-accent1/50 bg-accent1/5',
           // Error state
@@ -106,23 +111,23 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-neutral4 text-sm">Parsing CSV...</span>
+            <span className="text-body text-muted-foreground">Parsing CSV...</span>
           </>
         ) : (
           <>
-            <Icon className="text-neutral4">
+            <Icon className="text-muted-foreground">
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-neutral1 text-sm font-medium">Click to upload or drag and drop</span>
-              <span className="text-neutral4 text-xs">CSV files only</span>
+              <span className="text-subheading text-placeholder">Click to upload or drag and drop</span>
+              <span className="text-caption text-muted-foreground">CSV files only</span>
             </div>
           </>
         )}
       </div>
 
       {/* Error message */}
-      {error && <div className="text-accent2 text-sm">{error}</div>}
+      {error && <FieldBlock.ErrorMsg name="csv-file">{error}</FieldBlock.ErrorMsg>}
     </div>
   );
 }

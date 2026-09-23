@@ -23,6 +23,7 @@ import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class ResourceScopedObservationStrategy extends ObservationStrategy {
@@ -419,8 +420,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         const thread = await this.storage.getThreadById({ threadId: update.threadId });
         if (thread) {
           const oldTitle = thread.title?.trim();
-          const newTitle = update.threadTitle?.trim();
-          const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+          const newTitle = resolveThreadTitleUpdate(thread, update.threadTitle);
+          const shouldUpdateThreadTitle = newTitle !== undefined;
           const previousOmMetadata = getThreadOMMetadata(thread.metadata);
           const metadataUpdate = buildThreadMetadataFromExtractedValues(
             update.extractors ?? this.observationConfig.extractors,

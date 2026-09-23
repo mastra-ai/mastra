@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "kimi-k3",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",
@@ -68,6 +69,7 @@
   "structuredOutput": [
     "deepseek-v4-flash-0731",
     "glm-5.2",
+    "kimi-k3",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",

@@ -446,6 +446,38 @@ export class NotificationsPG extends NotificationsStorage {
     return updated;
   }
 
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
+
+    const now = new Date();
+    const assignments: Record<string, unknown> = {
+      status: input.status,
+      ...statusTimestamp(input.status, now),
+      updatedAt: now,
+    };
+    const columns = Object.keys(assignments);
+    const setClause = columns
+      .map((column, index) => `"${parseSqlIdentifier(column, 'column name')}" = $${index + 1}`)
+      .join(', ');
+
+    const schemaName = getSchemaName(this.#schema);
+    const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    // Bind the id list as one array parameter so the statement's parameter count is
+    // independent of how many ids are passed.
+    const rows = await this.#db.client.manyOrNone(
+      `UPDATE ${tableName} SET ${setClause} WHERE "threadId" = $${columns.length + 1} AND "id" = ANY($${columns.length + 2}::text[]) RETURNING *`,
+      [...Object.values(assignments), input.threadId, ids],
+    );
+    return rows.map(rowToNotification);
+  }
+
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
     if (!input.dedupeKey && !input.coalesceKey) return undefined;
 

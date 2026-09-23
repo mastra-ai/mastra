@@ -230,6 +230,9 @@ export class LocalSandbox extends MastraSandbox<string> {
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
+    if (requestedIsolation === 'seatbelt' && process.platform === 'win32') {
+      throw new IsolationUnavailableError('seatbelt', 'Seatbelt isolation is only supported on macOS, not Windows.');
+    }
     if (requestedIsolation !== 'none' && !isIsolationAvailable(requestedIsolation)) {
       const detection = detectIsolation();
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
@@ -495,8 +498,14 @@ export class LocalSandbox extends MastraSandbox<string> {
   private async _captureCheckpoint(name: string): Promise<void> {
     const target = this._checkpointPath(name);
     await fs.mkdir(this._checkpointsDirectory, { recursive: true });
-    const tmp = path.join(this._checkpointsDirectory, `.tmp-${name}-${crypto.randomBytes(6).toString('hex')}`);
-    const backup = path.join(this._checkpointsDirectory, `.bak-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    const tmp = path.join(
+      this._checkpointsDirectory,
+      `.tmp-${name}-${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`,
+    );
+    const backup = path.join(
+      this._checkpointsDirectory,
+      `.bak-${name}-${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`,
+    );
     let targetMoved = false;
     try {
       await fs.cp(this.workingDirectory, tmp, { recursive: true });

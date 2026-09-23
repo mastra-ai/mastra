@@ -24,8 +24,8 @@ export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
           variant="default"
           onClick={() => requestChange('public')}
           data-testid="skill-builder-visibility-add"
+          icon={<Globe />}
         >
-          <Globe className="h-3.5 w-3.5" />
           Add to library
         </Button>
       ) : (
@@ -34,8 +34,8 @@ export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
           variant="ghost"
           onClick={() => requestChange('private')}
           data-testid="skill-builder-visibility-remove"
+          icon={<LockIcon />}
         >
-          <LockIcon className="h-3.5 w-3.5" />
           Remove from library
         </Button>
       )}

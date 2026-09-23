@@ -17,6 +17,14 @@ import { MC_TOOLS } from '../tool-names.js';
 import { buildToolGuidance } from './prompts/tool-guidance.js';
 import { createDynamicTools } from './tools.js';
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 // Minimal mock of AgentControllerRequestContext shape that createDynamicTools reads
 function makeRequestContext(
   overrides: {
@@ -63,6 +71,13 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('request_access');
   });
 
+  it('should keep provider-native and interactive tools foreground-only', async () => {
+    const tools = await createDynamicTools()({ requestContext: makeRequestContext() });
+
+    expect(tools.web_search.background).toBeUndefined();
+    expect(tools.request_access.background).toBeUndefined();
+  });
+
   it('should not overwrite built-in tools with extraTools of the same name', async () => {
     const sneakyTool = createTool({
       id: 'request_access',
@@ -100,6 +115,88 @@ describe('createDynamicTools – extraTools', () => {
 
     expect(tools.plugin_tool).toBe(pluginTool);
     expect(tools.request_access).not.toBe(sneakyPluginTool);
+  });
+
+  it('should keep the Alexandria expert foreground-only by default', async () => {
+    const mastraExpert = createTool({
+      id: 'mastra_expert',
+      description: 'Ask the Alexandria expert',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async () => ({ answer: 'expert answer' }),
+    });
+
+    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
+      mastra_expert: mastraExpert,
+    })({ requestContext: makeRequestContext() });
+
+    expect(tools.mastra_expert).toBe(mastraExpert);
+    expect(tools.mastra_expert.background).toBeUndefined();
+    expect(tools.mastra_expert.execute).toBe(mastraExpert.execute);
+  });
+
+  it.each(['mastra_expert', 'adversarial_review', 'custom_tool'])(
+    'does not infer background support from %s',
+    async name => {
+      const tool = createTool({ id: name, inputSchema: z.object({}), execute: async () => ({ answer: 'ack' }) });
+      const tools = await createDynamicTools(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { [name]: tool },
+        true,
+      )({ requestContext: makeRequestContext() });
+      expect(tools[name]).toBe(tool);
+      expect(tools[name].background).toBeUndefined();
+    },
+  );
+
+  it.each([true, false])('respects plugin-declared background configuration with setting %s', async enabled => {
+    const background = { enabled: true, defaultDisposition: 'foreground' as const, timeoutMs: 1234, maxRetries: 0 };
+    const tool = createTool({
+      id: 'custom_tool',
+      inputSchema: z.object({}),
+      background,
+      execute: async () => 'answer',
+    });
+    const tools = await createDynamicTools(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { custom_tool: tool },
+      enabled,
+    )({ requestContext: makeRequestContext() });
+    expect(tools.custom_tool.background).toEqual({ ...background, enabled });
+    expect(tools.custom_tool.execute).toBe(tool.execute);
+    expect(tool.background).toEqual(background);
+    if (enabled) expect(tools.custom_tool).toBe(tool);
+  });
+
+  it('does not serialize plugin-owned execution across requests', async () => {
+    const release = createDeferred<void>();
+    const started: string[] = [];
+    const tool = createTool({
+      id: 'mastra_expert',
+      inputSchema: z.object({ question: z.string() }),
+      background: { enabled: true, defaultDisposition: 'foreground' },
+      execute: async ({ question }) => {
+        started.push(question);
+        await release.promise;
+        return question;
+      },
+    });
+    const getTools = createDynamicTools(undefined, undefined, undefined, undefined, { mastra_expert: tool }, true);
+    const firstTools = await getTools({ requestContext: makeRequestContext() });
+    const secondTools = await getTools({ requestContext: makeRequestContext() });
+    const first = firstTools.mastra_expert.execute!({ question: 'first' });
+    const second = secondTools.mastra_expert.execute!({ question: 'second' });
+    try {
+      await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
+    } finally {
+      release.resolve();
+      await Promise.all([first, second]);
+    }
   });
 
   it('should let extraTools win over pluginTools for embedding overrides', async () => {
@@ -250,10 +347,10 @@ describe('createDynamicTools – extraTools', () => {
     ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
     expect(notificationStore.listNotifications).toHaveBeenCalledWith({
       threadId: 'thread-1',
-      status: undefined,
+      status: ['pending', 'delivered'],
       priority: undefined,
       source: undefined,
-      limit: undefined,
+      limit: 21,
     });
   });
 

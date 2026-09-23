@@ -1,4 +1,5 @@
 import { createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
+import { SPAN_SCHEMA, TABLE_SPANS } from '@mastra/core/storage';
 import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -99,6 +100,87 @@ export function pgTests() {
           [thread.id],
         );
         expect(Number(row.count)).toBe(8192);
+      });
+    });
+
+    describe('batchInsert span conflict handling', () => {
+      beforeAll(async () => {
+        const existing = await store.db.oneOrNone<{ table: string | null }>(
+          `SELECT to_regclass('public.mastra_ai_spans') AS "table"`,
+        );
+        if (!existing?.table) {
+          await dbOps.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+        }
+      });
+
+      beforeEach(async () => {
+        await dbOps.clearTable({ tableName: TABLE_SPANS });
+      });
+
+      it('applies last-write-wins for duplicate (traceId, spanId) within one input batch', async () => {
+        const traceId = `dup-trace-${Date.now()}`;
+        const spanId = 'dup-span';
+        const startedAt = new Date('2024-01-01T00:00:00.000Z');
+
+        await dbOps.batchInsert({
+          tableName: TABLE_SPANS,
+          records: [
+            { traceId, spanId, name: 'first', spanType: 'agent_run', isEvent: false, startedAt },
+            { traceId, spanId, name: 'second', spanType: 'agent_run', isEvent: false, startedAt },
+            { traceId, spanId, name: 'third', spanType: 'agent_run', isEvent: false, startedAt },
+          ],
+        });
+
+        const rows = await store.db.manyOrNone<{ name: string }>(
+          'SELECT "name" FROM mastra_ai_spans WHERE "traceId" = $1 AND "spanId" = $2',
+          [traceId, spanId],
+        );
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.name).toBe('third');
+      });
+
+      it('persists a large span batch through chunked multi-row inserts', async () => {
+        const traceId = `chunk-trace-${Date.now()}`;
+        const startedAt = new Date('2024-01-01T00:00:00.000Z');
+        const records = Array.from({ length: 5000 }, (_, index) => ({
+          traceId,
+          spanId: `span-${index}`,
+          name: `span-${index}`,
+          spanType: 'tool_call',
+          isEvent: false,
+          startedAt,
+        }));
+
+        await dbOps.batchInsert({ tableName: TABLE_SPANS, records });
+
+        const row = await store.db.one<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM mastra_ai_spans WHERE "traceId" = $1',
+          [traceId],
+        );
+        expect(Number(row.count)).toBe(5000);
+      });
+
+      it('upserts existing spans across separate batches (last write wins)', async () => {
+        const traceId = `cross-batch-trace-${Date.now()}`;
+        const spanId = 'cross-batch-span';
+        const startedAt = new Date('2024-01-01T00:00:00.000Z');
+
+        await dbOps.batchInsert({
+          tableName: TABLE_SPANS,
+          records: [{ traceId, spanId, name: 'initial', spanType: 'agent_run', isEvent: false, startedAt }],
+        });
+        await dbOps.batchInsert({
+          tableName: TABLE_SPANS,
+          records: [{ traceId, spanId, name: 'updated', spanType: 'agent_run', isEvent: false, startedAt }],
+        });
+
+        const rows = await store.db.manyOrNone<{ name: string }>(
+          'SELECT "name" FROM mastra_ai_spans WHERE "traceId" = $1 AND "spanId" = $2',
+          [traceId, spanId],
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.name).toBe('updated');
       });
     });
 

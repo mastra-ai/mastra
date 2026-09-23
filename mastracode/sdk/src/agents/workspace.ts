@@ -14,7 +14,7 @@ import type { MastraCodeState } from '../schema.js';
 import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
 
-import { GOAL_JUDGE_READONLY_TOOLS, MASTRACODE_WORKSPACE_TOOLS } from './tool-availability.js';
+import { createMastraCodeWorkspaceTools, GOAL_JUDGE_READONLY_TOOLS } from './tool-availability.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -183,10 +183,12 @@ export async function getDynamicWorkspace({
   requestContext,
   mastra,
   skillExtension,
+  backgroundToolsEnabled = false,
 }: {
   requestContext: RequestContext;
   mastra?: Mastra;
   skillExtension?: WorkspaceSkillExtension;
+  backgroundToolsEnabled?: boolean;
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
@@ -213,7 +215,7 @@ export async function getDynamicWorkspace({
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
   // `activeTools` on the AgentController, not by mutating workspace capabilities.
-  const workspaceTools = MASTRACODE_WORKSPACE_TOOLS;
+  const workspaceTools = createMastraCodeWorkspaceTools(backgroundToolsEnabled);
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)
   let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;

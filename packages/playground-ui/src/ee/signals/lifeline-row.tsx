@@ -5,6 +5,9 @@ import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { nodeColor } from '@/ds/components/SankeyChart';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHoverInGroup } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 const TRACK_HEIGHT = 28;
 const MAX_BAR_HEIGHT = 22;
@@ -57,15 +60,19 @@ export function LifelineRow({
   return (
     <li
       aria-label={`${row.label}: present in ${row.points.length} of ${snapshots.length} landmarks`}
-      className={`group hover:bg-surface3 flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
+      className={`group flex items-center gap-3 rounded-md hover:bg-fill-subtle ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
       <span
-        className="text-neutral4 group-hover:text-neutral6 w-52 shrink-0 truncate text-right text-xs"
+        className={cn(
+          quietTextHoverInGroup,
+          controlStateColorTransition,
+          'w-52 shrink-0 truncate text-right text-caption',
+        )}
         title={row.label}
       >
         {row.label}
       </span>
-      <div className="border-border1 relative mx-2 h-7 min-w-0 flex-1 border-b">
+      <div className="relative mx-2 h-7 min-w-0 flex-1 border-b border-border">
         {connectors.length > 0 || segments.length > 0 ? (
           <svg
             aria-hidden="true"
@@ -112,7 +119,7 @@ export function LifelineRow({
           );
         })}
       </div>
-      <span className="text-neutral3 w-9 shrink-0 font-mono text-[11px] tabular-nums">
+      <span className="w-9 shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
         {row.points.length}/{snapshots.length}
       </span>
     </li>

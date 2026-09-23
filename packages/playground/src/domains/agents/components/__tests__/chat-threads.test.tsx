@@ -46,4 +46,14 @@ describe('ChatThreads — hide threads panel', () => {
 
     expect(onHidePanel).toHaveBeenCalledTimes(1);
   });
+
+  it('advertises the { shortcut in the hide control tooltip', async () => {
+    renderThreads(vi.fn());
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Hide threads panel' }));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.textContent).toContain('Hide threads panel');
+    expect(tooltip.querySelector('kbd')?.textContent).toBe('{');
+  });
 });

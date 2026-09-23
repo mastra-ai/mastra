@@ -1,7 +1,9 @@
+import type { MastraClient } from '@mastra/client-js';
 import type { EntityType } from '@mastra/core/observability';
-import type { ListLogsArgs } from '@mastra/core/storage';
 import type { LogLevel } from './types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+
+type ListLogsArgs = NonNullable<Parameters<MastraClient['listLogsVNext']>[0]>;
 
 export type LogsDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 

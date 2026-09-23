@@ -1,5 +1,11 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/resources')];
 
 const resources = [
   {
@@ -49,28 +55,31 @@ const resources = [
 
 export default function Resources() {
   return (
-    <PageLayout width="narrow">
-      <PageLayout.MainArea>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Resources</h1>
+      <div>
         <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
           {resources.map(resource => (
             <a
               key={resource.href}
               href={resource.href}
               {...(resource.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="group border-border1 bg-surface2 hover:border-accent1 hover:bg-surface3 flex flex-col gap-3 rounded-lg border p-5 transition-colors"
+              className="group state-layer flex flex-col gap-3 rounded-lg border border-border bg-background p-5 hover:border-accent1"
             >
               <div className="flex items-center gap-2.5">
-                <resource.icon className="text-icon3 group-hover:text-accent1 h-5 w-5 transition-colors" />
-                <span className="text-ui-md text-text1 font-medium">{resource.title}</span>
+                <resource.icon
+                  className={cn('h-5 w-5 text-muted-foreground group-hover:text-accent1', controlStateColorTransition)}
+                />
+                <span className="text-subheading text-foreground">{resource.title}</span>
                 {resource.external && (
-                  <ExternalLinkIcon className="text-icon3 ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <ExternalLinkIcon className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-ui-sm text-text3 leading-relaxed">{resource.description}</p>
+              <p className="text-text3 text-caption">{resource.description}</p>
             </a>
           ))}
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

@@ -1,10 +1,12 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import {
@@ -13,9 +15,18 @@ import {
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { useInfiniteExperiments } from '@/domains/experiments/hooks/use-infinite-experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useReviewSummary } from '@/domains/review';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
+import {
+  TARGET_ID_PARAM,
+  TARGET_TYPE_PARAM,
+  useTargetFilterParams,
+} from '@/domains/shared/hooks/use-target-filter-params';
+
+const crumbs = [navCrumb('/experiments')];
+const EXPERIMENTS_SORT_KEYS = ['createdAt', 'status'] as const;
 
 export default function Experiments() {
   const [search, setSearch] = useState('');
@@ -25,6 +36,14 @@ export default function Experiments() {
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: EXPERIMENTS_SORT_KEYS });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
 
   const datasetFilter = searchParams.get('dataset') ?? 'all';
   const setDatasetFilter = useCallback(
@@ -45,16 +64,21 @@ export default function Experiments() {
     [setSearchParams],
   );
 
+  const { targetType, targetId, setTargetType, setTargetId } = useTargetFilterParams();
+
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
   const {
     data: experimentsData,
     isLoading: isLoadingExperiments,
     error: errorExperiments,
-  } = useExperimentsForDatasetFilter(datasetFilter === 'all' ? undefined : datasetFilter);
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useInfiniteExperiments(datasetFilter === 'all' ? undefined : datasetFilter, { targetType, targetId }, orderBy);
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
-  const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
+  const experiments = useMemo(() => experimentsData ?? [], [experimentsData]);
   const experimentDatasetOptions = useMemo(() => getExperimentDatasetOptions(datasets), [datasets]);
   const reviewByExperiment = useMemo(() => buildReviewByExperimentMap(reviewSummary), [reviewSummary]);
 
@@ -95,33 +119,42 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="experiments" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
+        <PermissionDenied variant="fill" resource="experiments" />
+      </PageLayout>
     );
   }
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="datasets" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
+        <PermissionDenied variant="fill" resource="datasets" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load experiments" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load experiments"
+          descriptionSlot={error.message}
+        />
+      </PageLayout>
     );
   }
 
@@ -133,27 +166,39 @@ export default function Experiments() {
     />
   );
 
-  // With a dataset filter active, keep the toolbar so the user can reset it.
-  if (experiments.length === 0 && !isLoading && datasetFilter === 'all') {
+  // With a dataset or target filter active, keep the toolbar so the user can reset it.
+  if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
-  const hasFilters = statusFilter !== 'all' || datasetFilter !== 'all' || search !== '';
+  const hasFilters = statusFilter !== 'all' || datasetFilter !== 'all' || search !== '' || targetType !== '';
 
   const resetFilters = () => {
     setSearch('');
     setStatusFilter('all');
-    setDatasetFilter('all');
+    // Single URL update: consecutive functional setSearchParams calls would overwrite each other.
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('dataset');
+        next.delete(TARGET_TYPE_PARAM);
+        next.delete(TARGET_ID_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   return (
-    <PageLayout height="full">
-      <PageLayout.TopArea>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
         <ExperimentsToolbar
           search={search}
           onSearchChange={setSearch}
@@ -162,6 +207,10 @@ export default function Experiments() {
           datasetFilter={datasetFilter}
           onDatasetFilterChange={setDatasetFilter}
           datasetOptions={experimentDatasetOptions}
+          targetType={targetType}
+          onTargetTypeChange={setTargetType}
+          targetId={targetId}
+          onTargetIdChange={setTargetId}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
           onRunClick={() => setRunDialogOpen(true)}
@@ -177,8 +226,9 @@ export default function Experiments() {
               : undefined
           }
         />
-      </PageLayout.TopArea>
-
+      }
+    >
+      <h1 className="sr-only">Experiments</h1>
       <ExperimentsList
         experiments={experiments}
         datasets={datasets}
@@ -187,6 +237,11 @@ export default function Experiments() {
         search={search}
         statusFilter={statusFilter}
         datasetFilter={datasetFilter}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        sort={sort}
+        onSortChange={onSortChange}
         selection={
           isSelectionActive
             ? { selectedExperimentIds: selectedIds, onToggleSelection: toggleExperimentSelection }

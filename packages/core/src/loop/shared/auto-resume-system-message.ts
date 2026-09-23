@@ -53,22 +53,32 @@ export function extractSuspendedToolsFromMessages(
   // Merge both metadata buckets — the same assistant turn can declare both
   // a suspended tool and a pending approval, and we should not lose one when
   // the other exists.
-  let suspendedToolObj: Record<string, unknown> | undefined =
+  const metadataEntries =
     metadata && (metadata.suspendedTools || metadata.pendingToolApprovals)
       ? { ...(metadata.suspendedTools ?? {}), ...(metadata.pendingToolApprovals ?? {}) }
       : undefined;
+  let suspendedToolObj: Record<string, unknown> | undefined = metadataEntries
+    ? Object.fromEntries(
+        Object.entries(metadataEntries).map(([toolCallId, entry]) => [
+          toolCallId,
+          entry && typeof entry === 'object' && !Array.isArray(entry)
+            ? { toolCallId, ...(entry as Record<string, unknown>) }
+            : entry,
+        ]),
+      )
+    : undefined;
 
   if (!suspendedToolObj) {
     suspendedToolObj = suspendedToolsMessage.content.parts
       ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
       ?.reduce(
-        (acc, part) => {
+        (acc, part, index) => {
           if (
             (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
             !(part.data as { resumed?: boolean }).resumed
           ) {
-            const data = part.data as { toolName?: string };
-            if (data.toolName) acc[data.toolName] = data;
+            const data = part.data as { toolCallId?: string; toolName?: string };
+            if (data.toolName) acc[data.toolCallId ?? `${data.toolName}-${index}`] = data;
           }
           return acc;
         },
@@ -78,10 +88,9 @@ export function extractSuspendedToolsFromMessages(
 
   if (!suspendedToolObj) return [];
 
-  // The auto-resume directive tells the model to pass the entry's `runId` back
-  // as `suspendedToolRunId`, which the resume leg uses to resume the suspended
-  // (inner) run. Persisted metadata stores the OUTER resumable runId with the
-  // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
+  // The original tool call identifies the framework-persisted suspension. The
+  // delegated run remains visible for diagnostics and backwards compatibility,
+  // but the resume leg derives it from the selected suspended tool call.
   return Object.values(suspendedToolObj).map(entry => {
     if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
     const { delegatedRunId, parentToolName, parentArgs, ...rest } = entry as Record<string, unknown>;
@@ -111,17 +120,18 @@ export function buildAutoResumeSystemMessageSuffix(
   // explicit approval APIs, never reconstructed by the model from a message.
   const resumableTools = suspendedTools.filter(tool => tool.type !== 'approval');
   if (resumableTools.length === 0) return null;
-  // parentRunId is internal bookkeeping for channel resume routing; the model
-  // only needs runId (as suspendedToolRunId). Omitting it keeps the prompt
-  // byte-identical to existing LLM recordings.
+  // parentRunId is internal bookkeeping for channel resume routing. The model
+  // uses the original toolCallId to identify the suspension; runId remains
+  // visible only for compatibility and diagnostics.
   const toolsForPrompt = resumableTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
   return `\n\nAnalyse the suspended tools: ${JSON.stringify(toolsForPrompt)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
-                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
+                      Also, add the toolCallId of the suspended tool as suspendedToolCallId to the tool call arguments/input. This identifies the exact framework-persisted suspension to resume.
+                      You may also add the runId as suspendedToolRunId for compatibility, but it does not select the suspension and must match the runId associated with suspendedToolCallId.
                       If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
 
-                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
+                      IMPORTANT: If you're able to construct resumeData and get suspendedToolCallId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data.
                       `;
 }
 

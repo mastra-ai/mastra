@@ -10,8 +10,8 @@ import { useState } from 'react';
 
 import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+
 import { SettingsSubsection } from './SettingsSubsection';
 import { Segmented, SoundPicker, ThinkingLevelPicker } from './SettingsFields';
 
@@ -28,23 +28,19 @@ export function GeneralSettings() {
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
     saveDoneSound(next);
-    // Preview the pick so the user hears what they chose.
+
     playDoneSound(next);
   };
   return (
     <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Theme" description="Color scheme for the interface">
+      <SettingsContainer>
+        <SettingsRow label="Theme" description="Color scheme for the interface">
           <ThemeToggle />
         </SettingsRow>
-        <SettingsRow
-          variant="factory"
-          label="Completion sound"
-          description="Played when an agent run finishes in a workspace"
-        >
+        <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
           <SoundPicker value={doneSound} onChange={changeDoneSound} />
         </SettingsRow>
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
@@ -56,11 +52,7 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow
-      variant="factory"
-      label="Thinking level"
-      description="Reasoning budget for your chats — overrides the Factory defaults"
-    >
+    <SettingsRow label="Thinking level" description="Reasoning budget for your chats — overrides the Factory defaults">
       <ThinkingLevelPicker
         ariaLabel="Thinking level"
         value={settings?.thinkingLevel ?? 'off'}
@@ -94,8 +86,8 @@ export function BehaviorSettings({
         title="General"
         description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
       >
-        <SettingsCard>
-          <SettingsRow variant="factory" label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
+        <SettingsContainer>
+          <SettingsRow label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
             <Toggle
               ariaLabel="Auto-approve tools"
               checked={!!settings?.yolo}
@@ -103,7 +95,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
-          <SettingsRow variant="factory" label="Smart editing" description="Use AST-aware edits when available">
+          <SettingsRow label="Smart editing" description="Use AST-aware edits when available">
             <Toggle
               ariaLabel="Smart editing"
               checked={!!settings?.smartEditing}
@@ -111,7 +103,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
-          <SettingsRow variant="factory" label="Notifications" description="How completion alerts are delivered">
+          <SettingsRow label="Notifications" description="How completion alerts are delivered">
             <Segmented
               ariaLabel="Notifications"
               value={notificationMode}
@@ -120,7 +112,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ notifications: v })}
             />
           </SettingsRow>
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
       <PermissionsSection
         permissions={permissions}
@@ -155,9 +147,9 @@ function PermissionsSection({
       title="Tool permissions"
       description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow. Shared by everyone working in this Factory, and reset when the server restarts."
     >
-      <SettingsCard>
+      <SettingsContainer>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-          <SettingsRow variant="factory" key={value} label={label} description={hint}>
+          <SettingsRow key={value} label={label} description={hint}>
             <Segmented
               ariaLabel={`${label} permission`}
               value={permissions?.categories?.[value] ?? 'ask'}
@@ -167,7 +159,7 @@ function PermissionsSection({
             />
           </SettingsRow>
         ))}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }

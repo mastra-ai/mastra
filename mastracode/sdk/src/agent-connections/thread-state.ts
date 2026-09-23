@@ -1,0 +1,225 @@
+import type { RequestContext } from '@mastra/core/request-context';
+
+import {
+  AGENT_CONNECTIONS_STATE_TYPE,
+  type AgentConnectionsState,
+  type AgentSignalPriority,
+  type AgentSignalRoutingAction,
+  type ConnectedAgentPeer,
+  type SentAgentSignal,
+} from './types.js';
+
+export const AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY = 'mastracode.agentConnections';
+
+const stateWriteQueues = new WeakMap<object, Map<string, Promise<void>>>();
+
+export type ResolvedAgentConnectionStore = {
+  getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined>;
+  setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void>;
+};
+
+export interface AgentConnectionContext {
+  agent?: { threadId?: string; resourceId?: string; agentId?: string };
+  requestContext?: RequestContext;
+  mastra?: { getStorage?: () => any };
+  runtimeAgent?: { discoverThreadPeers?: (...args: any[]) => Promise<unknown> };
+}
+
+export function isMemoryBacked(agent: AgentConnectionContext['agent']): boolean {
+  return Boolean(agent?.threadId && agent?.resourceId);
+}
+
+export function isThreadStateStore(value: unknown): value is ResolvedAgentConnectionStore {
+  return (
+    !!value &&
+    typeof (value as ResolvedAgentConnectionStore).getState === 'function' &&
+    typeof (value as ResolvedAgentConnectionStore).setState === 'function'
+  );
+}
+
+export async function resolveAgentConnectionStore(
+  context: AgentConnectionContext,
+): Promise<ResolvedAgentConnectionStore | undefined> {
+  const store = await context.mastra?.getStorage?.()?.getStore?.('threadState');
+  return isThreadStateStore(store) ? store : undefined;
+}
+
+export function normalizeAgentConnectionsState(value: unknown): AgentConnectionsState {
+  if (!value || typeof value !== 'object') return { peers: [] };
+  const state = value as { peers?: unknown; sentSignals?: unknown };
+  return {
+    peers: Array.isArray(state.peers) ? normalizeConnectedPeers(state.peers) : [],
+    sentSignals: Array.isArray(state.sentSignals) ? normalizeSentAgentSignals(state.sentSignals) : [],
+  };
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+export function normalizeConnectedPeers(peers: unknown[]): ConnectedAgentPeer[] {
+  const seen = new Set<string>();
+  const normalized: ConnectedAgentPeer[] = [];
+  for (const peer of peers) {
+    if (!peer || typeof peer !== 'object') continue;
+    const candidate = peer as Partial<ConnectedAgentPeer>;
+    if (!readString(candidate.id) || !readString(candidate.resourceId) || !readString(candidate.threadId)) continue;
+    if (candidate.agentId !== undefined && typeof candidate.agentId !== 'string') continue;
+    if (seen.has(candidate.id as string)) continue;
+    seen.add(candidate.id as string);
+    normalized.push({
+      id: candidate.id as string,
+      agentId: candidate.agentId,
+      resourceId: candidate.resourceId as string,
+      threadId: candidate.threadId as string,
+      label: readString(candidate.label),
+      title: readString(candidate.title),
+      mode: readString(candidate.mode),
+      pid: typeof candidate.pid === 'number' ? candidate.pid : undefined,
+      connectedAt: typeof candidate.connectedAt === 'number' ? candidate.connectedAt : Date.now(),
+      lastSeenAt: typeof candidate.lastSeenAt === 'number' ? candidate.lastSeenAt : 0,
+    });
+  }
+  return sortConnectedPeers(normalized);
+}
+
+export function sortConnectedPeers(peers: ConnectedAgentPeer[]): ConnectedAgentPeer[] {
+  return [...peers].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+const agentSignalPriorities = new Set<AgentSignalPriority>(['low', 'medium', 'high', 'urgent']);
+const agentSignalRoutingActions = new Set<AgentSignalRoutingAction>([
+  'wake',
+  'deliver',
+  'persist',
+  'discard',
+  'blocked',
+]);
+
+export function normalizeSentAgentSignals(signals: unknown[]): SentAgentSignal[] {
+  return signals.flatMap(signal => {
+    if (!signal || typeof signal !== 'object') return [];
+    const candidate = signal as Partial<SentAgentSignal>;
+    const messageId = readString(candidate.messageId);
+    const fingerprint = readString(candidate.fingerprint);
+    const targetId = readString(candidate.targetId);
+    const returnPeerId = readString(candidate.returnPeerId);
+    if (
+      !messageId ||
+      !fingerprint ||
+      !targetId ||
+      !agentSignalPriorities.has(candidate.priority as AgentSignalPriority) ||
+      typeof candidate.expectsReply !== 'boolean' ||
+      !returnPeerId ||
+      !Number.isFinite(candidate.sentAt) ||
+      (candidate.replyTo !== undefined && !readString(candidate.replyTo)) ||
+      (candidate.routingAction !== undefined &&
+        !agentSignalRoutingActions.has(candidate.routingAction as AgentSignalRoutingAction)) ||
+      (candidate.runId !== undefined && !readString(candidate.runId))
+    ) {
+      return [];
+    }
+    return [
+      {
+        messageId,
+        fingerprint,
+        targetId,
+        priority: candidate.priority as AgentSignalPriority,
+        expectsReply: candidate.expectsReply,
+        ...(candidate.replyTo ? { replyTo: candidate.replyTo } : {}),
+        returnPeerId,
+        ...(candidate.routingAction ? { routingAction: candidate.routingAction } : {}),
+        ...(candidate.runId ? { runId: candidate.runId } : {}),
+        sentAt: candidate.sentAt as number,
+      },
+    ];
+  });
+}
+
+async function readAgentConnectionsState(context: AgentConnectionContext): Promise<AgentConnectionsState> {
+  const store = await resolveAgentConnectionStore(context);
+  const threadId = context.agent?.threadId;
+  if (!store || !threadId) return { peers: [] };
+  const state = await store.getState<AgentConnectionsState>({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE });
+  return normalizeAgentConnectionsState(state);
+}
+
+export async function readAgentConnections(context: AgentConnectionContext): Promise<ConnectedAgentPeer[]> {
+  return (await readAgentConnectionsState(context)).peers;
+}
+
+export async function updateAgentConnections(
+  context: AgentConnectionContext,
+  update: (current: ConnectedAgentPeer[]) => ConnectedAgentPeer[],
+): Promise<ConnectedAgentPeer[]> {
+  const next = await updateAgentConnectionsState(context, current => ({
+    ...current,
+    peers: sortConnectedPeers(update(current.peers)),
+  }));
+  context.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, next.peers);
+  return next.peers;
+}
+
+export async function readSentAgentSignals(context: AgentConnectionContext): Promise<SentAgentSignal[]> {
+  return (await readAgentConnectionsState(context)).sentSignals ?? [];
+}
+
+export async function writeSentAgentSignals(
+  context: AgentConnectionContext,
+  sentSignals: SentAgentSignal[],
+): Promise<void> {
+  await updateAgentConnectionsState(context, current => {
+    const byMessageId = new Map((current.sentSignals ?? []).map(signal => [signal.messageId, signal]));
+    for (const signal of sentSignals) byMessageId.set(signal.messageId, signal);
+    return {
+      ...current,
+      sentSignals: [...byMessageId.values()].sort((a, b) => a.sentAt - b.sentAt).slice(-100),
+    };
+  });
+}
+
+async function updateAgentConnectionsState(
+  context: AgentConnectionContext,
+  update: (current: AgentConnectionsState) => AgentConnectionsState,
+): Promise<AgentConnectionsState> {
+  const store = await resolveAgentConnectionStore(context);
+  const threadId = context.agent?.threadId;
+  if (!store || !threadId) return update({ peers: [] });
+
+  const queueOwner = context.mastra ?? store;
+  let queues = stateWriteQueues.get(queueOwner);
+  if (!queues) {
+    queues = new Map();
+    stateWriteQueues.set(queueOwner, queues);
+  }
+  const previous = queues.get(threadId) ?? Promise.resolve();
+  const pending = previous
+    .catch(() => {})
+    .then(async () => {
+      const state = await store.getState<AgentConnectionsState>({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE });
+      const next = update(normalizeAgentConnectionsState(state));
+      await store.setState({
+        threadId,
+        type: AGENT_CONNECTIONS_STATE_TYPE,
+        value: next,
+      });
+      return next;
+    });
+  const queued = pending.then(
+    () => {},
+    () => {},
+  );
+  queues.set(threadId, queued);
+  try {
+    return await pending;
+  } finally {
+    if (queues.get(threadId) === queued) queues.delete(threadId);
+  }
+}
+
+export function getCarriedAgentConnections(
+  requestContext: RequestContext | undefined,
+): ConnectedAgentPeer[] | undefined {
+  const value = requestContext?.get(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY);
+  return Array.isArray(value) ? normalizeConnectedPeers(value) : undefined;
+}

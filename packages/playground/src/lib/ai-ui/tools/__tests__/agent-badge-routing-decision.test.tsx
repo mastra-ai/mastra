@@ -9,7 +9,7 @@ vi.mock('@mastra/playground-ui/domains/chat/components/network-choice-metadata-d
   NetworkChoiceMetadataDialogTrigger: mockNetworkChoiceMetadataDialogTrigger,
 }));
 
-vi.mock('../badges/tool-approval-buttons', () => ({
+vi.mock('@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons', () => ({
   ToolApprovalButtons: mockToolApprovalButtons,
 }));
 

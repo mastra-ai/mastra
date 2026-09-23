@@ -80,6 +80,7 @@ export async function loadPluginRecord(
       // session exist, so a plugin resolves these when it needs them, not now.
       getController: options.runtime?.getController,
       getActiveSession: options.runtime?.getActiveSession,
+      getStorage: options.runtime?.getStorage,
     };
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const processors = await resolvePluginProcessors(plugin, context);

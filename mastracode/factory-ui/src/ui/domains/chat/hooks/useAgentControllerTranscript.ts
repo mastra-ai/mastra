@@ -1,35 +1,22 @@
-import type { AgentControllerEvent, AgentControllerSessionState, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
 import { useCallback, useReducer } from 'react';
 
 import { createInitialTranscript, createLocalMessageId, transcriptReducer } from '../services/transcript';
 import type { OutgoingFile } from '../services/transcript';
 
-/** What the session-state route hydrates the status line with before the first event lands. */
-export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'omProgress' | 'tokenUsage'>;
-
-/**
- * The transcript and the handles that change it. Every handle is a bare dispatch, so
- * they are pinned once (`onEvent` re-pins only when the viewer changes): a delta then
- * leaves the whole API identical, which is what lets anything downstream skip a render.
- */
 export function useAgentControllerTranscript({
   initialThreadId,
   initialMessages,
-  initialState,
   viewerId,
 }: {
   initialThreadId?: string;
   initialMessages?: MastraDBMessage[];
-  initialState?: SessionStateSnapshot;
-  /** The signed-in user; a live message from anyone else is drawn as it lands. */
   viewerId?: string;
 } = {}) {
   const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>
     createInitialTranscript({
       messages: initialMessages,
       threadId: initialThreadId,
-      omProgress: initialState?.omProgress,
-      usage: initialState?.tokenUsage,
     }),
   );
   const [initialHistoryReady, markInitialHistoryReady] = useReducer(
@@ -37,12 +24,10 @@ export function useAgentControllerTranscript({
     !initialThreadId || initialMessages !== undefined,
   );
 
-  const reset = useCallback((threadId?: string, state?: SessionStateSnapshot) => {
+  const reset = useCallback((threadId?: string) => {
     dispatch({
       type: 'reset',
       threadId,
-      omProgress: state?.omProgress,
-      usage: state?.tokenUsage,
     });
   }, []);
 

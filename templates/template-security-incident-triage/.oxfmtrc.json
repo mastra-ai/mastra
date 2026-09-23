@@ -1,0 +1,25 @@
+{
+  "endOfLine": "lf",
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "printWidth": 120,
+  "arrowParens": "avoid",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules/**",
+    "dist/**",
+    ".mastra/**",
+    ".cache/**",
+    "coverage/**",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    ".vscode/**",
+    "src/mastra/evals/datasets/v1/**",
+    "src/mastra/agents/response-planner.ts",
+    "src/mastra/evals/offline-replay.ts"
+  ]
+}

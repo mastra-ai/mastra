@@ -1,6 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 
@@ -40,8 +42,8 @@ export function AgentVersionPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-border1 border-b px-3 py-3">
-        <Txt variant="ui-sm" className="text-neutral5 font-medium">
+      <div className="border-b border-border px-3 py-3">
+        <Txt variant="column" tone="ink">
           Version history
         </Txt>
       </div>
@@ -49,7 +51,7 @@ export function AgentVersionPanel({
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="px-3 py-4">
-            <Txt variant="ui-xs" className="text-neutral2">
+            <Txt variant="meta" tone="faint">
               Loading versions...
             </Txt>
           </div>
@@ -67,20 +69,21 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 text-sm transition-colors border-l-2',
+                      'w-full border-l-2 px-3 py-2.5 text-left text-body',
+                      controlStateColorTransition,
                       isSelected
-                        ? 'bg-surface2 text-neutral5 border-accent1'
-                        : 'border-transparent text-neutral3 hover:bg-surface3 hover:text-neutral5',
+                        ? 'border-accent1 bg-fill-hover text-foreground'
+                        : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <Txt variant="ui-sm" className="text-inherit">
+                      <Txt variant="caption" className="text-inherit">
                         v{version.versionNumber}
                       </Txt>
                       {isPublished && <Badge variant="green">Published</Badge>}
                       {isDraft && <Badge variant="blue">Draft</Badge>}
                     </div>
-                    <Txt variant="ui-xs" className="text-neutral2 mt-0.5">
+                    <Txt variant="meta" tone="faint" className="mt-0.5">
                       {formatTimestamp(version.createdAt)}
                     </Txt>
                   </button>

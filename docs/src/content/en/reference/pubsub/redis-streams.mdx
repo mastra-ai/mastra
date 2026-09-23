@@ -22,6 +22,8 @@ Each topic maps to a Redis stream key. Subscriptions with a group use a Redis co
 npm install @mastra/redis-streams
 ```
 
+Requires Redis 7.0 or later. The reclaim loop relies on `XCLAIM` removing trimmed entries from the pending list, which earlier versions don't do.
+
 ## Usage example
 
 Provide a Redis connection URL.
@@ -34,6 +36,36 @@ export const mastra = new Mastra({
   pubsub: new RedisStreamsPubSub({
     url: 'redis://localhost:6379',
   }),
+})
+```
+
+### Redis Cluster
+
+Pass `cluster` instead of `url`/`redisOptions` to connect to a Redis Cluster (for example, AWS ElastiCache with cluster mode enabled). The options are forwarded to `createCluster()` from `redis`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    cluster: {
+      rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }],
+    },
+  }),
+})
+```
+
+### Bring your own client
+
+To control client construction yourself (TLS, credential providers, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
+
+```typescript title="src/mastra/index.ts"
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { createClient } from 'redis'
+
+const pubsub = new RedisStreamsPubSub({
+  client: createClient({ url: process.env.REDIS_URL, socket: { tls: true } }),
 })
 ```
 
@@ -69,6 +101,20 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
+    name: 'cluster',
+    type: 'RedisClusterOptions',
+    description:
+      'Connect to a Redis Cluster. Options are passed to `createCluster()` from `redis`. Mutually exclusive with `url`, `redisOptions`, and `client`.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'RedisClientType | RedisClusterType',
+    description:
+      'A pre-configured, unconnected `redis` client (standalone or cluster) used as the writer; readers are created with `client.duplicate()`. The pubsub owns its lifecycle (connects lazily, quits on `close()`). Mutually exclusive with `url`, `redisOptions`, and `cluster`.',
+    isOptional: true,
+  },
+  {
     name: 'maxStreamLength',
     type: 'number',
     description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
@@ -79,7 +125,7 @@ export const mastra = new Mastra({
     name: 'streamIdleTtlMs',
     type: 'number',
     description:
-      'Idle expiry in milliseconds: a sliding TTL refreshed on every write (publish, nack retry, group re-creation). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically. Note that only writes refresh the TTL — a consumer slowly draining a backlog does not — so set it well above the longest expected gap between writes on a live topic. This is a backstop, not the primary cleanup — `clearTopic` handles normal end-of-lifecycle deletion; this only bounds memory for streams that never reach a `clearTopic` call (e.g. a crashed run). Must be a non-negative integer. Defaults to 0 (disabled).',
+      'Idle expiry in milliseconds: a sliding TTL refreshed on every write to a stream (publish, subscribe creating its consumer group, nack retry). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically, together with its entries and consumer groups. Only writes refresh the TTL — a consumer slowly draining a backlog does not — so keep it well above the longest expected gap between writes on a live topic, and above the longest a grouped worker may be offline while still expecting to replay its backlog on restart. For topics with a clear end of life (workflow and agent runs), `clearTopic` deletes the stream eagerly and the TTL only covers streams that never reach that call, such as a crashed run. For open-ended topics that are never cleared (for example, per-conversation streams), the TTL is the only mechanism that reclaims their memory — with it disabled they stay in Redis forever, so production deployments should set it (for example, 7 days). Must be a non-negative integer. Defaults to 0 (disabled).',
     isOptional: true,
     defaultValue: '0',
   },
@@ -106,6 +152,14 @@ export const mastra = new Mastra({
       'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
     isOptional: true,
     defaultValue: '5',
+  },
+  {
+    name: 'inFlightTimeoutMs',
+    type: 'number',
+    description:
+      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+    isOptional: true,
+    defaultValue: '0',
   },
   {
     name: 'logger',
@@ -168,6 +222,8 @@ Deletes a topic's stream and every consumer group on it, freeing the memory a fi
 
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
+Not every topic reaches a `clearTopic` call. Topics without a defined end of life (per-conversation streams, application feeds) are never cleared, and a stream that misses its cleanup (for example, a crashed run) is never retried. Configure the `streamIdleTtlMs` sliding TTL to reclaim those streams once they go idle.
+
 ```typescript
 await pubsub.clearTopic('workflow.events.run-123')
 ```
@@ -184,6 +240,8 @@ await pubsub.close()
 
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
 
+A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
+
 ## Distributed leasing
 
 `RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/harness/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
@@ -191,13 +249,3 @@ When a subscriber calls `nack`, the event is republished with an incremented `de
 Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
 
 You don't call these methods directly. Configuring `RedisStreamsPubSub` as the `pubsub` backend is enough for the runtime to detect and use the capability. See [`LeaseProvider`](/reference/pubsub/lease-provider) for the full method contract.
-
-## Managed provisioning
-
-When you deploy a project that reads `REDIS_URL` from the environment, the Mastra CLI's `deploy` preflight offers to attach a managed Redis on the Mastra platform in one step.
-
-If you accept, `mastra deploy` provisions the database and waits for it to reach the ready state before injecting `REDIS_URL` into the deploy so `new RedisStreamsPubSub({ url: process.env.REDIS_URL })` connects without extra setup.
-
-The prompt is shown only when three conditions hold: `REDIS_URL` is referenced by user code, the environment's value is missing or points to a localhost address, and the run is interactive (a terminal without the `--yes` flag). Non-interactive runs (CI, `--yes`) report the issue with a copy-pasteable `mastra env db create --kind redis` command instead of silently creating infrastructure.
-
-You can also provision a managed Redis up front with `mastra env db create --kind redis`. Once attached, the platform meters CPU seconds and memory GB-hours and shows them on the project's Database Usage page.

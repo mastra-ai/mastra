@@ -50,7 +50,7 @@ cleanup()
 
 ### Using the `durable` config flag
 
-Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, `cleanupTimeoutMs`, or `shouldCache`.
+Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, `cleanupTimeoutMs`, `shouldCache`, or `shouldPersistSnapshot`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -134,6 +134,13 @@ Returns: `DurableAgent`
     description:
       'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
   },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`. Pass a predicate that includes `running` to keep crash-recovery checkpoints for manual `listActiveRuns()` / `recoverActiveRuns()` without enabling automatic recovery. Mastra logs a warning when a predicate excludes `suspended` or `paused`, or excludes `running` while `recovery.durableAgents` is `'auto'`.",
+  },
 ]}
 />
 
@@ -185,6 +192,13 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     isOptional: true,
     description:
       'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
+  },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      'Accepted for API symmetry with `createDurableAgent`, but ignored: the evented engine requires the full snapshot set (`pending`, `paused`, `suspended`, `running`) because the initial `running` write creates the base row that suspend-merges and multi-worker coordination build on. A warning is logged if set.',
   },
 ]}
 />
@@ -241,6 +255,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     isOptional: true,
     description:
       'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
+  },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`.",
   },
   {
     name: 'cleanupTimeoutMs',
@@ -365,21 +386,29 @@ Stopping a durable run through `abortRunStream()` or `abortThreadStream()` requi
 
 Returns: `boolean`. `true` when this process aborted the run locally or can see it executing. The abort request is published either way.
 
-#### `abortThreadStream({ threadId, resourceId? })`
+#### `abortThreadStream({ threadId, resourceId?, expectedRunId? })`
 
 Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. The run is resolved from this process's thread runtime, so it must have been started here or observed through `subscribeToThread()` on this process. The server route `POST /agents/:agentId/threads/abort` uses this method.
 
+Pass `expectedRunId` when the request must only stop a specific run. If another queued run becomes active before the request is handled, the method returns `false` without aborting the successor. Omit `expectedRunId` to abort whichever run is active when the request is handled.
+
 ```typescript
-durableAgent.abortThreadStream({ resourceId: 'user-1', threadId: 'thread-1' })
+const aborted = durableAgent.abortThreadStream({
+  resourceId: 'user-1',
+  threadId: 'thread-1',
+  expectedRunId: runId,
+})
 ```
 
-Returns: `boolean`. `false` when this process has no active run recorded for the thread. No abort request is sent in that case.
+Returns: `boolean`. `false` when this process has no active run recorded for the thread or the active run doesn't match `expectedRunId`. No abort request is sent in either case.
 
 ### Recovery
 
 #### `listActiveRuns(options?)`
 
 Lists this agent's runs whose persisted snapshot is in `running` status: runs whose agentic loop was mid-execution when the workflow engine last saved state. On a live process they transition to `suspended` or a terminal status. After a crash or restart they stay `running` with nothing driving them, which is what `recoverActiveRuns()` re-drives. Runs started by other durable agents on the same storage aren't included.
+
+`running` snapshots are only written when `recovery.durableAgents` is `'auto'` or a custom `shouldPersistSnapshot` includes `running`. Without one of those, this method returns no runs. See [snapshot persistence](/docs/harness/durable-agents#snapshot-persistence).
 
 ```typescript
 const { runs, total } = await durableAgent.listActiveRuns({ resourceId: 'user-1' })

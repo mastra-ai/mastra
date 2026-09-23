@@ -172,6 +172,21 @@ export type StorageListWorkflowRunsInput = {
    */
   page?: number;
   resourceId?: string;
+  /**
+   * Best-effort narrowing filter on the thread id embedded in the snapshot JSON.
+   *
+   * Unlike `resourceId`, the thread id is not a column — it lives inside the
+   * snapshot at one of two locations (see `getSnapshotMemoryInfo` in
+   * `domains/workflows/snapshot-memory-info.ts` for the canonical extraction):
+   * 1. agentic-loop: `context.<suspended step>.suspendPayload.__streamState.messageList.memoryInfo.threadId`
+   * 2. durable loop: `context.input.messageListState.memoryInfo.threadId`
+   *
+   * Adapters MAY ignore this field entirely (returning a superset), but MUST
+   * NOT exclude rows the canonical extraction would match. Callers must
+   * re-verify the thread id on returned rows; most adapters currently ignore
+   * the field and only jsonb/json-capable stores (e.g. pg, libsql) push it down.
+   */
+  threadId?: string;
   status?: WorkflowRunStatus;
 };
 
@@ -235,14 +250,6 @@ export type StorageCloneThreadInput = {
   metadata?: Record<string, unknown>;
   /** Options for filtering which messages to include */
   options?: {
-    /**
-     * When true (default), the returned `clonedMessages` array is populated with the
-     * fully hydrated (parsed) message payloads. When false, message rows are copied
-     * inside the database (never returned to the JS heap) and `clonedMessages` is
-     * returned empty; only `messageIdMap` is produced. Set false on paths that discard
-     * payloads (e.g. forked-subagent clones, observational-memory-only remaps).
-     */
-    hydrateMessages?: boolean;
     /** Maximum number of messages to copy (from most recent) */
     messageLimit?: number;
     /** Filter messages by date range or specific IDs */
@@ -258,15 +265,22 @@ export type StorageCloneThreadInput = {
 };
 
 /**
+ * Output from copying a thread. Message payloads are copied inside the store and
+ * never returned; only the id mapping is produced.
+ */
+export type StorageCopyThreadOutput = {
+  /** The newly created thread */
+  thread: StorageThreadType;
+  /** Map from source message IDs to copied message IDs (used for OM remapping) */
+  messageIdMap?: Record<string, string>;
+};
+
+/**
  * Output from cloning a thread
  */
-export type StorageCloneThreadOutput = {
-  /** The newly created cloned thread */
-  thread: StorageThreadType;
+export type StorageCloneThreadOutput = StorageCopyThreadOutput & {
   /** The messages that were copied to the new thread */
   clonedMessages: MastraDBMessage[];
-  /** Map from source message IDs to cloned message IDs (used for OM remapping) */
-  messageIdMap?: Record<string, string>;
 };
 
 export type StorageResourceType = {
@@ -2781,9 +2795,21 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
   name?: string;
 }
 
+export type DatasetOrderByField = 'createdAt' | 'updatedAt' | 'name';
+export type DatasetItemOrderByField = 'createdAt' | 'updatedAt';
+export type ExperimentOrderByField = 'createdAt' | 'status';
+export type ExperimentResultOrderByField = 'startedAt' | 'createdAt';
+
+export interface ListOrderBy<TField extends string> {
+  field?: TField;
+  direction?: ThreadSortDirection;
+}
+
 export interface ListDatasetsInput {
   pagination: StoragePagination;
   filters?: ListDatasetsFilters;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<DatasetOrderByField>;
 }
 
 export interface ListDatasetsOutput {
@@ -2797,6 +2823,8 @@ export interface ListDatasetItemsInput {
   search?: string;
   pagination: StoragePagination;
   filters?: DatasetTenancyFilters;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<DatasetItemOrderByField>;
 }
 
 export interface ListDatasetItemsOutput {
@@ -3152,6 +3180,8 @@ export interface ListExperimentsInput {
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<ExperimentOrderByField>;
 }
 
 export interface ListExperimentsOutput {
@@ -3168,6 +3198,8 @@ export interface ListExperimentResultsInput {
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
+  /** Sort order. Defaults to `startedAt ASC` (execution order). Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<ExperimentResultOrderByField>;
 }
 
 export interface ListExperimentResultsOutput {

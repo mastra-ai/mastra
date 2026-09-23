@@ -13,7 +13,7 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
-  StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
@@ -1135,6 +1135,80 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single write transaction. SQLite serializes write transactions, so overlapping
+   * transfers of the same thread cannot interleave the thread update with the message update:
+   * either both the thread and every message move to the new resource, or neither does. The
+   * thread's `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    try {
+      const tx = await this.#client.transaction('write');
+      try {
+        const result = await tx.execute({
+          sql: `SELECT * FROM "${TABLE_THREADS}" WHERE id = ?`,
+          args: [threadId],
+        });
+        const row = result.rows?.[0] as
+          | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+          | undefined;
+
+        if (!row) {
+          throw new Error(`Thread "${threadId}" not found`);
+        }
+
+        const currentResourceId = row.resourceId as string;
+        const normalized: StorageThreadType = {
+          id: row.id as string,
+          resourceId: currentResourceId,
+          title: row.title as string,
+          metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+          createdAt: new Date(row.createdAt),
+          updatedAt: new Date(row.updatedAt),
+        };
+
+        if (currentResourceId === resourceId) {
+          await tx.commit();
+          return normalized;
+        }
+
+        const now = new Date();
+        await tx.execute({
+          sql: `UPDATE "${TABLE_THREADS}" SET "resourceId" = ?, "updatedAt" = ? WHERE id = ?`,
+          args: [resourceId, now.toISOString(), threadId],
+        });
+        await tx.execute({
+          sql: `UPDATE "${TABLE_MESSAGES}" SET "resourceId" = ? WHERE thread_id = ?`,
+          args: [resourceId, threadId],
+        });
+
+        await tx.commit();
+        return { ...normalized, resourceId, updatedAt: now };
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
@@ -1393,7 +1467,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
@@ -1423,16 +1497,11 @@ export class MemoryLibSQL extends MemoryStorage {
       });
     }
 
-    const hydrateMessages = options?.hydrateMessages ?? true;
-
     try {
-      // Build message query with filters. When not hydrating, we only need the ids
-      // (and createdAt for ordering / clone metadata) — content is copied inside the
-      // database via INSERT … SELECT and never returned to the JS heap.
-      const messageColumns = hydrateMessages
-        ? `id, content, role, type, "createdAt", thread_id, "resourceId"`
-        : `id, "createdAt"`;
-      let messageQuery = `SELECT ${messageColumns}
+      // Build message query with filters. Only ids (and createdAt for ordering / clone
+      // metadata) are read here — content is copied inside the database via
+      // INSERT … SELECT and never returned to the JS heap.
+      let messageQuery = `SELECT id, "createdAt"
                           FROM "${TABLE_MESSAGES}" WHERE thread_id = ?`;
       const messageParams: InValue[] = [sourceThreadId];
 
@@ -1517,8 +1586,8 @@ export class MemoryLibSQL extends MemoryStorage {
           ],
         });
 
-        // Clone messages with new IDs
-        const clonedMessages: MastraDBMessage[] = [];
+        // Copy messages under new IDs. content/role/type are read from the source row
+        // within SQL and never materialized in the JS heap.
         const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
@@ -1527,64 +1596,22 @@ export class MemoryLibSQL extends MemoryStorage {
           const sourceMsgId = sourceMsg.id as string;
           messageIdMap[sourceMsgId] = newMessageId;
 
-          if (!hydrateMessages) {
-            // Copy the row inside the database. content/role/type are read from the
-            // source row within SQL and never materialized in the JS heap.
-            const insertResult = await tx.execute({
-              sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
-                    SELECT ?, ?, content, role, type, "createdAt", ?
-                    FROM "${TABLE_MESSAGES}" WHERE id = ?`,
-              args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
-            });
-            if (insertResult.rowsAffected !== 1) {
-              throw new Error(
-                `Failed to clone message ${sourceMsgId}: expected 1 row copied but got ${insertResult.rowsAffected}`,
-              );
-            }
-            continue;
-          }
-
-          const contentStr = sourceMsg.content as string;
-          let parsedContent: MastraDBMessage['content'];
-          try {
-            parsedContent = JSON.parse(contentStr);
-          } catch {
-            // use content as is - wrap in format 2 structure if needed
-            parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
-          }
-
-          await tx.execute({
+          const insertResult = await tx.execute({
             sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            args: [
-              newMessageId,
-              newThreadId,
-              contentStr,
-              sourceMsg.role as string,
-              (sourceMsg.type as string) || 'v2',
-              sourceMsg.createdAt as string,
-              targetResourceId,
-            ],
+                  SELECT ?, ?, content, role, type, "createdAt", ?
+                  FROM "${TABLE_MESSAGES}" WHERE id = ?`,
+            args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
           });
-
-          clonedMessages.push({
-            id: newMessageId,
-            threadId: newThreadId,
-            content: parsedContent,
-            role: sourceMsg.role as MastraDBMessage['role'],
-            type: (sourceMsg.type as string) || undefined,
-            createdAt: new Date(sourceMsg.createdAt as string),
-            resourceId: targetResourceId,
-          });
+          if (insertResult.rowsAffected !== 1) {
+            throw new Error(
+              `Failed to copy message ${sourceMsgId}: expected 1 row copied but got ${insertResult.rowsAffected}`,
+            );
+          }
         }
 
         await tx.commit();
 
-        return {
-          thread: newThread,
-          clonedMessages,
-          messageIdMap,
-        };
+        return { thread: newThread, messageIdMap };
       } catch (error) {
         await tx.rollback();
         throw error;

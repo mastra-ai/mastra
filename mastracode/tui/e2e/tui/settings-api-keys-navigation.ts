@@ -11,11 +11,11 @@ export const settingsApiKeysNavigationScenario = {
     terminal.submit('/settings');
 
     await runtime.waitForScreenText(/Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       terminal.write('\x1b[B');
     }
+    await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);

@@ -354,6 +354,29 @@ export class MssqlDB extends MastraBase {
     }
   }
 
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const result = await this.pool
+      .request()
+      .input('limit', sql.Int, limit)
+      .input('cutoff', sql.DateTime2, cutoff)
+      .query(`DELETE TOP (@limit) FROM ${fullTableName} WHERE [${column}] < @cutoff`);
+    return result.rowsAffected[0] ?? 0;
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
     try {

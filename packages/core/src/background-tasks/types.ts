@@ -185,6 +185,12 @@ export interface BackgroundTaskManagerConfig {
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
   /**
+   * Whether to recover running and pending tasks during manager startup.
+   * Disable this when multiple live managers share storage until recovery can
+   * be fenced by persisted worker ownership and leases. Default: true.
+   */
+  recoverStaleTasksOnStart?: boolean;
+  /**
    * Minimum delay between chunk-based progress output events for each task, in ms.
    * Default: undefined (publish every progress chunk).
    */
@@ -200,13 +206,46 @@ export interface BackgroundTaskManagerConfig {
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
   onTaskFailed?: (task: BackgroundTask) => void | Promise<void>;
+  /** Optional callback invoked when a task is cancelled */
+  onTaskCancelled?: (task: BackgroundTask) => void | Promise<void>;
 }
 
 // --- Tool-level and agent-level config ---
 
+export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
+
+/**
+ * A process-local operation started by a tool and adopted by its native
+ * background task. The operation handle is never persisted or published.
+ */
+export interface BackgroundTaskOperation<TResult = unknown> {
+  /** Resolves with the task's terminal result after the complete operation and cleanup finish. */
+  completion: Promise<TResult>;
+  /** Cancels the operation when the native background task is cancelled or times out. */
+  cancel?: (reason?: unknown) => void | Promise<void>;
+}
+
+/** Runtime bridge exposed only while a tool executes as a native background task. */
+export interface BackgroundTaskAdoptionContext {
+  taskId: string;
+  disposition: Exclude<BackgroundExecutionDisposition, 'foreground'>;
+  /**
+   * Transfers lifecycle ownership of an already-started process-local operation
+   * to the native background task. A tool may adopt at most one operation.
+   */
+  adopt<TResult>(operation: BackgroundTaskOperation<TResult>): void;
+}
+
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
   enabled?: boolean;
+  /**
+   * How an eligible tool runs when the call carries no `_background` override.
+   * - `'deferred'` (default): eligible calls run in the background.
+   * - `'foreground'`: eligible calls run inline unless the model explicitly
+   *   opts in via `_background` — eligibility only grants the *option*.
+   */
+  defaultDisposition?: 'foreground' | 'deferred';
   /** Override the manager's default timeout for this tool */
   timeoutMs?: number;
   /** Override retry config for this tool */
@@ -219,7 +258,9 @@ export interface ToolBackgroundConfig {
   onFailed?: (task: BackgroundTask) => void | Promise<void>;
 }
 
-export type AgentBackgroundToolConfig = boolean | { enabled: boolean; timeoutMs?: number };
+export type AgentBackgroundToolConfig =
+  | boolean
+  | { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' };
 
 export interface AgentBackgroundConfig {
   /**
@@ -231,11 +272,13 @@ export interface AgentBackgroundConfig {
    */
   disabled?: boolean;
   /**
-   * Which tools should run in the background.
-   * - `true`: use the tool's own background config
-   * - `false`: always foreground, even if tool says background
-   * - `{ enabled, timeoutMs }`: override specific settings
-   * - `'all'`: run all background-eligible tools in background
+   * Which tools are eligible for background execution. Eligible tools run
+   * deferred by default; set `defaultDisposition: 'foreground'` to make a
+   * tool run inline unless the call opts in via `_background`.
+   * - `true`: allow the tool's own background config
+   * - `false`: always foreground, even if the tool is eligible
+   * - `{ enabled, timeoutMs, defaultDisposition }`: override specific settings
+   * - `'all'`: make all tools eligible for background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
   /** Per-agent concurrency override */
@@ -253,8 +296,10 @@ export interface AgentBackgroundConfig {
  * to override background behavior per-call.
  */
 export interface LLMBackgroundOverride {
-  /** Force background (true) or foreground (false). Undefined = use default config. */
+  /** Force deferred (true) or foreground (false). Undefined uses the configured default disposition. */
   enabled?: boolean;
+  /** Choose foreground, deferred, or awaited execution for this call. */
+  disposition?: BackgroundExecutionDisposition;
   /** Override timeout for this specific call */
   timeoutMs?: number;
   /** Override max retries for this specific call */
@@ -327,6 +372,8 @@ export interface ToolExecutor {
        * execution.
        */
       resumeData?: unknown;
+      /** Framework-resolved delegated run ID recovered from persisted suspension state. */
+      suspendedToolRunId?: string;
     },
   ): Promise<unknown>;
 }
@@ -441,5 +488,6 @@ export interface BackgroundTaskHandle {
   waitForCompletion(options?: {
     timeoutMs?: number;
     onProgress?: (elapsedMs: number) => void;
+    abortSignal?: AbortSignal;
   }): Promise<BackgroundTask>;
 }

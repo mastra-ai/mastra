@@ -1,0 +1,71 @@
+---
+title: "Reference: Memory.updateThreadResourceId() | Memory"
+description: "The .updateThreadResourceId() method transfers ownership of a thread to a different resource by reassigning its resourceId."
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.updateThreadResourceId()
+
+The `.updateThreadResourceId()` method transfers ownership of an existing thread to a different resource by reassigning its `resourceId`. It updates the thread and all of its associated messages so that they belong to the new resource, while preserving the thread's original `createdAt` timestamp. This is useful for scenarios such as moving a private thread into a shared workspace.
+
+## Usage example
+
+```typescript
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const memory = new Memory({
+  storage: new LibSQLStore({ id: 'memory-store', url: 'file:./memory.db' }),
+})
+
+const thread = await memory.updateThreadResourceId({
+  threadId: 'thread-123',
+  resourceId: 'new-resource-456',
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the thread to transfer.',
+    isOptional: false,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resource that should own the thread after the call.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'thread',
+    type: 'StorageThreadType',
+    description:
+      'The updated thread with the new resourceId. If the thread already belongs to the target resource, it is returned unchanged.',
+  },
+]}
+/>
+
+## Behavior
+
+- The thread's `resourceId` is reassigned to the new resource, and all of its messages are updated to reference the new resource.
+- The thread's original `createdAt` timestamp is preserved. The `updatedAt` timestamp is refreshed.
+- If the thread already belongs to the target resource, the method is a no-op and returns the existing thread.
+- If the thread doesn't exist, the method throws an error.
+
+## Security
+
+Thread ownership transfer changes which resource a thread belongs to, bypassing the normal per-resource ownership checks. The HTTP endpoint (`POST /memory/threads/:threadId/transfer`) is only available to privileged, non-resource-scoped callers. Requests made with a resolved resource scope are rejected, and when `server.auth` is configured without an FGA provider the endpoint also rejects unscoped requests rather than treating them as implicitly privileged. Perform transfers from a trusted service context rather than exposing this operation directly to end users.
+
+Like all memory mutations (deleting threads, listing messages, writing working memory), this endpoint is unauthenticated on a server configured with no authentication at all. Configure `server.auth` (and, for per-resource enforcement, an FGA provider) before exposing the memory API to untrusted callers.

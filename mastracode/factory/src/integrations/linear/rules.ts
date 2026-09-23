@@ -1,10 +1,11 @@
-import { boardForWorkItem } from '../../boards/index.js';
+import { boardForWorkItem, isTerminalWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { linearClaimKey } from './claim.js';
 import type { LinearEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -38,7 +39,7 @@ export interface LinearIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Linear project the issue was read from; resolves the bound board via `intakeBoards`. */
+  /** Linear source the issue was read from (project or team); resolves the bound board via `intakeBoards`. */
   sourceId?: string | null;
 }
 
@@ -70,13 +71,43 @@ export class LinearRules {
 
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    const itemsByClaimKey = new Map(items.filter(item => item.claimKey).map(item => [item.claimKey, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(`linear:${issue.identifier}`)));
+      // The stable issue id finds the card even after Linear renamed the
+      // identifier; the identifier covers cards filed before claims existed.
+      const relatedItem =
+        itemsByClaimKey.get(linearClaimKey(issue.id)) ?? itemsBySourceKey.get(`linear:${issue.identifier}`);
+      // One live card per Linear issue per org. When the winning source for an
+      // issue moves to a source routed elsewhere (a project deselected under a
+      // selected team, or the reverse), the card that already exists keeps the
+      // issue; this Factory must not mint a second one. The store's claim index
+      // is the guarantee; this check spares the dispatcher a refused upsert.
+      if (!relatedItem && (await this.#heldElsewhere(input, issue))) {
+        statuses.push('missing');
+        continue;
+      }
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
     return { status: 'missing', ingested: statuses.length };
+  }
+
+  async #heldElsewhere(input: LinearRulesIngress, issue: LinearIssueIngress): Promise<boolean> {
+    const heldLive = (row: WorkItemRow) =>
+      row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row);
+    const claimant = await this.options.storage.getByClaimKey({
+      orgId: input.orgId,
+      claimKey: linearClaimKey(issue.id),
+    });
+    if (claimant && heldLive(claimant)) return true;
+    // Cards filed before claims existed carry only the identifier.
+    const legacy = await this.options.storage.listBySource({
+      orgId: input.orgId,
+      source: { integrationId: 'linear', type: 'issue', externalId: `linear:${issue.identifier}` },
+    });
+    return legacy.some(heldLive);
   }
 
   async #ingestIssue(

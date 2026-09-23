@@ -55,7 +55,7 @@ export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, cla
 
   return (
     <PlanContext.Provider value={contextValue}>
-      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-surface3', className)} {...props}>
+      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-card', className)} {...props}>
         {children}
       </div>
     </PlanContext.Provider>
@@ -81,10 +81,10 @@ export type PlanLabelProps = ComponentProps<'div'>;
 export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelProps) {
   return (
     <div data-slot="plan-label" className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
-      <Icon size="sm" className="text-icon3">
+      <Icon size="xs" className="text-muted-foreground">
         <ClipboardList />
       </Icon>
-      <Txt as="span" variant="ui-sm" className="text-neutral4">
+      <Txt as="span" variant="caption" tone="muted">
         {children}
       </Txt>
     </div>
@@ -166,7 +166,7 @@ export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 
 
 export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   return (
-    <Txt {...props} as="h3" variant="header-sm" className={cn('text-neutral7 font-semibold', className)}>
+    <Txt {...props} as="h3" variant="heading" tone="ink" className={className}>
       {children}
     </Txt>
   );
@@ -189,10 +189,11 @@ export function PlanPath({ children, className, ...props }: PlanPathProps) {
     <Txt
       {...props}
       as="p"
-      variant="ui-xs"
+      variant="meta"
+      tone="muted"
       font="mono"
       title={children}
-      className={cn('max-w-full truncate overflow-hidden text-neutral3', className)}
+      className={cn('max-w-full truncate overflow-hidden', className)}
     >
       {getFileName(children)}
     </Txt>
@@ -250,9 +251,9 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
     >
       <div
         ref={contentRef}
-        className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6"
+        className="[&_code]:bg-muted [&_h1]:text-title [&_h2]:text-heading [&_h3]:text-subheading [&_p]:text-body"
       >
-        <MarkdownRenderer className="text-neutral6">{children}</MarkdownRenderer>
+        <MarkdownRenderer className="text-foreground">{children}</MarkdownRenderer>
       </div>
     </div>
   );
@@ -265,10 +266,10 @@ export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
 export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="ui-xs" className="text-neutral3 mb-2">
+      <Txt as="p" variant="meta" tone="muted" className="mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="ui-sm" className="text-neutral6 font-mono break-all">
+      <Txt as="p" variant="caption" tone="ink" className="font-mono break-all">
         {children}
       </Txt>
     </div>
@@ -325,8 +326,8 @@ export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps)
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}
+      icon={isExpanded ? <Minimize2 /> : <Maximize2 />}
     >
-      {isExpanded ? <Minimize2 /> : <Maximize2 />}
       {isExpanded ? 'Collapse plan' : 'Expand plan'}
     </Button>
   );

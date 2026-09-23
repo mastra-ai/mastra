@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { ChevronRight, X } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -123,6 +124,7 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
           </DialogHeader>
           <DialogFooter>
             <Button
+              icon={<X />}
               variant="ghost"
               onClick={handleCancel}
               disabled={updateStoredAgent.isPending}
@@ -131,6 +133,7 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
               Cancel
             </Button>
             <Button
+              icon={<ChevronRight />}
               variant="default"
               onClick={handleConfirm}
               disabled={updateStoredAgent.isPending}

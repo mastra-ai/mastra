@@ -2,34 +2,6 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { SidebarPanel } from './sidebar-panel';
 
-export function AgentViewLoadingSkeleton() {
-  return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_1fr]" data-testid="agent-route-skeleton" aria-busy="true">
-      <AgentViewHeaderLoadingSkeleton />
-      <div className="min-h-0 overflow-hidden">
-        <AgentSettingsLoadingSkeleton />
-      </div>
-    </div>
-  );
-}
-
-function AgentViewHeaderLoadingSkeleton() {
-  return (
-    <div className="flex items-center justify-between gap-2 pr-3 max-lg:py-2">
-      <div className="min-w-0 flex-1 max-lg:hidden">
-        <div className="flex min-w-0 items-center gap-2 p-3">
-          <Skeleton className="size-7 shrink-0 rounded-full" />
-          <Skeleton className="h-4 w-36" />
-        </div>
-      </div>
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <Skeleton className="h-9 w-9 rounded-lg" />
-        <Skeleton className="h-9 w-24 rounded-lg" />
-      </div>
-    </div>
-  );
-}
-
 export function AgentSidebarLoadingSkeleton() {
   return (
     <SidebarPanel>
@@ -39,7 +11,7 @@ export function AgentSidebarLoadingSkeleton() {
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
             <Skeleton className="h-3 w-16" />
           </SidebarLoadingRow>
-          <hr aria-hidden="true" className="bg-border1/40 -mx-1 my-1 h-px border-0" />
+          <hr aria-hidden="true" className="-mx-1 my-1 h-px border-0 bg-border/40" />
           <div className="flex flex-col gap-px">
             <SidebarLoadingRow>
               <Skeleton className="h-3 w-32" />
@@ -57,7 +29,7 @@ export function AgentSidebarLoadingSkeleton() {
         </div>
       </div>
 
-      <div className="rounded-studio-panel border-border1/40 bg-surface4 m-2 border px-3 py-2.5">
+      <div className="m-2 rounded-studio-panel border border-border/40 bg-muted px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
@@ -80,7 +52,7 @@ function SidebarLoadingRow({ children }: { children: ReactNode }) {
 
 export function ChatMessagesLoadingSkeleton() {
   return (
-    <div className="min-h-0 space-y-4 overflow-hidden pt-6">
+    <div className="min-h-0 space-y-4 overflow-hidden pt-4">
       <div className="flex justify-start">
         <Skeleton className="h-10 w-2/3 rounded-2xl" />
       </div>
@@ -100,29 +72,47 @@ export function ChatMessagesLoadingSkeleton() {
 
 export function AgentChatLoadingSkeleton() {
   return (
-    <div className="grid h-full min-h-0 w-full overflow-hidden px-4 py-6 md:px-10">
+    <div className="grid h-full min-h-0 w-full overflow-hidden px-4 py-4 md:px-10">
       <div className="mx-auto grid h-full min-h-0 w-full max-w-[80ch] grid-rows-[1fr_auto]">
         <ChatMessagesLoadingSkeleton />
-
-        <div className="border-border1 bg-surface2 rounded-3xl border px-3 py-2.5">
-          <Skeleton className="h-5 w-1/2 rounded-full" />
-          <div className="mt-4 flex items-center justify-between">
-            <Skeleton className="h-8 w-24 rounded-full" />
-            <Skeleton className="h-8 w-8 rounded-full" />
-          </div>
-        </div>
+        <ComposerLoadingSkeleton />
       </div>
     </div>
   );
 }
 
-function AgentSettingsLoadingSkeleton() {
+export function ComposerLoadingSkeleton() {
   return (
-    <div className="h-full w-full min-w-0" data-testid="agent-settings-skeleton" aria-busy="true">
-      <div className="space-y-4 p-4">
-        <Skeleton className="h-28 w-full rounded-lg" />
-        <Skeleton className="h-36 w-full rounded-lg" />
-        <Skeleton className="h-24 w-5/6 rounded-lg" />
+    <div className="rounded-3xl border border-border bg-background px-3 py-2.5">
+      <Skeleton className="h-5 w-1/2 rounded-full" />
+      <div className="mt-4 flex items-center justify-between">
+        <Skeleton className="h-control-md w-24 rounded-full" />
+        <Skeleton className="h-control-md w-control-md rounded-full" />
+      </div>
+    </div>
+  );
+}
+
+// Mirrors the /new landing silhouette (greeting, centered composer, prompt cards) so the
+// page resolves in place instead of jumping from a docked-chat skeleton.
+export function AgentLandingLoadingSkeleton() {
+  return (
+    <div
+      className="flex h-full min-h-0 w-full flex-col items-center justify-center px-4 py-4 md:px-10"
+      data-testid="agent-landing-skeleton"
+      aria-busy="true"
+    >
+      <div className="flex w-full max-w-[80ch] flex-col gap-6">
+        <div className="flex flex-col items-center gap-4">
+          <Skeleton className="h-avatar-lg w-avatar-lg rounded-full" />
+          <Skeleton className="h-7 w-2/3 rounded-full" />
+        </div>
+        <ComposerLoadingSkeleton />
+        <div className="flex flex-col gap-1 px-3">
+          <Skeleton className="h-control-md w-2/3 rounded-full" />
+          <Skeleton className="h-control-md w-1/2 rounded-full" />
+          <Skeleton className="h-control-md w-3/5 rounded-full" />
+        </div>
       </div>
     </div>
   );

@@ -190,7 +190,7 @@ export function updateStatusLine(state: TUIState): void {
   const centerTextShort =
     centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;
   const now = Date.now();
-  const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
+  const queuedCount = state.pendingQueuedActions.length + displayState.queuedFollowUps;
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
@@ -200,6 +200,10 @@ export function updateStatusLine(state: TUIState): void {
     state.agentRunStartedAt !== undefined &&
     Math.floor(getGoalDurationMs(goalState, now) / 60_000) === Math.floor((now - state.agentRunStartedAt) / 60_000);
   const goalLabel = goalDuration ? (goalMatchesActiveRun ? 'goal' : `goal ${goalDuration}`) : null;
+  const fallbackLabel =
+    !isJudging && !showOMMode && state.fallbackStatus
+      ? `Using fallback ${state.fallbackStatus.usingPack} (${state.fallbackStatus.failedPack} failed)`
+      : null;
   const formatDirPart = (value: string) => {
     const separator = githubPrLabel && value ? ' ' : '';
     return {
@@ -309,6 +313,7 @@ export function updateStatusLine(state: TUIState): void {
     allowDirTruncation?: boolean;
     badge?: 'full' | 'short';
     showQueue?: boolean;
+    showFallback?: boolean;
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
@@ -337,6 +342,13 @@ export function updateStatusLine(state: TUIState): void {
       plain: `${opts.modelId}${tintBg ? ' ' : ''}${timingPlain}`,
       styled: styleModelId(opts.modelId) + timingStyled,
     });
+    const visibleFallbackLabel = opts.showFallback === false ? null : fallbackLabel;
+    if (visibleFallbackLabel) {
+      parts.push({
+        plain: visibleFallbackLabel,
+        styled: theme.fg('warning', visibleFallbackLabel),
+      });
+    }
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     const ds = displayState;
@@ -437,7 +449,7 @@ export function updateStatusLine(state: TUIState): void {
     const hasDir = dirText !== null;
     if (indicatorPart && parts.length >= 2) {
       // Three groups: left (model + timing + goal), center (queue + dir/thread), right (throughput + context)
-      const leftPartCount = opts.showQueue && goalLabel ? 2 : 1;
+      const leftPartCount = 1 + (visibleFallbackLabel ? 1 : 0) + (opts.showQueue && goalLabel ? 1 : 0);
       const leftParts = parts.slice(0, leftPartCount);
       const centerParts = parts.slice(leftPartCount, -rightParts.length);
       const leftSeparatorPlain = timingLabel ? ' · ' : ' ';
@@ -491,12 +503,34 @@ export function updateStatusLine(state: TUIState): void {
     }) ??
     buildLine({ modelId: fullModelId, showOMBar: false, showDir: false, dir: centerTextShort, showQueue: true }) ??
     buildLine({ modelId: fullModelId, showOMBar: false, showDir: false, showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showOMBar: false, showDir: false, showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showOMBar: false, showDir: false, badge: 'short', showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showOM: false, showDir: false }) ??
-    buildLine({ modelId: '', showOMBar: false, showDir: false, badge: 'short', showQueue: true }) ??
-    buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short' });
+    buildLine({ modelId: fullModelId, showOM: false, showDir: false, showQueue: true }) ??
+    buildLine({ modelId: tinyModelId, showOMBar: false, showDir: false, showQueue: true, showFallback: true }) ??
+    buildLine({
+      modelId: tinyModelId,
+      showOMBar: false,
+      showDir: false,
+      badge: 'short',
+      showQueue: true,
+      showFallback: true,
+    }) ??
+    buildLine({
+      modelId: tinyModelId,
+      showOM: false,
+      showDir: false,
+      badge: 'short',
+      showQueue: true,
+      showFallback: true,
+    }) ??
+    buildLine({ modelId: tinyModelId, showOM: false, showDir: false, showFallback: true }) ??
+    buildLine({
+      modelId: '',
+      showOMBar: false,
+      showDir: false,
+      badge: 'short',
+      showQueue: true,
+      showFallback: false,
+    }) ??
+    buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short', showFallback: false });
 
   state.statusLine.setText(result?.styled ?? shortModeBadge + styleModelId(tinyModelId));
 

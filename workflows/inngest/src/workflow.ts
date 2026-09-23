@@ -74,6 +74,7 @@ export class InngestWorkflow<
   private function: ReturnType<Inngest['createFunction']> | undefined;
   private cronFunction: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
+  private readonly functionRetries: NonNullable<InngestFlowControlConfig['retries']>;
   private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
   /**
    * Optional override that lets a host (e.g. `createInngestAgent`) provide the
@@ -95,8 +96,18 @@ export class InngestWorkflow<
     >,
     inngest: Inngest,
   ) {
-    const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
-      params;
+    const {
+      concurrency,
+      rateLimit,
+      throttle,
+      debounce,
+      priority,
+      retries,
+      cron,
+      inputData,
+      initialState,
+      ...workflowParams
+    } = params;
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>);
 
@@ -107,6 +118,7 @@ export class InngestWorkflow<
     );
 
     this.flowControlConfig = flowControlEntries.length > 0 ? Object.fromEntries(flowControlEntries) : undefined;
+    this.functionRetries = retries ?? 0;
 
     this.#mastra = params.mastra!;
     this.inngest = inngest;
@@ -280,7 +292,7 @@ export class InngestWorkflow<
     this.cronFunction = this.inngest.createFunction(
       {
         id: `workflow.${this.id}.cron`,
-        retries: 0,
+        retries: this.functionRetries,
         // Not scoped by `match` like the event-triggered function above: a cron
         // trigger carries no event data to match a runId against, and the run
         // is created inside the function, so the canceller has no id to name.
@@ -311,14 +323,14 @@ export class InngestWorkflow<
       return this.function;
     }
 
-    // Always set function-level retries to 0, since retries are handled at the step level via executeStepWithRetry
-    // which uses either step.retries or retryConfig.attempts (step.retries takes precedence).
-    // step.retries is not accessible at function level, so we handle retries manually in executeStepWithRetry.
-    // This is why we set retries to 0 here.
+    // Step-code errors are retried at the step level via executeStepWithRetry (step.retries or
+    // retryConfig.attempts) and are returned, not rethrown, so function-level retries never re-run
+    // failed step code. Function-level retries only re-invoke the function when an SDK request
+    // fails (process restart, OOM, 5xx/timeout); they default to 0 and are configurable via `retries`.
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
-        retries: 0,
+        retries: this.functionRetries,
         // `match` scopes the cancellation to the run the cancel event names.
         // Without it Inngest cancels every in-flight run of this function, and
         // since all durable agents share one function, cancelling a single run
@@ -350,6 +362,7 @@ export class InngestWorkflow<
           perStep,
           tracingOptions,
           actor,
+          parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
         } = event.data;
         const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
@@ -428,7 +441,7 @@ export class InngestWorkflow<
           return span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -468,6 +481,15 @@ export class InngestWorkflow<
                 });
               } catch (err) {
                 this.logger.debug?.('Failed to publish watch event:', err);
+              }
+              // Nested functions have workflow-local channels; send writer chunks
+              // directly to the outermost run without forwarding lifecycle events.
+              if (parentStream) {
+                try {
+                  await defaultPubsub.publishWorkflowWatchTo(parentStream.workflowId, parentStream.runId, chunk);
+                } catch (err) {
+                  this.logger.debug?.('Failed to publish parent watch event:', err);
+                }
               }
             },
           });

@@ -44,7 +44,7 @@ export function SignalDeltaColumn({
   return (
     <section aria-label={`${label} changes`} className="min-w-0">
       <h3
-        className="font-mono text-xs font-semibold tracking-widest uppercase"
+        className="font-mono text-column tracking-widest uppercase"
         style={{ color: nodeColor(getSignalHue(signalName)) }}
       >
         <Tooltip>
@@ -55,20 +55,22 @@ export function SignalDeltaColumn({
         </Tooltip>
       </h3>
       <ul className="mt-2 space-y-1.5">
-        {deltas.length === 0 ? <li className="text-neutral3 text-xs">No themes in either snapshot.</li> : null}
+        {deltas.length === 0 ? (
+          <li className="text-caption text-muted-foreground">No themes in either snapshot.</li>
+        ) : null}
         {deltas.map(delta => {
           const themeId = delta.themeId;
           const card = (
             <>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-neutral6 truncate text-xs font-medium" title={delta.label}>
+                <span className="truncate text-column text-foreground" title={delta.label}>
                   {delta.label}
                 </span>
-                <span className="text-neutral6 shrink-0 font-mono text-xs font-semibold tabular-nums">
+                <span className="shrink-0 font-mono text-column text-foreground tabular-nums">
                   {deltaLabel(delta.delta)}
                 </span>
               </div>
-              <p className="text-neutral3 font-mono text-[11px] tabular-nums">
+              <p className="font-mono text-caption text-muted-foreground tabular-nums">
                 {percent(delta.fromShare)} → {percent(delta.toShare)}
               </p>
               <ThemeCompareSparkline
@@ -81,8 +83,8 @@ export function SignalDeltaColumn({
           return (
             <li
               key={delta.label}
-              className={`border-border1 rounded-lg border ${
-                delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-surface3'
+              className={`rounded-lg border border-border ${
+                delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-card'
               }`}
             >
               {themeId === undefined ? (
@@ -90,7 +92,7 @@ export function SignalDeltaColumn({
               ) : (
                 <button
                   aria-label={`View theme details for ${delta.label}`}
-                  className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.03]"
+                  className="block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left hover:border-border-strong hover:bg-white/[0.03]"
                   onClick={() =>
                     onThemeSelect({ kind: 'theme', signalName, themeId, label: delta.label }, detailIndexFor(delta))
                   }

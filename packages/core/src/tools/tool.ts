@@ -205,6 +205,9 @@ export class Tool<
   /** Unique identifier for the tool */
   id: TId;
 
+  /** Display name for UIs and MCP clients. Never sent to the model. */
+  title?: string;
+
   /** Description of what the tool does */
   description: string;
 
@@ -398,6 +401,7 @@ export class Tool<
   ) {
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
+    this.title = opts.title;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
     this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
@@ -429,7 +433,7 @@ export class Tool<
         // validation. The original args were already validated during the initial
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
-        const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+        const isResuming = (context?.resumeData ?? context?.agent?.resumeData ?? context?.workflow?.resumeData) != null;
         const wasBuilderValidated = consumeBuilderValidatedInput(context);
         const skipInputValidation = isResuming || wasBuilderValidated;
 
@@ -504,29 +508,35 @@ export class Tool<
               messages,
               suspend,
               resumeData,
+              suspendPayload,
               threadId,
               resourceId,
               writableStream,
+              isBackgroundTask,
+              background,
               ...rest
             } = baseContext;
             organizedContext = {
               ...rest,
+              background,
               agent: {
                 agentId: agentId || '',
                 toolCallId,
                 messages,
                 suspend,
                 resumeData,
+                suspendPayload,
                 threadId,
                 resourceId,
                 writableStream,
+                ...(isBackgroundTask ? { isBackgroundTask: true } : {}),
               },
               // Ensure requestContext is always present
               requestContext: executionRequestContext ?? new RequestContext(),
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = baseContext;
+            const { workflowId, runId, state, setState, suspend, resumeData, suspendPayload, ...rest } = baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -536,6 +546,7 @@ export class Tool<
                 setState,
                 suspend,
                 resumeData,
+                suspendPayload,
               },
               // Ensure requestContext is always present
               requestContext: executionRequestContext ?? new RequestContext(),
@@ -571,7 +582,7 @@ export class Tool<
         const resumeData =
           organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
 
-        if (resumeData) {
+        if (resumeData != null) {
           const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
           if (resumeValidation.error) {
             return resumeValidation.error as any;

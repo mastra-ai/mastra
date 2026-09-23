@@ -16,6 +16,8 @@ export interface ToolComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function ToolCombobox({
@@ -28,6 +30,8 @@ export function ToolCombobox({
   disabled = false,
   variant,
   size,
+  'aria-label': ariaLabel,
+  align,
 }: ToolComboboxProps) {
   const { data: tools = {}, isLoading: isLoadingTools, isError: isErrorTools, error: errorTools } = useTools();
   const { data: agents = {}, isLoading: isLoadingAgents, isError: isErrorAgents, error: errorAgents } = useAgents();
@@ -92,6 +96,8 @@ export function ToolCombobox({
       disabled={disabled || isLoadingTools || isLoadingAgents || isErrorTools || isErrorAgents}
       variant={variant}
       size={size}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

@@ -15,6 +15,7 @@ import { test, expect } from '@playwright/test';
 import { setupMemberAuth, setupMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
+import { revealFoldedSidebarItems } from '../__utils__/sidebar';
 
 test.describe('Member Role', () => {
   test.afterEach(async () => {
@@ -32,6 +33,7 @@ test.describe('Member Role', () => {
       // Member should see main navigation links
       await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
       await expect(page.getByRole('link', { name: /^Workflows$/i })).toBeVisible();
+      await revealFoldedSidebarItems(page);
       await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
     });
 
@@ -89,11 +91,11 @@ test.describe('Member Role', () => {
 
     test('member can view agent tools', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/settings');
+      await page.goto('/agents/weather-agent/chat/new');
 
-      // Member should be able to see agent tools (they have agents:read and tools:read).
-      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+      // The overview side panel starts collapsed; the member can open it and see the agent tools.
+      await page.getByTestId('agent-overview-panel-toggle').click();
+      await expect(page.getByTestId('agent-overview-panel')).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
@@ -163,8 +165,8 @@ test.describe('Member Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Member should see the trigger/run workflow controls
-      const triggerButton = page.getByRole('button', { name: /run|trigger|execute/i });
-      await expect(triggerButton.first()).toBeVisible();
+      const triggerButton = page.getByRole('button', { name: 'Run', exact: true });
+      await expect(triggerButton).toBeVisible();
     });
 
     test('member workflow execution button is not disabled', async ({ page }) => {
@@ -172,7 +174,7 @@ test.describe('Member Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Look for run/execute button
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
 
       // Wait for button to be visible
       await expect(runButton).toBeVisible();
@@ -312,7 +314,7 @@ test.describe('Member Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Member should see run button enabled
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(runButton).toBeVisible();
       await expect(runButton).not.toBeDisabled();
 

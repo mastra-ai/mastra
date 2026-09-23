@@ -20,16 +20,12 @@ import {
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageFactory } from '@mastra/react';
-import type {
-  MastraDBMessageMetadata,
-  MessageRenderers,
-  MessageStatusRenderers,
-  DynamicToolPart,
-  ToolInvocationPart,
-  RequireApprovalEntry,
-} from '@mastra/react';
+import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
+import { MessageFactory } from '@mastra/react/ui';
+import type { MessageRenderers, MessageStatusRenderers, DynamicToolPart, ToolInvocationPart } from '@mastra/react/ui';
 import {
   AlertTriangle,
   AlignLeft,
@@ -87,9 +83,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
-      <Txt variant="ui-sm" className="text-neutral5 pb-2" as="div">
-        Approval required for <span className="text-neutral6 font-mono">{toolName}</span>
+    <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
+      <Txt variant="caption" tone="ink" className="pb-2" as="div">
+        Approval required for <span className="font-mono text-foreground">{toolName}</span>
       </Txt>
       <div className="flex items-center gap-2">
         <Button
@@ -272,7 +268,7 @@ export const Txtmessage = ({
     return (
       <div className="flex justify-end">
         <Txt
-          variant="ui-md"
+          variant="body"
           className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
           as="div"
         >
@@ -285,8 +281,9 @@ export const Txtmessage = ({
   if (role === 'assistant' || role === 'system') {
     return (
       <Txt
-        variant="ui-md"
-        className="text-neutral4 max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
+        variant="body"
+        tone="muted"
+        className="max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
         as="div"
       >
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
@@ -300,19 +297,20 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="border-accent6/40 bg-accent6/5 flex max-w-[80%] flex-col gap-3 p-4"
+      className="flex max-w-[80%] flex-col gap-3 border-accent6/40 bg-accent6/5 p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="text-accent6 mt-0.5 size-4 shrink-0" aria-hidden />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-accent6" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt variant="ui-md" className="text-icon6 font-medium" as="div">
+          <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.
           </Txt>
           <Txt
-            variant="ui-sm"
-            className="text-neutral4 break-words"
+            variant="caption"
+            tone="muted"
+            className="break-words"
             as="div"
             data-testid="agent-builder-chat-error-summary"
           >
@@ -328,15 +326,18 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               <Button
                 variant="default"
                 onClick={onRetry}
-                className="gap-1.5"
                 data-testid="agent-builder-chat-error-retry"
+                icon={<RefreshCw aria-hidden />}
               >
-                <RefreshCw className="size-3.5" aria-hidden />
                 Try again
               </Button>
             )}
             <CollapsibleTrigger
-              className="text-neutral4 hover:text-neutral6 text-sm underline-offset-2 hover:underline"
+              className={cn(
+                'text-body underline-offset-2 hover:underline',
+                quietTextHover,
+                controlStateColorTransition,
+              )}
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
@@ -344,7 +345,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-neutral4 bg-surface1 max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap"
+              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -357,10 +358,9 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
             <Button
               variant="default"
               onClick={onRetry}
-              className="gap-1.5"
               data-testid="agent-builder-chat-error-retry"
+              icon={<RefreshCw aria-hidden />}
             >
-              <RefreshCw className="size-3.5" aria-hidden />
               Try again
             </Button>
           </div>
@@ -372,7 +372,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
 
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
-    <div className="flex flex-col gap-6" data-testid={testId}>
+    <div className="flex flex-col gap-4" data-testid={testId}>
       <div className="flex justify-end">
         <Skeleton className="h-10 w-56 rounded-2xl" />
       </div>
@@ -407,37 +407,37 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           className="group flex w-full items-center gap-2 text-left"
           data-testid="agent-builder-chat-generic-tool-trigger"
         >
-          <span className="border-border1/60 bg-surface1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
-            <Wrench className="text-neutral4 size-3.5 shrink-0" aria-hidden />
-            <Txt variant="ui-sm" className="text-neutral5" as="span">
-              Executing <span className="text-neutral6 font-mono">{toolName}</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-sidebar px-2 py-0.5">
+            <Wrench className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <Txt variant="caption" tone="ink" as="span">
+              Executing <span className="font-mono text-foreground">{toolName}</span>
             </Txt>
           </span>
           <ChevronRight
-            className="text-neutral4 size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
+            className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
             aria-hidden
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-              <div className="border-border1/60 border-b px-2 py-1">
-                <Txt variant="ui-sm" className="text-neutral3" as="div">
+            <div className="overflow-hidden rounded-md border border-border/60 bg-sidebar">
+              <div className="border-b border-border/60 px-2 py-1">
+                <Txt variant="caption" tone="muted" as="div">
                   Input
                 </Txt>
               </div>
-              <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+              <pre className="m-0 max-h-[320px] overflow-auto p-3 text-caption break-words whitespace-pre-wrap text-foreground">
                 {inputJson || '{}'}
               </pre>
             </div>
             {hasOutput ? (
-              <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-                <div className="border-border1/60 border-b px-2 py-1">
-                  <Txt variant="ui-sm" className="text-neutral3" as="div">
+              <div className="overflow-hidden rounded-md border border-border/60 bg-sidebar">
+                <div className="border-b border-border/60 px-2 py-1">
+                  <Txt variant="caption" tone="muted" as="div">
                     Output
                   </Txt>
                 </div>
-                <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                <pre className="m-0 max-h-[320px] overflow-auto p-3 text-caption break-words whitespace-pre-wrap text-foreground">
                   {outputJson}
                 </pre>
               </div>
@@ -461,7 +461,7 @@ export const ToolCard = ({
   <Card
     data-testid={testId}
     className={cn(
-      'max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300',
+      'max-w-[80%] animate-in border-border/60 bg-background/60 p-3 duration-300 fade-in slide-in-from-left-2',
       className,
     )}
   >
@@ -470,12 +470,12 @@ export const ToolCard = ({
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="animate-in fade-in slide-in-from-right-4 flex max-w-full min-w-0 items-start gap-2 duration-500 ease-out">
+  <div className="flex max-w-full min-w-0 animate-in items-start gap-2 duration-500 ease-out fade-in slide-in-from-right-4">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <Txt variant="ui-md" className="text-neutral3 min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="text-neutral6 font-semibold">{value}</strong>
+    <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
+      {label} <strong className="font-medium text-foreground">{value}</strong>
     </Txt>
   </div>
 );

@@ -57,6 +57,19 @@ export interface ReclaimResult {
   file: string;
   bytesBefore: number;
   bytesAfter: number;
+  /**
+   * Set when the file was left untouched instead of compacted.
+   *
+   * `'vector-index'`: the database carries a `libsql_vector_idx` index.
+   * Vacuuming such a database corrupts its `libsql_vector_meta_shadow` table
+   * (`PRAGMA integrity_check` → `row not in PRIMARY KEY order`), silently at
+   * first, so we never compact it. See
+   * https://github.com/mastra-ai/mastra/issues/23439.
+   *
+   * `'detection-failed'`: the schema could not be inspected, so we cannot
+   * prove the database is safe to vacuum and skip it as a precaution.
+   */
+  skipped?: 'vector-index' | 'detection-failed';
 }
 
 /** Handle the TUI uses to run storage maintenance without reaching into store internals. */
@@ -117,6 +130,30 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
 }
 
 /**
+ * Does this database carry a libsql vector index?
+ *
+ * Takes an already-open connection on purpose: the query needs a prepared
+ * statement, and a statement opened before the exclusivity probe pins the
+ * connection past close() (libsql-js#228) and makes the probe's
+ * `journal_mode = DELETE` fail with SQLITE_BUSY on files nobody else has open.
+ * The caller's connection must therefore already be in rollback mode — a
+ * pinned statement holds no lock there.
+ *
+ * Matched by schema, not filename — the main database can carry vector indexes
+ * too. SQLite stores `CREATE INDEX` SQL verbatim, so the match is deliberately
+ * loose (no trailing `(`): an index written `libsql_vector_idx (embedding)`
+ * must not slip through. The two errors are not symmetric — a false positive
+ * costs one uncompacted file that we tell the user about, a false negative
+ * silently corrupts their vector index.
+ */
+function hasVectorIndex(db: InstanceType<typeof Database>): boolean {
+  const row = db
+    .prepare(`SELECT 1 AS hit FROM sqlite_master WHERE type = 'index' AND sql LIKE '%libsql_vector_idx%' LIMIT 1`)
+    .get() as Record<string, unknown> | undefined;
+  return row !== undefined;
+}
+
+/**
  * Compact each local libsql db file by streaming a `VACUUM INTO` copy next to
  * it, then swapping the copy into place. Reports before/after sizes.
  *
@@ -134,6 +171,11 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
  * MUST run with every connection to these files closed (the swap replaces the
  * inode — a surviving connection would keep writing to the unlinked old file).
  * `runStorageMaintenance()` closes storage before calling this.
+ *
+ * Databases carrying a `libsql_vector_idx` index are skipped, not compacted:
+ * any VACUUM over one corrupts its `libsql_vector_meta_shadow` table (issue
+ * #23439). Detection fails closed — a file we cannot inspect is skipped too.
+ * Skipped files come back with `skipped` set so the caller can report them.
  */
 export async function reclaimLibSQLDisk(
   dbFiles: string[],
@@ -187,6 +229,19 @@ export async function reclaimLibSQLDisk(
     const db = new Database(file);
     try {
       db.exec('PRAGMA busy_timeout = 2000');
+      // First, before any check that can throw: a full disk must not abort the
+      // whole loop over a file we were going to leave alone anyway.
+      let skipped: ReclaimResult['skipped'];
+      try {
+        if (hasVectorIndex(db)) skipped = 'vector-index';
+      } catch {
+        // Fail closed: we could not establish that this file is safe to vacuum.
+        skipped = 'detection-failed';
+      }
+      if (skipped) {
+        results.push({ file, bytesBefore, bytesAfter: bytesBefore, skipped });
+        continue;
+      }
       const pageSize = pragmaNumber(db, 'page_size');
       const pageCount = pragmaNumber(db, 'page_count');
       const freelistCount = pragmaNumber(db, 'freelist_count');
@@ -406,8 +461,29 @@ export async function runStorageMaintenance(opts: {
     return;
   }
   for (const r of reclaimed) {
-    log(`  ${r.file}: ${formatBytes(r.bytesBefore)} → ${formatBytes(r.bytesAfter)}`);
+    if (r.skipped === 'vector-index') {
+      log(`  ${r.file}: skipped — it contains a vector index, and compacting it would corrupt that index.`);
+    } else if (r.skipped === 'detection-failed') {
+      log(`  ${r.file}: skipped — it could not be inspected, so it was left untouched as a precaution.`);
+    } else {
+      log(`  ${r.file}: ${formatBytes(r.bytesBefore)} → ${formatBytes(r.bytesAfter)}`);
+    }
   }
-  const saved = reclaimed.reduce((sum, r) => sum + Math.max(0, r.bytesBefore - r.bytesAfter), 0);
-  log(`Reclaimed ${formatBytes(saved)}.`);
+  const compacted = reclaimed.filter(r => !r.skipped);
+  const vectorSkips = reclaimed.filter(r => r.skipped === 'vector-index').length;
+  const failedSkips = reclaimed.filter(r => r.skipped === 'detection-failed').length;
+  const skipSummary = [
+    vectorSkips > 0
+      ? `${vectorSkips} skipped because ${vectorSkips === 1 ? 'it contains' : 'they contain'} a vector index`
+      : '',
+    failedSkips > 0 ? `${failedSkips} skipped because ${failedSkips === 1 ? 'it' : 'they'} could not be inspected` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+  if (compacted.length === 0) {
+    log(`No database files were compacted; ${skipSummary}.`);
+    return;
+  }
+  const saved = compacted.reduce((sum, r) => sum + Math.max(0, r.bytesBefore - r.bytesAfter), 0);
+  log(skipSummary ? `Reclaimed ${formatBytes(saved)}; ${skipSummary}.` : `Reclaimed ${formatBytes(saved)}.`);
 }

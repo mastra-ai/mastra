@@ -35,12 +35,12 @@ export function ItemListRowButton({
       {...props}
       onClick={handleClick}
       className={cn(
-        'grid w-full items-center gap-4 rounded-lg px-4 text-left',
+        'grid w-full items-center gap-3 rounded-lg px-3 text-left',
         transitions.colors,
         focusRing.visible,
         {
-          'bg-surface4': isFeatured,
-          'hover:bg-surface4': item && !isFeatured && !disabled,
+          'bg-fill-hover': isFeatured,
+          'hover:bg-fill-subtle': item && !isFeatured && !disabled,
         },
         className,
       )}
