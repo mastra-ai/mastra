@@ -690,10 +690,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
         return [part];
       }
 
-      // Unlike a whole result, an over-budget part can simply be dropped — the parts that
-      // did fit still carry a marker, so the truncation is still visible. Emitting a marker
+      // Unlike a whole result, an over-budget part can simply be dropped. Emitting a marker
       // per dropped part is what pushes the result back over the cap, and when media alone
       // fills the budget that is every text part at once.
+      //
+      // The first cut part carries a marker whenever one fits, so truncation is usually
+      // visible. It is not when the budget cannot even hold `[truncated]`: the text is then
+      // dropped silently and the result is the media alone. Bounding it is the point — the
+      // alternative is spending tokens the cap already ruled out.
       const truncated = this.capTextToBudget(text, tokens, remaining);
       remaining = 0;
       if (truncated === undefined) return [];
