@@ -623,7 +623,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Set up pubsub with lazy CachingPubSub creation
   // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
   let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
-  let _cachingPubsub: PubSub | null = null;
+  let _cachingPubsub: CachingPubSub | null = null;
 
   // Resolve the cache that backs CachingPubSub history.
   //
@@ -647,7 +647,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   //
   // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
   // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
-  function getPubsub(): PubSub {
+  function getPubsub(): CachingPubSub {
     if (!_cachingPubsub) {
       if (innerPubsub instanceof CachingPubSub) {
         _cachingPubsub = innerPubsub;
@@ -660,16 +660,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   async function getPubsubOffset(runId: string): Promise<number> {
-    const pubsub = getPubsub() as PubSub & {
-      getHistory?: (topic: string) => Promise<unknown[]>;
-    };
-    if (typeof pubsub.getHistory !== 'function') return 0;
-    try {
-      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
-      return Array.isArray(history) ? history.length : 0;
-    } catch {
-      return 0;
-    }
+    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
+    return history.length;
   }
 
   // Route workflow event publishes through a CachingPubSub backed by the same cache
@@ -1020,6 +1012,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const existingRegistryEntry = globalRunRegistry.get(runId);
       const priorExecution = existingRegistryEntry?.workflowExecution;
 
+      // Settle the prior segment before taking its event offset. Otherwise a late
+      // suspension event can be replayed into the new segment and close it early.
+      await priorExecution?.catch(() => {
+        /* errors already handled by the prior segment */
+      });
+      const resumeOffset = await getPubsubOffset(runId);
+
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
       // co-located) can react. The previous run's controller is no longer
@@ -1067,13 +1066,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         resumeCleanedUp = true;
         globalRunRegistry.delete(runId);
       };
-
-      // Settle the prior segment before taking its event offset. Otherwise a late
-      // suspension event can be replayed into the new segment and close it early.
-      await priorExecution?.catch(() => {
-        /* errors already handled by the prior segment */
-      });
-      const resumeOffset = await getPubsubOffset(runId);
 
       // Re-subscribe to the stream
       const {

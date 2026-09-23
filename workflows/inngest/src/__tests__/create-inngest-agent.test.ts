@@ -744,6 +744,37 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('resume() fails when its cached history boundary cannot be read', async () => {
+    const durableAgent = makeIsolatedAgent('resume-stream-boundary-failure');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-stream-boundary-failure-run';
+    const historyError = new Error('history unavailable');
+    const originalGetHistory = durableAgent.pubsub.getHistory.bind(durableAgent.pubsub);
+    const historySpy = vi
+      .spyOn(durableAgent.pubsub, 'getHistory')
+      .mockRejectedValueOnce(historyError)
+      .mockImplementation(originalGetHistory);
+    const sendSpy = stubInngestSend();
+    let result: Awaited<ReturnType<typeof durableAgent.resume>> | undefined;
+
+    try {
+      try {
+        result = await durableAgent.resume(runId, { approved: true });
+        expect.fail('resume should fail when its stream boundary cannot be read');
+      } catch (error) {
+        expect(error).toBe(historyError);
+      }
+
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+    } finally {
+      result?.cleanup();
+      globalRunRegistry.delete(runId);
+      historySpy.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('resume() starts after cached history', async () => {
     const durableAgent = makeIsolatedAgent('resume-stream-boundary');
     setSuspendedSnapshot(durableAgent);
