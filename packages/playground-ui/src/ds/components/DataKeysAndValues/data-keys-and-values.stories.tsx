@@ -53,6 +53,21 @@ export const WithHeader: Story = {
   ),
 };
 
+export const Dense: Story = {
+  render: () => (
+    <DataKeysAndValues density="dense">
+      <DataKeysAndValues.Key>Text</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">3,184</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Cache read</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">8,192</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Cache write</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">1,024</DataKeysAndValues.Value>
+      <DataKeysAndValues.Key>Reasoning</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value className="text-right">640</DataKeysAndValues.Value>
+    </DataKeysAndValues>
+  ),
+};
+
 export const TruncatedValues: Story = {
   decorators: [
     Story => (
