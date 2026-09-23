@@ -2209,6 +2209,142 @@ describe('Agent signals', () => {
     }
   });
 
+  it('releases the logical message reservation when the owner rejects its stream options, so a retry can route', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const model = createTextStreamModel('routed owner response');
+    const ownerAgent = new Agent({
+      id: 'retry-stream-options-owner',
+      name: 'Retry Stream Options Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-stream-options-sender',
+      name: 'Retry Stream Options Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-stream-options-user', threadId: 'retry-stream-options-thread' };
+    const attributes = { messageId: 'retry-stream-options-message', sourcePeerId: 'retry-stream-options-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    // Only the first wake attempt fails to resolve its options. Claiming the thread
+    // must still be able to resolve them, so the flag is raised after the claim.
+    let failNextStreamOptions = false;
+    const claim = await ownerRuntime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+        streamOptions: () => {
+          if (failNextStreamOptions) {
+            failNextStreamOptions = false;
+            throw new Error('retry stream options rejected');
+          }
+          return {};
+        },
+      },
+      pubsub,
+    );
+    failNextStreamOptions = true;
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'route the retried wake', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      // The attempt never admitted a run, so the sender must be told it failed
+      // rather than that this logical message was already accepted.
+      await expect(firstSignal.accepted).rejects.toThrow('retry stream options rejected');
+      expect(model.doStreamCalls ?? []).toHaveLength(0);
+
+      // The retry carries the same logical identity. Its fresh transport request id
+      // cannot reach the reservation, so only releasing it on the failed attempt lets
+      // this wake route instead of being resolved to a run that never started.
+      const retryRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'route the retried wake', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      // A leaked reservation resolves the retry without running it, so assert the
+      // wake actually reached the model before waiting on the run to finish.
+      await waitForCondition(() => (model.doStreamCalls ?? []).length === 1);
+      await expect(retryRun).resolves.toMatchObject({ value: { text: 'routed owner response' } });
+      expect(failNextStreamOptions).toBe(false);
+      expect(model.doStreamCalls ?? []).toHaveLength(1);
+    } finally {
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('reports a failed run to a retry of the same logical message instead of running it again', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const model = createTextStreamModel('owner response that should never stream');
+    let failNextRun = false;
+    const ownerAgent = new Agent({
+      id: 'retry-failed-owner',
+      name: 'Retry Failed Owner',
+      instructions: async () => {
+        if (failNextRun) {
+          failNextRun = false;
+          throw new Error('owner preparation failed');
+        }
+        return 'Test';
+      },
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-failed-sender',
+      name: 'Retry Failed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-failed-user', threadId: 'retry-failed-thread' };
+    const attributes = { messageId: 'retry-failed-message', sourcePeerId: 'retry-failed-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    // Raised only once the owner is claimed, so claiming the thread can still resolve
+    // the owner's instructions.
+    failNextRun = true;
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'run once and fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(firstSignal.accepted).rejects.toThrow('owner preparation failed');
+
+      // The failed attempt did run, so its identity stays recorded: the retry must
+      // learn the original turn failed rather than repeat its tools.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'run once and fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('owner preparation failed');
+      expect(model.doStreamCalls ?? []).toHaveLength(0);
+    } finally {
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
   it('preserves an acknowledged remote wake when the busy owner releases its claim', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const pubsub = new ControlledLeasePubSub();

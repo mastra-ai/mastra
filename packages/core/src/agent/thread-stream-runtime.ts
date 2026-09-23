@@ -1185,8 +1185,17 @@ export class AgentThreadStreamRuntime {
       releaseMessageIdentity();
       return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
     }
-    const ownerStreamOptions =
-      typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    // Resolving the owner's stream options can reject. A later retry of the same
+    // logical message must be free to route instead of being told this message was
+    // already accepted, so release the reservation before propagating.
+    let ownerStreamOptions: AgentExecutionOptions<any> | undefined;
+    try {
+      ownerStreamOptions =
+        typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    } catch (error) {
+      releaseMessageIdentity();
+      throw error;
+    }
     // The run executes inside the claiming owner's session, so the owner's
     // options stay authoritative for everything that shapes the run — memory,
     // toolsets, provider options. Only `requestContext` crosses over: it
@@ -1241,7 +1250,17 @@ export class AgentThreadStreamRuntime {
     }
     state.activeThreadRunIds.set(key, runId);
     state.threadKeysByRunId.set(runId, key);
-    const lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
+    let lease: { acquired: boolean; owner?: string };
+    try {
+      lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
+    } catch (error) {
+      // No run and no lease exist for this attempt yet, so unwind the run
+      // bookkeeping it just claimed and let a retry of the logical message route.
+      releaseMessageIdentity();
+      state.activeThreadRunIds.delete(key);
+      state.threadKeysByRunId.delete(runId);
+      throw error;
+    }
     const ownerActive = isOwnerActive();
     const expired = Date.now() >= expiresAt;
     if (!lease.acquired || !ownerActive || expired) {
@@ -1264,6 +1283,12 @@ export class AgentThreadStreamRuntime {
       return { runId, output };
     } catch (error) {
       const message = getErrorFromUnknown(error).message;
+      // The run did start, so keep the identity instead of releasing it: a sender
+      // retrying the same logical message must learn the original turn failed
+      // rather than run that turn's tools a second time.
+      if (messageIdentity) {
+        state.acceptedIdleMessagesByIdentity.set(messageIdentity, { runId, terminalReason: message });
+      }
       state.threadKeysByRunId.delete(runId);
       this.#cleanupPreparedRun(state, runId);
       if (state.activeThreadRunIds.get(key) === runId) {
@@ -2780,8 +2805,9 @@ export class AgentThreadStreamRuntime {
       if (acceptedMessage && acceptedMessage.runId !== pendingIdle.runId) {
         state.drainingIdleSignalsByThread.delete(key);
         this.#notifyThreadEvents(state);
-        void this.#drainPendingIdleSignals(state, pubsub, key);
-        return true;
+        // Hand the finishing run's lease on to whatever drains next, and report
+        // whether work actually started — the caller only keeps the lease if so.
+        return await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId);
       }
     }
 
