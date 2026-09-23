@@ -3787,17 +3787,25 @@ export class DurableAgent<
    * persistent transports, the underlying stream). Fire-and-forget: the
    * `clearTopic` contract is best-effort and non-throwing.
    *
-   * Clears both the agent stream topic and `workflow.events.v2.<runId>`. The
-   * durable agentic loop runs on the default workflow engine, so the evented
-   * engine's terminal topic cleanup never runs for these runs — without this,
-   * CachingPubSub permanently orphans a no-TTL counter key per completed run.
+   * Clears both the agent stream topic and `workflow.events.v2.<runId>`.
+   * The agent stream topic is cleared only here, on both engines. For the
+   * workflow events topic the engines differ:
+   * - Default engine (`DurableAgent`): no other cleanup exists — without
+   *   this, CachingPubSub permanently orphans a no-TTL counter key per
+   *   completed run.
+   * - Evented engine (`EventedAgent`): the WorkflowEventProcessor also
+   *   clears `workflow.events.v2.<runId>` via its own delayed,
+   *   restart-guarded terminal cleanup. The two clears overlap safely:
+   *   `clearTopic` is idempotent and clearing an empty topic is a no-op.
    *
-   * Unlike the evented workflow engine's per-run topic cleanup, this needs no
-   * restart guard: cleanup timers arm only on terminal outcomes
+   * This needs no restart guard of its own — the lifecycle facts are
+   * engine-agnostic: cleanup timers arm only on terminal outcomes
    * (FINISH/ERROR/ABORT — never SUSPENDED), `resume()` rejects runs whose
    * snapshot isn't `suspended`, `untilIdle` continuations mint a fresh runId
    * per segment, and cross-process `recover()` can't race a dead process's
-   * timer. No supported flow re-engages a runId after its timer is armed.
+   * timer. The one evented-only edge — at-least-once redelivery writing to
+   * the workflow events topic after this clear — is covered by the WEP's own
+   * cleanup, which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));

@@ -1,5 +1,4 @@
 ---
-'@mastra/temporal': patch
 '@mastra/inngest': patch
 '@mastra/core': patch
 ---

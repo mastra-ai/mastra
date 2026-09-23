@@ -1,13 +1,13 @@
 /**
- * THROWAWAY battery-1 sanity check (evented-engine enablement assessment).
+ * Pins EventedAgent to the evented execution engine.
  *
  * Verifies that EventedAgent's durable agentic loop actually runs on the
  * evented execution engine: the workflow instance is an evented-engine
  * workflow, and execution flows through the WorkflowEventProcessor (a pubsub
  * spy sees workflow.start / step events on the 'workflows' topic during a
- * run), not just streaming.
- *
- * Delete after the assessment battery is complete.
+ * run), not just streaming. Also covers the custom-pubsub configuration,
+ * where the agent's stream transport is split from mastra.pubsub but
+ * execution must still complete and clean up its run records.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -38,7 +38,7 @@ function createTextStreamModel(text: string) {
   }) as unknown as LanguageModelV2;
 }
 
-describe('EventedAgent evented-engine sanity', () => {
+describe('EventedAgent evented engine', () => {
   it('runs the durable agentic loop on the evented execution engine via the WEP', async () => {
     const baseAgent = new Agent({
       id: 'sanity-agent',
@@ -76,7 +76,7 @@ describe('EventedAgent evented-engine sanity', () => {
     cleanup();
   }, 30_000);
 
-  it('diagnostic: custom agent pubsub — does execution complete even if streaming is split?', async () => {
+  it('completes execution and cleans up run records with a custom agent pubsub split from mastra.pubsub', async () => {
     const { EventEmitterPubSub } = await import('../../../events/event-emitter');
     const { DurableStepIds } = await import('../constants');
 
