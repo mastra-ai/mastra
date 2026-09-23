@@ -26,6 +26,7 @@ import {
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
+import { buildCommentAuthorsIdentity } from '../../observed-comment-authors.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -112,6 +113,11 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
+  /**
+   * Identity capability — source (a) from persisted comment authors on
+   * `platform === 'linear'`. Source (b) deferred.
+   */
+  readonly identity = buildCommentAuthorsIdentity('linear');
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;

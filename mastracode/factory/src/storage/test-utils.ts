@@ -14,6 +14,7 @@ import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
+import { IntegrationIdentityStorage } from './domains/integration-identity/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelPacksStorage } from './domains/model-packs/base.js';
@@ -36,6 +37,7 @@ export interface FactoryStorageTestSeed {
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
+  integrationIdentity: IntegrationIdentityStorage;
   comments: WorkItemCommentsStorage;
 }
 
@@ -60,6 +62,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
+  const integrationIdentity = storage.registerDomain(new IntegrationIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
@@ -77,6 +80,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     customProviders,
     queueHealth,
     channelIdentity,
+    integrationIdentity,
     comments,
   };
 }

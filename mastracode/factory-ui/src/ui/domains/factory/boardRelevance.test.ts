@@ -17,11 +17,14 @@ import {
   boardRelevanceOptions,
   boardRelevanceQueryValue,
   candidateMatchesLabels,
+  candidateMatchesMe,
   candidateMatchesRelevance,
   workItemMatchesLabels,
+  workItemMatchesMe,
   workItemMatchesRelevance,
   workItemRelevance,
 } from './boardRelevance';
+import type { ResolvedMe } from './boardRelevance';
 import type { AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
@@ -295,5 +298,58 @@ describe('board relevance', () => {
       'assigned',
       'review-requested',
     ]);
+  });
+
+  describe('@me predicate', () => {
+    function resolveMe(entries: Record<string, string[]>): ResolvedMe {
+      const map = new Map<string, Set<string>>();
+      for (const [integrationId, ids] of Object.entries(entries)) {
+        map.set(integrationId, new Set(ids));
+      }
+      return map;
+    }
+
+    const allTypes = new Set(boardRelevanceOptions('review').map(option => option.id));
+
+    it('matches a claimed GitHub author on a PR the user opened', () => {
+      const me = resolveMe({ github: ['octocat'] });
+      expect(workItemMatchesMe(item, activityPage, me, allTypes)).toBe(true);
+    });
+
+    it('matches a claimed GitHub login as a review-requested reviewer', () => {
+      const me = resolveMe({ github: ['monalisa'] });
+      expect(workItemMatchesMe(item, activityPage, me, allTypes)).toBe(true);
+    });
+
+    it('does not match when the claim is for a different integration', () => {
+      const me = resolveMe({ linear: ['octocat'] });
+      expect(workItemMatchesMe(item, activityPage, me, allTypes)).toBe(false);
+    });
+
+    it('returns false when the user has claimed no accounts', () => {
+      expect(workItemMatchesMe(item, activityPage, resolveMe({}), allTypes)).toBe(false);
+    });
+
+    it('respects the selected relevance types', () => {
+      // Author is `octocat`, but the user only asks for `assigned` — no match.
+      const me = resolveMe({ github: ['octocat'] });
+      expect(workItemMatchesMe(item, activityPage, me, new Set(['assigned']))).toBe(false);
+    });
+
+    it('matches an intake candidate whose assignee is claimed', () => {
+      const candidate = issueCandidate({
+        number: 7,
+        title: 'Fix login bug',
+        url: 'https://github.com/acme/app/issues/7',
+        author: 'someone-else',
+        assignee: 'octocat',
+        labels: [],
+        comments: 0,
+        createdAt: '2026-08-01T09:00:00.000Z',
+        updatedAt: '2026-08-01T09:00:00.000Z',
+      });
+      const me = resolveMe({ github: ['octocat'] });
+      expect(candidateMatchesMe(candidate, me, allTypes)).toBe(true);
+    });
   });
 });

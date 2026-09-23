@@ -154,7 +154,67 @@ export function createSessionSearchGroups(input: {
   };
 }
 
-function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearchResult {
+/** Every external-user field the search should treat as a `@me` match target for a card. */
+function externalActorIdsForCard(card: Pick<WorkItem, 'source' | 'metadata'>): {
+  integrationId: string;
+  externalUserIds: string[];
+} | null {
+  const authors: string[] = [];
+  const meta = card.metadata;
+  const pushString = (value: unknown) => {
+    if (typeof value === 'string' && value.trim().length > 0) authors.push(value.trim().toLowerCase());
+  };
+  const pushList = (value: unknown) => {
+    if (Array.isArray(value)) for (const entry of value) pushString(entry);
+  };
+  let integrationId: string | null = null;
+  if (card.source === 'github-issue' || card.source === 'github-pr') {
+    integrationId = 'github';
+    pushString(meta.author);
+    pushString(meta.assignee);
+    pushList(meta.assignees);
+    pushList(meta.requestedReviewers);
+  } else if (card.source === 'linear-issue') {
+    integrationId = 'linear';
+    pushString(meta.assignee ?? meta.linearAssignee);
+    pushString(meta.creator ?? meta.linearCreator ?? meta.author);
+  } else if (card.source === 'jira-issue') {
+    integrationId = 'jira';
+    pushString(meta.assignee);
+    pushString(meta.creator ?? meta.author);
+  } else if (card.source === 'incidentio-follow-up') {
+    integrationId = 'incidentio';
+    pushString(meta.assignee);
+    pushString(meta.creator ?? meta.reporter);
+  }
+  if (!integrationId) return null;
+  return { integrationId, externalUserIds: [...new Set(authors)] };
+}
+
+/**
+ * When the acting user has claimed at least one external account whose id
+ * appears on this card, we append `@me` to the card's fuzzy-search `value`.
+ * `cmdk` then picks it up whenever a user types `@me` — no extra parsing
+ * pass and no bespoke query language, just the same value scheme every
+ * other result uses.
+ */
+function meTokenForCard(
+  card: Pick<WorkItem, 'source' | 'metadata'>,
+  resolvedMe: ReadonlyMap<string, ReadonlySet<string>> | undefined,
+): string | undefined {
+  if (!resolvedMe || resolvedMe.size === 0) return undefined;
+  const actors = externalActorIdsForCard(card);
+  if (!actors) return undefined;
+  const claims = resolvedMe.get(actors.integrationId);
+  if (!claims || claims.size === 0) return undefined;
+  return actors.externalUserIds.some(id => claims.has(id)) ? '@me' : undefined;
+}
+
+function createWorkItemResult(
+  factoryId: string,
+  item: WorkItem,
+  resolvedMe?: ReadonlyMap<string, ReadonlySet<string>>,
+): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
   const stage = currentItemStageLabel(item);
@@ -164,14 +224,27 @@ function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearch
     title: item.title,
     context: `${sourceLabel} · ${stage} · not started`,
     identifier,
-    value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
+    value: joinValue([
+      item.title,
+      'work item',
+      sourceLabel,
+      stage,
+      identifier,
+      item.sourceKey,
+      meTokenForCard(item, resolvedMe),
+    ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
     target: { kind: 'work-item', item },
   };
 }
 
-function createCandidateResult(factoryId: string, candidate: BoardCandidate, updatedAt: string): WorkItemSearchResult {
+function createCandidateResult(
+  factoryId: string,
+  candidate: BoardCandidate,
+  updatedAt: string,
+  resolvedMe?: ReadonlyMap<string, ReadonlySet<string>>,
+): WorkItemSearchResult {
   const identifier = workItemIdentifier(candidate);
   const sourceLabel = SOURCE_LABELS[candidate.source];
   const stage = stageLabel(candidate.column);
@@ -181,18 +254,32 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
     title: candidate.title,
     context: `${sourceLabel} · ${stage} · not filed`,
     identifier,
-    value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
+    value: joinValue([
+      candidate.title,
+      'work item',
+      sourceLabel,
+      stage,
+      identifier,
+      candidate.sourceKey,
+      meTokenForCard(candidate, resolvedMe),
+    ]),
     path: relationshipPath(candidate, factoryId),
     updatedAt,
     target: { kind: 'candidate', candidate },
   };
 }
 
-/** Board entries with no session to open: unstarted cards, plus live candidates not yet filed as one. */
+/**
+ * Board entries with no session to open: unstarted cards, plus live candidates
+ * not yet filed as one. `resolvedMe` is threaded through so cards whose
+ * external author/assignee/reviewer matches one of the acting user's claims
+ * pick up a hidden `@me` token in their search value.
+ */
 export function createWorkItemSearchResults(input: {
   factoryId: string;
   workItems: WorkItem[];
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
+  resolvedMe?: ReadonlyMap<string, ReadonlySet<string>>;
 }): WorkItemSearchResult[] {
   const filed = persistedSourceKeys(input.workItems);
   const candidates = input.candidates.filter(({ candidate }) => !filed.has(candidate.sourceKey));
@@ -200,7 +287,9 @@ export function createWorkItemSearchResults(input: {
   return [
     ...input.workItems
       .filter(item => Object.keys(item.sessions).length === 0)
-      .map(item => createWorkItemResult(input.factoryId, item)),
-    ...candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
+      .map(item => createWorkItemResult(input.factoryId, item, input.resolvedMe)),
+    ...candidates.map(({ candidate, updatedAt }) =>
+      createCandidateResult(input.factoryId, candidate, updatedAt, input.resolvedMe),
+    ),
   ].sort(newestFirst);
 }

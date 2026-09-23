@@ -108,6 +108,7 @@ import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
+import { IntegrationIdentityStorage } from './storage/domains/integration-identity/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
@@ -497,6 +498,9 @@ export class MastraFactory {
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
+    // Tenant → external accounts a Factory user has self-claimed on each
+    // integration; consumed by the `@me` filter and settings UI.
+    const integrationIdentityStorage = storage.registerDomain(new IntegrationIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
@@ -511,6 +515,7 @@ export class MastraFactory {
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
+      integrationIdentity: integrationIdentityStorage,
       comments: workItemCommentsStorage,
     };
     const auditDomain = new AuditDomain({

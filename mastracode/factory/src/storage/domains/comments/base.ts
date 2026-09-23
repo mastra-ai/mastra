@@ -797,6 +797,55 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     return [...authors.values()];
   }
 
+  /**
+   * Distinct external authors of comments in this org, filtered by the
+   * `author_external.platform` slug that identifies the source integration.
+   * Powers integration identity capabilities' source-(a) "observed" list —
+   * every external comment author is a person that integration has seen touch
+   * factory data. Comments without an external author (WorkOS users, agents)
+   * are skipped.
+   *
+   * De-duplicates on `external.userId`. Display name is captured at write
+   * time and preserved, preferring `fullName`, then `userName`, then the id
+   * itself. Rows without a `platform` match are skipped in-memory: the
+   * `author_external` column is JSON, so no index can express the filter.
+   */
+  async listExternalAuthorsForOrg({
+    orgId,
+    platform,
+    limit = 2_000,
+  }: {
+    orgId: string;
+    platform: string;
+    limit?: number;
+  }): Promise<Array<{ externalUserId: string; label: string; email?: string }>> {
+    const rows = await this.ops.findMany<WorkItemCommentDbRow>(
+      'work_item_comments',
+      { org_id: orgId },
+      {
+        orderBy: [
+          ['occurred_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit,
+      },
+    );
+    const seen = new Map<string, { externalUserId: string; label: string; email?: string }>();
+    for (const row of rows) {
+      const external = row.author_external;
+      if (!external || external.platform !== platform) continue;
+      const externalUserId = external.userId;
+      if (!externalUserId) continue;
+      const label = external.fullName?.trim() || external.userName?.trim() || externalUserId;
+      const existing = seen.get(externalUserId);
+      // Prefer the first row that carried a real label over later id-only fallbacks:
+      // integrations aren't guaranteed to write display metadata on every comment.
+      if (existing && existing.label !== existing.externalUserId) continue;
+      seen.set(externalUserId, { externalUserId, label });
+    }
+    return [...seen.values()];
+  }
+
   async #listMentionRows(commentId: string): Promise<WorkItemMentionRow[]> {
     const rows = await this.ops.findMany<WorkItemMentionDbRow>('work_item_comment_mentions', {
       comment_id: commentId,

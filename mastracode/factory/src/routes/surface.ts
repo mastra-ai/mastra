@@ -16,6 +16,8 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
+import type { IdentityServiceIntegration } from '../services/identity-service.js';
+import { IdentityService } from '../services/identity-service.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -35,6 +37,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntegrationIdentityStorage } from '../storage/domains/integration-identity/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
@@ -55,6 +58,7 @@ import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IdentityRoutes } from './identity.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -113,6 +117,7 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    integrationIdentity: IntegrationIdentityStorage;
     comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
@@ -339,7 +344,7 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'integrationIdentity' | 'comments' | 'memorySettings'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -370,6 +375,8 @@ export function buildIntegrationContext(
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
+      integrationIdentity: deps.domains.integrationIdentity,
+      comments: deps.domains.comments,
       memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
@@ -497,6 +504,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
 
+  const identityRegistrations: IdentityServiceIntegration[] = [];
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
@@ -509,7 +517,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       },
       integration.id,
     );
+    // Identity capability is resolved from the same context the integration's
+    // own routes/workers see, so its listCandidateAccounts calls end up with
+    // the same storage handles and org scoping.
+    if (integration.identity) identityRegistrations.push({ integration, context });
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
+  });
+  const identityService = new IdentityService({
+    storage: deps.domains.integrationIdentity,
+    integrations: () => identityRegistrations,
   });
   // Session persistence belongs to the linked source-control provider, not to
   // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
@@ -637,6 +653,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),
+    ...new IdentityRoutes({ auth: deps.auth, service: identityService }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
     ...providerRoutes,

@@ -9,6 +9,7 @@ import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
+import { useResolvedMe } from '../../hooks/useIdentityClaims';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -39,8 +40,10 @@ import {
   boardLabels,
   boardParticipants,
   candidateMatchesLabels,
+  candidateMatchesMe,
   candidateMatchesRelevance,
   workItemMatchesLabels,
+  workItemMatchesMe,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '../domains/factory/boardFilters';
@@ -163,8 +166,15 @@ function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const filters = boardFiltersFromParams(searchParams, kind);
+  /**
+   * `teammate=@me` is a sentinel that expands, at match time, into every
+   * external-user id the acting user has claimed across every integration.
+   * See `workItemMatchesMe` for the resolution rules.
+   */
+  const meSelected = filters.participantId === '@me';
 
   const auth = useFactoryAuth();
+  const resolvedMe = useResolvedMe();
   const items = useBoardItems({ factoryProjectId, kind });
   const intake = useBoardIntake({
     factoryProjectId,
@@ -197,7 +207,9 @@ function BoardContent({
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const filteredCandidates = intake.candidates.filter(
     candidate =>
-      candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes) &&
+      (meSelected
+        ? candidateMatchesMe(candidate, resolvedMe.data, filters.relevanceTypes)
+        : candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes)) &&
       candidateMatchesLabels(candidate, filters.labels) &&
       cardMatchesSearch(candidate, filters.search),
   );
@@ -230,7 +242,15 @@ function BoardContent({
     unfilteredWorkItemsForStage(stage).filter(item => {
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
-        workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
+        (meSelected
+          ? workItemMatchesMe(item, activityPage, resolvedMe.data, filters.relevanceTypes, liveCandidate)
+          : workItemMatchesRelevance(
+              item,
+              activityPage,
+              filters.participantId,
+              filters.relevanceTypes,
+              liveCandidate,
+            )) &&
         workItemMatchesLabels(item, filters.labels, liveCandidate) &&
         cardMatchesSearch(item, filters.search)
       );
@@ -305,6 +325,7 @@ function BoardContent({
                 participants={participants}
                 availableLabels={availableLabels}
                 currentUserId={auth.data?.user?.userId}
+                hasIdentityClaims={resolvedMe.data.size > 0}
                 filters={filters}
                 onFiltersChange={setFilters}
               />

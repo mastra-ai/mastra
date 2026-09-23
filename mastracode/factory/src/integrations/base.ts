@@ -34,9 +34,11 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntegrationIdentityStorage } from '../storage/domains/integration-identity/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -127,6 +129,19 @@ export interface IntegrationContext {
      * right user's credentials.
      */
     channelIdentity: ChannelIdentityStorage;
+    /**
+     * Tenant → external accounts a Factory user has self-claimed on this or
+     * any other integration. Integrations use it (through the aggregation
+     * service) to power the `@me` filter; the settings UI writes to it when
+     * a user claims or unclaims an account.
+     */
+    integrationIdentity: IntegrationIdentityStorage;
+    /**
+     * Work-item comments handle. Narrowed to the single reader the identity
+     * capability needs; broader comment CRUD stays on the feed and comments
+     * domain that own it.
+     */
+    comments: Pick<WorkItemCommentsStorage, 'listExternalAuthorsForOrg'>;
   };
   /**
    * Factory runtime available when the work-item domain is ready.
@@ -179,6 +194,41 @@ export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfi
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
  */
+/**
+ * A candidate account an integration surfaces to the identity settings UI.
+ * `sources` is a two-value set because a candidate may be discovered by
+ * scanning the integration's own stored records (`'observed'`), by hitting
+ * the provider's user-list endpoint (`'api-listed'`), or both — the merge
+ * point sits in the integration's own implementation. The UI shows the tags
+ * so the user can distinguish "this is a person the integration has seen
+ * touch our data" from "this is a person on the provider's roster".
+ */
+export interface IntegrationCandidateAccount {
+  /** Provider-native id — GitHub login, Linear user id, Jira accountId, etc. */
+  externalUserId: string;
+  /** Display label shown next to the checkbox in the settings UI. */
+  label: string;
+  /** Provider-reported email, when available. Display-only. */
+  email?: string;
+  /** Which sources contributed this candidate. Non-empty, de-duplicated. */
+  sources: Array<'observed' | 'api-listed'>;
+}
+
+/**
+ * Optional capability an integration mounts to power identity claims and the
+ * `@me` filter. The capability owns discovery — merging observed accounts
+ * from its own stored records with any provider-side user roster — and
+ * returns a de-duplicated list keyed by `externalUserId`. Claim writes and
+ * `@me` resolution stay in the factory's identity service; the capability
+ * only produces the candidate list the user picks from.
+ */
+export interface IntegrationIdentityCapability {
+  listCandidateAccounts(
+    ctx: IntegrationContext,
+    args: { orgId: string; query?: string },
+  ): Promise<IntegrationCandidateAccount[]>;
+}
+
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
@@ -259,6 +309,12 @@ export interface FactoryIntegration {
    * owning a chat channel.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
+  /**
+   * Optional identity capability — the integration exposes candidate accounts
+   * for the identity settings UI. When omitted, the integration does not
+   * participate in identity claims or the `@me` filter.
+   */
+  identity?: IntegrationIdentityCapability;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

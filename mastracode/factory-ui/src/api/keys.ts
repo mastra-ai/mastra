@@ -80,6 +80,13 @@ export const queryKeys = {
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  /** All integrations that opted into the identity capability. */
+  identityIntegrations: () => ['identity', 'integrations'] as const,
+  /** The acting user's claimed external accounts, across every integration. */
+  identityClaims: () => ['identity', 'claims'] as const,
+  /** Candidate accounts for one integration, keyed by the optional query filter. */
+  identityCandidates: (integrationId: string | undefined, query: string | undefined) =>
+    ['identity', 'candidates', integrationId ?? null, query ?? null] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
