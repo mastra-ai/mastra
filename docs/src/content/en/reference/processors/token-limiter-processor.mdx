@@ -227,7 +227,7 @@ const result = await agent.generate('Research this topic using your tools', {
 })
 ```
 
-> **Note on processor workflow ordering:** If a `TokenLimiterProcessor` is nested inside a processor workflow (wrapped with `createStep`), it runs its trimming through `processInputStep`, which operates on stored messages before top-level prompt processors such as `ToolCallFilter` convert them. For post-filter counting — where earlier prompt processors like `ToolCallFilter` have already removed tool results from the prompt — register the limiter directly in `inputProcessors`, not wrapped in a `createStep`.
+> **Note on processor workflow ordering:** If a `TokenLimiterProcessor` is nested inside a processor workflow (wrapped with `createStep`), it runs its trimming through `processInputStep`, which operates on stored messages before top-level prompt processors such as `ToolCallFilter` convert them. For post-filter counting, where earlier prompt processors like `ToolCallFilter` have already removed tool results from the prompt, register the limiter directly in `inputProcessors`, not wrapped in a `createStep`.
 
 ````
 
