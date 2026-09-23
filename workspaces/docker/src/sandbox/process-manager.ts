@@ -465,9 +465,11 @@ export class DockerProcessManager extends SandboxProcessManager {
         // while kill() is still confirming the process group is gone. Wait for that
         // confirmation (bounded) before settling: settling now would publish a
         // termination-free result and disarm 'close', the only other path carrying
-        // `killed`. When termination is already recorded there is nothing to wait
-        // for.
-        if (!handle._killed && handle._terminationPromise) {
+        // `killed`. The wait is unconditional — the timeout path records `_killed`
+        // optimistically before asking kill() to confirm, so gating on it would let
+        // this settle while the kill helper is still running and a failed
+        // confirmation could no longer be reflected.
+        if (handle._terminationPromise) {
           await waitForTermination(handle._terminationPromise);
         }
         if (settled) return;
@@ -495,7 +497,17 @@ export class DockerProcessManager extends SandboxProcessManager {
         settleTerminated();
       });
 
-      stream.on('error', () => {
+      stream.on('error', async () => {
+        // Tearing the hijacked exec socket down can surface as a stream error
+        // (ECONNRESET) rather than 'end'. Same rule as 'end': a kill that is still
+        // confirming must be awaited (bounded) before this settles, otherwise the
+        // error path publishes an exit-1 result with no `killed`/`timedOut` and the
+        // later 'close' settlement has nothing left to correct.
+        if (handle._terminationPromise) {
+          await waitForTermination(handle._terminationPromise);
+        }
+        if (settled) return;
+
         if (handle._killed) {
           settleTerminated();
           return;
@@ -511,6 +523,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       const timeoutMs = resolvedTimeout;
       const timer = setTimeout(() => {
         if (handle.exitCode === undefined) {
+          // Record the timeout kill up front so the 'close' settlement that
+          // follows _destroyStream() carries the metadata. The kill confirmation
+          // is still in flight here, which is safe now that 'end' and 'error'
+          // await it before settling — a helper that fails is followed by
+          // forceClose(), which keeps this flag and tears the stream down anyway.
           handle._killed = true;
           handle._timedOut = true;
           // Await kill() so the process tree is actually terminated before the

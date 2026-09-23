@@ -1507,6 +1507,99 @@ describe('DockerSandbox', () => {
       }
     });
 
+    it('should keep wait() pending until a timeout kill is confirmed', async () => {
+      // The timeout path records the termination before kill() confirms it, so
+      // 'end' must still wait for that confirmation: settling early would report a
+      // terminated process while the kill helper is still running.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        // Gate the kill helper so it stays in flight while 'end' is delivered.
+        let releaseKillHelper!: () => void;
+        const killHelperGate = new Promise<void>(resolve => {
+          releaseKillHelper = resolve;
+        });
+        const killStream = { destroy: vi.fn() };
+        mockContainer.exec.mockImplementationOnce(async () => {
+          await killHelperGate;
+          return {
+            id: 'kill-exec',
+            start: vi.fn().mockResolvedValue(killStream),
+            inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+          };
+        });
+
+        // Fire the timeout, then deliver 'end' with the helper still unconfirmed.
+        await vi.advanceTimersByTimeAsync(50);
+
+        let settled = false;
+        void waitPromise.then(() => {
+          settled = true;
+        });
+
+        const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+        const endPromise = endHandler();
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+
+        releaseKillHelper();
+        await endPromise;
+
+        const result = await waitPromise;
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(true);
+        expect(result.timedOut).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should preserve killed metadata when the stream errors while kill is still confirming', async () => {
+      // Tearing the hijacked exec socket down can surface as ECONNRESET instead of
+      // 'end'; the error path must await the in-flight confirmation for the same
+      // reason, or the result loses the termination metadata entirely.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      let releaseKillHelper!: () => void;
+      const killHelperGate = new Promise<void>(resolve => {
+        releaseKillHelper = resolve;
+      });
+      const killStream = { destroy: vi.fn() };
+      mockContainer.exec.mockImplementationOnce(async () => {
+        await killHelperGate;
+        return {
+          id: 'kill-exec',
+          start: vi.fn().mockResolvedValue(killStream),
+          inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+        };
+      });
+
+      const killPromise = handle.kill();
+
+      const errorHandler = mockStream.on.mock.calls.find(([event]) => event === 'error')?.[1] as () => Promise<void>;
+      const errorPromise = errorHandler();
+
+      releaseKillHelper();
+      await errorPromise;
+      expect(await killPromise).toBe(true);
+
+      const result = await waitPromise;
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+    });
+
     it('should track spawned processes in list()', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
