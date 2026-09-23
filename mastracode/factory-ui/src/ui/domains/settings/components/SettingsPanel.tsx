@@ -22,6 +22,7 @@ import {
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
+import { IdentityClaimsSection } from './IdentityClaimsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
@@ -90,13 +91,22 @@ export function SettingsPanel() {
         {section === 'preferences' && <GeneralSettings />}
         {section === 'factory' && <FactoryManagementSection />}
         {section === 'connections' && (
-          <SettingsSubsection
-            scope="personal"
-            title="Connected accounts"
-            description="Connect your account to use Factory from Slack."
-          >
-            <ConnectedAccountsSection />
-          </SettingsSubsection>
+          <div className="flex flex-col gap-6">
+            <SettingsSubsection
+              scope="personal"
+              title="Connected accounts"
+              description="Connect your account to use Factory from Slack."
+            >
+              <ConnectedAccountsSection />
+            </SettingsSubsection>
+            <SettingsSubsection
+              scope="personal"
+              title="Identity"
+              description="Claim which external accounts on each integration are yours. Used by the board and Cmd+K @me filters."
+            >
+              <IdentityClaimsSection />
+            </SettingsSubsection>
+          </div>
         )}
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
