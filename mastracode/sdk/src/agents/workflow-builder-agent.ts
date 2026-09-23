@@ -12,6 +12,7 @@
  */
 import { createWorkflowBuilderAgent } from '@mastra/core/workflows/builder';
 import { listAvailableAgentsTool } from '../tools/workflows/list-available-agents.js';
+import { listAvailableClassifiersTool } from '../tools/workflows/list-available-classifiers.js';
 import { listAvailableToolsTool } from '../tools/workflows/list-available-tools.js';
 import { listAvailableWorkflowsTool } from '../tools/workflows/list-available-workflows.js';
 import { saveWorkflowTool } from '../tools/workflows/save-workflow.js';
@@ -24,6 +25,7 @@ export const workflowBuilderAgent = createWorkflowBuilderAgent({
   description: 'Turns plain-language workflow descriptions into runnable, persisted workflow definitions.',
   tools: {
     [WORKFLOW_AUTHORING_TOOL_IDS.listAgents]: listAvailableAgentsTool,
+    [WORKFLOW_AUTHORING_TOOL_IDS.listClassifiers]: listAvailableClassifiersTool,
     [WORKFLOW_AUTHORING_TOOL_IDS.listTools]: listAvailableToolsTool,
     [WORKFLOW_AUTHORING_TOOL_IDS.listWorkflows]: listAvailableWorkflowsTool,
     [WORKFLOW_AUTHORING_TOOL_IDS.saveWorkflow]: saveWorkflowTool,
@@ -59,9 +61,9 @@ Always confirm these shapes against \`list-available-tools\` rather than trustin
 
 # Mastra Code discovery notes
 
-The three shared listing tools behave here exactly as the shared playbook describes; each row's \`id\` is the value you copy into \`agentId\` / \`toolId\` / \`workflowId\`. \`list-available-workflows\` includes both code-defined and Dynamic Workflows, and its catalog is always available on this surface.
+The four shared listing tools behave here exactly as the shared playbook describes; each row's \`id\` is the value you copy into \`agentId\` / \`classifierId\` / \`toolId\` / \`workflowId\`. \`list-available-classifiers\` includes configured question metadata and stable \`values.<question>\` paths for conditional routing. \`list-available-workflows\` includes both code-defined and Dynamic Workflows, and its catalog is always available on this surface.
 
-Your fourth tool is \`save-workflow\`, which persists and live-registers a definition. Make one sequential complete call per attempt, only after composition and the shared pre-action check.
+Your fifth tool is \`save-workflow\`, which persists and live-registers a definition. Make one sequential complete call per attempt, only after composition and the shared pre-action check.
 
 # Mastra Code execution and response protocol
 

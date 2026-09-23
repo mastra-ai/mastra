@@ -49,7 +49,7 @@ export function IdentityClaimsSection() {
   }
   if (integrationsQuery.isError) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+      <Txt as="p" variant="caption" className="text-notice-destructive-fg">
         {integrationsQuery.error instanceof Error
           ? integrationsQuery.error.message
           : 'Failed to load identity integrations'}
@@ -58,7 +58,7 @@ export function IdentityClaimsSection() {
   }
   if (claimsQuery.isError) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+      <Txt as="p" variant="caption" className="text-notice-destructive-fg">
         {claimsQuery.error instanceof Error ? claimsQuery.error.message : 'Failed to load your identity claims'}
       </Txt>
     );
@@ -73,10 +73,10 @@ export function IdentityClaimsSection() {
         <SettingsRow
           label={
             <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="ui-md">
+              <Txt as="span" variant="body">
                 No integrations available
               </Txt>
-              <Txt as="span" variant="ui-sm" className="text-icon3">
+              <Txt as="span" variant="caption" className="text-icon3">
                 Once an integration that supports identity is configured, its candidate accounts will appear here.
               </Txt>
             </span>
@@ -118,10 +118,10 @@ function IntegrationClaimGroup({ integrationId, claims }: { integrationId: strin
           >
             {expanded ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />}
             <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="ui-md">
+              <Txt as="span" variant="body">
                 {label}
               </Txt>
-              <Txt as="span" variant="ui-sm" className={claims.length > 0 ? 'text-positive1' : 'text-icon3'}>
+              <Txt as="span" variant="caption" className={claims.length > 0 ? 'text-positive1' : 'text-icon3'}>
                 {claimSummary}
               </Txt>
             </span>
@@ -243,7 +243,7 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
       {candidatesQuery.isPending ? (
         <SkeletonRows label="Loading accounts" rows={3} rowClassName="h-10 w-full" />
       ) : merged.length === 0 ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-icon3">
           No accounts observed yet on this integration. Add your account id below to enable the <code>@me</code> filter
           for records that reference you.
         </Txt>
@@ -261,11 +261,11 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
                   onChange={event => onToggle(candidate.externalUserId, event.target.checked)}
                 />
                 <label htmlFor={inputId} className="flex flex-1 flex-col gap-0.5">
-                  <Txt as="span" variant="ui-md">
+                  <Txt as="span" variant="body">
                     {candidate.label}
                   </Txt>
                   {candidate.email && (
-                    <Txt as="span" variant="ui-sm" className="text-icon3">
+                    <Txt as="span" variant="caption" className="text-icon3">
                       {candidate.email}
                     </Txt>
                   )}
@@ -277,7 +277,7 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
       )}
 
       <div className="border-border1 flex flex-col gap-2 border-t pt-3">
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-icon3">
           Add an account by its {integrationLabel(integrationId)} id (e.g. <code>octocat</code> for GitHub).
         </Txt>
         <div className="flex flex-wrap items-center gap-2">

@@ -46,8 +46,7 @@ describe('createWorkItemSearchResults @me tokens', () => {
     const results = createWorkItemSearchResults({
       factoryId: 'factory-1',
       workItems: [item],
-      issues: [],
-      pullRequests: [],
+      candidates: [],
       resolvedMe: resolveMe({ github: ['octocat'] }),
     });
     expect(results).toHaveLength(1);
@@ -59,8 +58,7 @@ describe('createWorkItemSearchResults @me tokens', () => {
     const results = createWorkItemSearchResults({
       factoryId: 'factory-1',
       workItems: [item],
-      issues: [],
-      pullRequests: [],
+      candidates: [],
       resolvedMe: resolveMe({ linear: ['octocat'] }),
     });
     expect(results[0].value.split(' ')).not.toContain('@me');
@@ -71,8 +69,7 @@ describe('createWorkItemSearchResults @me tokens', () => {
     const results = createWorkItemSearchResults({
       factoryId: 'factory-1',
       workItems: [item],
-      issues: [],
-      pullRequests: [],
+      candidates: [],
       resolvedMe: resolveMe({}),
     });
     expect(results[0].value.split(' ')).not.toContain('@me');
@@ -90,8 +87,7 @@ describe('createWorkItemSearchResults @me tokens', () => {
     const results = createWorkItemSearchResults({
       factoryId: 'factory-1',
       workItems: [item],
-      issues: [],
-      pullRequests: [],
+      candidates: [],
       resolvedMe: resolveMe({ github: ['monalisa'] }),
     });
     expect(results[0].value.split(' ')).toContain('@me');
@@ -102,8 +98,7 @@ describe('createWorkItemSearchResults @me tokens', () => {
     const results = createWorkItemSearchResults({
       factoryId: 'factory-1',
       workItems: [item],
-      issues: [],
-      pullRequests: [],
+      candidates: [],
     });
     expect(results[0].value.split(' ')).not.toContain('@me');
   });

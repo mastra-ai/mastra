@@ -63,8 +63,8 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <div className="flex flex-col items-center space-y-6 text-center">
           <LogoWithoutText className="h-16 w-16 opacity-50" />
           <div className="space-y-2">
-            <h2 className="text-foreground text-header-sm font-semibold">Authentication Required</h2>
-            <p className="text-muted-foreground max-w-sm">
+            <h2 className="text-heading text-foreground">Authentication Required</h2>
+            <p className="max-w-sm text-muted-foreground">
               Add the authorization header that Studio needs to reach your Mastra server.
             </p>
           </div>
@@ -88,19 +88,19 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
       <div className="flex flex-col items-center space-y-6 text-center">
         <LogoWithoutText className="h-16 w-16 opacity-50" />
         <div className="space-y-2">
-          <h2 className="text-foreground text-header-sm font-semibold">Sign in to continue</h2>
-          <p className="text-muted-foreground max-w-sm">You need to sign in to access this page.</p>
+          <h2 className="text-heading text-foreground">Sign in to continue</h2>
+          <p className="max-w-sm text-muted-foreground">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
-          <div className="border-border1 bg-surface2 flex items-start gap-2.5 rounded-md border p-3 text-left">
-            <Lock className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-muted-foreground text-ui-md max-w-sm">{capabilities.login.description}</p>
+          <div className="flex items-start gap-2.5 rounded-md border border-border bg-background p-3 text-left">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <p className="max-w-sm text-body text-muted-foreground">{capabilities.login.description}</p>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (
-            <div className="text-ui-md">
+            <div className="text-body">
               <span className="text-muted-foreground">{"Don't have an account? "}</span>
               <button type="button" onClick={handleSignUp} className="text-foreground hover:underline">
                 Sign up

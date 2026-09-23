@@ -109,7 +109,7 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
         data-slot="thread-trace-row"
         className={cn(
           // Same fixed messages width as the trace panel; the details column takes the rest.
-          'group grid grid-cols-[24rem_minmax(0,1fr)] border-b border-border1 pr-4 pl-14 transition-opacity hover:opacity-100',
+          'group grid grid-cols-[24rem_minmax(0,1fr)] border-b border-border pr-4 pl-14 transition-opacity hover:opacity-100',
           isActive || isCurrent ? 'opacity-100' : 'opacity-50',
           className,
         )}

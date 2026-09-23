@@ -1,3 +1,4 @@
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDownIcon, ChevronsDownIcon, ChevronsUpIcon, ChevronUpIcon } from 'lucide-react';
 
@@ -24,9 +25,9 @@ export function ExperimentTraceTimelineExpandCol({
 }: ExperimentTraceTimelineExpandColProps) {
   return (
     <div
-      className={cn('flex items-center justify-end h-full px-3', {
+      className={cn('flex h-full items-center justify-end px-3', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
-        'bg-surface4': isSelected,
+        'bg-fill-hover': isSelected,
       })}
     >
       {numOfChildren && numOfChildren > 0 ? (
@@ -58,9 +59,10 @@ function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
     <button onClick={onClick} className={cn('h-full', className)}>
       <div
         className={cn(
-          'flex items-center gap-[0.1rem] text-ui-sm text-foreground border border-border1 pl-2 pr-1 rounded-lg transition-all',
+          'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2 text-caption text-foreground',
+          controlStateColorTransition,
           'hover:text-yellow-500',
-          '[&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:w-4 [&>svg]:h-4 [&>svg]:transition-all',
+          '[&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-all',
         )}
       >
         {children}

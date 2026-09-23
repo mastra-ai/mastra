@@ -356,6 +356,42 @@ const github = new PlatformGithubIntegration({
 
 Pass the integration in `MastraFactory`'s `integrations` array. The direct `GithubIntegration` accepts the same `rules` option alongside its GitHub App credentials. A function replaces one default handler without composing with it. `null` disables that event's handler, not authentication, webhook ingestion, or reconciliation bookkeeping. Omitted events and `undefined` retain their defaults. Each instance copies and freezes its resolved handler map; unknown event names and invalid handler values are rejected during construction.
 
+When Platform credentials are present, `MastraFactory` installs a `PlatformGithubIntegration` itself, so a deploy can change its handlers without constructing one. Pass the same options under `platform.github` and they are forwarded to that integration's constructor:
+
+```typescript
+import { MastraFactory } from '@mastra/factory';
+
+// Your own label → board mapping (Settings › Intake › GitHub label routes remain
+// the stored, per-project alternative when labels alone are enough).
+const boardForLabels = (labels: string[]) => (labels.includes('design') ? 'design' : 'work');
+
+new MastraFactory({
+  storage,
+  platform: {
+    github: {
+      rules: {
+        // Route a new issue to the board its existing labels select, instead of
+        // defaulting to Work.
+        issueOpened: context => ({
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:issue-intake`,
+          board: boardForLabels(context.issue?.labels ?? []),
+          source: 'github-issue',
+          sourceKey: `github-issue:${context.issue!.number}`,
+          title: context.issue!.title,
+          url: context.issue!.url,
+          stage: 'intake',
+        }),
+      },
+      // Optional. Overrides the sibling `githubAppSlug` for recognizing Factory's own writes.
+      slug: 'factory-app',
+    },
+  },
+});
+```
+
+`platform.github` applies only to the integration the factory installs itself. An explicit `github` entry in `integrations` takes precedence and makes the key a no-op; the factory warns rather than ignoring it silently, and warns the same way when no Platform credentials and no explicit GitHub integration are present. `GithubRuleOverrides` (the `rules` option type) is exported from `@mastra/factory`.
+
 **Migration:** Move each global `rules.github[event].onEvent` value to the integration constructor's `rules[event]` option:
 
 ```typescript
@@ -369,6 +405,79 @@ const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: nul
 Board definitions own lifecycle, transition-policy, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
+
+**Placement, not transition.** An `upsertLinkedWorkItem` decision normally names a destination: the card is materialized on the board's initial phase, the arrival rule runs, and a governed transition moves it to `stage` where that phase's entry rule runs. Set `skipRules: true` to file it on `stage` directly instead, as its first entry, with none of the board's phase rules run for it — no arrival, no destination entry, no transition row. The card is filed and left parked for a person:
+
+```typescript
+import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
+import { defaultGithubRules } from '@mastra/factory/integrations/github/default-rules';
+
+new PlatformGithubIntegration({
+  rules: {
+    // An issue whose triage is already recorded skips the triage phase
+    // entirely and waits on Planning.
+    issueOpened: context => {
+      const decision = defaultGithubRules.issueOpened(context);
+      if (!decision || !context.issue) return decision;
+      const labels = context.issue.labels ?? [];
+      if (labels.some(label => label.toLowerCase() === 'status: auto-triaged')) {
+        return { ...decision, stage: 'planning', skipRules: true };
+      }
+      // A reconcile replay carries the existing card: a card that has already
+      // left the landing phase is re-placed, not landed again.
+      const moved = context.item !== undefined && !context.item.stages.includes(decision.stage);
+      return moved ? { ...decision, stage: 'triage', skipRules: true } : decision;
+    },
+  },
+});
+```
+
+Label-driven placement is a relocation, not a transition: `stage` must be a phase of `board`, and the card is written there in one step. An existing card the same decision reaches — a reconcile pass reacting to a label change, or a retry after a lost acknowledgement — is placed the same way, so the decision means the same thing whether the card is being created or already exists. The relocation guards apply: a terminal card, a card with a session attached to its current phase's role, and a card that changed under the dispatcher (revision conflict) all stay put. A retry whose materialization key already matches its card is a no-op, so a card that has since moved on is not dragged back to the stage this decision filed it at.
+
+A decision _without_ the flag that reaches a card which already exists keeps the governed path, so once a card has left the board's initial phase the decision cannot move it: a destination transition starts at the initial phase, and the initial phase is deliberately never re-entered. A handler that answers for an existing card — the reconcile replay below — therefore sets `skipRules` itself when the labels, not an arrival, are what decides where the card belongs.
+
+`AUTO_TRIAGED_LABEL` is exported from `@mastra/factory/rules/types` for the label the triage skill applies.
+
+Reconciliation re-applies label-derived placement. The issue sweep replays an open issue through the rules ingress whenever the issue's live labels differ from the card's stored ones — the `labeled`/`unlabeled` webhook may never have arrived (Factory was down, or the label was applied by something else). The deployment rule decides placement, exactly as at arrival, and the context carries the existing card on `item`, so one handler answers for both: a card still resting on the board's initial phase is landed the normal way, and a card that has already left it is re-placed with `skipRules` and no phase rule run. Cards parked by hand are untouched while an issue's labels are unchanged.
+
+A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its Review card closes and the Work item that wrote the code assesses whether it is finished. An opening pull request is evaluated the same way. Its own Review card is filed by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival and returns nothing for the authoring item.
+
+### GitLab intake and source control
+
+Direct deployments can use either a GitLab Personal Access Token or Group Access Token. Both authenticate the GitLab API and Git-over-HTTPS in the same way; the difference is reach: a personal token follows the user's accessible projects, while a group token is limited to its group and subgroups. Configure the token with `api` and `write_repository` scopes so Factory can manage issues and merge requests, clone repositories, and push session branches.
+
+```typescript
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
+
+const gitlab = new GitLabIntegration({
+  accessToken: process.env.GITLAB_ACCESS_TOKEN,
+  accessTokenType: 'group', // Or 'personal'. Defaults to 'personal'.
+  baseUrl: 'https://gitlab.example.com', // Omit for gitlab.com.
+  webhookSecret: process.env.GITLAB_WEBHOOK_SECRET,
+});
+const factory = new MastraFactory({ storage, integrations: [gitlab] });
+```
+
+With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE` (`personal` or `group`), `GITLAB_BASE_URL`, and `GITLAB_WEBHOOK_SECRET`. See GitLab's [access-token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/), [personal token](https://docs.gitlab.com/user/profile/personal_access_tokens/), and [group token](https://docs.gitlab.com/user/group/settings/group_access_tokens/) documentation when creating the credential.
+
+`GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
+
+For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active connection of the organization on the Platform's `gitlab` (OAuth) integration, proxies provider requests through `/v2/connections/{connectionId}/proxy`, and polls the Platform event log for GitLab events. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
+
+```typescript
+import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';
+
+const gitlab = new PlatformGitLabIntegration(); // Optionally { connectionId: 'connection-id' } to pin one connection.
+```
+
+In Platform mode, issue, note, merge request and push events reach Factory by polling the Platform's event log for each connection, the same way Platform GitHub deployments do. Point the GitLab project webhook at the Platform's Nango forwarding URL, not at Factory; Platform mode needs neither `MASTRA_GITLAB_CONNECTION_ID` nor `MASTRA_GITLAB_WEBHOOK_SECRET`. The direct `/web/gitlab/webhook` route stays available when `MASTRA_GITLAB_WEBHOOK_SECRET` is set; do not point a project webhook at both Factory and the Platform, or each event is processed twice.
+
+| Variable                                     | Default | Purpose                                                               |
+| -------------------------------------------- | ------- | --------------------------------------------------------------------- |
+| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`     | `true`  | Set `false` to stop polling the Platform event log for GitLab events. |
+| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds.                            |
+
+These sit next to `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` and follow the same rules. One replica polls at a time; the cursor for each connection is stored in the integration settings table and only advances once a page of events has been processed. `diagnostics()` reports `pollingEnabled` and `pollingIntervalMs`.
 
 ### incident.io intake
 

@@ -19,10 +19,12 @@ import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { IdentityServiceIntegration } from '../services/identity-service.js';
 import { IdentityService } from '../services/identity-service.js';
 import {
+  createSourceControlSessionLookup,
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
+  resolveFactorySourceControl,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -44,6 +46,7 @@ import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
+  type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import {
   isAgentActor,
@@ -61,6 +64,8 @@ import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
+import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
+import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -187,7 +192,7 @@ function guardIntegrationRoutes({
  * falls back to minting one.
  */
 async function reuseBoundSession(
-  sourceControl: GithubIntegration['sourceControlStorage'],
+  sourceControl: SourceControlStorageHandle,
   input: FactoryBindingPreparationInput,
 ): Promise<EnsuredFactorySourceSession | undefined> {
   const ref = input.item.sessions[input.role];
@@ -221,13 +226,17 @@ async function reuseBoundSession(
  * what it forwards.
  */
 export async function prepareFactoryRuleBinding(
-  github: GithubIntegration,
+  sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
   boards: BoardRegistry,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
+    const sourceControl =
+      'sourceControlStorage' in sourceControlProvider
+        ? sourceControlProvider.sourceControlStorage
+        : sourceControlProvider;
     const source = workItemBranchSource(input.item.externalSource);
     const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
@@ -257,9 +266,9 @@ export async function prepareFactoryRuleBinding(
     // previous sandbox.
     const approver = input.record.approvedBy ?? undefined;
     const preparedSession =
-      (await reuseBoundSession(github.sourceControlStorage, input)) ??
+      (await reuseBoundSession(sourceControl, input)) ??
       (await ensureFactorySourceSession({
-        sourceControl: github.sourceControlStorage,
+        sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
         repositorySlug,
@@ -324,6 +333,7 @@ export function buildIntegrationContext(
     | 'factoryStorage'
     | 'integrationStorage'
     | 'sourceControlStorage'
+    | 'integrations'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -359,6 +369,9 @@ export function buildIntegrationContext(
       ...(deps.sourceControlOwnerId
         ? { sourceControlOwner: deps.sourceControlStorage.forIntegration(deps.sourceControlOwnerId) }
         : {}),
+      sourceControls: (deps.integrations ?? [])
+        .filter(({ integration }) => integration.versionControl)
+        .map(({ integration }) => deps.sourceControlStorage.forIntegration(integration.id)),
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
@@ -484,6 +497,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
+  const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
+  const sourceControlIntegrationIds = [
+    ...new Set(['github', ...sourceControlRegistrations.map(({ integration }) => integration.id)]),
+  ];
+  const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
+  const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
 
   const identityRegistrations: IdentityServiceIntegration[] = [];
   const integrationRoutes = registrations.flatMap(registration => {
@@ -508,6 +527,31 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     storage: deps.domains.integrationIdentity,
     integrations: () => identityRegistrations,
   });
+  // Session persistence belongs to the linked source-control provider, not to
+  // GitHub. Replace legacy GitHub-owned handlers with one resolver spanning
+  // the legacy GitHub partition and every registered source-control partition.
+  const sharedSessionRouteKeys = new Set([
+    'GET /web/github/projects/:id/sessions',
+    'POST /web/github/projects/:id/sessions',
+    'GET /web/user-sessions/:sessionId',
+    'DELETE /web/user-sessions/:sessionId',
+    'POST /web/user-sessions/:sessionId/title',
+  ]);
+  const providerRoutes = integrationRoutes.filter(
+    route => !sharedSessionRouteKeys.has(route.method + ' ' + route.path),
+  );
+  const sourceControlSessionRoutes =
+    sourceControls.length === 0
+      ? []
+      : buildSourceControlSessionRoutes({
+          auth: deps.auth,
+          sourceControls,
+          ...(deps.users ? { users: deps.users } : {}),
+          controller: deps.controller,
+          memorySettings: deps.domains.memorySettings,
+          sessionRetirement: deps.sessionRetirement,
+          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+        });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear', 'jira']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
@@ -532,23 +576,41 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.controller,
         deps.domains.workItems,
         transitionService,
-        githubIntegration?.sourceControlStorage,
+        request =>
+          resolveFactorySourceControl({
+            sourceControls,
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            sessionId: request.sessionId,
+          }),
         deps.domains.memorySettings,
       )
     : undefined;
   if (transitionService && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
-      ...(githubIntegration
+      ...(sourceControlRegistrations.length > 0
         ? {
-            prepareBinding: (input: FactoryBindingPreparationInput) =>
-              prepareFactoryRuleBinding(
-                githubIntegration,
+            prepareBinding: async (input: FactoryBindingPreparationInput) => {
+              const sourceControl = await resolveFactorySourceControl({
+                sourceControls,
+                orgId: input.record.orgId,
+                factoryProjectId: input.record.factoryProjectId,
+              });
+              if (!sourceControl) {
+                throw new FactoryDispatchError(
+                  'source_control_missing',
+                  'Factory project has no linked source-control repository.',
+                );
+              }
+              return prepareFactoryRuleBinding(
+                sourceControl,
                 startCoordinator,
                 deps.domains.projects,
                 deps.boardRegistry,
                 input,
-              ),
+              );
+            },
           }
         : {}),
     });
@@ -559,7 +621,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+        sessions: sourceControlSessions,
         filesystem: deps.domains.filesystem,
       },
     }),
@@ -569,7 +631,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
-      sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      sourceControlSessions,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
@@ -592,7 +654,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),
     ...new IdentityRoutes({ auth: deps.auth, service: identityService }).routes(),
-    ...integrationRoutes,
+    ...sourceControlSessionRoutes,
+    ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
+    ...providerRoutes,
     ...absentStubs,
     ...slackAbsentStubs,
     ...(deps.intakeReady

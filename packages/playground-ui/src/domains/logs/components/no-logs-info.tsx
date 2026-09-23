@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import type { LogsDatePreset } from '../log-filters';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
@@ -50,23 +50,21 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { tit
 export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {}) => {
   const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
   return (
-    <div className="flex h-full items-center justify-center">
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot={title}
-        descriptionSlot={description}
-        actionSlot={
-          <Button
-            variant="ghost"
-            render={
-              <a href="https://mastra.ai/en/docs/observability/logging" target="_blank" rel="noopener noreferrer" />
-            }
-            icon={<ExternalLinkIcon />}
-          >
-            Logging Documentation
-          </Button>
-        }
-      />
-    </div>
+    <EmptyState
+      titleSlot={title}
+      descriptionSlot={description}
+      actionSlot={
+        <Button
+          variant="ghost"
+          render={
+            <a href="https://mastra.ai/en/docs/observability/logging" target="_blank" rel="noopener noreferrer" />
+          }
+          icon={<ExternalLinkIcon />}
+        >
+          Logging Documentation
+        </Button>
+      }
+      variant="fill"
+    />
   );
 };

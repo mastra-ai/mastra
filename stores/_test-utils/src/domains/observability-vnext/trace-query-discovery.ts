@@ -26,6 +26,8 @@ const BASE_SPAN: Omit<RawTraceQuerySpan, 'cursorId' | 'traceId' | 'spanId'> = {
   parentEntityVersionId: null,
   rootEntityVersionId: 'agent-v1',
   environment: 'production',
+  organizationId: null,
+  tags: null,
 };
 
 const span = (
@@ -82,6 +84,11 @@ export const TRACE_QUERY_DISCOVERY_TIME_RANGE = {
   from: '2026-08-01T00:00:00.000Z',
   to: '2026-09-01T00:00:00.000Z',
 };
+/** Window holding only the tenant-scoped discovery roots. */
+export const TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE = {
+  from: '2026-09-01T00:00:00.000Z',
+  to: '2026-09-08T00:00:00.000Z',
+};
 
 export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -89,8 +96,10 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-02T10:00:00.000Z',
       metadata: { superseded: 'old' },
       environment: 'development',
+      tags: ['superseded'],
     }),
     span(10, 'trace-a', 'root-a', {
+      tags: ['beta', 'alpha'],
       metadata: {
         region: 'us-west-2',
         customer: 'acme',
@@ -135,6 +144,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
         unicodeValue: '大阪',
       },
       environment: 'staging',
+      // Stores trim and drop blank tags on write, so discovery only sees `beta`.
+      tags: [' beta ', '', '   '],
     }),
     span(21, 'trace-b', 'span-model-b', {
       parentSpanId: 'root-b',
@@ -146,6 +157,7 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-12T10:00:00.000Z',
       metadata: { region: 'eu-west-1', customer: 'acme' },
       error: { message: 'failed' },
+      tags: [],
     }),
     span(31, 'trace-c', 'span-model-c', {
       parentSpanId: 'root-c',
@@ -158,10 +170,28 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-13T10:00:00.000Z',
       endedAt: null,
       metadata: { pendingOnly: 'excluded' },
+      tags: ['excluded'],
     }),
     span(50, 'trace-outside', 'root-outside', {
       startedAt: '2026-07-01T10:00:00.000Z',
       metadata: { outsideOnly: 'excluded' },
+      tags: ['excluded'],
+    }),
+    span(60, 'trace-scoped-a', 'root-scoped-a', {
+      startedAt: '2026-09-02T10:00:00.000Z',
+      endedAt: '2026-09-02T10:00:01.000Z',
+      environment: 'scoped-a-env',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+      metadata: { tenantA: 'a' },
+    }),
+    span(61, 'trace-scoped-b', 'root-scoped-b', {
+      startedAt: '2026-09-03T10:00:00.000Z',
+      endedAt: '2026-09-03T10:00:01.000Z',
+      environment: 'scoped-b-env',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+      metadata: { tenantB: 'b' },
     }),
   ],
   scores: [

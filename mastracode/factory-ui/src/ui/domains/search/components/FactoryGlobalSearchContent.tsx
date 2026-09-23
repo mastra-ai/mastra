@@ -44,11 +44,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
   const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
-  const intake = useGlobalSearchIntake(projectRepositoryId);
+  const intake = useGlobalSearchIntake(factoryId, projectRepositoryId, activeFactory?.repositories[0]?.provider);
   // The palette closes on select, so a failed move has no card left to carry its reason.
-  const board = useBoardItems({
+  const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'work',
+    onFailure: message => toast.error(message),
+  });
+  const reviewBoard = useBoardItems({
+    factoryProjectId: searchableFactoryId,
+    kind: 'review',
     onFailure: message => toast.error(message),
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
@@ -64,8 +69,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.items,
-    issues: intake.issues,
-    pullRequests: intake.pullRequests,
+    candidates: intake.candidates,
     resolvedMe: resolvedMe.data,
   });
   const counts = createGlobalSearchScopeCounts({
@@ -107,11 +111,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const target = result.target;
                 if (target.kind === 'candidate') {
                   const [move] = cardMoves(target.candidate, target.candidate.column);
+                  const board =
+                    target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
+                      ? reviewBoard
+                      : workBoard;
                   if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
                 const [move] = cardMoves(target.item, 'intake');
                 if (move) {
+                  const board = target.item.board === 'review' ? reviewBoard : workBoard;
                   board.move(target.item.id, move.stage);
                   return;
                 }

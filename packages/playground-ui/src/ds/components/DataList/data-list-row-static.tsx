@@ -19,10 +19,7 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
     return (
       <div
         ref={ref}
-        className={cn(
-          isWrapped ? 'grid grid-cols-subgrid gap-4 px-3 transition-colors duration-200' : dataListRowStaticStyles,
-          className,
-        )}
+        className={cn(isWrapped ? 'grid grid-cols-subgrid gap-4 px-3' : dataListRowStaticStyles, className)}
         style={resolvedStyle}
         data-featured={featured || undefined}
         data-variant={variant ?? 'default'}

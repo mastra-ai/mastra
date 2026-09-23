@@ -14,6 +14,7 @@ import {
   planTraceQueryValues,
 } from '@mastra/core/storage';
 import type {
+  TraceQueryTenantScope,
   CreateFeedbackRecord,
   CreateScoreRecord,
   CreateSpanRecord,
@@ -22,7 +23,11 @@ import type {
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import { TRACE_QUERY_DISCOVERY_FIXTURE_DATA, TRACE_QUERY_DISCOVERY_TIME_RANGE } from './trace-query-discovery';
+import {
+  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
+  TRACE_QUERY_DISCOVERY_TIME_RANGE,
+  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
+} from './trace-query-discovery';
 import {
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
@@ -163,6 +168,8 @@ async function writeTraceQueryFixture(
       parentEntityVersionId: span.parentEntityVersionId,
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
+      organizationId: span.organizationId,
+      tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
@@ -185,6 +192,8 @@ async function writeTraceQueryFixture(
         entityVersionId: score.entityVersionId,
         parentEntityVersionId: score.parentEntityVersionId,
         rootEntityVersionId: score.rootEntityVersionId,
+        organizationId: score.organizationId ?? undefined,
+        resourceId: score.resourceId ?? undefined,
         timestamp,
         createdAt: timestamp,
         updatedAt: null,
@@ -208,6 +217,8 @@ async function writeTraceQueryFixture(
         entityVersionId: feedback.entityVersionId,
         parentEntityVersionId: feedback.parentEntityVersionId,
         rootEntityVersionId: feedback.rootEntityVersionId,
+        organizationId: feedback.organizationId ?? undefined,
+        resourceId: feedback.resourceId ?? undefined,
         metadata: null,
       },
     });
@@ -254,28 +265,36 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     });
 
     if (capabilities.traceQueryDiscovery) {
-      const observedFields = async (args: {
-        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        search?: string;
-        limit?: number;
-      }) => {
+      const observedFields = async (
+        args: {
+          predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+          search?: string;
+          limit?: number;
+          timeRange?: { from: string; to: string };
+        },
+        scope?: TraceQueryTenantScope,
+      ) => {
         const normalized = parseGetTraceQueryFieldsArgs({
           timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
           ...args,
         });
-        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized));
+        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized, { scope }));
       };
-      const values = async (args: {
-        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        path: string;
-        search?: string;
-        limit?: number;
-      }) => {
+      const values = async (
+        args: {
+          predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+          path: string;
+          search?: string;
+          limit?: number;
+          timeRange?: { from: string; to: string };
+        },
+        scope?: TraceQueryTenantScope,
+      ) => {
         const normalized = parseGetTraceQueryValuesArgs({
           timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
           ...args,
         });
-        return storage.getTraceQueryValues(planTraceQueryValues(normalized));
+        return storage.getTraceQueryValues(planTraceQueryValues(normalized, { scope }));
       };
 
       const writeDiscoveryFixture = () =>
@@ -367,6 +386,33 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       });
 
+      it('applies the trusted tenant scope to field and value discovery', async () => {
+        await writeDiscoveryFixture();
+        const timeRange = TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE;
+        await expect(values({ predicateScope: 'trace', path: 'environment', timeRange })).resolves.toEqual({
+          values: [
+            { value: 'scoped-a-env', count: 1 },
+            { value: 'scoped-b-env', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(
+          values({ predicateScope: 'trace', path: 'environment', timeRange }, { organizationId: 'org-a' }),
+        ).resolves.toEqual({ values: [{ value: 'scoped-a-env', count: 1 }], valuesTruncated: false });
+        await expect(
+          values(
+            { predicateScope: 'trace', path: 'environment', timeRange },
+            { organizationId: 'org-a', resourceId: 'project-2' },
+          ),
+        ).resolves.toEqual({ values: [], valuesTruncated: false });
+        await expect(
+          observedFields({ predicateScope: 'trace', timeRange }, { organizationId: 'org-b' }),
+        ).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.tenantB', occurrences: 1 })],
+          observedFieldsTruncated: false,
+        });
+      });
+
       it('treats value search wildcard characters as literal substring text', async () => {
         await writeDiscoveryFixture();
         await expect(
@@ -376,9 +422,191 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           valuesTruncated: false,
         });
       });
+
+      it('discovers tag values with per-trace counts from current qualified roots', async () => {
+        await writeDiscoveryFixture();
+        await expect(values({ predicateScope: 'trace', path: 'tags' })).resolves.toEqual({
+          values: [
+            { value: 'beta', count: 2 },
+            { value: 'alpha', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'tags', search: 'ALP' })).resolves.toEqual({
+          values: [{ value: 'alpha', count: 1 }],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'tags', limit: 1 })).resolves.toEqual({
+          values: [{ value: 'beta', count: 2 }],
+          valuesTruncated: true,
+        });
+      });
     }
 
     if (capabilities.traceQuery) {
+      it('matches advanced predicate conformance when polling trace deltas', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const cases = TRACE_QUERY_CONFORMANCE_CASES.filter(
+            testCase =>
+              !testCase.request.group &&
+              !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false),
+          );
+          const requests = await Promise.all(
+            cases.map(async testCase => {
+              const request = {
+                timeRange: testCase.request.timeRange,
+                where: testCase.request.where,
+                mode: 'delta' as const,
+                limit: 2,
+              };
+              const bootstrap = await storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest(request), { scope: testCase.scope }),
+              );
+              if (!('delta' in bootstrap)) throw new Error('Expected delta');
+              return { testCase, request, after: bootstrap.deltaCursor };
+            }),
+          );
+          await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+          for (const { testCase, request, after } of requests) {
+            const expected = testCase.expected.map(row => ('traceId' in row ? row.traceId : '')).sort();
+            const result = await waitFor(
+              async () => {
+                let cursor = after;
+                const ids: string[] = [];
+                for (let page = 0; page < 20; page++) {
+                  const batch = await storage.queryTraces(
+                    planTraceQuery(parseTraceQueryRequest({ ...request, after: cursor }), { scope: testCase.scope }),
+                  );
+                  if (!('delta' in batch)) throw new Error('Expected delta');
+                  ids.push(...batch.traces.map(trace => trace.traceId));
+                  cursor = batch.deltaCursor;
+                  if (!batch.delta.hasMore) return ids.sort();
+                }
+                throw new Error('Delta pagination did not terminate');
+              },
+              ids => JSON.stringify(ids) === JSON.stringify(expected),
+            );
+            expect(result, testCase.name).toEqual(expected);
+          }
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('hands numbered trace pages to delta polling and drains matching completed roots', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const predicate = {
+            op: 'and' as const,
+            args: [
+              { op: 'exists' as const, path: 'threadId' },
+              {
+                op: 'not' as const,
+                arg: { op: 'eq' as const, left: { path: 'traceId' }, right: { literal: 'excluded' } },
+              },
+            ],
+          };
+          const query = (fields: Partial<TraceQueryRequest>) =>
+            storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where: predicate, ...fields })));
+          const page = await query({ pagination: { page: 0, perPage: 2 } });
+          if (!('pagination' in page)) throw new Error('Expected numbered page');
+          expect(page.traces).toEqual([]);
+          expect(page.deltaCursor).toBeTruthy();
+          const bootstrap = await query({ mode: 'delta' });
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          expect(bootstrap.traces).toEqual([]);
+          expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const rows = ['delta-a', 'delta-b', 'delta-c'].map((traceId, i) => ({
+            ...template,
+            traceId,
+            spanId: traceId,
+            cursorId: 100 + i,
+            threadId: 'delta-thread',
+          }));
+          await writeTraceQueryFixture(
+            storage,
+            {
+              spans: [{ ...rows[0]!, traceId: 'excluded', spanId: 'excluded', name: 'excluded' }, ...rows],
+              scores: [],
+              feedback: [],
+            },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const first = await waitFor(
+            () => query({ mode: 'delta', after: page.deltaCursor, limit: 2 }),
+            result => 'delta' in result && result.traces.length === 2,
+          );
+          if (!('delta' in first)) throw new Error('Expected delta');
+          expect(first.delta).toEqual({ limit: 2, hasMore: true });
+          const second = await query({ mode: 'delta', after: first.deltaCursor, limit: 2 });
+          if (!('delta' in second)) throw new Error('Expected delta');
+          expect(second.delta.hasMore).toBe(false);
+          expect([...first.traces, ...second.traces].map(trace => trace.traceId).sort()).toEqual([
+            'delta-a',
+            'delta-b',
+            'delta-c',
+          ]);
+          const empty = await query({ mode: 'delta', after: second.deltaCursor });
+          if (!('delta' in empty)) throw new Error('Expected delta');
+          expect(empty.traces).toEqual([]);
+          expect(empty.delta.hasMore).toBe(false);
+
+          // A child write does not constitute a new root/completion candidate.
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...rows[0]!, spanId: 'child', parentSpanId: rows[0]!.spanId }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const childPoll = await query({ mode: 'delta', after: empty.deltaCursor });
+          expect('traces' in childPoll && childPoll.traces).toEqual([]);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('returns a root completed after the delta bootstrap', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const root = { ...template, traceId: 'delta-completion', spanId: 'delta-completion' };
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...root, isPending: true, endedAt: null }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const bootstrap = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta' })),
+          );
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [root], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const poll = await waitFor(
+            () =>
+              storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after: bootstrap.deltaCursor })),
+              ),
+            result => 'traces' in result && result.traces.length === 1,
+          );
+          expect('traces' in poll && poll.traces.map(trace => trace.traceId)).toEqual(['delta-completion']);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
@@ -386,7 +614,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
             continue;
           }
-          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), { scope: testCase.scope });
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
         }
@@ -477,7 +705,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         );
         const empty = await storage.queryTraces(emptyPlan);
         if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
-        expect(empty).toEqual({
+        expect(empty).toMatchObject({
           traces: [],
           pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
         });
@@ -606,7 +834,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
             continue;
           }
-          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request));
+          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request), { scope: testCase.scope });
           const response = await storage.queryThreads(plan);
           expect(response.threads, testCase.name).toEqual(testCase.expected);
         }

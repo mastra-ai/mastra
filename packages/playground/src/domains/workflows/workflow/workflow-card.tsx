@@ -12,17 +12,17 @@ export interface WorkflowCardProps {
 export const WorkflowCard = ({ header, children, footer }: WorkflowCardProps) => {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="border-border1 bg-surface4 rounded-lg border">
+    <div className="rounded-lg border border-border bg-muted">
       <button className="flex w-full items-center justify-between gap-3 px-2 py-1" onClick={() => setExpanded(s => !s)}>
         <div className="w-full">{header}</div>
         <Icon>
           <ChevronDownIcon
-            className={cn('text-muted-foreground transition-transform -rotate-90', expanded && 'rotate-0')}
+            className={cn('-rotate-90 text-muted-foreground transition-transform', expanded && 'rotate-0')}
           />
         </Icon>
       </button>
-      {children && expanded && <div className="border-border1 max-h-[400px] overflow-y-auto border-t">{children}</div>}
-      {footer && <div className="border-border1 border-t px-2 py-1">{footer}</div>}
+      {children && expanded && <div className="max-h-[400px] overflow-y-auto border-t border-border">{children}</div>}
+      {footer && <div className="border-t border-border px-2 py-1">{footer}</div>}
     </div>
   );
 };

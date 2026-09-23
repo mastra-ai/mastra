@@ -13,7 +13,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Minimal shape shared by every surface that lists dataset items
- * (experiment results, review queue, inbox). `DatasetExperimentResult`
+ * (experiment results, review queue). `DatasetExperimentResult`
  * and the review `ReviewItem` both satisfy it.
  */
 export type ExperimentResultsListItem = {
@@ -162,12 +162,12 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="text-ui-smd text-muted-foreground flex items-center gap-1.5 tracking-wide">
+                  <DataList.Cell className="flex items-center gap-1.5 text-body-sm tracking-wide text-muted-foreground">
                     <span>{result.itemId?.slice(0, 8) ?? ''}</span>
                     {hasError && (
                       <Tooltip>
                         <TooltipTrigger
-                          render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                          render={<AlertCircleIcon role="img" aria-label="Error" className="size-3.5 text-error" />}
                         />
                         <TooltipContent>{errorMessage(result.error)}</TooltipContent>
                       </Tooltip>
@@ -217,7 +217,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground text-ui-smd font-mono">
+                    <DataList.Cell key={scorerId} className="font-mono text-body-sm text-muted-foreground">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );
@@ -276,17 +276,17 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
     : Object.values(scores ?? {});
   if (values.length === 0) {
     return (
-      <Txt variant="ui-xs" className="text-placeholder">
+      <Txt variant="meta" tone="faint">
         —
       </Txt>
     );
   }
   return (
     <div className="flex items-center gap-1">
-      <Icon size="sm" className="text-muted-foreground">
+      <Icon size="xs" className="text-muted-foreground">
         <GaugeIcon />
       </Icon>
-      <Txt variant="ui-xs" className="text-muted-foreground font-mono">
+      <Txt variant="meta" tone="muted" className="font-mono">
         {values[0].toFixed(2)}
       </Txt>
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}

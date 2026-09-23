@@ -5,20 +5,24 @@ packages:
   - service-mastra
 
 allowBuilds:
-  esbuild: set this to true or false
-  protobufjs: set this to true or false
+  esbuild: false
+  protobufjs: false
 
 catalog:
   tsx: ^4.21.0
   typescript: ^5.9.3
 
 overrides:
+  '@fastify/proxy-addr@<=5.1.0': 5.1.1
+  proxy-addr: 2.0.8
   '@mastra/core': link:../../../../packages/core
   '@mastra/hono': link:../../../../server-adapters/hono
   '@mastra/observability': link:../../../mastra
   '@mastra/otel-bridge': link:../../../otel-bridge
   '@mastra/otel-exporter': link:../../../otel-exporter
-  'brace-expansion@>=2.0.0 <2.1.4': 2.1.4
+  'brace-expansion@>=2.0.0 <2.1.7': 2.1.7
+  'brace-expansion@>=4.0.0 <5.0.12': 5.0.12
+  'fast-uri@<3.1.8': 3.1.8
   mastra: link:../../../../packages/cli
   vitest@>=2.1.0 <4.1.11: 4.1.11
   '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11

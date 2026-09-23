@@ -17,6 +17,7 @@ import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
+import { snapshotRequestContextForScore } from '../request-context-snapshot';
 import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from '../thresholds';
 import type {
   ScorerEntry as ThresholdScorerEntry,
@@ -1673,7 +1674,7 @@ async function saveSingleScore({
         name: (target as any).name || target.id,
       },
       // Include requestContext from item
-      requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
+      requestContext: item.requestContext ? snapshotRequestContextForScore(item.requestContext) : undefined,
       // Include additionalContext with groundTruth
       additionalContext: Object.keys(additionalContext).length > 0 ? additionalContext : undefined,
       // Per-turn scores carry their turn index in metadata for UI grouping/labeling.

@@ -5,7 +5,7 @@ import {
   parseTraceColumnPreferences,
   serializeTraceColumnPreferences,
 } from '../trace-list-columns';
-import type { TraceColumnPreferences, TraceOptionalColumn } from '../trace-list-columns';
+import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 
 function readPreferences(storageKey: string): TraceColumnPreferences {
   if (typeof window === 'undefined') return DEFAULT_TRACE_COLUMN_PREFERENCES;
@@ -84,11 +84,28 @@ export function useTraceColumnPreferences() {
     }));
   };
 
+  const addCustomColumn = (field: TraceCustomColumn) => {
+    commit(current =>
+      current.customColumns.includes(field)
+        ? current
+        : { ...current, customColumns: [...current.customColumns, field] },
+    );
+  };
+
+  const removeCustomColumn = (field: TraceCustomColumn) => {
+    commit(current => ({
+      ...current,
+      customColumns: current.customColumns.filter(customColumn => customColumn !== field),
+    }));
+  };
+
   const resetColumns = () => commit(() => DEFAULT_TRACE_COLUMN_PREFERENCES);
 
   return {
     preferences,
     toggleColumn,
+    addCustomColumn,
+    removeCustomColumn,
     addMetadataColumn,
     removeMetadataColumn,
     resetColumns,

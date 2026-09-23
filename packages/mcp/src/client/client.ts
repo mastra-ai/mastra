@@ -541,21 +541,29 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private async connectStdio(command: string) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
+    // Held locally until the connect succeeds, mirroring connectHttp, so a failed
+    // attempt leaves `this.transport` unset. connect()'s failure branch keys the
+    // process-hook release on that, and a lingering transport would suppress it.
+    const transport = new StdioClientTransport({
+      command,
+      args: this.serverConfig.args,
+      env: this.buildStdioEnv(),
+      stderr: this.serverConfig.stderr,
+      cwd: this.serverConfig.cwd,
+    });
     try {
-      this.transport = new StdioClientTransport({
-        command,
-        args: this.serverConfig.args,
-        env: this.buildStdioEnv(),
-        stderr: this.serverConfig.stderr,
-        cwd: this.serverConfig.cwd,
-      });
-      await this.client.connect(this.transport, {
+      await this.client.connect(transport, {
         timeout: this.serverConfig.timeout ?? this.timeout,
         prior: this.priorDiscovery,
       });
+      this.transport = transport;
       this.log('debug', `Successfully connected to MCP server via Stdio`);
     } catch (e) {
       this.log('error', e instanceof Error ? e.stack || e.message : JSON.stringify(e));
+      // client.connect() may already have spawned the child before throwing, and
+      // nothing else holds this transport now, so close it here or the subprocess
+      // outlives the failed attempt.
+      await transport.close().catch(() => {});
       throw e;
     }
   }
@@ -813,6 +821,12 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
+        // A connect that never reached a transport leaves nothing for disconnect() to
+        // tear down, so the process hooks must not outlive the failed attempt. A live
+        // transport means an earlier connection still owns them.
+        if (!this.transport) {
+          this.unregisterProcessHooks();
+        }
         this.isConnected = null;
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
@@ -820,6 +834,19 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     });
 
+    // Registered before the connection settles so an exit during a connect attempt still
+    // tears down anything the transport already started (a spawned stdio child, say).
+    // The failure path inside the promise removes them again.
+    this.registerProcessHooks();
+
+    return this.isConnected;
+  }
+
+  /**
+   * Installs the process-exit and signal handlers that tear this client down when the
+   * host process goes away. Idempotent, so repeated connects add at most one of each.
+   */
+  private registerProcessHooks() {
     if (!this.exitHookUnsubscribe) {
       this.exitHookUnsubscribe = asyncExitHook(
         async () => {
@@ -839,8 +866,26 @@ export class InternalMastraMCPClient extends MastraBase {
       this.sigHupHandler = () => gracefulExit();
       process.on('SIGHUP', this.sigHupHandler);
     }
+  }
 
-    return this.isConnected;
+  /**
+   * Removes whatever {@link registerProcessHooks} installed. Keyed on the handlers this
+   * client actually registered rather than on connection state, so a client that never
+   * reached a transport still releases its process listeners.
+   */
+  private unregisterProcessHooks() {
+    if (this.exitHookUnsubscribe) {
+      this.exitHookUnsubscribe();
+      this.exitHookUnsubscribe = undefined;
+    }
+    if (this.sigTermHandler) {
+      process.off('SIGTERM', this.sigTermHandler);
+      this.sigTermHandler = undefined;
+    }
+    if (this.sigHupHandler) {
+      process.off('SIGHUP', this.sigHupHandler);
+      this.sigHupHandler = undefined;
+    }
   }
 
   /**
@@ -903,6 +948,9 @@ export class InternalMastraMCPClient extends MastraBase {
     this.closePendingAuthTransport();
     if (!this.transport) {
       await this.detachStaleClientTransport();
+      // A client whose connect() failed still holds process hooks; there is simply no
+      // transport to close. Release them here or they outlive the client entirely.
+      this.unregisterProcessHooks();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
@@ -923,18 +971,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.isConnected = null;
       this.serverInstructions = undefined;
 
-      if (this.exitHookUnsubscribe) {
-        this.exitHookUnsubscribe();
-        this.exitHookUnsubscribe = undefined;
-      }
-      if (this.sigTermHandler) {
-        process.off('SIGTERM', this.sigTermHandler);
-        this.sigTermHandler = undefined;
-      }
-      if (this.sigHupHandler) {
-        process.off('SIGHUP', this.sigHupHandler);
-        this.sigHupHandler = undefined;
-      }
+      this.unregisterProcessHooks();
     }
   }
 
@@ -1263,6 +1300,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
     return {
       name: tool.name,
+      ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: tool.inputSchema,
       ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
@@ -1283,6 +1321,7 @@ export class InternalMastraMCPClient extends MastraBase {
   toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
       name: definition.name,
+      title: definition.title,
       description: definition.description,
       inputSchema: definition.inputSchema,
       outputSchema: definition.outputSchema,
@@ -1342,6 +1381,7 @@ export class InternalMastraMCPClient extends MastraBase {
       // Server-advertised annotations are exposed on `mcp.annotations` and forwarded to
       // the requireToolApproval callback so consumers can write annotation-driven policies.
       const annotations = tool.annotations;
+      const title = tool.title || annotations?.title;
 
       if (typeof this.requireToolApproval === 'function') {
         const serverApprovalFn = this.requireToolApproval;
@@ -1406,6 +1446,7 @@ export class InternalMastraMCPClient extends MastraBase {
       };
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
+        title,
         description: tool.description || '',
         inputSchema: this.convertInputSchema(tool.inputSchema),
         outputSchema: this.convertOutputSchema(tool.outputSchema),

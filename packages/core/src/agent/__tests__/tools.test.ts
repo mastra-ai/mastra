@@ -12,6 +12,7 @@ import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { resolveToolOutputValidationSchema } from '../../tools/validation';
 import { Agent } from '../agent';
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
@@ -186,6 +187,32 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       const message = toolCall?.result?.message;
 
       expect(message).toBe('Executed successfully');
+    });
+
+    it('preserves output validation schemas when agent hooks wrap tools', async () => {
+      const outputSchema = z.object({ summary: z.number() });
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        outputSchema,
+        execute: async () => ({ summary: 42 }),
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: {
+          beforeToolCall: () => undefined,
+          afterToolCall: () => undefined,
+        },
+      });
+
+      const tools = await testAgent.getToolsForExecution({});
+
+      expect(resolveToolOutputValidationSchema(tools.testTool!)).toBe(outputSchema);
     });
 
     it('runs agent hooks through the public generate path', async () => {

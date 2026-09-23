@@ -112,7 +112,7 @@ function FeedbackItems({
                 disabled={pendingFeedbackId === feedbackId}
                 onSelect={() => onMarkReviewed?.(feedbackId)}
               >
-                <Icon size="sm">
+                <Icon size="xs">
                   <ClipboardCheck />
                 </Icon>
                 Mark reviewed
@@ -120,7 +120,7 @@ function FeedbackItems({
             )}
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
-                <Icon size="sm">
+                <Icon size="xs">
                   <Trash2 />
                 </Icon>
                 Delete feedback
@@ -223,7 +223,7 @@ export function FeedbackThread({
           }
         }}
       >
-        <InputGroup size="sm" variant="outline">
+        <InputGroup size="sm">
           <InputGroupInput
             aria-label="Leave feedback"
             placeholder="Leave feedback..."
@@ -240,11 +240,11 @@ export function FeedbackThread({
 
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
-          <Txt variant="ui-md" className="text-muted-foreground">
+          <Txt variant="body" tone="muted">
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-muted-foreground text-center">
+          <Txt variant="body" tone="muted" className="text-center">
             No feedback yet
           </Txt>
         ) : (

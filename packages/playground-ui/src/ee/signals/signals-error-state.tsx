@@ -11,14 +11,14 @@ export function SignalsErrorState({
   onClear?: () => void;
 }) {
   return (
-    <section className="border-border1 bg-surface2 m-4 rounded-lg border p-6 lg:m-6" role="alert">
+    <section className="m-4 rounded-lg border border-border bg-background p-6 lg:m-6" role="alert">
       <div className="flex items-start gap-3">
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-red-500" />
         <div>
-          <h1 className="text-ui-md text-foreground font-semibold">{message}</h1>
-          <p className="text-ui-sm text-muted-foreground mt-1">Check the connection and try again.</p>
+          <h1 className="text-subheading text-foreground">{message}</h1>
+          <p className="mt-1 text-caption text-muted-foreground">Check the connection and try again.</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button icon={<RotateCcw />} onClick={onRetry} size="sm" type="button" variant="outline">
+            <Button icon={<RotateCcw />} onClick={onRetry} size="sm" type="button">
               Retry
             </Button>
             {onClear ? (

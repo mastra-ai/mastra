@@ -7,7 +7,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
+import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
@@ -16,10 +18,13 @@ import { ProviderConnectControl, ProviderConnectionsList } from './PlatformProvi
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraProject, JiraStatus } from '../../factory/services/jira';
+import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
+import type { GitLabProject, GitLabStatus } from '../../factory/services/gitlab';
 import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import type { GithubStatus } from '../../workspaces/services/github';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
@@ -39,26 +44,61 @@ interface SourceSectionProps {
   update: (next: IntakeConfig) => void;
 }
 
-function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
+function GithubIntakeSection({
+  config,
+  busy,
+  update,
+  slugs,
+  status,
+  statusPending,
+  statusRefetching,
+  onRetryStatus,
+}: SourceSectionProps & {
+  slugs: string[];
+  status: GithubStatus | undefined;
+  statusPending: boolean;
+  statusRefetching: boolean;
+  onRetryStatus: () => void;
+}) {
+  const connected = status?.connected === true;
+  // 'unavailable' is set by the browser when the status request failed, not
+  // by the server, so it must not read as "not configured".
+  const statusUnavailable = status?.reason === 'unavailable';
+  const description = statusPending
+    ? 'Checking the GitHub connection…'
+    : statusUnavailable
+      ? 'GitHub status could not be loaded.'
+      : status?.reason === 'auth_required'
+        ? 'Sign in again to manage GitHub issue syncing.'
+        : status?.reason === 'organization_required'
+          ? 'Select an organization to manage GitHub issue syncing.'
+          : status?.enabled !== true
+            ? 'GitHub is not configured on this server.'
+            : !connected
+              ? 'Connect GitHub to sync issues from this organization.'
+              : "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.";
+  const action = statusUnavailable ? (
+    <Button size="xs" variant="ghost" disabled={statusRefetching} onClick={onRetryStatus}>
+      Retry
+    </Button>
+  ) : undefined;
+
   return (
-    <SettingsSubsection
-      scope="org"
-      title="GitHub issues"
-      description="Open issues from the selected repositories feed every member's board. Pull requests always appear in Review."
-    >
+    <SettingsSubsection scope="org" title="GitHub issues" description={description} action={action}>
       <SettingsContainer>
         <SettingsRow label="Sync GitHub issues">
           <Switch
             aria-label="Sync GitHub issues"
             checked={config.github.enabled}
-            disabled={busy}
+            disabled={busy || !connected}
             onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
           />
         </SettingsRow>
 
-        {config.github.enabled &&
+        {connected &&
+          config.github.enabled &&
           (slugs.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+            <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -81,6 +121,74 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
               }
             />
           ))}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
+}
+
+function GitLabIntakeSection({
+  config,
+  busy,
+  update,
+  status,
+  projects,
+  authError,
+  reauthRequired,
+  showPickers,
+}: SourceSectionProps & {
+  status: GitLabStatus | undefined;
+  projects: GitLabProject[];
+  authError: boolean;
+  reauthRequired: boolean;
+  showPickers: boolean;
+}) {
+  const configured = Boolean(status?.enabled && status.configured);
+  const platformManaged = status?.connections !== undefined;
+  const description = reauthRequired
+    ? 'A GitLab account needs to be reconnected in Mastra Platform.'
+    : !configured
+      ? platformManaged
+        ? 'Connect GitLab in Mastra Platform to sync issues from this organization.'
+        : 'GitLab is not configured on this server. Configure a GitLab access token to enable it.'
+      : authError
+        ? platformManaged
+          ? 'GitLab rejected a connected account. Reconnect it in Mastra Platform.'
+          : 'GitLab rejected the configured access token. Ask the operator to check it.'
+        : "Open issues from the selected projects feed every member's board.";
+  const accounts = status?.accounts ?? [];
+  const action = configured ? (
+    <Txt as="span" variant="caption" className="text-muted-foreground">
+      {accounts.length === 1 ? `Connected to ${accounts[0]}` : `${accounts.length} GitLab accounts connected`}
+    </Txt>
+  ) : undefined;
+
+  return (
+    <SettingsSubsection scope="org" title="GitLab issues" description={description} action={action}>
+      <SettingsContainer>
+        <SettingsRow label="Sync GitLab issues">
+          <Switch
+            aria-label="Sync GitLab issues"
+            checked={config.gitlab.enabled}
+            disabled={busy || !configured}
+            onCheckedChange={enabled => update({ ...config, gitlab: { ...config.gitlab, enabled } })}
+          />
+        </SettingsRow>
+
+        {showPickers && (
+          <SourcePicker
+            label="GitLab projects"
+            groups={groupGitLabProjectsByAccount(projects)}
+            selectedIds={config.gitlab.sourceIds}
+            disabled={busy}
+            pending={busy}
+            onToggleItem={projectId =>
+              update({
+                ...config,
+                gitlab: { ...config.gitlab, sourceIds: toggleId(config.gitlab.sourceIds, projectId) },
+              })
+            }
+          />
+        )}
       </SettingsContainer>
     </SettingsSubsection>
   );
@@ -126,10 +234,10 @@ function LinearIntakeSection({
     </Button>
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
-      <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
+      <Button size="sm" variant="ghost" onClick={() => connectLinear(baseUrl)}>
         Reconnect
       </Button>
     </span>
@@ -216,19 +324,19 @@ function JiraIntakeSection({
       provider="jira"
       reconnectConnectionId={reconnectTarget.id}
       label="Reconnect Jira"
-      size={configured ? 'xs' : 'sm'}
+      size="sm"
     />
   ) : (
     <ProviderConnectControl
       provider="jira"
       label={configured ? 'Connect another site' : 'Connect Jira'}
-      size={configured ? 'xs' : 'sm'}
+      size="sm"
       variant={configured ? 'ghost' : 'default'}
     />
   );
   const action = configured ? (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         {connectionLabel}
       </Txt>
       {actionButton}
@@ -296,7 +404,7 @@ function IncidentioIntakeSection({
         title="incident.io follow-ups"
         description="Couldn't load incident.io connections."
         action={
-          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+          <Button size="sm" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
             Retry
           </Button>
         }
@@ -312,12 +420,12 @@ function IncidentioIntakeSection({
       <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
     ) : (
       <span className="flex items-center gap-2">
-        <Txt as="span" variant="ui-sm" className="text-icon3">
+        <Txt as="span" variant="caption" className="text-muted-foreground">
           {active.length === 1
             ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
             : `${active.length} ${meta.displayName} accounts connected`}
         </Txt>
-        <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
+        <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
       </span>
     );
 
@@ -355,7 +463,7 @@ function IncidentioIntakeSection({
             </SettingsRow>
             {config.incidentio.enabled && active.length > 0 && sourcesQuery.isError && (
               <SettingsRow label="Follow-up sources" description="Couldn't load follow-up sources.">
-                <Button size="xs" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
+                <Button size="sm" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
                   Retry
                 </Button>
               </SettingsRow>
@@ -412,6 +520,12 @@ export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const githubStatusQuery = useGithubStatusQuery();
+  const githubConnected = githubStatusQuery.data?.connected === true;
+  const gitlabStatusQuery = useGitLabStatusQuery();
+  const gitlabStatus = gitlabStatusQuery.data;
+  const gitlabConfigured = Boolean(gitlabStatus?.enabled && gitlabStatus.configured);
+  const gitlabProjectsQuery = useGitLabProjectsQuery(gitlabConfigured);
   const linearStatusQuery = useLinearStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
@@ -427,7 +541,11 @@ export function IntakeSection() {
   const config = configQuery.data;
 
   const linkedSlugs = [
-    ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
+    ...new Set(
+      (factoriesQuery.data ?? []).flatMap(factory =>
+        factory.repositories.filter(repository => repository.provider !== 'gitlab').map(repository => repository.slug),
+      ),
+    ),
   ];
 
   if (configQuery.isPending) {
@@ -435,8 +553,8 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub, Linear, Jira, or incident.io first.
+      <Txt as="p" variant="caption" className="text-muted-foreground">
+        Intake configuration is unavailable. Connect GitHub, GitLab, Linear, Jira, or incident.io first.
       </Txt>
     );
   }
@@ -448,6 +566,11 @@ export function IntakeSection() {
     });
   };
   const busy = saveMutation.isPending;
+  const gitlabProjects = gitlabProjectsQuery.data ?? [];
+  const gitlabAuthError = isGitLabAuthError(gitlabProjectsQuery.error);
+  const gitlabReauthRequired = isGitLabReauthRequired(gitlabStatus);
+  const gitlabSourceIds = config.gitlab.sourceIds ?? [];
+  const gitlabReady = gitlabConfigured && config.gitlab.enabled && !gitlabAuthError && gitlabProjects.length > 0;
   const linearProjects = linearProjectsQuery.data ?? [];
   const linearTeams = linearTeamsQuery.data ?? [];
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
@@ -464,24 +587,62 @@ export function IntakeSection() {
 
   return (
     <div className="flex flex-col gap-8">
-      <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
-      {config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
+      <GithubIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        slugs={linkedSlugs}
+        status={githubStatusQuery.data}
+        statusPending={githubStatusQuery.isPending}
+        statusRefetching={githubStatusQuery.isFetching}
+        onRetryStatus={() => void githubStatusQuery.refetch()}
+      />
+      {githubConnected && config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
         <SettingsSubsection
           scope="org"
           title="GitHub routing"
           description="Issues carrying a routed label file onto that board in the Factory; everything else stays on Work."
         >
           {(factoriesQuery.data ?? [])
-            .filter(factory => factory.repositories.length > 0)
+            .filter(factory => factory.repositories.some(repository => repository.provider !== 'gitlab'))
             .map(factory => (
               <SettingsContainer key={factory.id}>
                 <GithubLabelRouting
                   factoryProjectId={factory.id}
                   name={factory.name}
-                  repositories={factory.repositories.map(r => r.slug)}
+                  repositories={factory.repositories
+                    .filter(repository => repository.provider !== 'gitlab')
+                    .map(repository => repository.slug)}
                 />
               </SettingsContainer>
             ))}
+        </SettingsSubsection>
+      )}
+      <GitLabIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        status={gitlabStatus}
+        projects={gitlabProjects}
+        authError={gitlabAuthError}
+        reauthRequired={gitlabReauthRequired}
+        showPickers={gitlabReady}
+      />
+      {gitlabReady && gitlabSourceIds.length > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="GitLab routing"
+          description="Each selected project feeds one factory board. Until a project is fully routed, its issues are not picked up."
+        >
+          <SettingsContainer>
+            <IntakeSourceRouting
+              integrationId="gitlab"
+              label="GitLab"
+              sourceIds={gitlabSourceIds}
+              sources={gitlabProjects}
+              factories={factoriesQuery.data ?? []}
+            />
+          </SettingsContainer>
         </SettingsSubsection>
       )}
       <LinearIntakeSection
@@ -573,6 +734,18 @@ function groupJiraProjectsBySite(projects: JiraProject[]): SourcePickerGroup[] {
     }
   }
   return groups;
+}
+
+/** Group GitLab projects by connected account so same-named projects remain distinguishable. */
+function groupGitLabProjectsByAccount(projects: GitLabProject[]): SourcePickerGroup[] {
+  const byAccount = new Map<string, SourcePickerGroup>();
+  for (const project of projects) {
+    const account = project.accountLabel ?? 'GitLab';
+    const group = byAccount.get(account) ?? { id: project.connectionId ?? account, label: account, items: [] };
+    group.items.push({ id: project.id, label: project.name });
+    byAccount.set(account, group);
+  }
+  return [...byAccount.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
 }
 
 function groupLinearSourcesByTeam(

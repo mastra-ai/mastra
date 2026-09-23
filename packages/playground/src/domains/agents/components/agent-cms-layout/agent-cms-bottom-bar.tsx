@@ -26,10 +26,10 @@ export function AgentCmsBottomBar({ basePath, currentPath }: AgentCmsBottomBarPr
   }
 
   return (
-    <div className="border-border1 flex items-center justify-between border-t px-5 py-4">
+    <div className="flex items-center justify-between border-t border-border px-5 py-4">
       <div>
         {previous && (
-          <Button type="button" variant="outline" onClick={() => navigate(previous.href)} icon={<ArrowLeft />}>
+          <Button type="button" onClick={() => navigate(previous.href)} icon={<ArrowLeft />}>
             {previous.name}
           </Button>
         )}

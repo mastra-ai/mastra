@@ -151,7 +151,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="text-ui-sm h-[calc(100vh-126px)] px-4 pt-2 pb-4">
+      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4 text-caption">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
@@ -192,9 +192,9 @@ export function WorkflowTrigger({
     <div className="pt-3">
       <div>
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="bg-surface5 border-border1 -mt-5 flex items-center gap-2 border-b px-5 py-2">
+          <div className="-mt-5 flex items-center gap-2 border-b border-border bg-card px-5 py-2">
             <Icon>
-              <Loader2 className="text-foreground animate-spin" />
+              <Loader2 className="animate-spin text-foreground" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -228,7 +228,7 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-muted-foreground px-5 py-2">
+          <Txt variant="caption" tone="muted" className="px-5 py-2">
             You don't have permission to execute workflows.
           </Txt>
         )}
