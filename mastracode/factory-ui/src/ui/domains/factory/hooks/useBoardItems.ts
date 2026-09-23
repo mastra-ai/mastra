@@ -18,14 +18,6 @@ import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
-/**
- * Column order, stated here rather than inherited from the list endpoint: a
- * card must keep its place when a sync or a run touches it, and the board is
- * the surface that decides what "first" means.
- */
-const byNewest = (left: WorkItem, right: WorkItem) =>
-  right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id);
-
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
@@ -59,7 +51,7 @@ export function useBoardItems({
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
   const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
+  const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {

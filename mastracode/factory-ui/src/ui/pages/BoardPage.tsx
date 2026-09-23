@@ -47,6 +47,7 @@ import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '.
 import type { BoardFilterState } from '../domains/factory/boardFilters';
 import { candidatePayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
+import { orderWorkItemsForStage } from '../domains/factory/boardOrder';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -227,14 +228,17 @@ function BoardContent({
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
-    unfilteredWorkItemsForStage(stage).filter(item => {
-      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-      return (
-        workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, filters.labels, liveCandidate) &&
-        cardMatchesSearch(item, filters.search)
-      );
-    });
+    orderWorkItemsForStage(
+      unfilteredWorkItemsForStage(stage).filter(item => {
+        const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+        return (
+          workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
+          workItemMatchesLabels(item, filters.labels, liveCandidate) &&
+          cardMatchesSearch(item, filters.search)
+        );
+      }),
+      stage,
+    );
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
