@@ -1097,14 +1097,21 @@ describe('suspended-run discovery', () => {
     it('does not resume a different suspended run when the explicit runId has ended', async () => {
       const storage = new InMemoryStore();
       const { agent } = createSuspendedSetup({ storage });
-      const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      const ended = await suspendRun(agent, 'thread-1', 'resource-1');
+      const approved = await agent.approveToolCall({ runId: ended.runId, toolCallId: ended.toolCallId });
+      for await (const _chunk of approved.fullStream) {
+        // drain so the run ends
+      }
+      const { agent: secondAgent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(secondAgent, 'thread-1', 'resource-1');
+      mockFindUser.mockClear();
 
       const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
       await expect(
         restartedAgent.sendToolApproval({
           threadId: 'thread-1',
           resourceId: 'resource-1',
-          runId: 'ended-run',
+          runId: ended.runId,
           approved: true,
         }),
       ).rejects.toThrow();
