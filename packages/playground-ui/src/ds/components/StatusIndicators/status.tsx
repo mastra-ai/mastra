@@ -8,7 +8,7 @@ export type StatusProps = Omit<ComponentPropsWithoutRef<'span'>, 'children'> & {
 
 export function Status({ presentation, className, ...props }: StatusProps) {
   return (
-    <span className={cn('inline-flex items-center gap-[0.6em]', className)} {...props}>
+    <span className={cn('inline-flex items-center gap-2', className)} {...props}>
       <span className={statusDotClass(presentation)} aria-hidden />
       {presentation.label}
     </span>

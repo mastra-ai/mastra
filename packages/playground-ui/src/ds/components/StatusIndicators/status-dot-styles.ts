@@ -38,7 +38,7 @@ const TONE_RING: Record<StatusTone, string> = {
 };
 
 const PROGRESS_DECORATION =
-  "relative motion-safe:animate-pulse before:absolute before:-inset-1/2 before:rounded-full before:border before:border-notice-warning/20 before:border-t-notice-warning before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
+  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-notice-warning/20 before:border-t-notice-warning before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
 
 export function statusToneFill(tone: StatusTone): string {
   return TONE_FILL[tone];
@@ -49,7 +49,7 @@ export function statusDotClass(
   className?: string,
 ): string {
   return cn(
-    'inline-block size-[0.6em] shrink-0 rounded-full',
+    'inline-block size-2 shrink-0 rounded-full',
     glyph === 'ring' ? cn('border bg-transparent', TONE_RING[tone]) : TONE_FILL[tone],
     tone === 'progress' && PROGRESS_DECORATION,
     className,
