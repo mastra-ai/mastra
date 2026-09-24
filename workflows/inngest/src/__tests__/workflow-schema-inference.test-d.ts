@@ -172,6 +172,12 @@ describe('backwards compatibility', () => {
   });
 
   it('documents the explicit-generic limitation for schemas with distinct input and output types', () => {
+    const explicitDefaultsStep = createStep({
+      id: 'explicit-defaults-step',
+      inputSchema,
+      outputSchema,
+      execute: async () => ({ ok: true }),
+    });
     const workflow = createWorkflow<'explicit-defaults', any, z.input<typeof inputSchema>, { ok: boolean }>({
       id: 'explicit-defaults',
       inputSchema,
@@ -179,7 +185,7 @@ describe('backwards compatibility', () => {
     });
 
     // @ts-expect-error Explicit generic arguments prevent TParsedInput from being inferred from the schema output.
-    workflow.then(firstStep).commit();
+    workflow.then(explicitDefaultsStep).commit();
   });
 
   it('keeps identical input/output schemas inferring as before', () => {
