@@ -261,7 +261,8 @@ describe('AISDKV7LanguageModel', () => {
 
       const value = outputOf((model.doStream as any).mock.calls[0][0]);
       expect(value[0]).toMatchObject({ type: 'file', data: { type: 'url' } });
-      expect(String(value[0].data.url)).toBe('https://example.com/a.jpg');
+      expect(value[0].data.url).toBeInstanceOf(URL);
+      expect(value[0].data.url.href).toBe('https://example.com/a.jpg');
       expect(value[1]).toEqual(v4File);
     });
   });

@@ -394,6 +394,17 @@ export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageM
   });
 }
 
+// V4 file parts carry `url: URL`. Unparseable strings pass through so a bad
+// tool output reaches the provider instead of throwing mid-request.
+function toUrl(url: unknown): unknown {
+  if (url instanceof URL || typeof url !== 'string') return url;
+  try {
+    return new URL(url);
+  } catch {
+    return url;
+  }
+}
+
 export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
   return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
     if (partType === `image-url` || partType === `file-url`) {
@@ -402,7 +413,7 @@ export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageM
       return {
         ...rest,
         type: `file`,
-        data: { type: `url`, url: contentPart.url },
+        data: { type: `url`, url: toUrl(contentPart.url) },
         // V4 file parts require a mediaType.
         mediaType: mediaType || (partType === `image-url` ? `image/jpeg` : `application/octet-stream`),
       };
@@ -414,7 +425,7 @@ export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageM
       return {
         ...rest,
         type: `file`,
-        data: { type: `url`, url: data },
+        data: { type: `url`, url: toUrl(data) },
         mediaType: mediaType || `application/octet-stream`,
       };
     }
