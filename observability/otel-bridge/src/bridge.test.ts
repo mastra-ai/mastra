@@ -14,7 +14,7 @@ import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { node, tracing } from '@opentelemetry/sdk-node';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OtelBridge } from './bridge.js';
 
 // OTEL invalid (no-op) IDs, returned when no SDK / tracer provider is registered
@@ -384,6 +384,88 @@ describe('OtelBridge', () => {
 
         bridge.shutdown();
       });
+
+      // Regression tests for https://github.com/mastra-ai/mastra/issues/24950
+      it('warns once, with an actionable message, across many createSpan calls', () => {
+        const bridge = new OtelBridge();
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        for (let i = 0; i < 3; i++) {
+          bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
+        }
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]![0]);
+        expect(message).toContain('No OpenTelemetry tracer provider is registered globally');
+        expect(message).toContain('new OtelBridge({ tracerProvider })');
+        expect(message).toContain('https://mastra.ai/reference/observability/tracing/bridges/otel#setup-requirements');
+
+        bridge.shutdown();
+      });
+
+      it('names the passed tracerProvider as the cause when it is a no-op', () => {
+        const bridge = new OtelBridge({ tracerProvider: trace.getTracerProvider() });
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]![0])).toContain('The tracerProvider passed to OtelBridge returned a no-op span');
+
+        bridge.shutdown();
+      });
+
+      it('does not reuse the parent span ID when the no-op tracer has a valid parent', () => {
+        // The no-op tracer hands back a span wrapping the parent's span
+        // context. Its IDs are valid, but reusing them would give every
+        // Mastra span the parent's span ID.
+        const bridge = new OtelBridge();
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        const result = bridge.createSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'resumed-agent',
+          attributes: { agentId: 'test' },
+          traceId: '0af7651916cd43dd8448eb211c80319c',
+          parentSpanId: 'b7ad6b7169203331',
+        });
+
+        expect(result).toBeUndefined();
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        bridge.shutdown();
+      });
+
+      it('does not warn per span when those spans end', async () => {
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'no-sdk',
+          name: 'no-sdk-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        const root = instance.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } })!;
+        root.createChildSpan({ type: SpanType.GENERIC, name: 'child' }).end();
+        root.end();
+        await instance.flush();
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      });
+    });
+
+    it('does not warn when a tracer provider is registered', () => {
+      const bridge = new OtelBridge();
+      const warn = vi.spyOn(bridge['logger'], 'warn');
+
+      const result = bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
+
+      expect(result).toBeDefined();
+      expect(warn).not.toHaveBeenCalled();
+
+      bridge.shutdown();
     });
   });
 
