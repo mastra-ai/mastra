@@ -54,14 +54,14 @@ function createContext() {
   const dynamicAgent = { setBrowser: vi.fn() };
   const controllerState = { mode: 'review' };
   const setState = vi.fn();
-  const settings = {
+  const settings: { browser: BrowserSettings } = {
     browser: {
       enabled: false,
-      provider: 'stagehand' as const,
+      provider: 'stagehand',
       headless: true,
       viewport: { width: 1280, height: 720 },
       profile: '/tmp/mastracode-browser-profile',
-      stagehand: { env: 'LOCAL' as const },
+      stagehand: { env: 'LOCAL' },
     },
   };
   const session = {
@@ -515,7 +515,7 @@ describe('handleBrowserCommand', () => {
 
     it('accepts window when stagehand connects over cdpUrl', async () => {
       const { ctx, settings } = createContext();
-      (settings.browser as Record<string, unknown>).cdpUrl = 'http://localhost:9222';
+      settings.browser.cdpUrl = 'http://localhost:9222';
       browserMocks.loadSettings.mockReturnValue(settings);
 
       await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
@@ -525,7 +525,7 @@ describe('handleBrowserCommand', () => {
 
     it('accepts window on the agent-browser provider', async () => {
       const { ctx, settings } = createContext();
-      (settings.browser as Record<string, unknown>).provider = 'agent-browser';
+      settings.browser.provider = 'agent-browser';
       browserMocks.loadSettings.mockReturnValue(settings);
 
       await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
@@ -556,7 +556,7 @@ describe('handleBrowserCommand', () => {
 
     it('offers window in the picker when the provider can honor it', async () => {
       const { ctx, settings } = createContext();
-      (settings.browser as Record<string, unknown>).provider = 'agent-browser';
+      settings.browser.provider = 'agent-browser';
       browserMocks.loadSettings.mockReturnValue(settings);
       browserMocks.askModalQuestion.mockResolvedValue('window');
 
