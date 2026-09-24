@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
-import { createWorkflow as createEventedWorkflow } from './evented/workflow';
+import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from './evented';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -46,6 +47,62 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
     for (const r of [{ workflowName: 'parent', runId: run.runId }, ...nested]) {
       const snapshot = await store.loadWorkflowSnapshot({ workflowName: r.workflowName, runId: r.runId });
       expect(snapshot?.status, r.workflowName).toBe('canceled');
+    }
+  });
+
+  it('evented engine cancels suspended nested runs from a recreated run', async () => {
+    const buildEvented = () => {
+      const suspendingStep = createEventedStep({
+        id: 'wait-for-approval',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ suspend }) => suspend({}),
+      });
+      const grandchild = createEventedWorkflow({ id: 'grandchild', inputSchema: schema, outputSchema: schema })
+        .then(suspendingStep)
+        .commit();
+      const child = createEventedWorkflow({ id: 'child', inputSchema: schema, outputSchema: schema })
+        .then(grandchild)
+        .commit();
+      return createEventedWorkflow({ id: 'parent', inputSchema: schema, outputSchema: schema }).then(child).commit();
+    };
+
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const processA = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { parent: buildEvented() },
+    });
+    const processB = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { parent: buildEvented() },
+    });
+    await processA.startWorkers();
+    try {
+      const run = await processA.getWorkflow('parent').createRun();
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('suspended');
+      await processA.stopWorkers();
+
+      const { runs } = await store.listWorkflowRuns({});
+      const nested = runs.filter(r => r.workflowName !== 'parent');
+      expect(nested.map(r => r.workflowName).sort()).toEqual(['child', 'grandchild']);
+
+      await processB.startWorkers();
+      const recreated = await processB.getWorkflow('parent').createRun({ runId: run.runId });
+      await recreated.cancel();
+
+      for (const r of [{ workflowName: 'parent', runId: run.runId }, ...nested]) {
+        const snap = await store.loadWorkflowSnapshot({ workflowName: r.workflowName, runId: r.runId });
+        expect(snap?.status, r.workflowName).toBe('canceled');
+      }
+    } finally {
+      await processA.stopWorkers();
+      await processB.stopWorkers();
     }
   });
 

@@ -3811,7 +3811,14 @@ export class Run<
       if ((runId === this.runId && workflowName === this.workflowId) || TERMINAL_RUN_STATUSES.has(snapshot.status))
         continue;
       try {
-        await workflowsStore.updateWorkflowState({ workflowName, runId, opts: { status: 'canceled' } });
+        // Guard against a descendant finishing between our read and this write.
+        await workflowsStore.updateWorkflowState({
+          workflowName,
+          runId,
+          opts: workflowsStore.supportsConcurrentUpdates()
+            ? { status: 'canceled', expectedStatus: snapshot.status }
+            : { status: 'canceled' },
+        });
       } catch (error) {
         this.mastra?.getLogger()?.error(`Failed to cancel nested workflow run ${runId}`, { error });
       }
