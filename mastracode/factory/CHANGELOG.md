@@ -1,5 +1,53 @@
 # @mastra/factory
 
+## 0.17.2-alpha.0
+
+### Patch Changes
+
+- Check missing external issues again after 24 hours to reduce repeated requests ([#24973](https://github.com/mastra-ai/mastra/pull/24973))
+
+- Keep integration arrivals in Intake until someone starts them. ([#24983](https://github.com/mastra-ai/mastra/pull/24983))
+
+  Before: trusted issue and pull request arrivals could create triage or review proposals, and unbound Linear, Jira, and incident.io cards landed in Triage. After: integrations stay in the routed board's initial phase without starting or suggesting a run (except explicit trusted review requests, which land directly in Reviewing). To restore automatic arrival triage, configure a custom board's initial-phase handler:
+
+  ```typescript
+  import { MastraFactory } from '@mastra/factory';
+  import type { MastraFactoryConfig } from '@mastra/factory';
+  import { defineBoard } from '@mastra/factory/boards';
+
+  const customWorkBoard = defineBoard({
+    id: 'custom-work',
+    title: 'Custom Work',
+    initialPhase: 'intake',
+    phases: {
+      intake: {
+        title: 'Intake',
+        kind: 'resting',
+        onEnter: {
+          issue: context =>
+            context.cause === 'linked_item_materialized' && context.item.metadata?.autoStartCandidate === true
+              ? {
+                  type: 'invokeSkill',
+                  idempotencyKey: `${context.ingress.id}:factory-triage`,
+                  role: 'triage',
+                  skillName: 'factory-triage',
+                }
+              : undefined,
+        },
+      },
+      triage: { title: 'Triage', kind: 'working', role: 'triage' },
+    },
+  });
+
+  export function createFactory(storage: MastraFactoryConfig['storage']) {
+    return new MastraFactory({ storage, boards: [customWorkBoard] });
+  }
+  ```
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+  - @mastra/code-sdk@1.8.3-alpha.0
+
 ## 0.17.1
 
 ### Patch Changes

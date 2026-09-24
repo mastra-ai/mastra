@@ -33,29 +33,6 @@ export default defineConfig({
 
 The setup file registers the custom matchers on `expect`. Alternatively, call `registerEvalMatchers()` from `@mastra/evals/vitest` in your own setup file.
 
-## Resolving targets from the Mastra instance
-
-Get the `target` (and any registered scorers) from your `Mastra` instance with `mastra.getAgent()`, `mastra.getWorkflow()`, and `mastra.getScorer()` instead of importing the agent or workflow file directly. A directly imported agent or workflow has no Mastra instance attached, so anything that reaches into the registry at runtime fails. For example, a workflow step that calls `mastra.getAgent('weatherAgent')` throws because `mastra` is `undefined`, and the same applies to child workflows, `.agent('agent-id')` references by string, and tools that call `mastra.getWorkflow()`. Registered targets also attach the configured `storage`, which is what lets scores persist and trace-based trajectory scoring work. `runEvals` logs a warning when the target isn't registered.
-
-The examples below look up `answerRelevancyScorer` and `trajectoryAccuracyScorer` with `mastra.getScorer()`, so register them on the `Mastra` instance first:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import {
-  createAnswerRelevancyScorer,
-  createTrajectoryAccuracyScorerCode,
-} from '@mastra/evals/scorers/prebuilt'
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-  workflows: { weatherWorkflow },
-  scorers: {
-    answerRelevancyScorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
-    trajectoryAccuracyScorer: createTrajectoryAccuracyScorerCode(),
-  },
-})
-```
-
 ## Asserting on a dataset with `expectEvals`
 
 `expectEvals` runs a `runEvals` evaluation inside a regular `test()` and asserts a minimum pass rate. It accepts the same configuration as `runEvals`: a `target` agent or workflow, `data` items, and `scorers`, `gates`, or thresholds. Gates score each item pass/fail, so `toPass(0.8)` requires at least 80% of items to pass every gate. Scorer thresholds still compare the average score across items and must pass regardless of the rate:
