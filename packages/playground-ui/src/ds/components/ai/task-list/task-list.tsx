@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 export type TaskListItem = TaskItem;
 
 export const TaskListContainer = ({ className, ...props }: ComponentProps<'section'>) => (
-  <section className={cn(raisedSurfaceStyle, 'rounded-2xl px-3 py-2.5', className)} {...props} />
+  <section className={cn(raisedSurfaceStyle, 'overflow-hidden rounded-2xl', className)} {...props} />
 );
 
 const barColors: Record<TaskListItem['status'], string> = {
@@ -110,10 +110,10 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
       <span
         aria-hidden={active}
         className={cn(
-          'col-start-1 row-start-1 truncate transition-[opacity,color]',
+          'col-start-1 row-start-1 truncate transition-[opacity,color,translate,filter]',
           taskGraphMotion,
           task.status === 'pending' ? 'text-muted-foreground/70' : 'text-muted-foreground',
-          active ? 'opacity-0' : 'opacity-100',
+          active ? '-translate-y-1 opacity-0 blur-[2px]' : 'translate-y-0 opacity-100 blur-none',
         )}
       >
         <span
@@ -131,9 +131,11 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
       <span
         aria-hidden={!active}
         className={cn(
-          'col-start-1 row-start-1 truncate bg-linear-to-r from-accent6 to-foreground to-60% bg-clip-text text-transparent transition-opacity',
+          'col-start-1 row-start-1 truncate bg-linear-to-r from-accent6 to-foreground to-30% bg-size-[200%_100%] bg-clip-text font-medium text-transparent transition-[opacity,translate,filter,background-position] dark:from-[color-mix(in_oklab,var(--accent6)_60%,var(--foreground))]',
           taskGraphMotion,
-          active ? 'opacity-100' : 'opacity-0',
+          active
+            ? 'translate-y-0 bg-position-[0%_0] opacity-100 blur-none'
+            : 'translate-y-1 bg-position-[100%_0] opacity-0 blur-[2px]',
         )}
       >
         {task.activeForm}
@@ -157,13 +159,18 @@ export const TaskListRow = ({ task, className, style, ...props }: TaskListRowPro
       <TaskListStatusIcon
         ref={pulseRef}
         status={task.status}
-        className={cn(taskGraphNodeClass, taskGraphMotion, taskGraphLaneShift[task.status])}
+        className={cn(
+          taskGraphNodeClass,
+          taskGraphMotion,
+          taskGraphLaneShift[task.status],
+          'group-data-collapsed/task-list:translate-x-0',
+        )}
       />
       <span
         className={cn(
           'flex min-w-0 transition-[padding-left]',
           taskGraphMotion,
-          task.status === 'in_progress' ? 'pl-12' : 'pl-8',
+          task.status === 'in_progress' ? 'pl-10 group-data-collapsed/task-list:pl-6' : 'pl-6',
         )}
       >
         <TaskListLabel task={task} />
@@ -173,11 +180,12 @@ export const TaskListRow = ({ task, className, style, ...props }: TaskListRowPro
 };
 
 const EXPANDED_VISIBLE_ROWS = 4.5;
+const LIST_INSET_Y = 10;
 
-/* Each fade is a gradient layer 2rem taller than the viewport; sliding it by 2rem pushes the fade out of view, which mask-position can animate. */
+/* A full layer minus one fade per edge; the fades are sized by mask-size, so their depth animates. */
 const edgeFades =
-  'mask-intersect mask-no-repeat [--fade-bottom:0rem] [--fade-top:-2rem] [mask-image:linear-gradient(to_bottom,transparent,black_2rem),linear-gradient(to_top,transparent,black_2rem)] [mask-position:0_var(--fade-top),0_var(--fade-bottom)] [mask-size:100%_calc(100%+2rem)]';
-const edgeFadesWhenScrolled = 'data-[overflow-y-end]:[--fade-bottom:-2rem] data-[overflow-y-start]:[--fade-top:0rem]';
+  'mask-no-repeat [--fade-bottom:0.875rem] [--fade-top:0.875rem] [mask-composite:subtract,add] [mask-image:linear-gradient(black,black),linear-gradient(to_bottom,black_40%,transparent),linear-gradient(to_top,black_40%,transparent)] [mask-position:0_0,0_0,0_100%] [mask-size:100%_100%,100%_var(--fade-top),100%_var(--fade-bottom)]';
+const edgeFadesWhenScrolled = 'data-[overflow-y-end]:[--fade-bottom:2rem] data-[overflow-y-start]:[--fade-top:2rem]';
 
 const clampScrollTop = (top: number, contentHeight: number, windowHeight: number) =>
   Math.min(Math.max(top, 0), Math.max(contentHeight - windowHeight, 0));
@@ -241,34 +249,33 @@ export const TaskList = ({
     <TaskListContainer
       aria-label="Task list"
       data-testid="task-list"
+      data-collapsed={open ? undefined : ''}
       onClick={open ? undefined : () => setOpen(true)}
-      className={cn('group relative', !open && 'cursor-pointer', className)}
+      className={cn('group/task-list relative', !open && 'cursor-pointer', className)}
       {...props}
     >
       <ScrollArea
         id={listId}
-        maxHeight={`${windowHeight}px`}
+        maxHeight={`${windowHeight + 2 * LIST_INSET_Y}px`}
         mask={false}
-        className="-mr-3"
         viewPortClassName={cn(
           edgeFades,
-          'pr-3 transition-[max-height,mask-position]',
+          'transition-[max-height,mask-size]',
           taskGraphMotion,
           open ? edgeFadesWhenScrolled : 'overflow-hidden!',
         )}
         viewportRef={viewportRef}
       >
-        <div className="relative">
-          <TaskGraphLines
-            statuses={tasks.map(task => task.status)}
-            className={cn('transition-opacity', taskGraphMotion, open ? 'opacity-100' : 'opacity-0')}
-          />
-          <ul>
-            {tasks.map((task, index) => {
-              const clippedAway = !open && index !== focusIndex;
-              return <TaskListRow key={task.id} task={task} inert={clippedAway} aria-hidden={clippedAway} />;
-            })}
-          </ul>
+        <div className="px-3" style={{ paddingBlock: LIST_INSET_Y }}>
+          <div className="relative">
+            <TaskGraphLines statuses={tasks.map(task => task.status)} singleLane={!open} />
+            <ul>
+              {tasks.map((task, index) => {
+                const clippedAway = !open && index !== focusIndex;
+                return <TaskListRow key={task.id} task={task} inert={clippedAway} aria-hidden={clippedAway} />;
+              })}
+            </ul>
+          </div>
         </div>
       </ScrollArea>
       <div className="absolute top-2.5 right-3 flex h-7 items-center bg-linear-to-r from-transparent to-card to-[1.5rem] pl-6">
@@ -298,7 +305,7 @@ export const TaskList = ({
             'grid size-6 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground',
             transitions.colors,
             focusRing.visible,
-            !open && 'group-hover:text-foreground',
+            !open && 'group-hover/task-list:text-foreground',
           )}
         >
           <ChevronDown

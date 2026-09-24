@@ -8,7 +8,7 @@ type TaskStatus = TaskItem['status'];
 const TRUNK_X = 8;
 const LANE_X = 24;
 
-const laneX = (status: TaskStatus) => (status === 'in_progress' ? LANE_X : TRUNK_X);
+const laneX = (status: TaskStatus, singleLane: boolean) => (status === 'in_progress' && !singleLane ? LANE_X : TRUNK_X);
 const rowCenter = (index: number) => index * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2;
 
 const ink: Record<TaskStatus, string> = {
@@ -17,11 +17,13 @@ const ink: Record<TaskStatus, string> = {
   pending: 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)',
 };
 
-const connectorPath = (upper: TaskStatus, lower: TaskStatus, index: number) => {
+const connectorPath = (upper: TaskStatus, lower: TaskStatus, index: number, singleLane: boolean) => {
   const fromY = rowCenter(index);
   const toY = rowCenter(index + 1);
   const midY = (fromY + toY) / 2;
-  return `path("M ${laneX(upper)} ${fromY} C ${laneX(upper)} ${midY} ${laneX(lower)} ${midY} ${laneX(lower)} ${toY}")`;
+  const fromX = laneX(upper, singleLane);
+  const toX = laneX(lower, singleLane);
+  return `path("M ${fromX} ${fromY} C ${fromX} ${midY} ${toX} ${midY} ${toX} ${toY}")`;
 };
 
 interface TaskGraphSegmentProps {
@@ -29,10 +31,11 @@ interface TaskGraphSegmentProps {
   lower: TaskStatus;
   index: number;
   graphId: string;
+  singleLane: boolean;
 }
 
-const TaskGraphSegment = ({ upper, lower, index, graphId }: TaskGraphSegmentProps) => {
-  const d = connectorPath(upper, lower, index);
+const TaskGraphSegment = ({ upper, lower, index, graphId, singleLane }: TaskGraphSegmentProps) => {
+  const d = connectorPath(upper, lower, index, singleLane);
   const reached = upper !== 'pending' && lower !== 'pending';
   const touchesActive = upper === 'in_progress' || lower === 'in_progress';
 
@@ -57,7 +60,12 @@ const TaskGraphSegment = ({ upper, lower, index, graphId }: TaskGraphSegmentProp
   );
 };
 
-export const TaskGraphLines = ({ statuses, className }: { statuses: TaskStatus[]; className?: string }) => {
+interface TaskGraphLinesProps {
+  statuses: TaskStatus[];
+  singleLane?: boolean;
+}
+
+export const TaskGraphLines = ({ statuses, singleLane = false }: TaskGraphLinesProps) => {
   const graphId = `task-graph${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const height = statuses.length * TASK_ROW_HEIGHT;
   const maskBox = { x: -8, y: 0, width: LANE_X + 24, height };
@@ -67,7 +75,7 @@ export const TaskGraphLines = ({ statuses, className }: { statuses: TaskStatus[]
       aria-hidden
       width={LANE_X + 8}
       height={height}
-      className={cn('pointer-events-none absolute top-0 left-0 overflow-visible', className)}
+      className="pointer-events-none absolute top-0 left-0 overflow-visible"
     >
       <defs>
         <linearGradient id={`${graphId}-fade`} gradientUnits="userSpaceOnUse" x1={0} x2={0} y1={0} y2={height}>
@@ -101,7 +109,16 @@ export const TaskGraphLines = ({ statuses, className }: { statuses: TaskStatus[]
         {statuses.map((status, index) => {
           const next = statuses[index + 1];
           if (!next) return null;
-          return <TaskGraphSegment key={index} upper={status} lower={next} index={index} graphId={graphId} />;
+          return (
+            <TaskGraphSegment
+              key={index}
+              upper={status}
+              lower={next}
+              index={index}
+              graphId={graphId}
+              singleLane={singleLane}
+            />
+          );
         })}
       </g>
     </svg>
