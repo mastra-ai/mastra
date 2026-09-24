@@ -216,7 +216,7 @@ checks.calledTool('search', { times: 2 })
 
 Returns: `1` if called at least `times` times, `0` otherwise.
 
-### `checks.didNotCall(toolName)`
+### `checks.didNotCall(toolName, options?)`
 
 Scores 1 if the agent didn't call the specified tool.
 
@@ -236,7 +236,7 @@ checks.didNotCall('delete_user')
 
 Returns: `1` if the tool wasn't called, `0` otherwise.
 
-### `checks.toolOrder(expectedOrder)`
+### `checks.toolOrder(expectedOrder, options?)`
 
 Scores 1 if the tools were called in the specified order. Uses relaxed matching. Other tool calls between the expected tools are allowed.
 
@@ -256,7 +256,7 @@ checks.toolOrder(['search', 'summarize', 'respond'])
 
 Returns: `1` if the expected order is satisfied, `0` otherwise.
 
-### `checks.maxToolCalls(max)`
+### `checks.maxToolCalls(max, options?)`
 
 Scores 1 if the agent used no more than `max` tool calls.
 
@@ -276,7 +276,7 @@ checks.maxToolCalls(5)
 
 Returns: `1` if within the limit, `0` otherwise.
 
-### `checks.usedNoTools()`
+### `checks.usedNoTools(options?)`
 
 Scores 1 if the agent made no tool calls at all.
 
@@ -286,7 +286,7 @@ checks.usedNoTools()
 
 Returns: `1` if no tools were called, `0` otherwise.
 
-### `checks.noToolErrors()`
+### `checks.noToolErrors(options?)`
 
 Scores 1 if none of the tool invocations resulted in an error state. Detects both error results (`result.error` present) and incomplete tool calls (`state === 'call'`).
 
@@ -319,6 +319,20 @@ const result = await runEvals({
   ],
 })
 ```
+
+## Using the same check more than once
+
+Every check accepts optional `id` and `name` overrides in its `options`. `runEvals` keys results by scorer id, so two checks with the same default id (for example two `checks.includes()` calls) are merged into a single averaged row and a failing gate can't be attributed to either one. Give each instance its own id when you use a check more than once:
+
+```typescript title="src/evals/weather-checks.ts"
+gates: [
+  checks.includes('London', { id: 'mentions-city' }),
+  checks.includes('°C', { id: 'mentions-temperature', name: 'Mentions temperature' }),
+  checks.noToolErrors({ id: 'no-tool-errors' }),
+]
+```
+
+`runEvals` logs a warning when two scorers or gates share an id.
 
 ## Multi-turn behavior
 

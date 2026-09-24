@@ -238,18 +238,33 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
     isOptional: true,
   },
   {
+    name: 'id',
+    type: 'string',
+    description:
+      'Overrides the scorer id. Results are keyed by id, so give each instance a unique id when using the scorer more than once in a single runEvals call.',
+    isOptional: true,
+    defaultValue: "'code-trajectory-accuracy-scorer'",
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Overrides the scorer display name.',
+    isOptional: true,
+    defaultValue: "'Trajectory Accuracy Scorer'",
+  },
+  {
     name: 'comparisonOptions',
     type: 'TrajectoryComparisonOptions',
     description: 'Controls how the comparison is performed.',
     isOptional: true,
     properties: [
       {
-        name: 'strictOrder',
-        type: 'boolean',
+        name: 'ordering',
+        type: "'strict' | 'relaxed' | 'unordered'",
         description:
-          'Requires exact match of trajectory (same steps in same order, no extra steps). When false, allows additional steps as long as expected steps appear in order.',
+          "How step ordering is evaluated. 'strict' gives full credit only for an exact match and penalizes extra steps. 'relaxed' allows additional steps as long as expected steps appear in order. 'unordered' only checks that expected steps are present.",
         isOptional: true,
-        defaultValue: 'false',
+        defaultValue: "'relaxed'",
       },
       {
         name: 'allowRepeatedSteps',
@@ -289,7 +304,7 @@ const scorer = createTrajectoryAccuracyScorerCode({
 const scorer = createTrajectoryAccuracyScorerCode()
 
 await runEvals({
-  target: myAgent,
+  target: mastra.getAgent('myAgent'),
   scorers: { trajectory: [scorer] },
   data: [
     {
@@ -313,15 +328,19 @@ await runEvals({
 
 ### Evaluation modes
 
-The code-based scorer operates in two modes based on `strictOrder`:
+The code-based scorer operates in one of three modes based on `ordering`:
 
-#### Strict mode (`strictOrder: true`)
+#### Strict mode (`ordering: 'strict'`)
 
-Requires an exact match. The actual steps must match the expected steps in the same order with no extra or missing steps. Returns `1.0` for an exact match and `0.0` otherwise.
+Only an exact match (the same steps in the same order, with nothing extra or missing) scores `1.0`. Anything else gets partial credit for the expected steps that matched in position, with a penalty deducted for each extra step. For example, the two expected steps followed by one extra step scores `0.75`.
 
-#### Relaxed mode (`strictOrder: false`, default)
+#### Relaxed mode (`ordering: 'relaxed'`, default)
 
 Allows extra steps. Expected steps must appear in the correct relative order. The score is calculated based on how many expected steps were matched, with optional penalties for extra or repeated steps.
+
+#### Unordered mode (`ordering: 'unordered'`)
+
+Only checks that each expected step is present. Order is ignored, and extra steps are reported in the result but not penalized.
 
 ## Code-based scoring details
 
@@ -371,16 +390,16 @@ const scorer = createTrajectoryAccuracyScorerCode({
       { stepType: 'tool_call', name: 'fetch-tool' },
     ],
   },
-  comparisonOptions: { strictOrder: true },
+  comparisonOptions: { ordering: 'strict' },
 })
 
 const result = await runEvals({
-  target: myAgent,
+  target: mastra.getAgent('myAgent'),
   scorers: { trajectory: [scorer] },
   data: [{ input: 'Get my data' }],
 })
 
-console.log(result.scores.trajectory['trajectory-accuracy']) // 1.0
+console.log(result.scores.trajectory['code-trajectory-accuracy-scorer']) // 1.0
 ```
 
 ### Agent trajectory with relaxed ordering
@@ -395,7 +414,7 @@ const scorer = createTrajectoryAccuracyScorerCode({
       { stepType: 'tool_call', name: 'summarize-tool' },
     ],
   },
-  comparisonOptions: { strictOrder: false },
+  comparisonOptions: { ordering: 'relaxed' },
 })
 
 // Agent called search-tool → log-tool → summarize-tool
@@ -422,12 +441,50 @@ const scorer = createTrajectoryAccuracyScorerCode({
 })
 
 const result = await runEvals({
-  target: myWorkflow,
+  target: mastra.getWorkflow('myWorkflow'),
   scorers: { trajectory: [scorer] },
   data: [{ input: { data: 'test' } }],
 })
 
-console.log(result.scores.trajectory['trajectory-accuracy'])
+console.log(result.scores.trajectory['code-trajectory-accuracy-scorer'])
+```
+
+### Multiple trajectory gates on one workflow
+
+To assert several independent facts about a run, create one scorer per expectation and give each a unique `id`. Without an override every instance shares the default id, so `runEvals` merges them into a single averaged row and a failing gate can't be attributed to one expectation.
+
+```typescript title="src/example-trajectory-gates.ts"
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'
+import { runEvals } from '@mastra/core/evals'
+
+const result = await runEvals({
+  target: mastra.getWorkflow('weatherWorkflow'),
+  data: [{ input: { city: 'London' } }],
+  gates: [
+    createTrajectoryAccuracyScorerCode({
+      id: 'fetch-weather-ran',
+      expectedTrajectory: [{ stepType: 'workflow_step', name: 'fetch-weather', status: 'success' }],
+    }),
+    createTrajectoryAccuracyScorerCode({
+      id: 'plan-activities-ran',
+      expectedTrajectory: [
+        { stepType: 'workflow_step', name: 'plan-activities', status: 'success' },
+      ],
+    }),
+    createTrajectoryAccuracyScorerCode({
+      id: 'plan-activities-called-weather-tool',
+      expectedTrajectory: [
+        {
+          stepType: 'workflow_step',
+          name: 'plan-activities',
+          children: { steps: [{ stepType: 'tool_call', name: 'weatherTool' }] },
+        },
+      ],
+    }),
+  ],
+})
+
+console.log(result.gateResults) // [{ id: 'fetch-weather-ran', passed: true, score: 1 }, ...]
 ```
 
 ### Comparing step data
@@ -552,6 +609,21 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
 
 <PropertiesTable
   content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Overrides the scorer id. Give each instance a unique id when using the scorer more than once in a single runEvals call.',
+    isOptional: true,
+    defaultValue: "'code-trajectory-scorer'",
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Overrides the scorer display name.',
+    isOptional: true,
+    defaultValue: "'Trajectory Scorer'",
+  },
   {
     name: 'defaults',
     type: 'TrajectoryExpectation',
@@ -711,7 +783,7 @@ const scorer = createTrajectoryScorerCode({
 })
 
 const result = await runEvals({
-  target: myAgent,
+  target: mastra.getAgent('myAgent'),
   scorers: { trajectory: [scorer] },
   data: [
     {
@@ -777,7 +849,7 @@ const trajectoryScorer = createTrajectoryAccuracyScorerCode({
 })
 
 const result = await runEvals({
-  target: myAgent,
+  target: mastra.getAgent('myAgent'),
   scorers: {
     agent: [qualityScorer], // receives raw MastraDBMessage[] output
     trajectory: [trajectoryScorer], // receives pre-extracted Trajectory
@@ -786,7 +858,7 @@ const result = await runEvals({
 })
 
 // result.scores.agent['quality'] — agent-level score
-// result.scores.trajectory['trajectory-accuracy'] — trajectory score
+// result.scores.trajectory['code-trajectory-accuracy-scorer'] — trajectory score
 ```
 
 ### Workflow trajectory evaluation
@@ -806,7 +878,7 @@ const workflowTrajectoryScorer = createTrajectoryAccuracyScorerCode({
 })
 
 const result = await runEvals({
-  target: myWorkflow,
+  target: mastra.getWorkflow('myWorkflow'),
   scorers: {
     workflow: [outputScorer], // receives workflow output
     trajectory: [workflowTrajectoryScorer], // receives pre-extracted Trajectory from step results
@@ -815,7 +887,7 @@ const result = await runEvals({
 })
 
 // result.scores.workflow['output-quality'] — workflow-level score
-// result.scores.trajectory['trajectory-accuracy'] — trajectory score
+// result.scores.trajectory['code-trajectory-accuracy-scorer'] — trajectory score
 ```
 
 ## Related
