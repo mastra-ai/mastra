@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Back off missing external issues during reconciliation
+Check missing external issues again after 24 hours to reduce repeated requests
