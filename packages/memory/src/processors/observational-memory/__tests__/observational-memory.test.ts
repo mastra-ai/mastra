@@ -11257,7 +11257,7 @@ describe('Full Async Buffering Flow', () => {
         // Observer call
         observerCalls.push({ input: promptText });
         if (observerCalls.length <= (opts.observerFailures ?? 0)) {
-          throw new Error('observer failed');
+          throw Object.assign(new Error('observer failed'), { statusCode: 503 });
         }
         const observerResponse =
           opts.observerResponses?.[observerCalls.length - 1] ??
@@ -11434,6 +11434,7 @@ describe('Full Async Buffering Flow', () => {
         reflectionObservationTokens: 50000,
         messageCount: 20,
         observerFailures: 1,
+        maxRetries: 0,
         failurePolicy: 'continue',
       });
 
