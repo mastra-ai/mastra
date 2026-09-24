@@ -1,8 +1,30 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
+import { toStandardSchema } from '@mastra/core/schema';
+import type { PublicSchema } from '@mastra/core/schema';
 import { z } from 'zod';
 
 import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
+
+/**
+ * The structured-output schema for this extractor stays generic because every structured extractor shares one
+ * response object: a strict working-memory schema there would make one invalid document fail every sibling
+ * extractor. The configured schema is enforced here instead, with its own validator, before anything is stored.
+ */
+async function validateAgainstConfiguredSchema(schema: PublicSchema, value: unknown): Promise<unknown> {
+  const result = await toStandardSchema(schema)['~standard'].validate(value);
+  if (!result.issues) {
+    return result.value;
+  }
+
+  const details = result.issues
+    .map(issue => {
+      const path = issue.path?.map(segment => String(typeof segment === 'object' ? segment.key : segment)).join('.');
+      return path ? `${path}: ${issue.message}` : issue.message;
+    })
+    .join('; ');
+  throw new Error(`Working memory update does not match the configured schema, so it was not saved: ${details}`);
+}
 
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
   template?: string;
@@ -73,13 +95,17 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
         const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
         const config = memory!.getMergedThreadConfig(memoryConfig ?? {});
-        const isSchemaWorkingMemory = Boolean(config.workingMemory?.schema);
+        const configuredSchema = config.workingMemory?.schema;
 
-        if (isSchemaWorkingMemory && current === null) {
-          return undefined;
+        let document: unknown = current;
+        if (configuredSchema) {
+          if (current === null) {
+            return undefined;
+          }
+          document = await validateAgainstConfiguredSchema(configuredSchema, current);
         }
 
-        const workingMemory = typeof current === 'string' ? current : (JSON.stringify(current) ?? '');
+        const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');
         if (!workingMemory.trim()) {
           return undefined;
         }
@@ -91,7 +117,7 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
           memoryConfig,
         });
 
-        return current;
+        return document as Record<string, unknown> | string;
       },
     });
   }
