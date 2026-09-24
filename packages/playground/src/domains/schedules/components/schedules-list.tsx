@@ -1,6 +1,7 @@
 import type { ScheduleResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo } from 'react';
@@ -79,13 +80,15 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
         <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link} {...getRowProps(index)}>
           <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
           <DataList.Cell className="min-w-0">
-            <span className="block truncate font-mono text-body-sm text-muted-foreground" title={s.id}>
+            <Txt as="span" variant="body-sm" tone="muted" font="mono" className="block truncate" title={s.id}>
               {s.id}
-            </span>
+            </Txt>
           </DataList.Cell>
           <DataList.Cell>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <code className="font-mono text-caption">{s.cron}</code>
+              <Txt as="span" variant="caption" font="mono">
+                {s.cron}
+              </Txt>
               {s.timezone ? <span className="text-meta text-muted-foreground">{s.timezone}</span> : null}
             </span>
           </DataList.Cell>

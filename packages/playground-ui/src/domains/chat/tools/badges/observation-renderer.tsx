@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/utils/cn';
 
 // Priority emoji to color mapping
@@ -258,14 +259,15 @@ function ObservationItem({
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
-          <span
-            className={cn(
-              'ml-2 shrink-0 font-mono text-meta',
-              useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
-            )}
+          <Txt
+            as="span"
+            variant="meta"
+            font="mono"
+            tone={useInheritedTextColor ? undefined : 'muted'}
+            className={cn('ml-2 shrink-0', useInheritedTextColor && 'opacity-60')}
           >
             {observation.time}
-          </span>
+          </Txt>
         )}
       </div>
       {observation.children.length > 0 && (
@@ -326,11 +328,14 @@ function ThreadSection({
       {showThreadId && thread.threadId !== 'default' && (
         <div
           className={cn(
-            'mb-1 inline-block rounded px-1 py-0.5 font-mono text-meta',
+            'mb-1 inline-block rounded px-1 py-0.5 text-meta',
             useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50 text-muted-foreground',
           )}
         >
-          Thread {thread.threadId}
+          Thread{' '}
+          <Txt as="span" variant="meta" font="mono">
+            {thread.threadId}
+          </Txt>
         </div>
       )}
       {thread.dateBlocks.map((block, i) => (

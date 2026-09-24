@@ -5,6 +5,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -69,9 +70,11 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
       >
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
-        <span className="font-mono text-meta text-muted-foreground">
-          {getShortId(score.id)} · {isToday(createdAt) ? 'Today' : format(createdAt, 'MMM dd')}{' '}
-          {format(createdAt, 'h:mm:ss aaa')}
+        <span className="text-meta text-muted-foreground tabular-nums">
+          <Txt as="span" variant="meta" font="mono">
+            {getShortId(score.id)}
+          </Txt>{' '}
+          · {isToday(createdAt) ? 'Today' : format(createdAt, 'MMM dd')} {format(createdAt, 'h:mm:ss aaa')}
         </span>
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}

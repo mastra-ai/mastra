@@ -506,10 +506,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
     } catch (error) {
-      const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+      const httpStatus =
+        error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
       const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
       if (!isClientError) {
-        this.mastra.getLogger()?.error('Error calling handler', {
+        // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+        const logLevel = httpStatus === 501 ? 'warn' : 'error';
+        this.mastra.getLogger()?.[logLevel]('Error calling handler', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           path: route.path,
           method: route.method,

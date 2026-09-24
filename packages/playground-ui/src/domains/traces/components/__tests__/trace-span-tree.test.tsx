@@ -75,7 +75,9 @@ describe('TraceSpanTree — trailing cell', () => {
     render(<Harness />);
 
     // Both fixture spans last exactly one second.
-    const durations = screen.getAllByText((_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'SPAN');
+    const durations = screen.getAllByText(
+      (_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'SPAN' && el.children.length === 0,
+    );
     expect(durations).toHaveLength(2);
     // The duration lives inside the row's name button, right after the name.
     const root = screen.getByLabelText('View details for span agent run');
@@ -89,6 +91,10 @@ describe('TraceSpanTree — trailing cell', () => {
     screen.getByText('root@0');
     screen.getByText('child@1');
     // The duration line is kept alongside the custom trailing cell.
-    expect(screen.getAllByText((_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'SPAN')).toHaveLength(2);
+    expect(
+      screen.getAllByText(
+        (_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'SPAN' && el.children.length === 0,
+      ),
+    ).toHaveLength(2);
   });
 });

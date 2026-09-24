@@ -182,6 +182,7 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
+  GetObservabilityCapabilitiesResponse,
   BuilderSettingsResponse,
   BuilderAvailableModelsResponse,
   PermissionPatternsResponse,
@@ -1362,6 +1363,11 @@ export class MastraClient extends BaseResource {
   /** Returns distinct tags with optional entity type filtering. */
   getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
     return this.observability.getTags(params);
+  }
+
+  /** Returns which optional observability APIs the configured observability storage supports. */
+  getObservabilityCapabilities(): Promise<GetObservabilityCapabilitiesResponse> {
+    return this.observability.getCapabilities();
   }
 
   // ============================================================================

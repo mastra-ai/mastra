@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
@@ -108,7 +109,9 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
         <div className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-caption text-foreground">$</span>
-            <code className="truncate font-mono text-caption text-foreground">{command}</code>
+            <Txt as="span" variant="caption" tone="ink" font="mono" className="truncate">
+              {command}
+            </Txt>
           </div>
           {onCopy && (
             <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
@@ -134,7 +137,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       <pre
         ref={contentRef}
         style={{ maxHeight }}
-        className="overflow-x-auto overflow-y-auto bg-black p-3 font-mono text-body whitespace-pre-wrap text-neutral-300"
+        className="overflow-x-auto overflow-y-auto bg-black p-3 text-body whitespace-pre-wrap text-neutral-300"
       >
         {content || <span className="text-foreground italic">No output</span>}
       </pre>

@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 
 import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
 import { overlaySurfaceStyle } from '../../../ds/primitives/raised-surface';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import { tToTimestampMs } from '../lib/replay-selection';
@@ -67,9 +68,11 @@ function TimeAxis({ domain }: { domain: TDomain }) {
       <p className="flex items-center self-stretch border-r border-border/50 pl-3 text-meta text-muted-foreground">
         Time
       </p>
-      <div className="flex justify-between px-1 py-1.5 font-mono text-meta text-muted-foreground">
+      <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
         {ticks.map(t => (
-          <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
+          <Txt key={t} as="span" variant="meta" font="mono">
+            {formatTimeDisplay(tToTimestamp(t, domain))}
+          </Txt>
         ))}
       </div>
     </div>
@@ -94,11 +97,13 @@ export function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 font-mono text-meta`}>
+      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 text-meta tabular-nums`}>
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">time</span>
-            <span className="text-foreground">{time}</span>
+            <Txt as="span" variant="meta" font="mono" tone="ink">
+              {time}
+            </Txt>
           </div>
         )}
         {visibleEntries.map(entry => (
@@ -114,8 +119,12 @@ export function FlameTooltip({
   }
 
   return (
-    <div className={`${overlaySurfaceStyle} rounded px-2 py-1 font-mono text-meta`}>
-      {time && <span className="text-foreground">{time}</span>}
+    <div className={`${overlaySurfaceStyle} rounded px-2 py-1 text-meta`}>
+      {time && (
+        <Txt as="span" variant="meta" font="mono" tone="ink">
+          {time}
+        </Txt>
+      )}
     </div>
   );
 }

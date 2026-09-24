@@ -3,6 +3,7 @@ import type {
   BrowserSettings,
   BrowserViewport,
   GlobalSettings,
+  ResolvedStagehandModel,
   StagehandEnv,
 } from '@mastra/code-sdk/onboarding/settings';
 import {
@@ -10,8 +11,10 @@ import {
   createBrowserFromSettings,
   loadSettings,
   parseViewportInput,
+  resolveStagehandModel,
   saveSettings,
   setProfileProvider,
+  toActiveBrowserSettings,
   VIEWPORT_PRESETS,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -28,6 +31,7 @@ import type { SlashCommandContext } from './types.js';
  * which may differ from the settings file if another instance changed it.
  */
 const ACTIVE_BROWSER_KEY = 'activeBrowserSettings';
+const ACTIVE_BROWSER_MODEL_KEY = 'activeBrowserModel';
 
 type BrowserAgent = { browser?: MastraBrowser; setBrowser?: (browser?: MastraBrowser) => void };
 type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: string) => Promise<void> };
@@ -37,11 +41,30 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  *
  * Usage:
  *   /browser              - Interactive setup wizard
- *   /browser status       - Show current browser configuration
+ *   /browser status|info  - Show current browser configuration
  *   /browser on           - Enable browser with current settings
  *   /browser off          - Disable browser
  *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl, model, viewport)
  */
+
+/**
+ * Human-readable line for the model Stagehand will actually use, including the
+ * implicit Codex fallback, so users can see it without reading the settings file.
+ */
+function describeStagehandModel(
+  settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
+  resolved: ResolvedStagehandModel = resolveStagehandModel(settings),
+): string {
+  const { modelName, source } = resolved;
+  switch (source) {
+    case 'settings':
+      return `  Model: ${modelName}`;
+    case 'codex-oauth':
+      return `  Model: ${modelName} (via OpenAI Codex login; override with /browser set model)`;
+    case 'stagehand-default':
+      return '  Model: Stagehand default (set one with /browser set model)';
+  }
+}
 
 /**
  * Validate a `provider/model` id against the providers Stagehand can resolve.
@@ -274,8 +297,12 @@ function applyBrowserToAgents(
     agent?.setBrowser?.(browser);
   }
   ctx.controller.setBrowser?.(browser);
-  // Track the active browser settings in controller state
-  void ctx.state.session.state.set({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
+  // Track the active browser settings in controller state, plus the model the
+  // browser was actually created with (credentials may change afterwards).
+  void ctx.state.session.state.set({
+    [ACTIVE_BROWSER_KEY]: browserSettings ? toActiveBrowserSettings(browserSettings) : undefined,
+    [ACTIVE_BROWSER_MODEL_KEY]: browserSettings?.enabled ? resolveStagehandModel(browserSettings) : undefined,
+  } as any);
 }
 
 /**
@@ -291,6 +318,13 @@ function getBrowserConfigKey(settings: BrowserSettings): string {
     parts.push(`model:${settings.stagehand.model}`);
   }
   parts.push(settings.headless ? 'headless' : 'headed');
+  // Mirror createBrowserFromSettings: a profile or CDP connection forces 'shared' scope,
+  // and preserveUserDataDir only affects Stagehand launches (not CDP attaches).
+  const effectiveScope = settings.profile || settings.cdpUrl ? 'shared' : settings.scope;
+  if (effectiveScope) parts.push(`scope:${effectiveScope}`);
+  if (settings.provider === 'stagehand' && !settings.cdpUrl && settings.stagehand?.preserveUserDataDir !== undefined) {
+    parts.push(`preserve:${settings.stagehand.preserveUserDataDir}`);
+  }
   if (settings.viewport) parts.push(`viewport:${formatViewport(settings.viewport)}`);
   if (settings.profile) parts.push(`profile:${settings.profile}`);
   if (settings.executablePath) parts.push(`exec:${settings.executablePath}`);
@@ -456,10 +490,11 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     return;
   }
 
-  if (arg === 'status') {
+  if (arg === 'status' || arg === 'info') {
     // Get the active browser settings from controller state (what's actually running)
     const state = ctx.state.session.state.get() as any;
     const activeSettings = state?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
+    const activeModel = state?.[ACTIVE_BROWSER_MODEL_KEY] as ResolvedStagehandModel | undefined;
 
     // Check for config drift between file and active instance
     const hasDrift = activeSettings && getBrowserConfigKey(browser) !== getBrowserConfigKey(activeSettings);
@@ -475,9 +510,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         activeSettings.provider === 'stagehand' && activeSettings.stagehand?.env === 'BROWSERBASE';
       lines.push('Browser (active):');
       lines.push(`  Provider: ${activeProvider}`);
-      if (activeSettings.provider === 'stagehand' && activeSettings.stagehand) {
-        lines.push(`  Environment: ${activeSettings.stagehand.env}`);
-        if (activeSettings.stagehand.model) lines.push(`  Model: ${activeSettings.stagehand.model}`);
+      if (activeSettings.provider === 'stagehand') {
+        if (activeSettings.stagehand) lines.push(`  Environment: ${activeSettings.stagehand.env}`);
+        lines.push(describeStagehandModel(activeSettings, activeModel));
       }
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
@@ -496,9 +531,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       const fileIsBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
       lines.push('Pending changes (not yet applied):');
       lines.push(`  Provider: ${fileProvider}`);
-      if (browser.provider === 'stagehand' && browser.stagehand) {
-        lines.push(`  Environment: ${browser.stagehand.env}`);
-        if (browser.stagehand.model) lines.push(`  Model: ${browser.stagehand.model}`);
+      if (browser.provider === 'stagehand') {
+        if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
+        lines.push(describeStagehandModel(browser));
       }
       if (!fileIsBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
@@ -521,9 +556,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
       const isBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
       const lines = [`Browser: enabled`, `  Provider: ${providerLabel}`];
-      if (browser.provider === 'stagehand' && browser.stagehand) {
-        lines.push(`  Environment: ${browser.stagehand.env}`);
-        if (browser.stagehand.model) lines.push(`  Model: ${browser.stagehand.model}`);
+      if (browser.provider === 'stagehand') {
+        if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
+        lines.push(describeStagehandModel(browser, activeModel));
       }
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
@@ -709,14 +744,14 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   }
 
   // /browser help, --help, -h, or unrecognized command
-  if (arg && !['set', 'status', 'on', 'off', 'enable', 'disable', 'export'].includes(arg)) {
+  if (arg && !['set', 'status', 'info', 'on', 'off', 'enable', 'disable', 'export'].includes(arg)) {
     const help = [
       'usage: /browser <command> [options]',
       '',
       '  (no command)   Interactive setup wizard',
       '  on, enable     Enable browser with current settings',
       '  off, disable   Disable browser',
-      '  status         Show current configuration',
+      '  status, info   Show current configuration (provider, model, profile, ...)',
       '  clear          Reset all settings to defaults',
       '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl, model, viewport',
       '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl, model, viewport',
@@ -932,6 +967,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
   if (provider === 'stagehand' && stagehandSettings) {
     summary.push(`  Environment: ${stagehandSettings.env}`);
+    summary.push(describeStagehandModel(nextBrowser));
   }
 
   // Only show headless for local browsers
