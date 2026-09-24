@@ -366,6 +366,7 @@ export interface CompiledClickHouseTraceQuery {
   query: string;
   query_params: QueryParams;
   sharedSnapshot?: boolean;
+  requiresAnalyzer?: boolean;
 }
 
 /**
@@ -709,34 +710,16 @@ function structuredDiscoveryRoot(
   return descriptor;
 }
 
-export function compileClickHouseTraceQueryObservedFields(
+function compileClickHouseObservedFieldsResult(
   plan: TrustedTraceQueryObservedFieldsPlan,
+  parameters: ParameterBuilder,
+  ctes: string[],
+  recursive: boolean,
 ): CompiledClickHouseTraceQuery {
-  const roots = structuredDiscoveryRoots(plan);
-  if (roots.length === 0) throw new Error('Unsupported structured discovery scope');
-  const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters, plan.scope);
   const search = plan.search
     ? `AND positionCaseInsensitiveUTF8(arrayStringConcat(segments, '.'), ${parameters.add(plan.search, 'String')}) > 0`
     : '';
   const limit = parameters.add(plan.limit + 1, 'UInt64');
-  const seeds = roots
-    .map(
-      descriptor =>
-        `SELECT ['${descriptor.root}'] AS segments, ifNull(${descriptor.jsonExpression}, '{}') AS leaf, false AS requires_exact FROM ${descriptor.relation}`,
-    )
-    .join('\n    UNION ALL\n    ');
-  ctes.push(`structured_tree AS (
-    ${seeds}
-    UNION ALL
-    SELECT arrayPushBack(segments, entry.1), entry.2, requires_exact OR position(entry.1, '.') > 0
-    FROM structured_tree
-    ARRAY JOIN JSONExtractKeysAndValuesRaw(if(JSONType(leaf) = 'Object', leaf, '{}')) AS entry
-    WHERE length(segments) < ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENTS}
-      AND entry.1 != '' AND position(entry.1, char(0)) = 0
-      AND length(entry.1) <= ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENT_BYTES}
-      AND length(arrayStringConcat(arrayPushBack(segments, entry.1), '.')) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
-  )`);
   ctes.push(`fields AS (
     SELECT segments,
       if(requires_exact, toJSONString(segments), arrayStringConcat(segments, '.')) AS path,
@@ -754,13 +737,66 @@ export function compileClickHouseTraceQueryObservedFields(
     GROUP BY path
   )`);
   return {
-    query: `WITH RECURSIVE ${ctes.join(',\n')}
+    query: `WITH${recursive ? ' RECURSIVE' : ''} ${ctes.join(',\n')}
 SELECT path, occurrences, value_kind
 FROM grouped_fields
 ORDER BY occurrences DESC, path ASC
 LIMIT ${limit}`,
     query_params: parameters.params,
+    requiresAnalyzer: recursive || undefined,
   };
+}
+
+export function compileClickHouseTraceQueryObservedFields(
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): CompiledClickHouseTraceQuery {
+  const roots = structuredDiscoveryRoots(plan);
+  if (roots.length === 0) throw new Error('Unsupported structured discovery scope');
+  const parameters = new ParameterBuilder();
+  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters, plan.scope);
+  const seeds = roots
+    .map(
+      descriptor =>
+        `SELECT ['${descriptor.root}'] AS segments, ifNull(${descriptor.jsonExpression}, '{}') AS leaf, false AS requires_exact FROM ${descriptor.relation}`,
+    )
+    .join('\n    UNION ALL\n    ');
+  ctes.push(`structured_tree AS (
+    ${seeds}
+    UNION ALL
+    SELECT arrayPushBack(segments, entry.1), entry.2, requires_exact OR position(entry.1, '.') > 0
+    FROM structured_tree
+    ARRAY JOIN JSONExtractKeysAndValuesRaw(if(JSONType(leaf) = 'Object', leaf, '{}')) AS entry
+    WHERE length(segments) < ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENTS}
+      AND entry.1 != '' AND position(entry.1, char(0)) = 0
+      AND length(entry.1) <= ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENT_BYTES}
+      AND length(arrayStringConcat(arrayPushBack(segments, entry.1), '.')) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+  )`);
+  return compileClickHouseObservedFieldsResult(plan, parameters, ctes, true);
+}
+
+function compileClickHouseLegacyTraceQueryObservedFields(
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): CompiledClickHouseTraceQuery {
+  const roots = structuredDiscoveryRoots(plan);
+  if (roots.length === 0) throw new Error('Unsupported structured discovery scope');
+  const parameters = new ParameterBuilder();
+  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters, plan.scope);
+  const expansions = roots
+    .map(
+      descriptor => `SELECT ['${descriptor.root}', entry.1] AS segments,
+      entry.2 AS leaf,
+      position(entry.1, '.') > 0 AS requires_exact
+    FROM ${descriptor.relation}
+    ARRAY JOIN JSONExtractKeysAndValuesRaw(if(JSONType(ifNull(${descriptor.jsonExpression}, '{}')) = 'Object', ifNull(${descriptor.jsonExpression}, '{}'), '{}')) AS entry
+    WHERE entry.1 != '' AND position(entry.1, char(0)) = 0
+      AND length(entry.1) <= ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENT_BYTES}
+      AND length(arrayStringConcat(['${descriptor.root}', entry.1], '.')) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}`,
+    )
+    .join('\n    UNION ALL\n    ');
+  ctes.push(`structured_tree AS (
+    ${expansions}
+  )`);
+  return compileClickHouseObservedFieldsResult(plan, parameters, ctes, false);
 }
 
 export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledClickHouseTraceQuery {
@@ -821,6 +857,30 @@ function isClickHouseResourceLimit(error: unknown): boolean {
   return String(candidate.code ?? '') === '241' || candidate.type === 'MEMORY_LIMIT_EXCEEDED';
 }
 
+function isUnsupportedRecursiveDiscovery(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; type?: unknown; message?: unknown };
+  const code = String(candidate.code ?? '');
+  if (code === '62' && candidate.type === 'SYNTAX_ERROR') return true;
+  return (
+    (code === '115' || candidate.type === 'UNKNOWN_SETTING') &&
+    String(candidate.message ?? '').includes('enable_analyzer')
+  );
+}
+
+const RECURSIVE_DISCOVERY_PROBE: CompiledClickHouseTraceQuery = {
+  query: `WITH RECURSIVE recursive_discovery_probe AS (
+  SELECT toUInt8(0) AS depth
+  UNION ALL
+  SELECT depth + 1 FROM recursive_discovery_probe WHERE depth < 1
+)
+SELECT max(depth) AS depth FROM recursive_discovery_probe`,
+  query_params: {},
+  requiresAnalyzer: true,
+};
+
+const recursiveDiscoveryCapabilities = new WeakMap<ClickHouseClient, Promise<boolean>>();
+
 export type ClickHouseTraceQueryExecutionLimits = {
   timeoutMs: number;
   memoryLimitBytes?: number;
@@ -843,6 +903,7 @@ export async function runWithClickHouseTraceQueryTimeout(
         ...CH_SETTINGS,
         max_execution_time: resolvedTimeoutMs / 1000,
         ...(limits.memoryLimitBytes === undefined ? {} : { max_memory_usage: String(limits.memoryLimitBytes) }),
+        ...(compiled.requiresAnalyzer ? { enable_analyzer: 1 } : {}),
         ...(compiled.sharedSnapshot ? { enable_shared_storage_snapshot_in_query: 1 } : {}),
       },
     });
@@ -854,17 +915,35 @@ export async function runWithClickHouseTraceQueryTimeout(
   }
 }
 
+function supportsRecursiveDiscovery(
+  client: ClickHouseClient,
+  limits: ClickHouseTraceQueryExecutionLimits,
+): Promise<boolean> {
+  const cached = recursiveDiscoveryCapabilities.get(client);
+  if (cached) return cached;
+
+  const capability = runWithClickHouseTraceQueryTimeout(client, limits, RECURSIVE_DISCOVERY_PROBE)
+    .then(() => true)
+    .catch(error => {
+      if (isUnsupportedRecursiveDiscovery(error)) return false;
+      recursiveDiscoveryCapabilities.delete(client);
+      throw error;
+    });
+  recursiveDiscoveryCapabilities.set(client, capability);
+  return capability;
+}
+
 export async function getTraceQueryObservedFields(
   client: ClickHouseClient,
   plan: TrustedTraceQueryObservedFieldsPlan,
   limits: ClickHouseTraceQueryExecutionLimits,
 ): Promise<TraceQueryObservedFieldsResult> {
   if (structuredDiscoveryRoots(plan).length === 0) return { observedFields: [], observedFieldsTruncated: false };
-  const rows = await runWithClickHouseTraceQueryTimeout(
-    client,
-    limits,
-    compileClickHouseTraceQueryObservedFields(plan),
-  );
+  const recursiveDiscoverySupported = await supportsRecursiveDiscovery(client, limits);
+  const compiled = recursiveDiscoverySupported
+    ? compileClickHouseTraceQueryObservedFields(plan)
+    : compileClickHouseLegacyTraceQueryObservedFields(plan);
+  const rows = await runWithClickHouseTraceQueryTimeout(client, limits, compiled);
   return {
     observedFields: rows
       .slice(0, plan.limit)

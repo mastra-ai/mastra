@@ -27,6 +27,7 @@ import {
   compileClickHouseTraceQuery,
   compileClickHouseTraceQueryObservedFields,
   compileClickHouseTraceQueryValues,
+  getTraceQueryObservedFields,
   queryThreads,
   queryTraces,
   runWithClickHouseTraceQueryTimeout,
@@ -218,6 +219,211 @@ describe('ClickHouse advanced trace query', () => {
         }),
       }),
     );
+  });
+
+  it('enables the analyzer only for recursive field discovery', async () => {
+    const query = vi.fn().mockResolvedValue({ json: async () => [] });
+    const storage = new ObservabilityStorageClickhouseVNext({
+      client: { query } as unknown as ClickHouseClient,
+    });
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await storage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({ enable_analyzer: 1 }),
+      }),
+    );
+
+    await storage.queryTraces(plan());
+    expect(query.mock.lastCall?.[0].clickhouse_settings).not.toHaveProperty('enable_analyzer');
+  });
+
+  it('probes recursive discovery once and caches support per client', async () => {
+    const row = { path: 'metadata.region', occurrences: '2', value_kind: 'string' };
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => [] })
+      .mockResolvedValue({ json: async () => [row] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 })).resolves.toEqual(
+      expect.objectContaining({
+        observedFields: [expect.objectContaining({ path: 'metadata.region', valueKind: 'string', occurrences: 2 })],
+      }),
+    );
+    await getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0]?.[0].query).toContain('recursive_discovery_probe');
+    expect(query.mock.calls[1]?.[0].query).toContain('WITH RECURSIVE current_roots');
+    expect(query.mock.calls[2]?.[0].query).toContain('WITH RECURSIVE current_roots');
+    for (const call of query.mock.calls) {
+      expect(call[0].clickhouse_settings).toEqual(expect.objectContaining({ enable_analyzer: 1 }));
+    }
+  });
+
+  it('deduplicates concurrent recursive discovery probes per client', async () => {
+    let resolveProbe: ((value: { json: () => Promise<never[]> }) => void) | undefined;
+    const probe = new Promise<{ json: () => Promise<never[]> }>(resolve => {
+      resolveProbe = resolve;
+    });
+    const query = vi
+      .fn()
+      .mockImplementationOnce(() => probe)
+      .mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    const first = getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+    const second = getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+    expect(query).toHaveBeenCalledTimes(1);
+
+    resolveProbe?.({ json: async () => [] });
+    await Promise.all([first, second]);
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    { code: '62', type: 'SYNTAX_ERROR', message: 'Syntax error near WITH RECURSIVE' },
+    { code: '115', type: 'UNKNOWN_SETTING', message: 'Unknown setting enable_analyzer' },
+  ])('falls back to cached one-level discovery for $type', async compatibilityError => {
+    const rows = [
+      { path: 'metadata.region', occurrences: '2', value_kind: 'string' },
+      { path: '["metadata","literal.dot"]', occurrences: '1', value_kind: 'boolean' },
+    ];
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(compatibilityError)
+      .mockResolvedValue({ json: async () => rows });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 })).resolves.toEqual(
+      expect.objectContaining({
+        observedFields: [
+          expect.objectContaining({ path: 'metadata.region', valueKind: 'string', occurrences: 2 }),
+          expect.objectContaining({ path: ['metadata', 'literal.dot'], valueKind: 'boolean', occurrences: 1 }),
+        ],
+      }),
+    );
+    await getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0]?.[0].query).toContain('recursive_discovery_probe');
+    for (const call of query.mock.calls.slice(1)) {
+      expect(call[0].query).not.toContain('WITH RECURSIVE');
+      expect(call[0].query).toContain('JSONExtractKeysAndValuesRaw');
+      expect(call[0].clickhouse_settings).not.toHaveProperty('enable_analyzer');
+    }
+  });
+
+  it.each([
+    ['trace', 'root_scope r', 'r.metadataRaw'],
+    ['spans', 'current_spans s', 's.metadataRaw'],
+    ['scores', 'current_scores s', 's.metadata'],
+    ['feedback', 'current_feedback s', 's.metadata'],
+  ] as const)('compiles one-level discovery for the %s scope', async (predicateScope, relation, jsonExpression) => {
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce({ code: '62', type: 'SYNTAX_ERROR', message: 'Syntax error near WITH RECURSIVE' })
+      .mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope }),
+    );
+
+    await getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+
+    const legacyQuery = query.mock.calls[1]?.[0];
+    expect(legacyQuery.query).toContain(`FROM ${relation}`);
+    expect(legacyQuery.query).toContain(`JSONType(ifNull(${jsonExpression}, '{}'))`);
+    expect(legacyQuery.query).toContain("entry.1 != '' AND position(entry.1, char(0)) = 0");
+    expect(legacyQuery.query).toContain('length(entry.1) <= 128');
+    expect(legacyQuery.query).toContain('length(JSONExtractString(leaf)) <= 4096');
+    expect(legacyQuery.query_params).toEqual(expect.objectContaining({ trace_query_3: 26 }));
+  });
+
+  it('does not use legacy discovery after a successful probe', async () => {
+    const recursiveError = { code: '62', type: 'SYNTAX_ERROR', message: 'Production query syntax error' };
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => [] })
+      .mockRejectedValueOnce(recursiveError);
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 })).rejects.toBe(recursiveError);
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns an empty result without probing when discovery has no structured roots', async () => {
+    const query = vi.fn();
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = {
+      ...planTraceQueryObservedFields(parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' })),
+      structuredRoots: [],
+    } as TrustedTraceQueryObservedFieldsPlan;
+
+    await expect(getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 })).resolves.toEqual({
+      observedFields: [],
+      observedFieldsTruncated: false,
+    });
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ code: '159', type: 'TIMEOUT_EXCEEDED' }, TraceQueryExecutionError],
+    [{ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' }, TraceQueryResourceLimitError],
+  ])('does not cache normalized probe failures', async (probeError, ErrorType) => {
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(probeError)
+      .mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 })).rejects.toBeInstanceOf(
+      ErrorType,
+    );
+    await getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[1]?.[0].query).toContain('recursive_discovery_probe');
+  });
+
+  it.each([
+    { code: '164', type: 'READONLY', message: 'Cannot modify setting enable_analyzer' },
+    { code: '47', type: 'UNKNOWN_IDENTIFIER', message: 'Unknown identifier in recursive query' },
+    new Error('ECONNRESET'),
+  ])('propagates non-compatibility probe failures and retries later', async probeError => {
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(probeError)
+      .mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 })).rejects.toBe(probeError);
+    await getTraceQueryObservedFields(client, discoveryPlan, { timeoutMs: 5_000 });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[1]?.[0].query).toContain('recursive_discovery_probe');
   });
 
   it('applies discovery execution budgets and normalizes memory exhaustion', async () => {

@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Documented that recursive nested metadata field discovery requires ClickHouse 24.8 or later with `enable_analyzer=1`. Known-path filtering and value discovery continue to use targeted JSON extraction.
+Fixed trace metadata field discovery on ClickHouse versions earlier than 24.8 by preserving top-level field discovery while newer servers discover nested fields. Known-path filtering and value discovery are unaffected.
