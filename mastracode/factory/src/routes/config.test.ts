@@ -789,6 +789,15 @@ describe('default model routes with a tenant', () => {
 describe('OM routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
 
+  // A host Gemini key would make every auto role prefer Google, hiding the
+  // provider-following behavior these cases assert.
+  beforeEach(() => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   /**
    * A minimal OM session whose role models live in a mutable map. `currentModelId`
    * is the session's effective (`model.get()`) model; `''` mirrors an unselected
@@ -931,9 +940,9 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('strips gateway prefixes before reporting provider status', async () => {
-    // A gateway-addressable session model reaches OM as `mastracode/...`/`mastra/...`;
-    // the provider is the segment after the gateway prefix, not the prefix itself.
+  it('keeps the gateway route and reports the routed provider status', async () => {
+    // A gateway-addressable session model keeps its `mastra/` route for OM; provider
+    // status reads the segment after the prefix, not the prefix itself.
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'deepseek', {
       type: 'api_key',
       key: 'sk-deepseek',
@@ -943,7 +952,7 @@ describe('OM routes with a tenant', () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
-      effectiveModelId: 'deepseek/deepseek-v4-flash',
+      effectiveModelId: 'mastra/deepseek/deepseek-v4-flash',
       providerStatus: 'available',
     });
   });
