@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Status } from './status';
+import { DataList } from '@/ds/components/DataList';
+import { PageHeader } from '@/ds/components/PageHeader';
 import { Txt } from '@/ds/components/Txt';
 
 const RUNNING = {
@@ -50,6 +52,35 @@ export const Inherited: Story = {
           <Status presentation={RUNNING} />
         </span>
       </div>
+    </main>
+  ),
+};
+
+export const InContext: Story = {
+  render: () => (
+    <main className="flex w-160 flex-col gap-10">
+      <h1 className="sr-only">Status in context</h1>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Status presentation={RUNNING} />
+        </PageHeader.Meta>
+        <PageHeader.Description>PageHeader.Meta sets the meta role, so the label takes it.</PageHeader.Description>
+      </PageHeader>
+      <DataList columns="1fr 7rem 7rem">
+        <DataList.Top>
+          <DataList.TopCell>ID</DataList.TopCell>
+          <DataList.TopCell>Status</DataList.TopCell>
+          <DataList.TopCell>Created</DataList.TopCell>
+        </DataList.Top>
+        <DataList.RowStatic>
+          <DataList.TextCell font="mono">5a1cc833-666</DataList.TextCell>
+          <DataList.Cell>
+            <Status presentation={RUNNING} />
+          </DataList.Cell>
+          <DataList.TextCell>2 hours ago</DataList.TextCell>
+        </DataList.RowStatic>
+      </DataList>
     </main>
   ),
 };
