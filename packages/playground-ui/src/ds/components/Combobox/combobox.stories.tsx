@@ -17,6 +17,12 @@ const meta: Meta<typeof Combobox> = {
       control: { type: 'select' },
       options: ['default', 'ghost'],
     },
+    showChevron: {
+      control: { type: 'boolean' },
+    },
+    iconOnlyValue: {
+      control: { type: 'boolean' },
+    },
   },
 };
 
@@ -152,23 +158,47 @@ export const CustomEmptyText: Story = {
 };
 
 export const ManyOptions: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Long lists scroll inside `ScrollArea`: an overlay scrollbar, fades at the clipped edges, and scroll padding that keeps the keyboard-highlighted row clear of the fade.',
+      },
+    },
+  },
   args: {
-    options: [
-      { label: 'Option 1', value: '1' },
-      { label: 'Option 2', value: '2' },
-      { label: 'Option 3', value: '3' },
-      { label: 'Option 4', value: '4' },
-      { label: 'Option 5', value: '5' },
-      { label: 'Option 6', value: '6' },
-      { label: 'Option 7', value: '7' },
-      { label: 'Option 8', value: '8' },
-      { label: 'Option 9', value: '9' },
-      { label: 'Option 10', value: '10' },
-      { label: 'Option 11', value: '11' },
-      { label: 'Option 12', value: '12' },
-    ],
+    options: Array.from({ length: 40 }, (_, index) => ({ label: `Option ${index + 1}`, value: `${index + 1}` })),
     placeholder: 'Select an option...',
     className: 'w-[200px]',
+  },
+};
+
+export const IconOnlyValue: Story = {
+  args: {
+    options: [
+      {
+        label: 'Database',
+        value: 'database',
+        start: <Database className={iconClassName} />,
+        displayLabel: <span className="sr-only">Database</span>,
+      },
+      {
+        label: 'Metrics',
+        value: 'metrics',
+        start: <Gauge className={iconClassName} />,
+        displayLabel: <span className="sr-only">Metrics</span>,
+      },
+      {
+        label: 'Branches',
+        value: 'branches',
+        start: <GitBranch className={iconClassName} />,
+        displayLabel: <span className="sr-only">Branches</span>,
+      },
+    ],
+    value: 'database',
+    'aria-label': 'Source',
+    showChevron: false,
+    iconOnlyValue: true,
   },
 };
 

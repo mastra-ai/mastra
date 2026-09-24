@@ -134,7 +134,7 @@ await observability.batchCreateFeedback({
 
 ### `deleteFeedback(args)`
 
-Deletes up to 1,000 feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` are provided, they're ANDed into the delete predicate to restrict deletion to records with matching scope fields.
+Deletes up to 1,000 feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` is provided, only records matching that scope are deleted.
 
 ```typescript
 await mastraClient.deleteFeedback({
@@ -164,7 +164,19 @@ await mastraClient.deleteFeedback({
 ]}
 />
 
-On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse doesn't configure a retention TTL for deletion requests in open-source deployments. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
+Returns `Promise<{ success: boolean }>` from `mastraClient.deleteFeedback()` and the HTTP route. The storage domain method returns `Promise<void>`. Requests with more than 1,000 ids return `400`, and a server running `@mastra/core` older than `1.66.0` returns `501`. ClickHouse vNext, PostgreSQL vNext, DuckDB, and the in-memory store implement deletion. Every other adapter, including LibSQL and MongoDB, throws `OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED`.
+
+On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse applies a TTL to deletion requests only when all five signals have finite retention. See [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl). Delete APIs leave the separate delta cursor table untouched. Its rows contain identifiers rather than feedback payloads and expire within two days.
+
+### `deleteScores(args)`
+
+Deletes up to 1,000 score records by id. It behaves like `deleteFeedback()` with `scoreIds` in place of `feedbackIds`, and Oracle Database also implements it. Unsupported adapters throw `OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED`.
+
+```typescript
+await mastraClient.deleteScores({
+  scoreIds: ['score-1', 'score-2'],
+})
+```
 
 ## List feedback
 
@@ -573,10 +585,11 @@ These routes belong to a Mastra runtime and use its configured observability sto
 
 | Method | Path | Purpose | Permission |
 | - | - | - | - |
-| `GET` | `/api/observability/feedback` | List feedback records | None derived |
-| `POST` | `/api/observability/feedback` | Create a feedback record | None derived |
+| `GET` | `/api/observability/feedback` | List feedback records | `observability:read` |
+| `POST` | `/api/observability/feedback` | Create a feedback record | `observability:write` |
 | `DELETE` | `/api/observability/feedback` | Delete feedback records by id | `observability:delete` |
 | `DELETE` | `/api/observability/scores` | Delete score records by id | `observability:delete` |
+| `PATCH` | `/api/observability/feedback/:feedbackId/review-status` | Update review status | `observability:write` |
 | `POST` | `/api/observability/feedback/aggregate` | Return one aggregate value | `observability:read` |
 | `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
 | `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |

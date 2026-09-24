@@ -5,13 +5,14 @@ import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages
 
 import { isTerminalInvocationState } from '../services/transcript';
 import type { MessageEntry, SuspensionPrompt, ToolCall } from '../services/transcript';
+import { isRecord } from './transcript-shared';
 
 export type MessagePart = MessageEntry['message']['content']['parts'][number];
 export type ToolPart = Extract<MessagePart, { type: 'tool-invocation' }>;
 
 export function messageText(parts: MessagePart[]): string {
   return parts
-    .flatMap(part => (part.type === 'text' ? [part.text] : []))
+    .flatMap(part => (isRecord(part) && part.type === 'text' ? [part.text] : []))
     .join('\n\n')
     .trim();
 }
@@ -25,7 +26,7 @@ export function terminalInvocationStatus(
 }
 
 export function renderableParts(entry: MessageEntry): MessagePart[] {
-  return mergeProse((entry.message.content.parts ?? []).filter(keepsSlot));
+  return mergeProse((entry.message.content.parts ?? []).filter(part => isRecord(part) && keepsSlot(part)));
 }
 
 function mergeProse(parts: MessagePart[]): MessagePart[] {
@@ -62,6 +63,8 @@ export function draws(
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
   runtimeTools: MessageEntry['runtimeTools'],
 ): boolean {
+  if (!isRecord(part)) return false;
+
   switch (part.type) {
     case 'text':
       return part.text.trim().length > 0;

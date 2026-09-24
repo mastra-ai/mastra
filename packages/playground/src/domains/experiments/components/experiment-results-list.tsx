@@ -13,7 +13,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Minimal shape shared by every surface that lists dataset items
- * (experiment results, review queue, inbox). `DatasetExperimentResult`
+ * (experiment results, review queue). `DatasetExperimentResult`
  * and the review `ReviewItem` both satisfy it.
  */
 export type ExperimentResultsListItem = {

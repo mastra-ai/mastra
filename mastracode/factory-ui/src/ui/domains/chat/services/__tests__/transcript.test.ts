@@ -296,6 +296,41 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'After' }]);
   });
 
+  it('drops part updates that would write past the end of the parts array', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]);
+    let state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: message.id,
+        event: { type: 'part', index: 3, part: { type: 'text', text: 'Far ahead' } },
+      },
+    });
+
+    // An out-of-range write leaves a hole in `parts`; `find` and `for…of`
+    // visit that hole as an undefined part and throw on `.type`.
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Before' }]);
+  });
+
+  it('appends a part that lands exactly at the end of the parts array', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]);
+    let state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: message.id,
+        event: { type: 'part', index: 1, part: { type: 'text', text: 'Next' } },
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([
+      { type: 'text', text: 'Before' },
+      { type: 'text', text: 'Next' },
+    ]);
+  });
+
   it('keeps accumulated text when a message_start is re-delivered', () => {
     const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
     const started = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });

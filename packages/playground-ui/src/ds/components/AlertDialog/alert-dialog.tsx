@@ -2,7 +2,7 @@ import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +72,7 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
         'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
         'rounded-xl backdrop-blur-md',
-        overlaySurfaceStyle,
+        dialogSurfaceStyle,
         className,
       )}
       {...props}

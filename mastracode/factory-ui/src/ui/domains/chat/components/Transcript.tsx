@@ -19,6 +19,7 @@ import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
 import { draws, messageText, renderableParts } from './transcript-parts';
+import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { isTimeGap } from './TranscriptSignals';
@@ -103,7 +104,7 @@ export function TranscriptEntries({
     entries.flatMap(entry =>
       entry.kind === 'message'
         ? entry.message.content.parts.flatMap(part =>
-            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+            isRecord(part) && part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
           )
         : [],
     ),
