@@ -1,5 +1,14 @@
 # @mastra/quickjs
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed guest code being able to crash the host Node process. Running out of memory while `external_*` calls are in flight now returns an "out of memory" error instead of aborting, and deep recursion now returns a "stack overflow" error instead of killing Node on arm64. The default `maxStackSizeBytes` is now 256 KiB (was 1 MiB). ([#24896](https://github.com/mastra-ai/mastra/pull/24896))
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
 ## 0.1.2
 
 ### Patch Changes
