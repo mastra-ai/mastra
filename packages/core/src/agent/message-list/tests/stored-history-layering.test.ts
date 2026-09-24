@@ -150,6 +150,53 @@ describe('live tool state only moves a stored call forward', () => {
   });
 });
 
+function withText(message: MastraDBMessage, text: string, extra: Partial<MastraDBMessage['content']> = {}) {
+  return {
+    ...message,
+    content: { ...message.content, ...extra, parts: [{ type: 'text' as const, text }, ...message.content.parts] },
+  };
+}
+
+function texts(list: MessageList) {
+  return list.get.all
+    .db()[0]!
+    .content.parts.filter(part => part.type === 'text')
+    .map(part => (part.type === 'text' ? part.text : ''));
+}
+
+describe('a client-sent assistant message only contributes tool outcomes', () => {
+  it('keeps the stored text when the client copy has different text', () => {
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(withText(toolMessage('assistant', 'result'), 'Your card ending 4242 is on file.'), 'input');
+    list.add(withText(toolMessage('assistant', 'call'), 'Your card ending [REDACTED] is on file.'), 'memory');
+
+    expect(texts(list)).toEqual(['Your card ending [REDACTED] is on file.']);
+    const tool = list.get.all.db()[0]!.content.parts.find(part => part.type === 'tool-invocation');
+    expect(tool?.type === 'tool-invocation' && tool.toolInvocation.state).toBe('result');
+    expect(list.get.input.db().map(message => message.id)).toEqual(['assistant']);
+  });
+
+  it('does not add client reasoning or metadata to the stored copy', () => {
+    const live = withText(toolMessage('assistant', 'result'), 'Stored text.', { metadata: { fromClient: true } });
+    live.content.parts.unshift({ type: 'reasoning', reasoning: 'client reasoning', details: [] });
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+    list.add(withText(toolMessage('assistant', 'call'), 'Stored text.', { metadata: { stored: true } }), 'memory');
+
+    const merged = list.get.all.db()[0]!;
+    expect(merged.content.parts.some(part => part.type === 'reasoning')).toBe(false);
+    expect(merged.content.metadata).toEqual({ stored: true });
+  });
+
+  it('still layers new text from a response message in the current run', () => {
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(withText(toolMessage('assistant', 'result'), 'Live text.'), 'response');
+    list.add(withText(toolMessage('assistant', 'call'), 'Stored text.'), 'memory');
+
+    expect(texts(list)).toEqual(expect.arrayContaining(['Live text.', 'Stored text.']));
+  });
+});
+
 describe('stored history is not layered onto stored history', () => {
   it('still replaces one stored duplicate with another', () => {
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });

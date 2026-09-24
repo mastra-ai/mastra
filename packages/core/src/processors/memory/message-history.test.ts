@@ -312,11 +312,14 @@ describe('MessageHistory', () => {
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
-      // msg-1 from history, msg-2 from new (duplicate filtered), msg-3 from new
+      // msg-1 from history, msg-2 once (stored copy is the base), msg-3 from new
       expect(resultMessages).toHaveLength(3);
       expect(resultMessages[0].id).toBe('msg-1');
       expect(resultMessages[1].id).toBe('msg-2');
-      expect(resultMessages[1].content.content).toBe('Message 2 (new)'); // New version kept
+      // An input copy of a stored assistant message only fills in pending tool calls; its text
+      // doesn't replace or add to the stored text.
+      expect(resultMessages[1].content.content).toBe('Message 2');
+      expect(resultMessages[1].content.parts).toEqual([{ type: 'text', text: 'Message 2' }]);
       expect(resultMessages[2].id).toBe('msg-3');
     });
 

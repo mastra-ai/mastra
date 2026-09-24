@@ -132,6 +132,25 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
   return changed ? { ...live, content: { ...live.content, parts } } : live;
 }
 
+/**
+ * Returns only the tool parts of a client-sent assistant message that move a stored call
+ * forward. The client's text, reasoning, and metadata are its own rendering of the stored
+ * message, which can differ from what was saved (an output processor may rewrite text before
+ * it is persisted), so none of it is layered onto the stored copy.
+ */
+function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
+  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  for (const part of stored.content.parts) {
+    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+  }
+  const parts = live.content.parts.filter(part => {
+    if (part.type !== 'tool-invocation') return false;
+    const storedState = storedStates.get(part.toolInvocation.toolCallId);
+    return !!storedState && advancesToolInvocationState(storedState, part.toolInvocation.state);
+  });
+  return { ...live, content: { format: 2, parts } };
+}
+
 type MessageListAddOptions = {
   merge?: boolean;
 };
@@ -2104,7 +2123,8 @@ export class MessageList {
     // When a stored row shares an id with a live message (client input, or a response part
     // such as a tool result), the stored copy must not replace it wholesale - that would drop
     // the client-supplied content from the prompt. Fold the stored copy into the live one and
-    // keep the live message's source so it stays visible to output processing.
+    // keep the live message's source so it stays visible to output processing. A client-sent
+    // assistant message contributes only tool outcomes for calls the stored copy has pending.
     const replacementTargetSource: MessageSource | undefined = !replacementTarget
       ? undefined
       : this.stateManager.isUserMessage(replacementTarget)
@@ -2131,6 +2151,8 @@ export class MessageList {
             ...(replacementTarget.content.metadata ?? {}),
           },
         };
+      } else if (replacementTargetSource === 'input') {
+        MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
       } else {
         for (const incomingPart of replacementTarget.content.parts) {
           if (incomingPart.type !== 'text') continue;
