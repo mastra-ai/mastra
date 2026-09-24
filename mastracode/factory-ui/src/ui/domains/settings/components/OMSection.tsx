@@ -151,7 +151,7 @@ export function OMSection({
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
         <div className="flex w-full max-w-72 items-center gap-2">
           <Button
-            variant={config?.observer.model === 'auto' ? 'primary' : 'outline'}
+            variant={config?.observer.model === 'auto' ? 'primary' : 'default'}
             size="sm"
             aria-label="Use automatic observer model"
             aria-pressed={config?.observer.model === 'auto'}
@@ -176,7 +176,7 @@ export function OMSection({
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
         <div className="flex w-full max-w-72 items-center gap-2">
           <Button
-            variant={config?.reflector.model === 'auto' ? 'primary' : 'outline'}
+            variant={config?.reflector.model === 'auto' ? 'primary' : 'default'}
             size="sm"
             aria-label="Use automatic reflector model"
             aria-pressed={config?.reflector.model === 'auto'}
