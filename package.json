@@ -64,6 +64,7 @@
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "dev:playground:full": "pnpm install && pnpm setup && pnpm --dir examples/agent install && pnpm --dir examples/agent dev:ui",
+    "factory:build": "pnpm turbo build --filter=mastra... --filter=@mastra/core... --filter=@mastra/factory... --filter=@mastra/code-sdk... --filter=@mastra/auth-workos... --filter=@mastra/libsql... --filter=@mastra/pg... --filter=@mastra/e2b... --filter=@mastra/platform-workspace... --filter=@mastra/redis-streams... --filter=@mastra/client-js... --filter=@mastra/hono... --filter=./mastracode/factory-ui^...",
     "factory:dev": "tsx mastracode/web/src/factory-dev/cli.ts",
     "generate:integration": "tsx ./integration-generator/index.ts",
     "test": "vitest run",
