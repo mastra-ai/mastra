@@ -90,6 +90,48 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true, updated: true });
     });
 
+    it('should record unavailable attachments on a stored message without losing its parts or other metadata', async () => {
+      const parts: MastraDBMessage['content']['parts'] = [
+        { type: 'text', text: 'What is in this picture?' },
+        { type: 'file', data: 'https://example.com/gone.png', mimeType: 'image/png', filename: 'gone.png' },
+      ];
+      const originalMessage = createSampleMessageV2({
+        threadId: thread.id,
+        role: 'user',
+        content: { content: 'What is in this picture?', parts, metadata: { mastra: { sealed: true }, other: 1 } },
+      });
+      await memoryStorage.saveMessages({ messages: [originalMessage] });
+
+      // Mirrors what the agent sends when it records an attachment it could not download.
+      const {
+        messages: [stored],
+      } = await memoryStorage.listMessagesById({ messageIds: [originalMessage.id] });
+      const storedMetadata = stored!.content.metadata as Record<string, any>;
+      await memoryStorage.updateMessages({
+        messages: [
+          {
+            id: stored!.id,
+            content: {
+              ...stored!.content,
+              metadata: {
+                ...storedMetadata,
+                mastra: { ...storedMetadata.mastra, unavailableAttachments: ['https://example.com/gone.png'] },
+              },
+            },
+          },
+        ],
+      });
+
+      const {
+        messages: [fromDb],
+      } = await memoryStorage.listMessagesById({ messageIds: [originalMessage.id] });
+      const metadata = fromDb!.content.metadata as Record<string, any>;
+      expect(fromDb!.content.parts).toEqual(parts);
+      expect(metadata.mastra.unavailableAttachments).toEqual(['https://example.com/gone.png']);
+      expect(metadata.mastra.sealed).toBe(true);
+      expect(metadata.other).toBe(1);
+    });
+
     it('should update multiple messages at once', async () => {
       const msg1 = createSampleMessageV2({ threadId: thread.id, role: 'user' });
       const msg2 = createSampleMessageV2({ threadId: thread.id, content: { content: 'original' } });
