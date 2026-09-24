@@ -159,10 +159,14 @@ export class ToolTracker {
 
   enrichApproval(call: { toolCallId: string; toolName: string; args: unknown }): ToolEnrichment {
     const tracked = this.tools.get(call.toolCallId);
-    const displayName = tracked?.displayName ?? stripToolPrefix(call.toolName);
+    // A sub-agent's approval is re-emitted by the supervisor under its delegation call's toolCallId, so the tracked
+    // start can belong to the delegation (`agent-<name>`) rather than the tool awaiting approval. Describe the tool
+    // that is actually awaiting approval.
+    const start = tracked?.toolName === call.toolName ? tracked : undefined;
+    const displayName = start?.displayName ?? stripToolPrefix(call.toolName);
     const argsSummary =
-      tracked?.argsSummary ?? formatArgsSummary(typeof call.args === 'object' && call.args != null ? call.args : {});
-    const args = tracked?.args ?? call.args;
+      start?.argsSummary ?? formatArgsSummary(typeof call.args === 'object' && call.args != null ? call.args : {});
+    const args = start?.args ?? call.args;
     const startedAt = tracked?.startedAt ?? Date.now();
     return {
       toolCallId: call.toolCallId,

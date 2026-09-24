@@ -85,6 +85,22 @@ describe('ToolTracker', () => {
     expect(tracker.inFlightCount).toBe(1);
   });
 
+  it('enrichApproval describes a delegated tool, not the delegation call that shares its toolCallId', () => {
+    const tracker = new ToolTracker();
+    tracker.trackStart({ toolCallId: 'd1', toolName: 'agent-worker', args: { prompt: 'Clean up the docs folder' } });
+    const e = tracker.enrichApproval({
+      toolCallId: 'd1',
+      toolName: 'mastra_workspace_delete',
+      args: { path: 'docs/old.md' },
+    });
+
+    expect(e.toolName).toBe('mastra_workspace_delete');
+    expect(e.displayName).toBe('delete');
+    expect(e.argsSummary).toBe('docs/old.md');
+    expect(e.args).toEqual({ path: 'docs/old.md' });
+    expect(tracker.has('d1')).toBe(true);
+  });
+
   it('parallel same-tool calls do not clobber each other', () => {
     const tracker = new ToolTracker();
     tracker.trackStart({ toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } });
