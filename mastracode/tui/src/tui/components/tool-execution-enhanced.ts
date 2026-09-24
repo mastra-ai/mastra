@@ -4,7 +4,12 @@
  */
 
 import * as os from 'node:os';
-import { isAbsolute as isAbsolutePath, relative as relativePath, resolve as resolvePath } from 'node:path';
+import {
+  isAbsolute as isAbsolutePath,
+  join as joinPath,
+  relative as relativePath,
+  resolve as resolvePath,
+} from 'node:path';
 import { Box, Spacer, Text, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
@@ -417,10 +422,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { command: command.slice(cdMatch[0].length), cdPath: cdMatch[1] ?? cdMatch[2] ?? cdMatch[3] ?? '' };
   }
 
+  /**
+   * The directory the command runs in, as written: the shell starts in `cwd`, then a leading `cd`
+   * moves it, relative to `cwd` unless the `cd` path is absolute or starts at home.
+   */
+  private getShellDirectory(): string {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const cwd = argsObj?.cwd ? String(argsObj.cwd) : '';
+    const { cdPath } = this.parseShellCommand();
+    if (!cwd || !cdPath) return cwd || cdPath;
+    return cdPath.startsWith('/') || cdPath === '~' || cdPath.startsWith('~/') ? cdPath : joinPath(cwd, cdPath);
+  }
+
   /** The directory a quiet shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
   private getShellHeaderPath(): string {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const raw = argsObj?.cwd ? String(argsObj.cwd) : this.parseShellCommand().cdPath;
+    const raw = this.getShellDirectory();
     const expanded = raw === '~' || raw.startsWith('~/') ? os.homedir() + raw.slice(1) : raw;
     const projectRoot = this.options.projectRoot ?? process.cwd();
     const resolved = resolvePath(projectRoot, expanded || '.');
@@ -1637,7 +1653,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return;
     }
 
-    const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : cdPath ? shortenPath(cdPath) : '';
+    const directory = this.getShellDirectory();
+    const cwd = directory ? shortenPath(directory) : '';
 
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;

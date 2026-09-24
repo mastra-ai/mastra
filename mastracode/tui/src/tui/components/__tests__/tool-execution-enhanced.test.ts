@@ -1652,18 +1652,30 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(component.render(120).join('\n'))).toContain('$ cd /Users/example/ws');
   });
 
-  it('prefers the cwd arg over the stripped cd path', () => {
-    const component = new ToolExecutionComponentEnhanced(
-      'execute_command',
-      { command: 'cd /Users/example/somewhere-else && npm run build', cwd: '/Users/example/real-cwd' },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
-      ui,
-    );
-    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+  it('shows where the command runs when it has both a cwd arg and a cd prefix', () => {
+    const render = (command: string, quietDisplayMode: 'normal' | 'quiet') => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command, cwd: '/Users/example/real-cwd' },
+        { quietDisplayMode, collapsedByDefault: true, projectRoot: '/work/repo' },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+      return { component, visible: stripAnsi(component.render(120).join('\n')) };
+    };
 
-    const visible = stripAnsi(component.render(120).join('\n'));
-    expect(visible).toContain('$ npm run build');
-    expect(visible).toContain('in /Users/example/real-cwd');
+    // The shell starts in cwd, and an absolute cd moves it elsewhere.
+    const absolute = render('cd /Users/example/somewhere-else && npm run build', 'normal').visible;
+    expect(absolute).toContain('$ npm run build');
+    expect(absolute).toContain('in /Users/example/somewhere-else');
+    // A relative cd moves it within cwd.
+    expect(render('cd packages/core && npm run build', 'normal').visible).toContain(
+      'in /Users/example/real-cwd/packages/core',
+    );
+    expect(render('cd packages/core && npm run build', 'quiet').component.getCompactToolGroupKey()).toBe(
+      '$ /Users/example/real-cwd/packages/core',
+    );
+    expect(render('npm run build', 'quiet').component.getCompactToolGroupKey()).toBe('$ /Users/example/real-cwd');
   });
 
   it('keeps the error visible when a quiet shell command fails', () => {
