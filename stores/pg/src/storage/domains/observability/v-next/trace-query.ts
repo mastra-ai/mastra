@@ -990,13 +990,19 @@ async function loadTableSummaryRows(
   schema: string,
   scope: TraceQueryTenantScope | undefined,
   traceIds: string[],
+  deadline?: number,
 ): Promise<TableSummaryRows> {
   const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map() };
   if (traceIds.length === 0) return result;
   const queries = compilePostgresTableSummaryQueries(schema, scope, traceIds);
-  const rollupRows = await transaction.any<Record<string, unknown>>(queries.rollups.text, queries.rollups.values);
-  const feedbackRows = await transaction.any<Record<string, unknown>>(queries.feedback.text, queries.feedback.values);
-  const scoreRows = await transaction.any<Record<string, unknown>>(queries.scores.text, queries.scores.values);
+  // `statement_timeout` is per statement, so re-derive the remaining budget before each one.
+  const run = async (query: CompiledPostgresTraceQuery) => {
+    if (deadline !== undefined) await setRemainingTimeout(transaction, deadline);
+    return transaction.any<Record<string, unknown>>(query.text, query.values);
+  };
+  const rollupRows = await run(queries.rollups);
+  const feedbackRows = await run(queries.feedback);
+  const scoreRows = await run(queries.scores);
   for (const row of rollupRows) {
     result.rollups.set(String(row.traceId), {
       errorTotal: Number(row.errorTotal ?? 0),
@@ -1084,12 +1090,12 @@ async function mapTraceRows(
 ) {
   let summaries: TableSummaryRows | undefined;
   if (plan.result === 'traces' && plan.tableSummary) {
-    if (deadline !== undefined) await setRemainingTimeout(transaction, deadline);
     summaries = await loadTableSummaryRows(
       transaction,
       schema,
       plan.scope,
       rows.map(row => String(row.traceId)),
+      deadline,
     );
   }
   return rows.map(row => traceRowToResult(row, summaries));

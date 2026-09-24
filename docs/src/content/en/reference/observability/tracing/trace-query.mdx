@@ -661,7 +661,7 @@ const result = await mastraClient.queryTraces({
 | - | - |
 | `outputPreview` | Short text from the current root span's output, truncated like `inputPreview`. `null` when the root has no output. |
 | `tags` | The current root span's tags. Empty when none are stored. |
-| `model` | The `model` attribute of the trace's earliest current `model_generation` span. `null` when the trace made no model call. |
+| `model` | The `model` attribute of the trace's earliest current `model_generation` span. `null` when the trace made no model call or that span has no `model` attribute. |
 | `timeToFirstTokenMs` | Milliseconds from that model span's start to its recorded first-token time. `null` when the span has no first-token time. |
 | `errorCounts` | Current spans with an error: `total` counts every span including the root, `llm` counts model spans, and `tool` counts tool-call spans. |
 | `promptCacheReadTokens`, `promptCacheCreationTokens` | Sums of the auto-extracted `mastra_model_input_cache_read_tokens` and `mastra_model_input_cache_write_tokens` metrics recorded on the trace's current spans. `null` when no metric row exists. `0` is a recorded value. |
