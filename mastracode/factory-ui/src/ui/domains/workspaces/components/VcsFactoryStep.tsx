@@ -160,7 +160,9 @@ function ProviderChoice({
     <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
       <ProviderConnection
         provider="GitHub"
-        message={githubUnavailable ? 'GitHub is not available for this deployment.' : 'Connect GitHub to choose a repository.'}
+        message={
+          githubUnavailable ? 'GitHub is not available for this deployment.' : 'Connect GitHub to choose a repository.'
+        }
         icon={<GithubIcon />}
         actionSlot={
           <Button variant="primary" disabled={githubRedirecting || githubUnavailable} onClick={onChooseGithub}>
@@ -178,9 +180,7 @@ function ProviderChoice({
       <ProviderConnection
         provider="GitLab"
         message={
-          gitlabUnavailable
-            ? 'GitLab is not available for this deployment.'
-            : 'Connect GitLab to choose a repository.'
+          gitlabUnavailable ? 'GitLab is not available for this deployment.' : 'Connect GitLab to choose a repository.'
         }
         icon={<GitLabIcon />}
         actionSlot={
