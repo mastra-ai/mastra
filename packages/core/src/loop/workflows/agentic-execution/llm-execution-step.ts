@@ -1353,23 +1353,35 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         };
         const chunks: CollectedChunk[] = [];
         for (const work of completed) {
-          for (const chunk of [
-            { type: 'tool-call', payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args } },
-            'error' in work
-              ? {
-                  type: 'tool-error',
-                  payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args, error: work.error },
-                }
-              : {
-                  type: 'tool-result',
-                  payload: {
-                    toolCallId: work.toolCallId,
-                    toolName: work.toolName,
-                    args: work.args,
-                    result: work.result,
-                  },
-                },
-          ]) {
+          const call = {
+            type: 'tool-call',
+            payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args },
+          };
+          // An incomplete call is written as the call alone, left in history as incomplete.
+          for (const chunk of work.incomplete
+            ? [call]
+            : [
+                call,
+                'error' in work
+                  ? {
+                      type: 'tool-error',
+                      payload: {
+                        toolCallId: work.toolCallId,
+                        toolName: work.toolName,
+                        args: work.args,
+                        error: work.error,
+                      },
+                    }
+                  : {
+                      type: 'tool-result',
+                      payload: {
+                        toolCallId: work.toolCallId,
+                        toolName: work.toolName,
+                        args: work.args,
+                        result: work.result,
+                      },
+                    },
+              ]) {
             chunks.push(
               (await addToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT>, transformOptions)) as CollectedChunk,
             );

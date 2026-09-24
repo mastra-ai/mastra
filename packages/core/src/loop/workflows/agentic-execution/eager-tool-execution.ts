@@ -100,6 +100,11 @@ export type CompletedEagerWork = {
   /** What the tool threw. A failed call is still a call that ran. */
   error?: unknown;
   /**
+   * The tool started, then observed the run's abort and stopped without an outcome.
+   * Kept so the aborted run records the call as incomplete, as the default pipeline does.
+   */
+  incomplete?: true;
+  /**
    * The order the model emitted this call in. Executions settle in whatever order they
    * finish, and history is written in model-call order everywhere else, so the caller
    * sorts by this before committing anything.
@@ -207,18 +212,21 @@ export class EagerToolExecutionCoordinator {
               // The step resolves an envelope rather than the tool's value, and it resolves
               // rather than rejects on failure: `{ result, ...call }` when the tool returned,
               // `{ error, ...call }` when it threw, `{ aborted: true, ...call }` when it was
-              // cancelled. Only the first is worth keeping. A failure or an abort left
-              // nothing the replacement attempt has to be told about, and committing one as
-              // though it were a result would show the next model a success that never
-              // happened. Unwrap here so the caller holds the tool's own output.
+              // cancelled. A result or an error is committed as what it is. An abort is kept
+              // as an incomplete call: the tool started, so the saved thread must show it,
+              // but it has no outcome to show the next model. Unwrap here so the caller
+              // holds the tool's own output.
               const envelope = result as { result?: unknown; error?: unknown; aborted?: boolean } | undefined;
-              const ran = !!envelope && typeof envelope === 'object' && !envelope.aborted;
-              const outcome =
-                ran && 'error' in envelope
-                  ? { error: envelope.error }
-                  : ran && 'result' in envelope
-                    ? { result: envelope.result }
-                    : undefined;
+              const settled = !!envelope && typeof envelope === 'object';
+              const outcome = !settled
+                ? undefined
+                : envelope.aborted
+                  ? { incomplete: true as const }
+                  : 'error' in envelope
+                    ? { error: envelope.error }
+                    : 'result' in envelope
+                      ? { result: envelope.result }
+                      : undefined;
 
               if (call && outcome && !controller.signal.aborted) {
                 this.#completed.set(toolCallId, {

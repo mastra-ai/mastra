@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { EagerToolExecutionCoordinator } from './eager-tool-execution';
@@ -331,6 +332,72 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     expect(types).toContain('tool-result');
     expect(types.indexOf('tool-result')).toBeLessThan(types.indexOf('abort'));
     expect(recordedResults(stream)).toContain('answered-a');
+  });
+
+  it('keeps a call that stopped on the abort in the saved thread as incomplete', async () => {
+    // The default pipeline leaves a started call that observed the abort in history as
+    // incomplete. Eager dispatch must too: the tool ran up to the abort.
+    const executions: string[] = [];
+    const abortController = new AbortController();
+    const started = deferred();
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'eager-abort-incomplete-agent',
+      name: 'Eager abort incomplete agent',
+      instructions: 'Call tool-a.',
+      memory,
+      model: new MockLanguageModelV2({
+        doStream: async ({ abortSignal }) =>
+          toolCallThen(async controller => {
+            await started.promise;
+            abortController.abort();
+            await new Promise<void>(resolve => {
+              if (abortSignal?.aborted) return resolve();
+              abortSignal?.addEventListener('abort', () => resolve(), { once: true });
+            });
+            controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          }),
+      }),
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Stops when aborted',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async ({ value }, context) => {
+            executions.push(value);
+            const signal = context?.abortSignal;
+            started.resolve();
+            await new Promise<void>((_, reject) => {
+              const stop = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+              if (signal?.aborted) return stop();
+              signal?.addEventListener('abort', stop, { once: true });
+            });
+            return { answer: 'unreachable' };
+          },
+        }),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 2,
+      eagerToolExecution: true,
+      abortSignal: abortController.signal,
+      memory: { thread: 'thread-abort', resource: 'resource-abort' },
+    });
+    try {
+      for await (const _ of stream.fullStream) {
+        // drain
+      }
+    } catch {
+      // abort ends the stream
+    }
+
+    expect(executions).toEqual(['a']);
+    const { messages } = await memory.recall({ threadId: 'thread-abort', resourceId: 'resource-abort' });
+    const saved = JSON.stringify(messages);
+    expect(saved).toContain('"toolCallId":"call-a"');
+    expect(saved).toContain('"state":"call"');
   });
 
   it('does not leave abort listeners on a caller signal reused across runs', async () => {
