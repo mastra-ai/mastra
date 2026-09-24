@@ -224,22 +224,16 @@ describe('ClickHouse deletion lifecycle', () => {
       );
     });
 
-    it('rejects before writing when an applied deletion request exists', async () => {
+    it('deletes a row still visible under an applied request instead of writing', async () => {
       const { client, insert, command } = reviewClient(['applied']);
 
       await expect(review(client)).rejects.toThrow('Feedback record not found');
-      expect(insert).not.toHaveBeenCalled();
-      expect(command).not.toHaveBeenCalled();
-    });
-
-    it('allows the update when only a failed (pending) request exists and the retried delete fails again', async () => {
-      const { client, insert, command } = reviewClient(['pending', 'pending', 'pending']);
-      command.mockRejectedValueOnce(new Error('missing ALTER DELETE'));
-
-      await expect(review(client)).resolves.toMatchObject({ reviewStatus: 'reviewed' });
-      // replacement row, then the re-run delete's request row
+      expect(command).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ query: expect.stringContaining(`DELETE FROM ${TABLE_FEEDBACK_EVENTS}`) }),
+      );
+      // the new request row and its applied marker; no replacement row
       expect(insert).toHaveBeenCalledTimes(2);
-      expect(command).toHaveBeenCalledOnce();
+      expect(insert.mock.calls.every(([args]) => args.table !== TABLE_FEEDBACK_EVENTS)).toBe(true);
     });
 
     it('re-runs the delete and reports not found when a request appears after the write', async () => {
@@ -257,11 +251,14 @@ describe('ClickHouse deletion lifecycle', () => {
       expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
     });
 
-    it('surfaces a failed cleanup delete once another delete has applied', async () => {
-      const { client, command } = reviewClient(['none', 'pending', 'applied']);
-      command.mockRejectedValueOnce(new Error('cleanup delete failed'));
+    it('surfaces a failed re-run delete instead of reporting success', async () => {
+      // A pending request can be a delete that failed or one still running.
+      const { client, insert, command } = reviewClient(['pending', 'pending']);
+      command.mockRejectedValueOnce(new Error('missing ALTER DELETE'));
 
-      await expect(review(client)).rejects.toThrow('cleanup delete failed');
+      await expect(review(client)).rejects.toThrow('missing ALTER DELETE');
+      // replacement row, then the re-run delete's request row
+      expect(insert).toHaveBeenCalledTimes(2);
     });
   });
 

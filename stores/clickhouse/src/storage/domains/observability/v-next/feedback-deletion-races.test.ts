@@ -224,6 +224,116 @@ describe('feedback deletion with lagging replicas', () => {
     expect(await requestStates(writer)).toEqual([{ applied: 1 }, { applied: 1 }]);
   }, 60_000);
 
+  /** Answers every deletion-request guard read after the first from `target`, or fails it. */
+  function redirectLaterGuards(client: ClickHouseClient, target: ClickHouseClient | 'fail') {
+    const query = client.query.bind(client);
+    let guards = 0;
+    vi.spyOn(client, 'query').mockImplementation(args => {
+      if (args.query.includes('has(predicateValues') && guards++ > 0) {
+        if (target === 'fail') throw new Error('socket hang up');
+        return target.query(args);
+      }
+      return query(args);
+    });
+  }
+
+  /** The replacement row leaked past a completed delete; the next review must remove it. */
+  async function expectNextReviewCleansUp(writer: ClickHouseClient, feedbackId: string) {
+    vi.restoreAllMocks();
+    await lagging().command({ query: `SYSTEM START FETCHES ${TABLE_DELETION_REQUESTS}` });
+    await syncReceipts();
+    for (const client of clients) {
+      await client.command({ query: `SYSTEM SYNC REPLICA ${TABLE_FEEDBACK_EVENTS}` });
+      expect(await visibleFeedback(client)).toEqual([{ feedbackId, reviewStatus: 'reviewed' }]);
+    }
+    await expect(updateFeedbackReviewStatus(writer, { feedbackId, reviewStatus: 'needs-review' }, {})).rejects.toThrow(
+      'Feedback record not found',
+    );
+    for (const client of clients) {
+      await client.command({ query: `SYSTEM SYNC REPLICA ${TABLE_FEEDBACK_EVENTS}` });
+      expect(await visibleFeedback(client)).toEqual([]);
+    }
+  }
+
+  const lagging = () => clients[2]!;
+
+  it('cleans up a review that leaked because the post-write guard read a replica without the request', async () => {
+    const [writer, deleter] = clients as [ClickHouseClient, ClickHouseClient];
+    await seed(writer, 'missing-request');
+    await lagging().command({ query: `SYSTEM STOP FETCHES ${TABLE_DELETION_REQUESTS}` });
+    const { ready, release } = holdReviewInsert(writer);
+    redirectLaterGuards(writer, lagging());
+
+    const updating = updateFeedbackReviewStatus(
+      writer,
+      { feedbackId: 'missing-request', reviewStatus: 'reviewed' },
+      {},
+    );
+    await ready.opened;
+    await deleteFeedback(deleter, { feedbackIds: ['missing-request'] }, {});
+    release.open();
+    // The stale replica has no request, so this review cannot know it lost.
+    await expect(updating).resolves.toMatchObject({ reviewStatus: 'reviewed' });
+
+    await expectNextReviewCleansUp(writer, 'missing-request');
+  }, 60_000);
+
+  it('cleans up a review that leaked because the post-write guard failed', async () => {
+    const [writer, deleter] = clients as [ClickHouseClient, ClickHouseClient];
+    await seed(writer, 'guard-failure');
+    const { ready, release } = holdReviewInsert(writer);
+    redirectLaterGuards(writer, 'fail');
+
+    const updating = updateFeedbackReviewStatus(writer, { feedbackId: 'guard-failure', reviewStatus: 'reviewed' }, {});
+    await ready.opened;
+    await deleteFeedback(deleter, { feedbackIds: ['guard-failure'] }, {});
+    release.open();
+    await expect(updating).rejects.toThrow('socket hang up');
+
+    await expectNextReviewCleansUp(writer, 'guard-failure');
+  }, 60_000);
+
+  it('reports a failed cleanup delete while another delete is still marking applied', async () => {
+    const [writer, deleter] = clients as [ClickHouseClient, ClickHouseClient];
+    await seed(writer, 'cleanup-failure');
+    const { ready, release } = holdReviewInsert(writer);
+    const markerReady = gate();
+    const markerRelease = gate();
+    const deleterInsert = deleter.insert.bind(deleter);
+    vi.spyOn(deleter, 'insert').mockImplementation(async args => {
+      const row = (args.values as Array<{ lastAppliedAt?: string }>)[0];
+      if (args.table === TABLE_DELETION_REQUESTS && row?.lastAppliedAt !== '1970-01-01T00:00:00.000Z') {
+        markerReady.open();
+        await markerRelease.opened;
+      }
+      return deleterInsert(args);
+    });
+    const writerCommand = writer.command.bind(writer);
+    vi.spyOn(writer, 'command').mockImplementation(async args => {
+      if (args.query.startsWith(`DELETE FROM ${TABLE_FEEDBACK_EVENTS}`)) throw new Error('socket hang up');
+      return writerCommand(args);
+    });
+
+    const updating = updateFeedbackReviewStatus(
+      writer,
+      { feedbackId: 'cleanup-failure', reviewStatus: 'reviewed' },
+      {},
+    );
+    await ready.opened;
+    const deleting = deleteFeedback(deleter, { feedbackIds: ['cleanup-failure'] }, {});
+    await markerReady.opened;
+    release.open();
+    // The request is still pending, but its delete is running, not failed.
+    try {
+      await expect(updating).rejects.toThrow('socket hang up');
+    } finally {
+      markerRelease.open();
+    }
+    await deleting;
+
+    await expectNextReviewCleansUp(writer, 'cleanup-failure');
+  }, 60_000);
+
   it.each(['serial', 'fallback'] as const)(
     'publishes review changes through %s delta cursors',
     async strategy => {
@@ -266,11 +376,12 @@ describe('feedback deletion with lagging replicas', () => {
       });
       expect(await requestStates(writer)).toEqual([{ applied: 0 }]);
       expect(await visibleFeedback(writer)).toHaveLength(1);
-      // The review re-attempts the pending delete, which fails again, so the
+      // The review is not blocked by the failed request. It re-attempts the
+      // pending delete, which fails again, and reports that failure; the
       // still-visible feedback keeps the new status.
       await expect(
         updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }),
-      ).resolves.toMatchObject({ reviewStatus: 'reviewed' });
+      ).rejects.toMatchObject({ code: '497' });
       expect(await visibleFeedback(writer)).toEqual([{ feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }]);
       // ClickHouse 26.6 and earlier also check ALTER UPDATE for lightweight deletes.
       await writer.command({ query: `GRANT ALTER DELETE, ALTER UPDATE ON ${database}.* TO ${username}` });

@@ -325,6 +325,11 @@ async function hasFeedbackDeletionRequest(
  * DELETE. The post-write check therefore looks for any request, pending or
  * applied, and re-runs the delete when it finds one. Only applied requests
  * block the update up front, so feedback whose delete failed stays editable.
+ *
+ * If the post-write check reads a replica that has not received the request
+ * yet, or the check or its delete fails, the replacement stays visible. A row
+ * that is still visible under an applied request can only be such a leftover,
+ * so the next update deletes it again.
  */
 export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
@@ -346,19 +351,7 @@ export async function updateFeedbackReviewStatus(
     throw feedbackNotFoundError(feedbackId);
   }
   const { organizationId, resourceId } = existingRow;
-
-  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: true })) {
-    throw feedbackNotFoundError(feedbackId);
-  }
-
-  const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
-  await batchCreateFeedback(client, { feedbacks: [updated] });
-
-  if (!(await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: false }))) {
-    return updated;
-  }
-
-  try {
+  const redelete = async (): Promise<never> => {
     await deleteFeedback(
       client,
       {
@@ -368,16 +361,22 @@ export async function updateFeedbackReviewStatus(
       },
       replication,
     );
-  } catch (error) {
-    // A delete that is still unapplied failed earlier, so the original rows are
-    // still visible and the update stands. Once a delete has applied, the
-    // replacement row must not be reported as a successful update.
-    if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: true })) {
-      throw error;
-    }
-    return updated;
+    throw feedbackNotFoundError(feedbackId);
+  };
+
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: true })) {
+    return redelete();
   }
-  throw feedbackNotFoundError(feedbackId);
+
+  const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
+  await batchCreateFeedback(client, { feedbacks: [updated] });
+
+  // A pending request is either a delete that failed or one still running.
+  // They look the same here, so re-run the delete in both cases.
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: false })) {
+    return redelete();
+  }
+  return updated;
 }
 
 // ============================================================================
