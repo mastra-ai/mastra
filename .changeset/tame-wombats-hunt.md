@@ -2,9 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `runId`, `sessionId`, `userId`, and `organizationId` to advanced trace queries. Use them at trace scope and inside `spans.some` / `spans.none` with `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery does not return their recorded values because they are private, high-cardinality identifiers.
-
-`organizationId` compares recorded data and is ANDed with the trusted tenant scope, so it can only narrow a tenant's own traces. `projectId` stays rejected in predicates. Stores advertise support through the new `trace-query-context-ids` observability storage feature.
+Added `runId`, `sessionId`, `userId`, and `organizationId` filters to advanced trace queries. Use them at trace scope or inside `spans.some` / `spans.none` with `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Value discovery does not suggest these values, and `organizationId` can only narrow the trusted tenant scope.
 
 ```ts
 const result = await observability.queryTraces(
@@ -14,14 +12,11 @@ const result = await observability.queryTraces(
       where: {
         op: 'and',
         args: [
-          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-123' } },
-          { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
-          { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+          { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-42' } },
+          { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-9' } },
         ],
       },
     }),
   ),
 );
 ```
-
-Refs OBS-401
