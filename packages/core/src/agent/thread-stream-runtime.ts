@@ -1803,6 +1803,12 @@ export class AgentThreadStreamRuntime {
         const part = parts[i - dropped] as { type?: string } | undefined;
         const at = getPartProducedAt(part);
         if (at === undefined || at > savedAt) {
+          // Saves at a step's end (savePerStep) start before its step-finish is
+          // produced: every part of the step is saved, only the marker is newer.
+          if (at !== undefined && part?.type === 'step-finish' && i > cutoff + 1) {
+            cutoff = i;
+            cutoffAt = at;
+          }
           savedAt = undefined;
           break;
         }

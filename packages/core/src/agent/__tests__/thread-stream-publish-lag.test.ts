@@ -14,6 +14,7 @@ import type { MemoryStorage } from '../../storage';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
@@ -92,6 +93,7 @@ function setup(options: {
   saveEachStep?: boolean;
   onStepSaved?: () => void;
   siblings?: boolean;
+  durable?: boolean;
 }) {
   const pubsub = new LeasePubSub();
   pubsub.retain = true;
@@ -121,8 +123,21 @@ function setup(options: {
     },
     inputProcessors: options.saveEachStep ? [stepSaver(store, options.onStepSaved)] : [],
   });
+  if (options.durable) {
+    const durable = createDurableAgent({ agent, pubsub });
+    const mastra = new Mastra({ agents: { agent: durable }, storage: new InMemoryStore(), logger: false, pubsub });
+    const registered = mastra.getAgent('agent') as any;
+    const stream = registered.stream.bind(registered);
+    // Same shape as Agent.stream for the helpers below.
+    // Close at a suspension like Agent.stream does, instead of staying open for the resume.
+    registered.stream = async (messages: any, streamOptions: any) => {
+      const result = await stream(messages, { ...streamOptions, closeOnSuspend: true });
+      return Object.assign(result.output, { runId: result.runId });
+    };
+    return Object.assign(registered as Agent<any, any, any, any>, { testPubsub: pubsub });
+  }
   const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false, pubsub });
-  return Object.assign(mastra.getAgent('agent'), { pubsub });
+  return Object.assign(mastra.getAgent('agent'), { testPubsub: pubsub });
 }
 
 async function drain(stream: { fullStream: AsyncIterable<any> }) {
@@ -154,9 +169,14 @@ afterEach(() => {
   agentThreadStreamRuntime.resetForTests();
 });
 
-describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
+describe.each([
+  [false, 0],
+  [false, 5],
+  [true, 0],
+  [true, 5],
+])('thread history (durable=%s) with %i ms publish lag', (durable, delayMs) => {
   it('reconnecting to a run waiting on approval delivers only the approval', async () => {
-    const agent = setup({ delayMs, tool: 'lookup' });
+    const agent = setup({ durable, delayMs, tool: 'lookup' });
     await drain(await agent.stream('go', { memory: memoryOption }));
 
     expect((await join(agent)).map(c => c.type)).toEqual(['thread-history', 'tool-call-approval']);
@@ -165,7 +185,13 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
   it('joining while an approved run resumes sends neither step 1 nor the answered approval', async () => {
     const toolGate = deferred();
     const toolStarted = deferred();
-    const agent = setup({ delayMs, tool: 'lookup', toolGate: toolGate.promise, onToolStart: toolStarted.resolve });
+    const agent = setup({
+      durable,
+      delayMs,
+      tool: 'lookup',
+      toolGate: toolGate.promise,
+      onToolStart: toolStarted.resolve,
+    });
     const first = await agent.stream('go', { memory: memoryOption });
     await drain(first);
 
@@ -191,6 +217,7 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     const answerGate = deferred();
     const stepSaved = deferred();
     const agent = setup({
+      durable,
       delayMs,
       tool: 'echo',
       beforeAnswer: answerGate.promise,
@@ -221,6 +248,7 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     const toolGate = deferred();
     const toolStarted = deferred();
     const agent = setup({
+      durable,
       delayMs,
       tool: 'lookup',
       siblings: true,
@@ -251,6 +279,7 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     const answerGate = deferred();
     const stepSaved = deferred();
     const agent = setup({
+      durable,
       delayMs,
       tool: 'echo',
       beforeAnswer: answerGate.promise,
@@ -259,9 +288,9 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     });
     const run = drain(await agent.stream('go', { memory: memoryOption }));
     const topicParts = () =>
-      agent.pubsub
+      agent.testPubsub
         .retainedTopics()
-        .flatMap(topic => agent.pubsub.retainedEvents(topic))
+        .flatMap(topic => agent.testPubsub.retainedEvents(topic))
         .filter(e => e.data?.type === 'stream-part')
         .map(e => e.data.part.type as string);
     await stepSaved.promise;
@@ -270,6 +299,35 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     const midRun = topicParts();
     expect(midRun).not.toContain('tool-call');
     expect(midRun).not.toContain('text-delta');
+
+    answerGate.resolve();
+    await run;
+  });
+
+  it('trims a step saved by savePerStep while the run continues', async () => {
+    const answerGate = deferred();
+    const step2Started = deferred();
+    // Step 2 only starts after step 1 finished and savePerStep saved it.
+    const beforeAnswer = { then: (resolve: () => void) => (step2Started.resolve(), answerGate.promise.then(resolve)) };
+    const agent = setup({ durable, delayMs, tool: 'echo', beforeAnswer: beforeAnswer as unknown as Promise<void> });
+    const published: string[] = [];
+    const publish = agent.testPubsub.publish.bind(agent.testPubsub);
+    agent.testPubsub.publish = async (topic, event) => {
+      await publish(topic, event);
+      if (event.data?.type === 'stream-part') published.push(event.data.part.type);
+    };
+    const run = drain(await agent.stream('go', { memory: memoryOption, savePerStep: true }));
+    const topicParts = () =>
+      agent.testPubsub
+        .retainedTopics()
+        .flatMap(topic => agent.testPubsub.retainedEvents(topic))
+        .filter(e => e.data?.type === 'stream-part')
+        .map(e => e.data.part.type as string);
+
+    await step2Started.promise;
+    await vi.waitFor(() => expect(published).toContain('step-finish'));
+    await vi.waitFor(() => expect(topicParts()).not.toContain('tool-call'));
+    expect(topicParts()).not.toContain('text-delta');
 
     answerGate.resolve();
     await run;
