@@ -272,18 +272,31 @@ export class FlagEmbedding extends Embedding {
     }
 
     const { repo, files } = HF_MODEL_SOURCES[model];
-    const tmpDir = `${modelDir}.tmp-${process.pid}-${Date.now()}`;
-    fs.mkdirSync(tmpDir, { recursive: true, mode: 0o755 });
+    const tmpDir = fs.mkdtempSync(`${modelDir}.tmp-`);
+    // Keep the Hugging Face hub cache inside the configured cacheDir (not ~/.cache) and
+    // move blobs out of it so each model file is stored only once.
+    const hubCacheDir = path.join(tmpDir, '.hf-hub');
 
     try {
       if (showDownloadProgress) {
         console.info(`Downloading ${model} from Hugging Face (${repo})...`);
       }
       for (const file of [...COMMON_MODEL_FILES, ...files]) {
-        const downloaded = await downloadFileToCacheDir({ repo, path: file });
-        fs.copyFileSync(downloaded, path.join(tmpDir, file));
+        const downloaded = await downloadFileToCacheDir({ repo, path: file, cacheDir: hubCacheDir });
+        fs.renameSync(fs.realpathSync(downloaded), path.join(tmpDir, file));
       }
-      fs.renameSync(tmpDir, modelDir);
+      fs.rmSync(hubCacheDir, { recursive: true, force: true });
+      try {
+        fs.renameSync(tmpDir, modelDir);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        // Another concurrent download already published this model.
+        if ((code === 'EEXIST' || code === 'ENOTEMPTY') && fs.existsSync(modelDir)) {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+          return modelDir;
+        }
+        throw error;
+      }
     } catch (error) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
       throw error;
