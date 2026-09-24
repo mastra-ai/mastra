@@ -48,6 +48,7 @@ function createRecorder(): Recorder {
 function createToolCallModel(
   calls: Array<{ toolCallId: string; toolName: string; input: unknown }>,
   record: Recorder['record'],
+  { finishReason = 'tool-calls', pauseMs = 100 }: { finishReason?: 'tool-calls' | 'length'; pauseMs?: number } = {},
 ) {
   return new MockLanguageModelV2({
     doStream: async () => ({
@@ -73,7 +74,7 @@ function createToolCallModel(
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, pauseMs));
 
           record('later-output');
           controller.enqueue({ type: 'text-start', id: 'text-1' });
@@ -82,7 +83,7 @@ function createToolCallModel(
           record('finish');
           controller.enqueue({
             type: 'finish',
-            finishReason: 'tool-calls',
+            finishReason,
             usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
           });
           controller.close();
@@ -169,202 +170,101 @@ describe('eager tool dispatch — execution context parity', () => {
   });
 });
 
+const CALL_A = [{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }];
+
+/** An ordinary eligible server tool that records when it is announced and when it runs. */
+function recordingTool(record: Recorder['record'], overrides: Record<string, unknown> = {}, id = 'tool-a') {
+  return createTool({
+    id,
+    description: 'Records its lifecycle',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    onInputAvailable: async () => record('input-available-a'),
+    execute: async ({ value }) => {
+      record('execute-a');
+      return { value };
+    },
+    ...overrides,
+  } as any);
+}
+
+/**
+ * How an excluded call may show up relative to the model's `finish`:
+ * - `never-dispatched`: neither announced nor run.
+ * - `never-executed`: the body never runs (it may be announced after finish).
+ * - `later`: it runs, but only on the post-stream pass.
+ * - `not-early`: whatever it does happens after finish.
+ */
+type Exclusion = 'never-dispatched' | 'never-executed' | 'later' | 'not-early';
+
+function expectExcluded(events: string[], exclusion: Exclusion) {
+  const finishIndex = events.indexOf('finish');
+  expect(finishIndex).toBeGreaterThan(-1);
+  for (const event of ['input-available-a', 'execute-a']) {
+    const index = events.indexOf(event);
+    expect(index === -1 || index > finishIndex).toBe(true);
+  }
+  if (exclusion === 'never-dispatched') expect(events).not.toContain('input-available-a');
+  if (exclusion === 'never-dispatched' || exclusion === 'never-executed') expect(events).not.toContain('execute-a');
+  if (exclusion === 'later') expect(events).toContain('execute-a');
+}
+
 describe('eager tool dispatch — excluded tool classes', () => {
   it('does not eagerly execute a tool that requires approval', async () => {
     const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
     const agent = new Agent({
       id: 'eager-approval-agent',
       name: 'Eager approval agent',
       instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Requires approval',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          requireApproval: true,
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
+      model: createToolCallModel(CALL_A, record),
+      tools: { 'tool-a': recordingTool(record, { requireApproval: true }) },
     });
 
     const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
-    // Stronger than "it did not execute": `onInputAvailable` fires inside toolCallStep
-    // *before* the approval gate is consulted, so an eager dispatch would show up here
-    // even though the tool body never ran. Its absence proves dispatch never happened.
+    // `onInputAvailable` fires inside toolCallStep *before* the approval gate, so an eager
+    // dispatch would show up here even though the body never ran.
     expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
-    const finishIndex = events.indexOf('finish');
-    expect(events.indexOf('input-available-a')).toBeGreaterThan(finishIndex);
-    // The approval gate is reached, so the body never runs at all.
-    expect(events.indexOf('execute-a')).toBe(-1);
-    // Existing approval behaviour is preserved end to end: the run asks for approval
-    // rather than erroring out of a half-started eager execution.
+    expectExcluded(events, 'never-executed');
+    // The run asks for approval rather than erroring out of a half-started eager execution.
     expect(chunks.map(chunk => chunk.type)).toContain('tool-call-approval');
     expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
   });
 
-  it('does not eagerly execute when approval comes from the run-level policy', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    // The tool itself is a plain eligible tool. The veto is entirely run-level, which is
-    // a source the whitelist has to consult separately from the tool's own flag.
-    const agent = new Agent({
-      id: 'eager-run-approval-agent',
-      name: 'Eager run approval agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Plain tool',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        requireToolApproval: true,
-      }),
-    );
-
-    expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
-    expect(events.indexOf('execute-a')).toBe(-1);
-  });
-
-  it('does not eagerly execute a tool whose approval is decided by a predicate', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    // A predicate is async and may do real work before deciding, so its answer is not
-    // available at dispatch time. Unknown has to mean ineligible. Note the tool builder
-    // converts a predicate into `requireApproval: true` plus a `needsApprovalFn`, so what
-    // actually stops this today is the flag check; this pins the user-visible behaviour
-    // rather than one particular guard.
-    const agent = new Agent({
-      id: 'eager-predicate-approval-agent',
-      name: 'Eager predicate approval agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Approval by predicate',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          requireApproval: async () => true,
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }) as never,
-      },
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
-
-    expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
-    expect(events.indexOf('execute-a')).toBe(-1);
-  });
-
-  it('does not eagerly execute a tool the step has filtered out of activeTools', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    const agent = new Agent({
-      id: 'eager-active-tools-agent',
-      name: 'Eager activeTools agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Filtered out of this step',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-        'tool-b': createTool({
-          id: 'tool-b',
-          description: 'The only active tool',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => ({ value }),
-        }),
-      },
-    });
-
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        activeTools: ['tool-b'],
-      }),
-    );
-
-    // The foreach rejects an inactive call and eager dispatch must not run it first.
-    // A filtered tool is also absent from the resolved set, so the explicit activeTools
-    // check is belt-and-braces; this pins the behaviour, whichever guard delivers it.
-    expect(events.indexOf('execute-a')).toBe(-1);
-    // Distinguishes "never dispatched" from "dispatched but execute was not reached":
-    // onInputAvailable fires early on the eager path and not at all on this one.
-    expect(events.indexOf('input-available-a')).toBe(-1);
-  });
-
-  it('does not eagerly execute when an output processor runs after the stream', async () => {
-    // A processor with `processLLMResponse` or `processOutputStep` is allowed to rewrite
-    // or drop the whole response before any tool runs. Starting a tool early would put a
-    // side effect behind a response that processor can still veto, so the presence of one
-    // disables eager dispatch for the entire turn rather than per call.
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    const agent = new Agent({
-      id: 'eager-post-stream-processor-agent',
-      name: 'Eager post-stream processor agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Ordinary server tool',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
+  const cases: Array<{
+    name: string;
+    exclusion: Exclusion;
+    toolName?: string;
+    input?: Record<string, unknown>;
+    tools?: (record: Recorder['record']) => Record<string, any>;
+    agentOptions?: Record<string, unknown>;
+    streamOptions?: (record: Recorder['record']) => Record<string, unknown>;
+    registerWithMastra?: boolean;
+    expectEvents?: string[];
+  }> = [
+    {
+      // The tool is eligible; the veto is run-level, a source consulted separately.
+      name: 'when approval comes from the run-level policy',
+      exclusion: 'never-executed',
+      streamOptions: () => ({ requireToolApproval: true }),
+    },
+    {
+      // A predicate is async, so its answer is unknown at dispatch time; unknown means ineligible.
+      name: 'a tool whose approval is decided by a predicate',
+      exclusion: 'never-executed',
+      tools: record => ({ 'tool-a': recordingTool(record, { requireApproval: async () => true }) }),
+    },
+    {
+      name: 'a tool the step has filtered out of activeTools',
+      exclusion: 'never-dispatched',
+      tools: record => ({ 'tool-a': recordingTool(record), 'tool-b': recordingTool(() => {}, {}, 'tool-b') }),
+      streamOptions: () => ({ activeTools: ['tool-b'] }),
+    },
+    {
+      // A post-stream processor can still rewrite or drop the response, so the whole turn waits.
+      name: 'when an output processor runs after the stream',
+      exclusion: 'later',
+      streamOptions: record => ({
         outputProcessors: [
           {
             id: 'post-stream-veto',
@@ -375,30 +275,13 @@ describe('eager tool dispatch — excluded tool classes', () => {
           },
         ],
       }),
-    );
-
-    // Guard the guard: if the processor never ran, the exclusion was never exercised.
-    expect(events).toContain('post-stream-processor');
-    // The tool still runs, but only on the normal path after the model finished.
-    expect(events).toContain('execute-a');
-    const finishIndex = events.indexOf('finish');
-    for (const event of ['input-available-a', 'execute-a']) {
-      expect(events.indexOf(event)).toBeGreaterThan(finishIndex);
-    }
-  });
-
-  it('does not eagerly execute a client-side tool, which has no execute to call', async () => {
-    // A tool with no `execute` is the caller's to run. There is nothing to start early,
-    // and dispatching it would fire `onInputAvailable` for a call this process never runs.
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    const agent = new Agent({
-      id: 'eager-client-side-agent',
-      name: 'Eager client-side agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
+      expectEvents: ['post-stream-processor'],
+    },
+    {
+      // No `execute`: the call is the caller's to run, so nothing may be announced early.
+      name: 'a client-side tool, which has no execute to call',
+      exclusion: 'not-early',
+      tools: record => ({
         'tool-a': {
           id: 'tool-a',
           description: 'Client-side tool with no execute',
@@ -406,21 +289,70 @@ describe('eager tool dispatch — excluded tool classes', () => {
           outputSchema: z.object({ value: z.string() }),
           onInputAvailable: async () => record('input-available-a'),
         } as any,
-      },
+      }),
+    },
+    {
+      // Any call may be a resume, which is the foreach's to sequence.
+      name: 'when the run may auto-resume a suspended tool',
+      exclusion: 'later',
+      streamOptions: () => ({ autoResumeSuspendedTools: true }),
+    },
+    {
+      name: 'a suspendable tool',
+      exclusion: 'not-early',
+      tools: record => ({
+        'tool-a': recordingTool(record, {
+          suspendSchema: z.object({ reason: z.string() }),
+          resumeSchema: z.object({ value: z.string() }),
+        }),
+      }),
+    },
+    {
+      // The `agent-` prefix is what the runtime uses to identify resumable sub-agent tools.
+      name: 'an agent-derived tool, which can suspend without a suspend schema',
+      exclusion: 'not-early',
+      toolName: 'agent-helper',
+      tools: record => ({ 'agent-helper': recordingTool(record, {}, 'agent-helper') }),
+    },
+    {
+      // Agent config alone dispatches to the background, with nothing in the call arguments.
+      name: 'a call that config alone dispatches to the background',
+      exclusion: 'not-early',
+      agentOptions: { backgroundTasks: { tools: { 'tool-a': true } } },
+      registerWithMastra: true,
+    },
+    {
+      name: 'when the call is dispatched as a background task',
+      exclusion: 'not-early',
+      input: { value: 'a', _background: true },
+    },
+  ];
+
+  it.each(cases)('does not eagerly execute $name', async testCase => {
+    const { events, record } = createRecorder();
+    const toolName = testCase.toolName ?? 'tool-a';
+    const agent = new Agent({
+      id: 'eager-exclusion-agent',
+      name: 'Eager exclusion agent',
+      instructions: 'Call the tool once.',
+      model: createToolCallModel([{ toolCallId: 'call-a', toolName, input: testCase.input ?? { value: 'a' } }], record),
+      tools: testCase.tools?.(record) ?? { 'tool-a': recordingTool(record) },
+      ...testCase.agentOptions,
     });
+    if (testCase.registerWithMastra) {
+      new Mastra({ agents: { 'eager-exclusion-agent': agent }, backgroundTasks: { enabled: true }, logger: false });
+    }
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    await drain(
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, ...testCase.streamOptions?.(record) }),
+    );
 
-    // Nothing may be dispatched early: `onInputAvailable` is the discriminating signal,
-    // since there is no execute whose absence would otherwise be visible.
-    const finishIndex = events.indexOf('finish');
-    const inputAvailableIndex = events.indexOf('input-available-a');
-    expect(inputAvailableIndex === -1 || inputAvailableIndex > finishIndex).toBe(true);
+    for (const event of testCase.expectEvents ?? []) expect(events).toContain(event);
+    expectExcluded(events, testCase.exclusion);
   });
 
   it('does not eagerly execute a provider-executed call', async () => {
-    // The provider already ran it. Executing our own copy early would duplicate the
-    // side effect and then race the provider's result into the same toolCallId.
+    // The provider already ran it; our own copy must never start, early or late.
     const { events, record } = createRecorder();
     const model = new MockLanguageModelV2({
       doStream: async () => ({
@@ -429,12 +361,6 @@ describe('eager tool dispatch — excluded tool classes', () => {
         stream: new ReadableStream({
           async start(controller) {
             controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'response-1',
-              modelId: 'mock-model',
-              timestamp: new Date(0),
-            });
             record('complete-call-a');
             controller.enqueue({
               type: 'tool-call',
@@ -444,7 +370,6 @@ describe('eager tool dispatch — excluded tool classes', () => {
               providerExecuted: true,
             });
             await new Promise(resolve => setTimeout(resolve, 100));
-            record('later-output');
             record('finish');
             controller.enqueue({
               type: 'finish',
@@ -456,117 +381,18 @@ describe('eager tool dispatch — excluded tool classes', () => {
         }),
       }),
     });
-
     const agent = new Agent({
       id: 'eager-provider-executed-agent',
       name: 'Eager provider-executed agent',
       instructions: 'Call tool-a once.',
       model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Also runs on the provider',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
+      tools: { 'tool-a': recordingTool(record) },
     });
 
     await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
-    // Our copy must never start, early or late. This pins the behaviour, not the
-    // predicate's `providerExecuted` line: deleting that line alone, or all three
-    // provider/client guards together, leaves this test green, because a
-    // provider-executed call is not run by the normal path either. The guard is
-    // redundant today and kept for the same reason as the other redundant ones.
-    expect(events.indexOf('execute-a')).toBe(-1);
-    expect(events.indexOf('input-available-a')).toBe(-1);
+    expectExcluded(events, 'never-dispatched');
   });
-
-  it('does not eagerly execute when the run may auto-resume a suspended tool', async () => {
-    // With `autoResumeSuspendedTools`, any call in the run can be a resume rather than a
-    // fresh start, and a resume is the foreach's to sequence. Nothing starts early.
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    const agent = new Agent({
-      id: 'eager-auto-resume-agent',
-      name: 'Eager auto-resume agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Ordinary server tool in an auto-resuming run',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        autoResumeSuspendedTools: true,
-      }),
-    );
-
-    // It still runs, but on the normal path.
-    expect(events).toContain('execute-a');
-    const finishIndex = events.indexOf('finish');
-    for (const event of ['input-available-a', 'execute-a']) {
-      expect(events.indexOf(event)).toBeGreaterThan(finishIndex);
-    }
-  });
-
-  it('does not eagerly execute a suspendable tool', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    const agent = new Agent({
-      id: 'eager-suspend-agent',
-      name: 'Eager suspend agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Suspendable',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          suspendSchema: z.object({ reason: z.string() }),
-          resumeSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
-
-    // Dispatch itself must not happen — see the approval case for why
-    // `onInputAvailable` is the discriminating signal.
-    const finishIndex = events.indexOf('finish');
-    for (const event of ['input-available-a', 'execute-a']) {
-      const index = events.indexOf(event);
-      expect(index === -1 || index > finishIndex).toBe(true);
-    }
-  });
-
   it('announces onInputAvailable once when an eager attempt hands the call back', async () => {
     // The hook is announced immediately before `execute`, so a bailout raised from
     // inside the tool body has already fired it. The foreach then adopts that call and
@@ -781,127 +607,6 @@ describe('eager tool dispatch — excluded tool classes', () => {
     expect(eager.events.indexOf('body')).toBeLessThan(eager.events.indexOf('finish'));
     expect(base.events.indexOf('body')).toBeGreaterThan(base.events.indexOf('finish'));
   });
-
-  it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel(
-      [{ toolCallId: 'call-a', toolName: 'agent-helper', input: { value: 'a' } }],
-      record,
-    );
-
-    const agent = new Agent({
-      id: 'eager-agent-tool-agent',
-      name: 'Eager agent-tool agent',
-      instructions: 'Call the sub-agent once.',
-      model,
-      tools: {
-        // Named with the `agent-` prefix the runtime itself uses to identify resumable
-        // sub-agent tools (see tools/tool-builder/builder.ts isResumableTool).
-        'agent-helper': createTool({
-          id: 'agent-helper',
-          description: 'Stands in for a sub-agent tool',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
-
-    const finishIndex = events.indexOf('finish');
-    expect(finishIndex).toBeGreaterThan(-1);
-    for (const event of ['input-available-a', 'execute-a']) {
-      const index = events.indexOf(event);
-      expect(index === -1 || index > finishIndex).toBe(true);
-    }
-  });
-
-  it('does not eagerly execute a call that config alone dispatches to the background', async () => {
-    // The `_background` argument is only the highest-priority input to
-    // `resolveBackgroundConfig`. An agent-level `backgroundTasks.tools` entry
-    // dispatches to the background on its own, with the default 'deferred'
-    // disposition and nothing at all in the call arguments. Checking the
-    // argument is therefore not the same check the foreach makes.
-    const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
-    const agent = new Agent({
-      id: 'eager-config-background-agent',
-      name: 'Eager config background agent',
-      instructions: 'Call tool-a once.',
-      model,
-      backgroundTasks: { tools: { 'tool-a': true } },
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Background dispatched by agent config, not by argument',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    new Mastra({
-      agents: { 'eager-config-background-agent': agent },
-      backgroundTasks: { enabled: true },
-      logger: false,
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
-
-    const finishIndex = events.indexOf('finish');
-    expect(finishIndex).toBeGreaterThan(-1);
-    for (const event of ['input-available-a', 'execute-a']) {
-      const index = events.indexOf(event);
-      expect(index === -1 || index > finishIndex).toBe(true);
-    }
-  });
-
-  it('does not eagerly execute when the call is dispatched as a background task', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel(
-      [{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a', _background: true } }],
-      record,
-    );
-
-    const agent = new Agent({
-      id: 'eager-background-agent',
-      name: 'Eager background agent',
-      instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Background dispatched',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          onInputAvailable: async () => record('input-available-a'),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
-
-    const finishIndex = events.indexOf('finish');
-    for (const event of ['input-available-a', 'execute-a']) {
-      const index = events.indexOf(event);
-      expect(index === -1 || index > finishIndex).toBe(true);
-    }
-  });
 });
 
 describe('eager tool dispatch — entry points', () => {
@@ -956,93 +661,55 @@ describe('eager tool dispatch — entry points', () => {
   });
 });
 
-describe('eager tool dispatch — concurrency', () => {
-  function createConcurrencyAgent(record: Recorder['record'], peak: { current: number; max: number }) {
-    const model = createToolCallModel(
-      [
-        { toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } },
-        { toolCallId: 'call-b', toolName: 'tool-a', input: { value: 'b' } },
-      ],
-      record,
-    );
+/** A tool that tracks how many copies of itself are running at once. */
+function peakTrackingTool(id: string, peak: { current: number; max: number }, record?: Recorder['record']) {
+  return createTool({
+    id,
+    description: 'Tracks peak concurrency',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async ({ value }) => {
+      peak.current++;
+      peak.max = Math.max(peak.max, peak.current);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      peak.current--;
+      record?.(`execute-${value}`);
+      return { value };
+    },
+  });
+}
 
-    return new Agent({
+describe('eager tool dispatch — concurrency', () => {
+  it.each([1, 2])('caps eager executions at a concurrency limit of %i', async limit => {
+    const { record } = createRecorder();
+    const peak = { current: 0, max: 0 };
+    const agent = new Agent({
       id: 'eager-concurrency-agent',
       name: 'Eager concurrency agent',
       instructions: 'Call tool-a twice.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Tracks peak concurrency',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => {
-            peak.current++;
-            peak.max = Math.max(peak.max, peak.current);
-            await new Promise(resolve => setTimeout(resolve, 20));
-            peak.current--;
-            record(`execute-${value}`);
-            return { value };
-          },
-        }),
-      },
+      model: createToolCallModel(
+        [
+          { toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } },
+          { toolCallId: 'call-b', toolName: 'tool-a', input: { value: 'b' } },
+        ],
+        record,
+      ),
+      tools: { 'tool-a': peakTrackingTool('tool-a', peak, record) },
     });
-  }
 
-  it('honours a concurrency limit of 1 for eager executions', async () => {
-    const { record } = createRecorder();
-    const peak = { current: 0, max: 0 };
-    const agent = createConcurrencyAgent(record, peak);
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: limit }));
 
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        toolCallConcurrency: 1,
-      }),
-    );
-
-    expect(peak.max).toBe(1);
-  });
-
-  it('allows parallel eager executions up to the configured limit', async () => {
-    const { record } = createRecorder();
-    const peak = { current: 0, max: 0 };
-    const agent = createConcurrencyAgent(record, peak);
-
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        toolCallConcurrency: 2,
-      }),
-    );
-
-    expect(peak.max).toBe(2);
+    expect(peak.max).toBe(limit);
   });
 
   it('defers to the normal foreach when the "called" strategy is configured', async () => {
     const { events, record } = createRecorder();
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
     const agent = new Agent({
       id: 'eager-called-strategy-agent',
       name: 'Eager called strategy agent',
       instructions: 'Call tool-a once.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Records execution',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => {
-            record('execute-a');
-            return { value };
-          },
-        }),
-      },
+      model: createToolCallModel(CALL_A, record),
+      tools: { 'tool-a': recordingTool(record) },
     });
 
     await drain(
@@ -1053,9 +720,8 @@ describe('eager tool dispatch — concurrency', () => {
       }),
     );
 
-    // The full called set is unknowable while streaming, so the 'called' strategy
-    // keeps its existing post-finish semantics.
-    expect(events).toEqual(['complete-call-a', 'later-output', 'finish', 'execute-a']);
+    // The full called set is unknowable while streaming, so 'called' keeps its post-finish semantics.
+    expect(events).toEqual(['complete-call-a', 'later-output', 'finish', 'input-available-a', 'execute-a']);
   });
 });
 
@@ -1063,14 +729,6 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
   it('preserves model-call order when executions settle in reverse', async () => {
     const { record } = createRecorder();
     const executionCounts = new Map<string, number>();
-    const model = createToolCallModel(
-      [
-        { toolCallId: 'call-a', toolName: 'slow', input: { value: 'a' } },
-        { toolCallId: 'call-b', toolName: 'fast', input: { value: 'b' } },
-      ],
-      record,
-    );
-
     const makeTool = (id: string, delay: number) =>
       createTool({
         id,
@@ -1083,26 +741,26 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
           return { value };
         },
       });
-
     const agent = new Agent({
       id: 'eager-ordering-agent',
       name: 'Eager ordering agent',
       instructions: 'Call both tools.',
-      model,
+      model: createToolCallModel(
+        [
+          { toolCallId: 'call-a', toolName: 'slow', input: { value: 'a' } },
+          { toolCallId: 'call-b', toolName: 'fast', input: { value: 'b' } },
+        ],
+        record,
+      ),
       tools: { slow: makeTool('slow', 60), fast: makeTool('fast', 1) },
     });
 
     const chunks = await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        toolCallConcurrency: 2,
-      }),
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: 2 }),
     );
 
-    const resultIds = chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId);
-
     // "fast" settles first, but the foreach remains the owner of result order.
+    const resultIds = chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId);
     expect(resultIds).toEqual(['call-a', 'call-b']);
     // Each call executed exactly once — adopted, never re-run by the foreach.
     expect([...executionCounts.entries()].sort()).toEqual([
@@ -1114,30 +772,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
   it('does not run eager work in parallel when an approval-capable tool joins the step', async () => {
     const { record } = createRecorder();
     const peak = { current: 0, max: 0 };
-    const model = createToolCallModel(
-      [
-        { toolCallId: 'call-a', toolName: 'safe-a', input: { value: 'a' } },
-        { toolCallId: 'call-b', toolName: 'safe-b', input: { value: 'b' } },
-      ],
-      record,
-    );
-
-    const tracked = (id: string) =>
-      createTool({
-        id,
-        description: 'Tracks peak concurrency',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ value: z.string() }),
-        execute: async ({ value }) => {
-          peak.current++;
-          peak.max = Math.max(peak.max, peak.current);
-          await new Promise(resolve => setTimeout(resolve, 20));
-          peak.current--;
-          return { value };
-        },
-      });
-
-    const safeTools = { 'safe-a': tracked('safe-a'), 'safe-b': tracked('safe-b') };
+    const safeTools = { 'safe-a': peakTrackingTool('safe-a', peak), 'safe-b': peakTrackingTool('safe-b', peak) };
     const gated = createTool({
       id: 'gated',
       description: 'Requires approval',
@@ -1146,14 +781,18 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
       requireApproval: true,
       execute: async ({ value }) => ({ value }),
     });
-
     const agent = new Agent({
       id: 'eager-mixed-batch-agent',
       name: 'Eager mixed batch agent',
       instructions: 'Call the tools.',
-      model,
-      // The agent's own tool set is entirely safe, so the concurrency resolved when the
-      // workflow is built is the configured 5.
+      model: createToolCallModel(
+        [
+          { toolCallId: 'call-a', toolName: 'safe-a', input: { value: 'a' } },
+          { toolCallId: 'call-b', toolName: 'safe-b', input: { value: 'b' } },
+        ],
+        record,
+      ),
+      // The agent's own tool set is entirely safe, so the limit resolved at build time is 5.
       tools: safeTools,
     });
 
@@ -1162,10 +801,9 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 5,
-        // The approval-capable tool only enters at step level, which is exactly when
-        // llm-execution recomputes the foreach limit down to 1. A coordinator holding a
-        // construction-time copy of the limit would still run the two safe calls in
-        // parallel; reading the limit late keeps one source of truth.
+        // The approval-capable tool only enters at step level, where llm-execution recomputes
+        // the limit down to 1. A coordinator holding a construction-time copy would still run
+        // the safe calls in parallel; reading the limit late keeps one source of truth.
         prepareStep: () => ({ tools: { ...safeTools, gated } }),
       }),
     );
@@ -1177,45 +815,16 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
 describe('eager tool dispatch — unsafe terminations', () => {
   it('never starts queued eager work before an unsafe termination', async () => {
     const { events, record } = createRecorder();
-    // Two calls, limit 1: the first occupies the permit, the second is queued.
-    const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: new ReadableStream({
-          async start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'response-1',
-              modelId: 'mock-model',
-              timestamp: new Date(0),
-            });
-            for (const id of ['call-a', 'call-b']) {
-              record(`complete-${id}`);
-              controller.enqueue({
-                type: 'tool-call',
-                toolCallId: id,
-                toolName: 'tool-a',
-                input: JSON.stringify({ value: id }),
-              });
-            }
-            await new Promise(resolve => setTimeout(resolve, 60));
-            record('finish');
-            controller.enqueue({
-              // Truncated output. The ordinary foreach still runs these calls afterwards,
-              // exactly as it does without eager dispatch — what must not happen is the
-              // queued one being started early, ahead of the model saying so.
-              type: 'finish',
-              finishReason: 'length',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            });
-            controller.close();
-          },
-        }),
-      }),
-    });
-
+    // Two calls, limit 1: the first occupies the permit, the second is queued. The model then
+    // truncates; the foreach still runs both afterwards, but the queued one must not start early.
+    const model = createToolCallModel(
+      [
+        { toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'call-a' } },
+        { toolCallId: 'call-b', toolName: 'tool-a', input: { value: 'call-b' } },
+      ],
+      record,
+      { finishReason: 'length', pauseMs: 60 },
+    );
     const agent = new Agent({
       id: 'eager-terminal-agent',
       name: 'Eager terminal agent',
@@ -1237,17 +846,10 @@ describe('eager tool dispatch — unsafe terminations', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution: true,
-        toolCallConcurrency: 1,
-      }),
-    );
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: 1 }));
 
     const finishIndex = events.indexOf('finish');
-    // The first call was already running and is still adopted — a real side effect is
-    // never discarded. The queued one never started eagerly.
+    // The running call is adopted — a real side effect is never discarded. The queued one waited.
     expect(events.indexOf('execute-call-a')).toBeLessThan(finishIndex);
     const secondIndex = events.indexOf('execute-call-b');
     expect(secondIndex === -1 || secondIndex > finishIndex).toBe(true);
@@ -1362,74 +964,48 @@ describe('eager tool dispatch — unsafe terminations', () => {
     // The tripwire really fired on the stream-level hook and really bailed the attempt.
     expect(on.events).toContain('tripwire');
     expect(on.types).toContain('tripwire');
-
-    // The point of the exclusion: the two schedules agree on whether the tool ran.
-    // Before it, the chunk sequences matched while the side effects did not — opting
-    // in decided whether a tool executed at all.
+    // The two schedules agree on whether the tool ran, not merely on the chunks.
     expect(off.effects).toEqual([]);
     expect(on.effects).toEqual(off.effects);
     expect(on.types).toEqual(off.types);
   });
 
-  it('leaves a processToolResult run to the post-stream pass when a provider tool is configured', async () => {
-    // With a provider tool in the step the hook can fire mid-stream, and which result
-    // reaches it is not knowable at dispatch, so the run stays on the post-stream pass.
-    const on = await runToolResultProcessorScenario(true, 'nothing-trips');
+  it.each([
+    // With a provider tool in the step the hook can fire mid-stream, so the run waits.
+    {
+      withProviderTool: true,
+      early: false,
+      name: 'leaves the run to the post-stream pass when a provider tool is configured',
+    },
+    // The exclusion is the conjunction: the hook alone only sees results after adoption.
+    { withProviderTool: false, early: true, name: 'still dispatches early when no provider tool is configured' },
+  ])('with a processToolResult hook, $name', async ({ withProviderTool, early }) => {
+    const on = await runToolResultProcessorScenario(true, 'nothing-trips', { withProviderTool });
 
     expect(on.events).not.toContain('tripwire');
     expect(on.effects).toEqual(['local']);
-    expect(on.events.indexOf('execute-local')).toBeGreaterThan(on.events.indexOf('finish'));
-  });
-
-  it('still dispatches early with a processToolResult hook when no provider tool is configured', async () => {
-    // The exclusion is the conjunction: the hook alone only ever sees results after
-    // adoption, so it cannot bail before the foreach and costs nothing to overlap.
-    const on = await runToolResultProcessorScenario(true, 'nothing-trips', { withProviderTool: false });
-
-    expect(on.effects).toEqual(['local']);
-    expect(on.events.indexOf('execute-local')).toBeLessThan(on.events.indexOf('finish'));
+    const executed = on.events.indexOf('execute-local');
+    const finished = on.events.indexOf('finish');
+    expect(early ? executed < finished : executed > finished).toBe(true);
   });
 
   it('still dispatches early when an output processor declares no tool-result hook', async () => {
-    // The guard keys on `processToolResult` specifically. A processor that only touches
-    // the stream must not cost the whole run its early dispatch.
+    // The guard keys on `processToolResult`; a stream-only processor must not cost early dispatch.
     const { events, record } = createRecorder();
-
-    class StreamOnlyProcessor {
-      readonly id = 'stream-only-processor';
-      async processOutputStream({ part }: any) {
-        return part;
-      }
-    }
-
-    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
-
     const agent = new Agent({
       id: 'eager-stream-only-processor-agent',
       name: 'Eager stream-only processor agent',
       instructions: 'Call the tool.',
-      model,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Dispatched early.',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => {
-            record('execute-call-a');
-            return { value };
-          },
-        }),
-      },
-      outputProcessors: [new StreamOnlyProcessor() as any],
+      model: createToolCallModel(CALL_A, record),
+      tools: { 'tool-a': recordingTool(record) },
+      outputProcessors: [{ id: 'stream-only-processor', processOutputStream: async ({ part }: any) => part } as any],
     });
 
     await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
-    // Positively establish execution first: an absent body is `-1`, which would sail
-    // past the ordering comparison and turn "feature disabled" into a passing test.
-    expect(events.filter(event => event === 'execute-call-a')).toHaveLength(1);
-    expect(events.indexOf('execute-call-a')).toBeLessThan(events.indexOf('finish'));
+    // Establish execution first: an absent body is `-1`, which would pass the ordering check.
+    expect(events.filter(event => event === 'execute-a')).toHaveLength(1);
+    expect(events.indexOf('execute-a')).toBeLessThan(events.indexOf('finish'));
   });
 
   /**
@@ -1539,175 +1115,123 @@ describe('eager tool dispatch — unsafe terminations', () => {
 });
 
 describe('eager tool dispatch — discarded model attempt', () => {
-  /**
-   * A model that emits a tool call and then fails mid-stream has its whole attempt
-   * discarded: the request is retried on the next model, and the normal pipeline never
-   * executes that attempt's tool calls.
-   *
-   * Eager dispatch cannot fully match that — by the time the model fails, the tool has
-   * already started, and no amount of bookkeeping un-runs a side effect. What it can do,
-   * and must, is cancel: the discarded attempt's eager work is aborted immediately, so a
-   * tool that honours its abort signal stops, and nothing it produced is adopted. This is
-   * the documented cost of opting in.
-   */
-  async function runErrorChunkRetryScenario(eagerToolExecution: boolean) {
-    const { events, record } = createRecorder();
-    let attempt = 0;
+  type Controller = ReadableStreamDefaultController<any>;
+  type Script = (controller: Controller) => Promise<void> | void;
 
-    // An `error` chunk answered by an error processor's `retry` is the *other* way an
-    // attempt gets discarded, and it returns `toolCalls: []` exactly like the thrown
-    // case. It reaches a different early return, which is how it shipped uncancelled.
-    const model = new MockLanguageModelV2({
-      doStream: async () => {
-        attempt += 1;
-        const failing = attempt === 1;
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  const emitCall = (controller: Controller, toolCallId: string, value: string) =>
+    controller.enqueue({ type: 'tool-call', toolCallId, toolName: 'tool-a', input: JSON.stringify({ value }) });
+  const recover: Script = controller => {
+    controller.enqueue({ type: 'text-start', id: 'text-1' });
+    controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
+    controller.enqueue({ type: 'text-end', id: 'text-1' });
+    controller.enqueue({
+      type: 'finish',
+      finishReason: 'stop',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    });
+    controller.close();
+  };
+  /** Emits a call, waits `ms`, then fails with an `error` chunk (answerable by an error processor). */
+  const callThenErrorChunk =
+    (toolCallId: string, value: string, ms: number): Script =>
+    async controller => {
+      emitCall(controller, toolCallId, value);
+      await sleep(ms);
+      controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+      controller.close();
+    };
+  /** Emits a call, waits `ms`, then errors the stream itself (the fallback route). */
+  const callThenThrow =
+    (toolCallId: string, value: string, ms: number): Script =>
+    async controller => {
+      emitCall(controller, toolCallId, value);
+      await sleep(ms);
+      controller.error(new Error('model blew up mid-stream'));
+    };
+
+  /** A model that runs `scripts[n]` on its n-th stream (the last one repeats) and records each prompt. */
+  function scriptedModel(modelId: string, scripts: Script[], prompts: any[][] = []) {
+    return new MockLanguageModelV2({
+      modelId,
+      doStream: async ({ prompt }) => {
+        const script = scripts[Math.min(prompts.length, scripts.length - 1)]!;
+        prompts.push(prompt as any[]);
+        const id = `response-${prompts.length}`;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
           stream: new ReadableStream({
             async start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: `response-${attempt}`,
-                modelId: 'mock-model',
-                timestamp: new Date(0),
-              });
-              if (failing) {
-                controller.enqueue({
-                  type: 'tool-call',
-                  toolCallId: 'call-discarded',
-                  toolName: 'tool-a',
-                  input: JSON.stringify({ value: 'discarded' }),
-                });
-                await new Promise(resolve => setTimeout(resolve, 20));
-                controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
-                controller.close();
-                return;
-              }
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
-              controller.enqueue({ type: 'text-end', id: 'text-1' });
-              controller.enqueue({
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              });
-              controller.close();
+              controller.enqueue({ type: 'response-metadata', id, modelId, timestamp: new Date(0) });
+              await script(controller);
             },
           }),
         };
       },
     });
-
-    const agent = new Agent({
-      id: `eager-error-retry-agent-${eagerToolExecution}`,
-      name: 'Eager error retry agent',
-      instructions: 'Call tool-a.',
-      model,
-      errorProcessors: [
-        {
-          id: 'retry-once',
-          processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
-        },
-      ] as never,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Records that it ran',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }, options) => {
-            record(`execute-${value}`);
-            const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
-            if (signal) {
-              await new Promise<void>(resolve => {
-                if (signal.aborted) return resolve();
-                signal.addEventListener('abort', () => resolve(), { once: true });
-                setTimeout(resolve, 500);
-              });
-              if (signal.aborted) record(`aborted-${value}`);
-            }
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution })).catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 150));
-    // Pins that the retry actually happened, so the assertions below cannot pass because
-    // the run died early for some unrelated reason.
-    expect(attempt).toBe(2);
-    return events;
   }
 
-  it('hands the replacement attempt work the discarded attempt already finished', async () => {
-    // Cancellation only answers for work still running. A tool that *finished* before its
-    // attempt was thrown away has already had its side effect, and the replacement model
-    // call must be told about it — otherwise the only way it can learn the answer is to
-    // ask for the same tool again, and the side effect happens twice.
-    const executions: string[] = [];
-    const prompts: any[][] = [];
-    let attempt = 0;
+  const retryOnce = [
+    {
+      id: 'retry-once',
+      processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
+    },
+  ] as never;
 
-    const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        attempt += 1;
-        prompts.push(prompt as any[]);
-        const failing = attempt === 1;
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: new ReadableStream({
-            async start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: `response-${attempt}`,
-                modelId: 'mock-model',
-                timestamp: new Date(0),
-              });
-              if (failing) {
-                controller.enqueue({
-                  type: 'tool-call',
-                  toolCallId: 'call-finished',
-                  toolName: 'tool-a',
-                  input: JSON.stringify({ value: 'finished' }),
-                });
-                // Long enough that the eager execution below has certainly settled before
-                // the attempt is discarded, which is the whole point of the case.
-                await new Promise(resolve => setTimeout(resolve, 80));
-                controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
-                controller.close();
-                return;
-              }
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
-              controller.enqueue({ type: 'text-end', id: 'text-1' });
-              controller.enqueue({
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              });
-              controller.close();
-            },
-          }),
-        };
+  /** Records that it ran, then waits for its abort signal (event-driven, so CI speed is irrelevant). */
+  function abortAwareTool(record: Recorder['record']) {
+    return createTool({
+      id: 'tool-a',
+      description: 'Records that it ran',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }, options) => {
+        record(`execute-${value}`);
+        const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
+        if (signal) {
+          await new Promise<void>(resolve => {
+            if (signal.aborted) return resolve();
+            signal.addEventListener('abort', () => resolve(), { once: true });
+            setTimeout(resolve, 500);
+          });
+          if (signal.aborted) record(`aborted-${value}`);
+        }
+        return { value };
       },
     });
+  }
 
+  it.each([
+    {
+      // An error chunk answered by `retry`: the replacement attempt must be told what already ran.
+      route: 'the replacement attempt',
+      build: (prompts: any[][]) => ({
+        model: scriptedModel('mock-model', [callThenErrorChunk('call-finished', 'finished', 80), recover], prompts),
+        errorProcessors: retryOnce,
+      }),
+    },
+    {
+      // The fallback route throws instead of returning a retry; it must hand the work over too.
+      route: 'the next fallback model',
+      build: (prompts: any[][]) => ({
+        model: [
+          { model: scriptedModel('failing-model', [callThenThrow('call-finished', 'finished', 80)], prompts) },
+          { model: scriptedModel('fallback-model', [recover], prompts) },
+        ] as never,
+      }),
+    },
+  ])('hands $route work the discarded attempt already finished', async ({ build }) => {
+    // Cancellation only answers for work still running. A tool that *finished* has had its side
+    // effect, so the next model call must see it — otherwise it asks again and it runs twice.
+    const executions: string[] = [];
+    const prompts: any[][] = [];
     const agent = new Agent({
       id: 'eager-finished-work-agent',
       name: 'Eager finished work agent',
       instructions: 'Call tool-a.',
-      model,
-      errorProcessors: [
-        {
-          id: 'retry-once',
-          processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
-        },
-      ] as never,
+      ...build(prompts),
       tools: {
         'tool-a': createTool({
           id: 'tool-a',
@@ -1724,249 +1248,80 @@ describe('eager tool dispatch — discarded model attempt', () => {
 
     await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true })).catch(() => {});
 
-    expect(attempt).toBe(2);
-    // The tool ran once, eagerly, during the attempt that was then discarded.
-    expect(executions).toEqual(['finished']);
-
-    // The replacement attempt is shown the completed call and its result, so it has no
-    // reason to ask for the work again.
-    const retryPrompt = JSON.stringify(prompts[1]);
-    expect(retryPrompt).toContain('call-finished');
-    expect(retryPrompt).toContain('answered-finished');
-  });
-
-  it('hands the next fallback model work the failed model already finished', async () => {
-    // The fallback route discards an attempt without ever going through a retry return:
-    // the callback throws, and the fallback machinery invokes it again with the next
-    // model. Nothing on that path used to write the finished work, so the second model
-    // was shown a clean slate and asked for the same tool again.
-    const executions: string[] = [];
-    const prompts: any[][] = [];
-
-    const failingModel = new MockLanguageModelV2({
-      modelId: 'failing-model',
-      doStream: async ({ prompt }) => {
-        prompts.push(prompt as any[]);
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: new ReadableStream({
-            async start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: 'response-failing',
-                modelId: 'failing-model',
-                timestamp: new Date(0),
-              });
-              controller.enqueue({
-                type: 'tool-call',
-                toolCallId: 'call-finished',
-                toolName: 'tool-a',
-                input: JSON.stringify({ value: 'finished' }),
-              });
-              // Long enough that the eager execution has certainly settled before the
-              // model takes the attempt down with it.
-              await new Promise(resolve => setTimeout(resolve, 80));
-              controller.error(new Error('model blew up mid-stream'));
-            },
-          }),
-        };
-      },
-    });
-
-    const fallbackModel = new MockLanguageModelV2({
-      modelId: 'fallback-model',
-      doStream: async ({ prompt }) => {
-        prompts.push(prompt as any[]);
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: 'response-fallback',
-                modelId: 'fallback-model',
-                timestamp: new Date(0),
-              });
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
-              controller.enqueue({ type: 'text-end', id: 'text-1' });
-              controller.enqueue({
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              });
-              controller.close();
-            },
-          }),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      id: 'eager-fallback-work-agent',
-      name: 'Eager fallback work agent',
-      instructions: 'Call tool-a.',
-      model: [{ model: failingModel }, { model: fallbackModel }] as never,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Finishes immediately',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ answer: z.string() }),
-          execute: async ({ value }) => {
-            executions.push(value);
-            return { answer: `answered-${value}` };
-          },
-        }),
-      },
-    });
-
-    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true })).catch(() => {});
-
-    // Pins that the fallback model was actually reached, so the assertion below cannot
-    // pass because the run died before the second attempt existed.
+    // The second model call was really reached, and the tool ran once, eagerly.
     expect(prompts.length).toBe(2);
     expect(executions).toEqual(['finished']);
-
-    const fallbackPrompt = JSON.stringify(prompts[1]);
-    expect(fallbackPrompt).toContain('call-finished');
-    expect(fallbackPrompt).toContain('answered-finished');
+    const nextPrompt = JSON.stringify(prompts[1]);
+    expect(nextPrompt).toContain('call-finished');
+    expect(nextPrompt).toContain('answered-finished');
   });
 
   it('cancels eager work when an error chunk is answered with a retry', async () => {
-    const withoutEager = await runErrorChunkRetryScenario(false);
-    const withEager = await runErrorChunkRetryScenario(true);
+    // The error-chunk retry reaches a different early return than the thrown case, which is
+    // how it once shipped uncancelled.
+    const run = async (eagerToolExecution: boolean) => {
+      const { events, record } = createRecorder();
+      const prompts: any[][] = [];
+      const agent = new Agent({
+        id: `eager-error-retry-agent-${eagerToolExecution}`,
+        name: 'Eager error retry agent',
+        instructions: 'Call tool-a.',
+        model: scriptedModel('mock-model', [callThenErrorChunk('call-discarded', 'discarded', 20), recover], prompts),
+        errorProcessors: retryOnce,
+        tools: { 'tool-a': abortAwareTool(record) },
+      });
+      await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution })).catch(() => {});
+      await sleep(150);
+      // The retry really happened, so the run did not just die early.
+      expect(prompts.length).toBe(2);
+      return events;
+    };
 
-    // The discarded attempt's call never runs at all without eager dispatch.
-    expect(withoutEager).toEqual([]);
-    // With it, the call had already started, so the guarantee is that it is cancelled
-    // rather than left running to produce a side effect nothing will ever record.
-    expect(withEager).toEqual(['execute-discarded', 'aborted-discarded']);
+    // The discarded attempt's call never runs without eager dispatch; with it, it is cancelled.
+    expect(await run(false)).toEqual([]);
+    expect(await run(true)).toEqual(['execute-discarded', 'aborted-discarded']);
   });
 
-  async function runFallbackScenario(eagerToolExecution: boolean) {
-    const { events, record } = createRecorder();
-
-    const failing = new MockLanguageModelV2({
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: new ReadableStream({
-          async start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'response-1',
-              modelId: 'failing-model',
-              timestamp: new Date(0),
-            });
-            controller.enqueue({
-              type: 'tool-call',
-              toolCallId: 'call-discarded',
-              toolName: 'tool-a',
-              input: JSON.stringify({ value: 'discarded' }),
-            });
-            await new Promise(resolve => setTimeout(resolve, 20));
-            controller.error(new Error('model blew up mid-stream'));
-          },
-        }),
-      }),
-    });
-
-    const recovering = new MockLanguageModelV2({
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'response-2',
-              modelId: 'recovering-model',
-              timestamp: new Date(0),
-            });
-            // Deliberately reuses the discarded attempt's toolCallId. Nothing may adopt
-            // the cancelled execution's promise for it — this call has to run fresh.
-            controller.enqueue({
-              type: 'tool-call',
-              toolCallId: 'call-discarded',
-              toolName: 'tool-a',
-              input: JSON.stringify({ value: 'retried' }),
-            });
-            controller.enqueue({
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            });
-            controller.close();
-          },
-        }),
-      }),
-    });
-
-    const agent = new Agent({
-      id: `eager-fallback-agent-${eagerToolExecution}`,
-      name: 'Eager fallback agent',
-      instructions: 'Call tool-a.',
-      model: [
-        { model: failing, maxRetries: 0 },
-        { model: recovering, maxRetries: 0 },
-      ] as any,
-      tools: {
-        'tool-a': createTool({
-          id: 'tool-a',
-          description: 'Records that it ran',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }, options) => {
-            record(`execute-${value}`);
-            const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
-            // Event-driven rather than sleep-then-check, so the assertion turns on the
-            // abort actually arriving and not on how fast CI is.
-            if (signal) {
-              await new Promise<void>(resolve => {
-                if (signal.aborted) return resolve();
-                signal.addEventListener('abort', () => resolve(), { once: true });
-                setTimeout(resolve, 500);
-              });
-              if (signal.aborted) record(`aborted-${value}`);
-            }
-            return { value };
-          },
-        }),
-      },
-    });
-
-    await drain(
-      await agent.stream('go', {
-        maxSteps: 1,
-        eagerToolExecution,
-        toolCallConcurrency: 1,
-      }),
-    ).catch(() => {});
-
-    // Give any leaked eager execution time to surface rather than racing the assertion.
-    await new Promise(resolve => setTimeout(resolve, 50));
-    return events.filter(event => event.startsWith('execute-') || event.startsWith('aborted-'));
-  }
-
   it('cancels eager work belonging to an attempt the pipeline discarded', async () => {
-    const withoutEager = await runFallbackScenario(false);
-    const withEager = await runFallbackScenario(true);
+    const run = async (eagerToolExecution: boolean) => {
+      const { events, record } = createRecorder();
+      const agent = new Agent({
+        id: `eager-fallback-agent-${eagerToolExecution}`,
+        name: 'Eager fallback agent',
+        instructions: 'Call tool-a.',
+        model: [
+          { model: scriptedModel('failing-model', [callThenThrow('call-discarded', 'discarded', 20)]), maxRetries: 0 },
+          {
+            // Deliberately reuses the discarded toolCallId: nothing may adopt the cancelled promise.
+            model: scriptedModel('recovering-model', [
+              controller => {
+                emitCall(controller, 'call-discarded', 'retried');
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            ]),
+            maxRetries: 0,
+          },
+        ] as any,
+        tools: { 'tool-a': abortAwareTool(record) },
+      });
+      await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution, toolCallConcurrency: 1 })).catch(
+        () => {},
+      );
+      // Give any leaked eager execution time to surface rather than racing the assertion.
+      await sleep(50);
+      return events;
+    };
 
-    // The normal pipeline never runs the discarded attempt's call at all — it only runs
-    // the surviving attempt's call, which reuses the same toolCallId.
-    expect(withoutEager).toEqual(['execute-retried']);
-
-    // Eager dispatch had already started the discarded one, so the guarantee is
-    // cancellation rather than absence: it is told to stop the moment its attempt is
-    // thrown away. Crucially the surviving call still executes for real instead of
-    // adopting the cancelled promise that shares its id.
+    // The normal pipeline only runs the surviving call, which reuses the same toolCallId.
+    expect(await run(false)).toEqual(['execute-retried']);
+    // Eager had already started the discarded one, so the guarantee is cancellation — and the
+    // surviving call still runs for real instead of adopting the cancelled promise.
+    const withEager = await run(true);
     expect(withEager).toEqual(['execute-discarded', 'aborted-discarded', 'execute-retried']);
     expect(withEager).not.toContain('aborted-retried');
   });

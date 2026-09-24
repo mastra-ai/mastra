@@ -54,7 +54,6 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
-import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 import {
   EAGER_TOOL_ABORT_SIGNAL,
   EAGER_TOOL_BAILOUT,
@@ -65,6 +64,7 @@ import {
   eagerToolCallSuspensionIntent,
 } from './eager-tool-execution';
 import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
+import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -1577,6 +1577,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // instead of running the call normally.
         if (eagerToolCallDidNotExecute(error)) {
           throw error;
+        }
+        // The tool caught the bailout and threw something else without a `cause`: the
+        // call still bailed, so hand back the recorded intent instead of a tool failure.
+        if (eagerBailout?.reason) {
+          throw new EagerToolExecutionNotRun(eagerBailout.reason, {
+            inputAvailableCalled: eagerBailout.inputAvailableCalled,
+            suspension: eagerBailout.suspension,
+          });
         }
         // A throw while the request is aborted is a mid-flight cancellation, not a genuine
         // failure. Recording it as an error result would fake-complete the call (its

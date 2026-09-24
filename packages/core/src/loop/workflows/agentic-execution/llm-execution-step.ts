@@ -1273,6 +1273,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   // Points at the live iteration's committer: the abort listener is registered once per
   // run, so it must not close over the first iteration's message id.
   let commitSettledEagerWorkOnAbort: (() => void) | undefined;
+  // Held so the dependent signal (and its listener) lives exactly as long as this step.
+  let eagerAbortSignal: AbortSignal | undefined;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1308,19 +1310,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * error chunk that an error processor answers with a retry, and a processor
        * rejecting the step's output with a retrying tripwire.
        */
-      const discardAttemptEagerWork = () => {
+      const discardAttemptEagerWork = async () => {
         const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
         // Written the moment the attempt dies, not when a replacement starts: a retry that
         // never runs (out of steps, a bail) would otherwise lose the only record of a
         // side effect that happened.
         if (completed?.length) eagerCoordinator?.carryDiscardedWork(completed);
-        commitCarriedEagerWork(currentMessageId);
+        await commitCarriedEagerWork(currentMessageId);
       };
 
-      const commitCarriedEagerWork = (messageId: string) => {
+      const commitCarriedEagerWork = async (messageId: string) => {
         const completed = eagerCoordinator?.takeCarriedWork() ?? [];
         if (!completed.length) return;
+        // Recorded before the awaits below so a concurrent rollback can still recarry it.
+        eagerCoordinator?.recordCommittedWork(messageId, completed);
 
         // A tool that already ran is the one thing the discard cannot undo. Committing
         // the call and its result into the conversation is what keeps eager execution
@@ -1332,19 +1336,32 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // already carries the call instead of adding a second message with the same tool
         // call id. On a retry that deleted the dead attempt's messages, it is the new
         // attempt's id, and this is the only surviving record of the side effect.
-        const messages = buildMessagesFromChunks({
-          chunks: completed.flatMap(work => [
+        //
+        // Chunks go through the same payload transforms as streamed tool chunks, so
+        // configured transcript/display redaction applies to recovered work too.
+        const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
+        const { resolveTool } = createToolResolvers({ ...tools, ...stepTools } as ToolSet);
+        const transformOptions = {
+          resolveTool,
+          policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
+          logger,
+        };
+        const chunks: CollectedChunk[] = [];
+        for (const work of completed) {
+          for (const chunk of [
             { type: 'tool-call', payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args } },
             {
               type: 'tool-result',
-              payload: {
-                toolCallId: work.toolCallId,
-                toolName: work.toolName,
-                args: work.args,
-                result: work.result,
-              },
+              payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args, result: work.result },
             },
-          ]),
+          ]) {
+            chunks.push(
+              (await addToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT>, transformOptions)) as CollectedChunk,
+            );
+          }
+        }
+        const messages = buildMessagesFromChunks({
+          chunks,
           messageId,
           // No tool set needed: it is only consulted to infer provider execution, and
           // the eligibility whitelist never dispatches a provider-executed call.
@@ -1352,7 +1369,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         for (const message of messages) {
           messageList.add(message, 'response');
         }
-        eagerCoordinator?.recordCommittedWork(messageId, completed);
       };
 
       if (eagerCoordinator) {
@@ -1367,15 +1383,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // Settled work is committed before teardown; only in-flight work is cancelled.
           const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
           if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
-          commitCarriedEagerWork(currentMessageId);
-        };
-        if (!eagerAbortListenerRegistered) {
-          eagerAbortListenerRegistered = true;
-          options?.abortSignal?.addEventListener(
-            'abort',
-            () => commitSettledEagerWorkOnAbort?.(),
-            { once: true },
+          void commitCarriedEagerWork(currentMessageId).catch(error =>
+            logger?.error('Failed to commit settled eager tool work on abort', { error }),
           );
+        };
+        if (!eagerAbortListenerRegistered && options?.abortSignal) {
+          eagerAbortListenerRegistered = true;
+          // Listen on a dependent signal rather than the caller's: callers often reuse one
+          // long-lived signal across many runs, and a listener added to it directly would
+          // outlive this run and pin its message list. The caller's signal only holds the
+          // dependent weakly, so the listener goes away with this run's step closure.
+          eagerAbortSignal = AbortSignal.any([options.abortSignal]);
+          eagerAbortSignal.addEventListener('abort', () => commitSettledEagerWorkOnAbort?.(), { once: true });
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.
@@ -1509,7 +1528,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // rotateResponseMessageId — is harmless for a different reason: rotation seals
         // the committed message, so the attempt streams into a fresh one and a removal
         // of that fresh id cannot take the committed record with it.
-        commitCarriedEagerWork(currentMessageId);
+        await commitCarriedEagerWork(currentMessageId);
 
         const currentStep: {
           messageId: string;
@@ -2116,13 +2135,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         // plain `processOutputStep` / `processLLMResponse` methods are not
                         // visible here. The wrapper records whether anything inside it runs
                         // after the stream; a workflow that does not say is assumed to.
-                        hasPostStreamProcessor: Boolean(
-                          outputProcessors?.some(processor =>
-                            isProcessorWorkflow(processor)
-                              ? processor.__processOutputStep !== false
-                              : 'processLLMResponse' in processor || 'processOutputStep' in processor,
+                        hasPostStreamProcessor:
+                          Boolean(
+                            outputProcessors?.some(processor =>
+                              isProcessorWorkflow(processor)
+                                ? processor.__processOutputStep !== false
+                                : 'processLLMResponse' in processor || 'processOutputStep' in processor,
+                            ),
+                          ) ||
+                          // Request-stage processors run `processLLMResponse` after the
+                          // stream too, and a tripwire there bails with no tool calls.
+                          // Workflows are skipped by runProcessLLMResponse, so only plain
+                          // processors count.
+                          getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }).some(
+                            processor => !isProcessorWorkflow(processor) && 'processLLMResponse' in processor,
                           ),
-                        ),
                         // `processToolResult` only matters in conjunction with a
                         // provider-executed tool: that is the one result reaching the hook
                         // mid-stream, where an abort bails the attempt before the foreach
@@ -2449,7 +2476,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
 
             // Retried or failed over: this attempt's calls are dropped either way.
-            discardAttemptEagerWork();
+            await discardAttemptEagerWork();
 
             if (errorResult.retry && canRetryError) {
               // Signal retry - store on runState so it's handled after the callback returns
@@ -2628,7 +2655,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         cleanupProviderToolSpans(true);
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
-        discardAttemptEagerWork();
+        await discardAttemptEagerWork();
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -2950,7 +2977,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // `processOutputStepTripwire` from it further down is itself dead. These
         // two lines are therefore insurance against that arrangement changing, not a live
         // path: cheap, and the thing they prevent is a second real side effect.
-        discardAttemptEagerWork();
+        await discardAttemptEagerWork();
       }
 
       const retryFeedbackText =

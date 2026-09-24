@@ -22,7 +22,12 @@ function toolCallThen(
     stream: new ReadableStream<StreamPart>({
       async start(controller) {
         controller.enqueue({ type: 'stream-start', warnings: [] });
-        controller.enqueue({ type: 'response-metadata', id: 'response', modelId: 'mock-model', timestamp: new Date(0) });
+        controller.enqueue({
+          type: 'response-metadata',
+          id: 'response',
+          modelId: 'mock-model',
+          timestamp: new Date(0),
+        });
         for (const call of calls) {
           controller.enqueue({
             type: 'tool-call',
@@ -151,6 +156,32 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     expect(attempts).toBe(1);
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('answered-a');
+  });
+
+  it('applies the configured payload transform to a settled result it writes on discard', async () => {
+    const executions: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async () =>
+        toolCallThen(async controller => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+          controller.close();
+        }),
+    });
+
+    const stream = await createAgent(model, executions, { retry: true }).stream('go', {
+      maxSteps: 1,
+      eagerToolExecution: true,
+      transform: {
+        targets: ['transcript'],
+        transformToolPayload: ctx => `[redacted ${ctx.phase}]`,
+      },
+    } as never);
+    await drain(stream);
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(executions).toEqual(['a']);
+    expect(recordedResults(stream)).toContain('[redacted output-available]');
   });
 
   it('commits a settled result when the caller aborts, and still runs it only once', async () => {
