@@ -651,7 +651,7 @@ A new knowledge and subconscious memory primitive for cross-thread memory is com
 
 #### Cross-thread continuity without resource scope
 
-Switching from resource scope to thread scope doesn't migrate existing observations. Each thread starts a new, empty thread-scoped observation record, and messages already observed under resource scope aren't observed again. Keep facts that must carry over in resource-scoped working memory.
+Switching from resource scope to thread scope doesn't migrate resource-scoped observations. Each thread uses its existing thread-scoped record if it has one, or starts a new, empty one, and messages already observed under resource scope aren't observed again. Keep facts that must carry over in resource-scoped working memory.
 
 Use thread scope with one or both of these features instead:
 
