@@ -693,6 +693,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
+        { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/model-selection-processor', label: 'ModelSelectionProcessor' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },

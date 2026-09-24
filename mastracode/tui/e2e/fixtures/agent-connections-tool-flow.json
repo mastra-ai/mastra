@@ -194,7 +194,7 @@
             "name": "agent_signal_send",
             "arguments": {
               "targetId": "code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread",
-              "summary": "Reconnected peer confirmation.",
+              "message": "Reconnected peer confirmation.",
               "priority": "high",
               "expectsReply": false,
               "messageId": "agent-connections-tool-flow-reconnect"
