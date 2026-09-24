@@ -381,7 +381,7 @@ export class CachingPubSub extends PubSub {
   }
 
   /** Forward run trims to the inner transport; the per-process cache is left to its own bounds. */
-  override async trimTopic(topic: string, options: { runId: string }): Promise<void> {
+  override async trimTopic(topic: string, options: { runId: string; producedBefore?: number }): Promise<void> {
     try {
       await this.inner.trimTopic(topic, options);
     } catch (error) {

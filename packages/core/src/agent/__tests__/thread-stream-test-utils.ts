@@ -17,6 +17,13 @@ export function nextTicks(count = 5) {
   );
 }
 
+function trimMatches(event: any, runId: string, producedBefore?: number) {
+  if (event.runId !== runId) return false;
+  if (producedBefore === undefined) return true;
+  const producedAt = event.data?.producedAt;
+  return typeof producedAt === 'number' && producedAt <= producedBefore && !event.data?.pinned;
+}
+
 /** In-memory pubsub with a real lease provider, standing in for Redis Streams. */
 export class LeasePubSub extends PubSub implements LeaseProvider {
   owners = new Map<string, string>();
@@ -45,12 +52,19 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
       await this.#deliver(topic, stamped, subscriber);
     }
   }
-  override async trimTopic(topic: string, { runId }: { runId: string }): Promise<void> {
+  override async trimTopic(
+    topic: string,
+    { runId, producedBefore }: { runId: string; producedBefore?: number },
+  ): Promise<void> {
     this.#retained.set(
       topic,
-      (this.#retained.get(topic) ?? []).filter(event => event.runId !== runId),
+      (this.#retained.get(topic) ?? []).filter(event => !trimMatches(event, runId, producedBefore)),
     );
   }
+  retainedTopics(): string[] {
+    return [...this.#retained.keys()];
+  }
+
   /** Events still retained on a topic, in publish order. */
   retainedEvents(topic: string): any[] {
     return this.#retained.get(topic) ?? [];

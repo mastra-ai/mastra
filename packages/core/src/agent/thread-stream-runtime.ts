@@ -19,7 +19,8 @@ import { createRecentRequests } from './recent-requests';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
-import { createThreadHistoryFilter, stampPartProducedAt } from './thread-history';
+import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
+import { onThreadMessagesSaved } from './thread-saves';
 import type {
   AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
@@ -410,6 +411,8 @@ type AgentThreadStreamRuntimeEvent =
       sourceId: string;
       /** Epoch ms the part was produced; publishing can lag behind it. */
       producedAt?: number;
+      /** Kept by save-time trims; removed only when the whole run is trimmed. */
+      pinned?: boolean;
     }
   | {
       type: 'run-completed';
@@ -1634,6 +1637,10 @@ export class AgentThreadStreamRuntime {
     const runtime = this;
 
     const parts: unknown[] = [];
+    // Parts already dropped from the front of `parts`; reader positions are absolute.
+    let dropped = 0;
+    let published = 0;
+    const readers = new Set<{ index: number }>();
     const waiters = new Set<() => void>();
     let started = false;
     let done = false;
@@ -1673,6 +1680,7 @@ export class AgentThreadStreamRuntime {
       const producedAt = getChunkProducedAt(rawPart) ?? Date.now();
       stampPartProducedAt(part, producedAt);
       parts.push(part);
+      const partType = (part as { type?: string } | null | undefined)?.type;
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
         runId: output.runId,
@@ -1680,7 +1688,11 @@ export class AgentThreadStreamRuntime {
         part,
         sourceId: runtime.#getSourceId(),
         producedAt,
+        // Prompts stay on the topic until the run is trimmed as a whole.
+        ...(partType === 'tool-call-approval' || partType === 'tool-call-suspended' ? { pinned: true } : {}),
       });
+      published++;
+      if (savedAt !== undefined) trimSaved();
       wake();
       // An error chunk settles `_waitUntilFinished()` without closing
       // `fullStream` (durable error-recovery keeps consuming), so the pump can
@@ -1773,16 +1785,67 @@ export class AgentThreadStreamRuntime {
       await broadcastFinished;
     };
 
+    // Messages saved mid-run (e.g. at each step) already hold every part up to
+    // the last finished step: drop those parts from the topic and, once every
+    // open reader has passed them, from this buffer.
+    // Latest save not yet fully trimmed; publishing can lag behind the save.
+    let savedAt: number | undefined;
+    let trimmedThrough = -1;
+    const trimSaved = () => {
+      if (savedAt === undefined) return;
+      let cutoff = -1;
+      let cutoffAt: number | undefined;
+      for (let i = dropped; i < published; i++) {
+        const part = parts[i - dropped] as { type?: string } | undefined;
+        const at = getPartProducedAt(part);
+        if (at === undefined || at > savedAt) {
+          savedAt = undefined;
+          break;
+        }
+        if (part?.type === 'step-finish') {
+          cutoff = i;
+          cutoffAt = at;
+        }
+      }
+      if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
+      trimmedThrough = cutoff;
+      void runtime.#getPubSub(pubsub)
+        .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
+        .catch(() => {});
+      let keep = cutoff + 1;
+      for (const reader of readers) keep = Math.min(keep, reader.index);
+      for (let i = dropped; i < keep; i++) {
+        const type = (parts[i - dropped] as { type?: string } | undefined)?.type;
+        if (type === 'tool-call-approval' || type === 'tool-call-suspended') {
+          keep = i;
+          break;
+        }
+      }
+      if (keep > dropped) {
+        parts.splice(0, keep - dropped);
+        dropped = keep;
+      }
+    };
+    const { threadId: savedThreadId, resourceId: savedResourceId } = runtime.#parseThreadKey(key);
+    const stopSaveListener = onThreadMessagesSaved({ threadId: savedThreadId, resourceId: savedResourceId }, at => {
+      savedAt = Math.max(savedAt ?? at, at);
+      trimSaved();
+    });
+    void broadcastFinished.then(stopSaveListener);
+
     const createStream = () => {
-      let index = 0;
+      // A subscriber that joins late starts after parts already dropped as saved.
+      const reader = { index: dropped };
       let closed = false;
       let waiter: (() => void) | undefined;
+      readers.add(reader);
       return new ReadableStream({
         async pull(controller) {
           start();
           while (!closed) {
-            if (index < parts.length) {
-              controller.enqueue(parts[index++]);
+            if (reader.index < dropped) reader.index = dropped;
+            if (reader.index - dropped < parts.length) {
+              controller.enqueue(parts[reader.index++ - dropped]);
               return;
             }
             if (error) {
@@ -1790,6 +1853,7 @@ export class AgentThreadStreamRuntime {
               return;
             }
             if (done) {
+              readers.delete(reader);
               controller.close();
               return;
             }
@@ -1805,6 +1869,7 @@ export class AgentThreadStreamRuntime {
         },
         cancel() {
           closed = true;
+          readers.delete(reader);
           if (waiter) {
             waiters.delete(waiter);
             waiter();

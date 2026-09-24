@@ -9,6 +9,8 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
+import { MessageHistory } from '../../processors/memory/message-history';
+import type { MemoryStorage } from '../../storage';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -68,18 +70,14 @@ function model(tool: string, beforeAnswer?: Promise<void>, siblings = false) {
 }
 
 /** Saves the previous step at each step boundary, the way Observational Memory does. */
-function stepSaver(memory: MockMemory, onSaved?: () => void): Processor {
+function stepSaver(store: InMemoryStore, onSaved?: () => void): Processor {
   return {
     id: 'step-saver',
     processInputStep: async ({ messageList, stepNumber }) => {
       if (stepNumber === 0) return;
-      if (!(await memory.getThreadById({ threadId }))) {
-        await memory.saveThread({
-          thread: { id: threadId, resourceId, title: '', createdAt: new Date(), updatedAt: new Date() },
-        });
-      }
+      const history = new MessageHistory({ storage: (await store.getStore('memory')) as MemoryStorage });
       const messages = [...messageList.get.input.db(), ...messageList.get.response.db()];
-      await memory.saveMessages({ messages });
+      await history.persistMessages({ messages, threadId, resourceId });
       onSaved?.();
     },
   };
@@ -98,7 +96,8 @@ function setup(options: {
   const pubsub = new LeasePubSub();
   pubsub.retain = true;
   pubsub.streamPartDelayMs = options.delayMs;
-  const memory = new MockMemory();
+  const store = new InMemoryStore();
+  const memory = new MockMemory({ storage: store });
   const execute = async () => {
     options.onToolStart?.();
     await options.toolGate;
@@ -120,10 +119,10 @@ function setup(options: {
       }),
       echo: createTool({ id: 'echo', description: 'e', inputSchema: z.object({ q: z.string() }), execute }),
     },
-    inputProcessors: options.saveEachStep ? [stepSaver(memory, options.onStepSaved)] : [],
+    inputProcessors: options.saveEachStep ? [stepSaver(store, options.onStepSaved)] : [],
   });
   const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false, pubsub });
-  return mastra.getAgent('agent');
+  return Object.assign(mastra.getAgent('agent'), { pubsub });
 }
 
 async function drain(stream: { fullStream: AsyncIterable<any> }) {
@@ -246,5 +245,33 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     await consumed;
 
     expect(chunks.filter(c => c.type === 'tool-call-approval').map(c => c.payload.toolCallId)).toEqual(['call-2']);
+  });
+
+  it('trims the saved step from the topic while the run continues', async () => {
+    const answerGate = deferred();
+    const stepSaved = deferred();
+    const agent = setup({
+      delayMs,
+      tool: 'echo',
+      beforeAnswer: answerGate.promise,
+      saveEachStep: true,
+      onStepSaved: stepSaved.resolve,
+    });
+    const run = drain(await agent.stream('go', { memory: memoryOption }));
+    const topicParts = () =>
+      agent.pubsub
+        .retainedTopics()
+        .flatMap(topic => agent.pubsub.retainedEvents(topic))
+        .filter(e => e.data?.type === 'stream-part')
+        .map(e => e.data.part.type as string);
+    await stepSaved.promise;
+    await vi.waitFor(() => expect(topicParts()).not.toContain('tool-call'));
+
+    const midRun = topicParts();
+    expect(midRun).not.toContain('tool-call');
+    expect(midRun).not.toContain('text-delta');
+
+    answerGate.resolve();
+    await run;
   });
 });

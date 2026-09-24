@@ -66,8 +66,11 @@ export abstract class PubSub {
    *
    * @param topic - The topic to trim
    * @param options.runId - The run whose entries to delete
+   * @param options.producedBefore - Only delete entries whose `data.producedAt`
+   *   is at or before this epoch ms and that aren't `data.pinned`. Used to drop
+   *   the parts of a run that storage already holds while the run continues.
    */
-  trimTopic(_topic: string, _options: { runId: string }): Promise<void> {
+  trimTopic(_topic: string, _options: { runId: string; producedBefore?: number }): Promise<void> {
     return Promise.resolve();
   }
 

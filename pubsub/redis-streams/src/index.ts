@@ -755,10 +755,14 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
   /**
    * Deletes a run's entries with `XDEL`: pages through the stream with `XRANGE`
-   * and matches each entry's `runId`. Entries of other runs, including those
-   * published by other processes, are untouched.
+   * and matches each entry's `runId`. With `producedBefore`, only unpinned
+   * entries produced at or before it are deleted. Entries of other runs,
+   * including those published by other processes, are untouched.
    */
-  override async trimTopic(topic: string, { runId }: { runId: string }): Promise<void> {
+  override async trimTopic(
+    topic: string,
+    { runId, producedBefore }: { runId: string; producedBefore?: number },
+  ): Promise<void> {
     if (this.#closed) return;
     try {
       await this.#ensureWriterConnected();
@@ -770,7 +774,16 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         for (const entry of page) {
           if (!entry) continue;
           try {
-            if ((JSON.parse(entry.message.event ?? '{}') as { runId?: string }).runId === runId) ids.push(entry.id);
+            const event = JSON.parse(entry.message.event ?? '{}') as {
+              runId?: string;
+              data?: { producedAt?: unknown; pinned?: unknown };
+            };
+            if (event.runId !== runId) continue;
+            if (producedBefore !== undefined) {
+              const producedAt = event.data?.producedAt;
+              if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;
+            }
+            ids.push(entry.id);
           } catch {
             // An unparseable entry can't belong to this run.
           }

@@ -11,6 +11,10 @@ export function stampPartProducedAt(part: unknown, at: number) {
   if (part && typeof part === 'object') partProducedAt.set(part, at);
 }
 
+export function getPartProducedAt(part: unknown): number | undefined {
+  return part && typeof part === 'object' ? partProducedAt.get(part) : undefined;
+}
+
 function toEpoch(value: unknown): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (value instanceof Date || typeof value === 'string') {

@@ -1,6 +1,7 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
+import { noteThreadMessagesSaved } from '../../agent/thread-saves';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import {
@@ -332,6 +333,8 @@ export class MessageHistory implements Processor {
       return;
     }
 
+    const savedAt = Date.now();
+
     // Ensure thread exists (create if needed) before saving messages.
     // Nothing to write when it already exists: re-writing the row we just read
     // would clobber a title generated concurrently with this save.
@@ -352,5 +355,6 @@ export class MessageHistory implements Processor {
 
     // Persist messages after thread is guaranteed to exist
     await this.storage.saveMessages({ messages: filtered });
+    noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
 }
