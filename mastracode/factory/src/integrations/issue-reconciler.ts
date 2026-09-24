@@ -2,6 +2,9 @@ import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilitie
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
+export const EXTERNAL_SOURCE_MISSING_KEY = 'externalSourceMissingAt';
+const MISSING_RECHECK_MS = 24 * 60 * 60_000;
+
 export interface IssueReconcileSummary {
   projects: number;
   checked: number;
@@ -48,6 +51,7 @@ export interface IssueReconcilerOptions<TScope = void> {
   ): Promise<Record<string, unknown> | void>;
   /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
   isTerminal(item: WorkItemRow): boolean;
+  now?: () => Date;
 }
 
 export type IssueReconciler<TScope = void> = TScope extends void
@@ -100,6 +104,11 @@ function withoutUndefined(record: Record<string, unknown>): Record<string, unkno
   return out;
 }
 
+function withoutMissingMarker(record: Record<string, unknown> | null): Record<string, unknown> {
+  const { [EXTERNAL_SOURCE_MISSING_KEY]: _missingAt, ...metadata } = record ?? {};
+  return metadata;
+}
+
 function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId: string): WorkItemRow[] {
   return items.filter(
     item =>
@@ -110,6 +119,7 @@ function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId
 }
 
 export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions<TScope>): IssueReconciler<TScope> {
+  const now = options.now ?? (() => new Date());
   const run = async (scope?: IssueReconcileScope<TScope>): Promise<IssueReconcileSummary> => {
     const summary: IssueReconcileSummary = {
       projects: 0,
@@ -138,31 +148,58 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
       for (const item of items) {
         summary.checked += 1;
         try {
+          const missingAt = item.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
+          const missingTime = typeof missingAt === 'string' ? Date.parse(missingAt) : Number.NaN;
+          if (Number.isFinite(missingTime) && now().getTime() - missingTime < MISSING_RECHECK_MS) {
+            summary.missing += 1;
+            continue;
+          }
+
           const resolved = await options.intake.resolveIntakeDispatch?.({
             orgId: project.orgId,
             externalSource: options.externalSource?.(item) ?? item.externalSource!,
           });
           if (!resolved) {
+            await options.storage.update({
+              orgId: project.orgId,
+              id: item.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+            });
             summary.missing += 1;
             continue;
           }
           const issueId = options.issueId(item) ?? resolved.issueId;
           const issue = await options.intake.getIssue({ ...resolved, issueId });
           if (!issue) {
+            await options.storage.update({
+              orgId: project.orgId,
+              id: item.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+            });
             summary.missing += 1;
             continue;
           }
 
+          const hadMissingMarker = typeof missingAt === 'string';
+          const baseMetadata = withoutMissingMarker(item.metadata);
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
           if (isClosed && !options.isTerminal(item) && options.onClosed) {
             const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});
-            if (!metadataMatches(item.metadata, closedMetadata)) {
+            if (hadMissingMarker || !metadataMatches(baseMetadata, closedMetadata)) {
               await options.storage.update({
                 orgId: project.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...(item.metadata ?? {}), ...closedMetadata } },
+                patch: {
+                  metadata: {
+                    ...baseMetadata,
+                    ...closedMetadata,
+                    ...(hadMissingMarker ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}),
+                  },
+                },
               });
               summary.updated += 1;
             }
@@ -171,12 +208,18 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
           }
 
           const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
-          if (metadataMatches(item.metadata, metadata)) continue;
+          if (!hadMissingMarker && metadataMatches(baseMetadata, metadata)) continue;
           await options.storage.update({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { ...(item.metadata ?? {}), ...metadata } },
+            patch: {
+              metadata: {
+                ...baseMetadata,
+                ...metadata,
+                ...(hadMissingMarker ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}),
+              },
+            },
           });
           summary.updated += 1;
         } catch (error) {

@@ -7,6 +7,8 @@
  * talks to Linear's GraphQL API on the org's behalf.
  */
 
+import { RequestError } from './request';
+
 export type LinearStatusReason =
   | 'missing_config'
   | 'auth_required'
@@ -114,8 +116,8 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
     } catch {
       /* ignore non-JSON */
     }
-    const err = new Error(message);
-    (err as { code?: string }).code = code;
+    const err = new RequestError(message, res.status);
+    (err as RequestError & { code?: string }).code = code;
     throw err;
   }
   return (await res.json()) as T;
