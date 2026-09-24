@@ -79,16 +79,16 @@ Monospace is a typeface, not another role. `font="mono"` swaps the family to `--
 | Use mono for                                  | Keep in the body face                     |
 | --------------------------------------------- | ----------------------------------------- |
 | Model and resource IDs, versions, and hashes  | Labels, field names, and column headers   |
+| Timestamps: dates and times of day            | Numbers: durations, counts, and costs     |
 | Log lines                                     | Headings and page titles                  |
 | Values a user copies or compares by character | Status text and badges that name a state  |
 |                                               | Prose, descriptions, and empty-state copy |
-|                                               | Numbers: durations, counts, timestamps    |
 
-Numbers stay in the body face. Add `tabular-nums` where digits should line up, such as table columns and live timers.
+Numbers stay in the body face. Add `tabular-nums` where digits should line up, such as table columns and live timers. A timestamp is the exception: a date or time of day marks a moment, so it is mono like other machine values, while a duration such as `412ms` is a number and stays in the body face.
 
 Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables and fields, `caption` for secondary identifiers, and `meta` for compact values such as versions. Heading roles stay proportional.
 
-Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
+Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers and timestamps, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
 
 `--font-mono` defaults to the system monospace stack. Override it in an unlayered rule in your own CSS to use a product face, and every mono value follows.
 

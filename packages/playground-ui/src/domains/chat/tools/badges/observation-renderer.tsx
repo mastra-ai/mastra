@@ -259,14 +259,15 @@ function ObservationItem({
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
-          <span
-            className={cn(
-              'ml-2 shrink-0 text-meta tabular-nums',
-              useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
-            )}
+          <Txt
+            as="span"
+            variant="meta"
+            font="mono"
+            tone={useInheritedTextColor ? undefined : 'muted'}
+            className={cn('ml-2 shrink-0', useInheritedTextColor && 'opacity-60')}
           >
             {observation.time}
-          </span>
+          </Txt>
         )}
       </div>
       {observation.children.length > 0 && (

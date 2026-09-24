@@ -86,7 +86,7 @@ export const Monospace: Story = {
     docs: {
       description: {
         story:
-          'Mono swaps the face and keeps the role. Use it for identifiers a machine wrote: model and resource ids, hashes, and log lines. Numbers stay in the body face with tabular-nums. Code goes in InlineCode or CodeBlock. Labels, headings, status, and prose stay proportional, even when they sit beside a mono value.',
+          'Mono swaps the face and keeps the role. Use it for identifiers a machine wrote (model and resource ids, hashes, log lines) and for timestamps. Numbers such as durations and counts stay in the body face with tabular-nums. Code goes in InlineCode or CodeBlock. Labels, headings, status, and prose stay proportional, even when they sit beside a mono value.',
       },
     },
   },
@@ -106,6 +106,14 @@ export const Monospace: Story = {
         </Txt>
         <Txt variant="body-sm" font="mono">
           run_01JQX8K2M4
+        </Txt>
+      </div>
+      <div className="flex items-baseline gap-6">
+        <Txt variant="label" className="w-16 shrink-0">
+          Started
+        </Txt>
+        <Txt variant="body-sm" font="mono">
+          Sep 23, 12:42:07
         </Txt>
       </div>
       <div className="flex items-baseline gap-6">
