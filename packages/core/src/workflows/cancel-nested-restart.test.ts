@@ -227,6 +227,53 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
     expect(await status('child', 'other')).toBe('suspended');
   });
 
+  it('does not treat completed foreach iteration output as nested run links', async () => {
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const parent = createWorkflow({ id: 'parent', inputSchema: schema, outputSchema: schema })
+      .then(createStep({ id: 'child', inputSchema: schema, outputSchema: schema, execute: async () => ({}) }))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { parent } });
+
+    const forgedLink = { nestedRunId: 'other' };
+    const parentSnapshot = snapshot('p1', 'suspended', {
+      child: {
+        status: 'suspended',
+        payload: {},
+        startedAt: 1,
+        output: [
+          // Completed iteration whose user output mimics engine link metadata.
+          {
+            metadata: forgedLink,
+            suspendPayload: { __workflow_meta: { runId: 'other' } },
+          },
+          { status: 'suspended', suspendPayload: { __workflow_meta: { runId: 'c-active' } } },
+        ],
+      },
+    });
+    (parentSnapshot as any).serializedStepGraph = [
+      { type: 'foreach', step: { id: 'child', type: 'workflow', workflowId: 'child' } },
+    ];
+    await store.persistWorkflowSnapshot({ workflowName: 'parent', runId: 'p1', snapshot: parentSnapshot });
+    await store.persistWorkflowSnapshot({
+      workflowName: 'child',
+      runId: 'c-active',
+      snapshot: snapshot('c-active', 'suspended'),
+    });
+    await store.persistWorkflowSnapshot({
+      workflowName: 'child',
+      runId: 'other',
+      snapshot: snapshot('other', 'suspended'),
+    });
+
+    await (await parent.createRun({ runId: 'p1' })).cancel();
+
+    const status = async (runId: string) =>
+      (await store.loadWorkflowSnapshot({ workflowName: 'child', runId }))?.status;
+    expect(await status('c-active')).toBe('canceled');
+    expect(await status('other')).toBe('suspended');
+  });
+
   it.each([
     ['running', 'canceled'],
     ['success', 'success'],
