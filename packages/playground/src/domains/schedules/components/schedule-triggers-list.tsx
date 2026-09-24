@@ -1,10 +1,9 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { AlertTriangleIcon } from 'lucide-react';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
 import { useLinkComponent } from '@/lib/framework';
@@ -65,7 +64,6 @@ export function ScheduleTriggersList({
       {triggers.map(t => {
         const driftMs = t.actualFireAt - t.scheduledFireAt;
         const driftValue = formatDuration(driftMs, { signed: true });
-        const startedTooltip = `Scheduled ${t.scheduledFireAt ? formatDate(t.scheduledFireAt, 'date-time') : '—'} — published ${t.actualFireAt ? formatDate(t.actualFireAt, 'date-time') : '—'} (drift ${driftValue})`;
         const isPublishFailure = t.outcome === 'failed';
         const errorMessage = isPublishFailure ? t.error : t.run?.error;
         const absDrift = Math.abs(driftMs);
@@ -119,7 +117,7 @@ export function ScheduleTriggersList({
 
             <DataList.Cell>
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                <span title={startedTooltip}>{t.actualFireAt ? formatRelativeTime(t.actualFireAt) : '—'}</span>
+                {t.actualFireAt ? <RelativeTimestamp value={t.actualFireAt} /> : '—'}
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>

@@ -2,13 +2,12 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -145,9 +144,7 @@ export default function SchedulePage() {
               <ScheduleStatusText status={schedule.status} />
             </MetaItem>
             <MetaItem label="Next fire">
-              <span title={schedule.nextFireAt ? formatDate(schedule.nextFireAt, 'date-time') : '—'}>
-                {schedule.nextFireAt ? formatRelativeTime(schedule.nextFireAt) : '—'}
-              </span>
+              {schedule.nextFireAt ? <RelativeTimestamp value={schedule.nextFireAt} /> : '—'}
             </MetaItem>
           </div>
 
