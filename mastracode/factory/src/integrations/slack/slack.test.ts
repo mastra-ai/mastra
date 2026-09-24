@@ -1,3 +1,4 @@
+import { ChannelSessionRejectedError } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -512,34 +513,73 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
   });
 
-  it('a factory without a repository falls back to a chat-only session', async () => {
+  // Past the deployment checks a thread the bot cannot place is refused, not
+  // downgraded: a chat-only session would answer outside the sender's project,
+  // on the SDK's built-in defaults. The rejection error is what core turns into
+  // a silent drop instead of an error posted back into the thread.
+  it('a factory without a repository refuses the new thread instead of starting a chat-only session', async () => {
     const sourceControl = makeSourceControl({ hasRepo: false });
     const deps = makeResolverDeps({ sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
+    // A project with no linked repository resolves to *no* source-control
+    // partition at all, so either failure description is legitimate here.
+    await expect(resolve(resolveArgs())).rejects.toThrow(ChannelSessionRejectedError);
+    await expect(resolve(resolveArgs())).rejects.toThrow(/no source-control connection|no linked repository/i);
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
-  it('an unlinked sender stays chat-only and creates no session row', async () => {
+  it('an unlinked sender is refused rather than given a chat-only thread', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ link: null, sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
+    await expect(resolve(resolveArgs())).rejects.toThrow(ChannelSessionRejectedError);
+    await expect(resolve(resolveArgs())).rejects.toThrow(/not linked to a Factory account/);
     expect(sourceControl.connections.list).not.toHaveBeenCalled();
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
-  it('a source-control failure falls back to chat-only instead of dropping the message', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('a linked sender with no project to route to is refused', async () => {
+    const sourceControl = makeSourceControl();
+    const deps = makeResolverDeps({ sourceControl });
+    deps.projects = makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]);
+    deps.accountLinks.getAccountLink = vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1' });
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(resolve(resolveArgs())).rejects.toThrow(/has no Factory project/);
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('a message with no sender id falls back to the chat-only resourceId', async () => {
+    const sourceControl = makeSourceControl();
+    const deps = makeResolverDeps({ sourceControl });
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    const args = resolveArgs();
+    args.message.author.userId = '';
+    await expect(resolve(args)).resolves.toBe('channel:slack:C-1:1700.42');
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('a message from no identifiable Slack workspace is refused', async () => {
+    const sourceControl = makeSourceControl();
+    const deps = makeResolverDeps({ sourceControl });
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    const args = resolveArgs();
+    args.message.raw = {};
+    await expect(resolve(args)).rejects.toThrow(ChannelSessionRejectedError);
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('a source-control failure surfaces instead of dropping to a chat-only thread', async () => {
     const sourceControl = makeSourceControl();
     sourceControl.sessions.create.mockRejectedValue(new Error('db down'));
     const deps = makeResolverDeps({ sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
-    expect(warn).toHaveBeenCalled();
+    await expect(resolve(resolveArgs())).rejects.toThrow('db down');
   });
 });
 

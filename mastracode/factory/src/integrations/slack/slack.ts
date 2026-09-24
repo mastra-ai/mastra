@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { ChannelSessionRejectedError } from '@mastra/core/channels';
 import type {
   ChannelHandler,
   ChannelHandlerContext,
@@ -341,9 +342,23 @@ function threadBranch(threadId: string): string {
  * factory has a repository gets a Factory user-session id — the controller
  * session then materializes the repo sandbox via the factory's dynamic
  * workspace (clone + PAT), the session shows up in the web Sessions list, and
- * View Session deep-links land on the normal workspace route. Everything else
- * (unlinked, unrouted, repo-less, or no source control) keeps the chat-only
- * `defaultResourceId`.
+ * View Session deep-links land on the normal workspace route.
+ *
+ * A gated deployment refuses a thread it cannot place, rather than falling back
+ * to a chat-only session: a repo-backed thread is the whole point of the
+ * integration, and answering in a chat-only one would run the sender's request
+ * in no project, on the SDK's built-in defaults. The refusal is a
+ * `ChannelSessionRejectedError`, which core logs and drops without posting —
+ * a sender the bot turns away must not get a reply confirming it is present.
+ * The hook only runs when a NEW thread is actually created (`getOrCreateThread`
+ * resolves the owner lazily), so an established conversation is never touched:
+ * it keeps its session, its model, and its history.
+ *
+ * The chat-only `channel:...` id survives for two cases where refusing would be
+ * wrong: a deployment that cannot produce a repo-backed thread at all (no
+ * account linking, no projects, or no source-control integration registered),
+ * and a message carrying no sender id. In both, a `channel:` thread is the only
+ * shape a session can take.
  *
  * Pure lookups only — cards for unlinked/unrouted senders are the dispatch
  * gate's job; this hook must never post.
@@ -358,60 +373,78 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
     // default is the per-USER memory key. Chat-only fallbacks must stay
     // per-thread, so reproduce the controller default here.
     const chatOnlyResourceId = `channel:${thread.id}`;
+    // A deployment with no account linking, no projects, or no source-control
+    // integration cannot produce a repo-backed thread at all, so a `channel:`
+    // thread is the only shape it has. Every refusal below is a different thing
+    // entirely: a sender the bot cannot place, in a deployment that can.
     if (!accountLinks || !projects || sourceControls.length === 0) return chatOnlyResourceId;
-    try {
-      const externalTeamId = rawTeamId(message.raw);
-      if (!externalTeamId) return chatOnlyResourceId;
-      const link = await accountLinks.getAccountLink({
-        platform,
-        externalTeamId,
-        externalUserId: message.author.userId,
-      });
-      if (!link) return chatOnlyResourceId;
+    // No sender id at all — a malformed message, not a sender the host turned
+    // away. There is nothing to place, so give it the per-thread memory key.
+    if (!message.author.userId) return chatOnlyResourceId;
 
-      // Same chain as `resolveFactoryForLink`, minus prompts/stamping: the
-      // dispatch gate has already run (and stamped a lone factory) by the
-      // time a new thread is created, so this is a read-only re-resolve.
-      const orgId = link.orgId ?? '';
-      let factoryProjectId: string | undefined;
-      if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
-        factoryProjectId = link.defaultFactoryProjectId;
-      } else if (orgId) {
-        const factories = await projects.list({ orgId });
-        if (factories.length === 1) factoryProjectId = factories[0]!.id;
-      }
-      if (!factoryProjectId) return chatOnlyResourceId;
-
-      const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
-      if (!sourceControl) return chatOnlyResourceId;
-      const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
-      if (!repo.found) return chatOnlyResourceId;
-
-      const branch = threadBranch(thread.id);
-      // Attributed to the Slack sender, not to whoever connected the repository:
-      // unlike an autonomous rule run, a Slack thread has a real interactive user.
-      const existing = await sourceControl.sessions.getForBranch({
-        projectRepositoryId: repo.projectRepositoryId,
-        userId: link.userId,
-        branch,
-      });
-      if (existing) return existing.sessionId;
-      const session = await sourceControl.sessions.create({
-        sessionId: randomUUID(),
-        projectRepositoryId: repo.projectRepositoryId,
-        orgId,
-        userId: link.userId,
-        branch,
-        baseBranch: repo.baseBranch,
-        // DMs are the only private origin; channel threads are org-visible.
-        visibility: thread.isDM ? 'private' : 'org',
-      });
-      return session.sessionId;
-    } catch (error) {
-      // Fall back to a chat-only session rather than dropping the message.
-      console.warn('[slack] repo-backed session resolution failed for thread', thread.id, error);
-      return chatOnlyResourceId;
+    const externalTeamId = rawTeamId(message.raw);
+    if (!externalTeamId) {
+      throw new ChannelSessionRejectedError('No Slack workspace id on the message — the sender cannot be identified');
     }
+    const link = await accountLinks.getAccountLink({
+      platform,
+      externalTeamId,
+      externalUserId: message.author.userId,
+    });
+    if (!link) {
+      throw new ChannelSessionRejectedError(`Slack sender ${message.author.userId} is not linked to a Factory account`);
+    }
+
+    // Same chain as `resolveFactoryForLink`, minus prompts/stamping: the
+    // dispatch gate has already run (and stamped a lone factory) by the
+    // time a new thread is created, so this is a read-only re-resolve.
+    const orgId = link.orgId ?? '';
+    let factoryProjectId: string | undefined;
+    if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
+      factoryProjectId = link.defaultFactoryProjectId;
+    } else if (orgId) {
+      const factories = await projects.list({ orgId });
+      if (factories.length === 1) factoryProjectId = factories[0]!.id;
+    }
+    if (!factoryProjectId) {
+      throw new ChannelSessionRejectedError(`Linked Slack sender ${message.author.userId} has no Factory project`);
+    }
+
+    // Linked and routed, so a repo-backed session is not a preference: with no
+    // repository to work in there is no thread to start, and starting one
+    // anyway would answer in a project the sender never picked, on the SDK's
+    // built-in defaults.
+    const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
+    if (!sourceControl) {
+      throw new ChannelSessionRejectedError(`No source-control connection owns Factory project ${factoryProjectId}`);
+    }
+    const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
+    if (!repo.found) {
+      throw new ChannelSessionRejectedError(
+        `Factory project ${factoryProjectId} has no ${repo.reason === 'connection' ? 'source-control connection' : 'linked repository'}`,
+      );
+    }
+
+    const branch = threadBranch(thread.id);
+    // Attributed to the Slack sender, not to whoever connected the repository:
+    // unlike an autonomous rule run, a Slack thread has a real interactive user.
+    const existing = await sourceControl.sessions.getForBranch({
+      projectRepositoryId: repo.projectRepositoryId,
+      userId: link.userId,
+      branch,
+    });
+    if (existing) return existing.sessionId;
+    const session = await sourceControl.sessions.create({
+      sessionId: randomUUID(),
+      projectRepositoryId: repo.projectRepositoryId,
+      orgId,
+      userId: link.userId,
+      branch,
+      baseBranch: repo.baseBranch,
+      // DMs are the only private origin; channel threads are org-visible.
+      visibility: thread.isDM ? 'private' : 'org',
+    });
+    return session.sessionId;
   };
 }
 
