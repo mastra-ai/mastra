@@ -1043,12 +1043,20 @@ export class MastraFactory {
                   // published review can carry the session URL that produced it
                   // — the affordance that lets a suspicious review (e.g. one
                   // that lands on the wrong PR) be traced back to its run.
+                  //
+                  // The session URL is browser-facing (a human opens it from a
+                  // GitHub review comment), so it needs the UI host. In a
+                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+                  // is the API host; the UI lives at `MASTRACODE_PUBLIC_URL`,
+                  // the same origin Slack session deep-links resolve against.
+                  // Fall back to `publicOrigin` only when the two coincide.
+                  const reviewSourceUiOrigin = (process.env.MASTRACODE_PUBLIC_URL ?? publicOrigin).replace(/\/+$/, '');
                   mergeTools(
                     'factory-review-source',
                     await createReviewSourceTool({
                       requestContext,
                       storage: workItemsStorage,
-                      publicOrigin,
+                      uiOrigin: reviewSourceUiOrigin,
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );

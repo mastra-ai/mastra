@@ -38,8 +38,16 @@ export async function createReviewSourceTool(options: {
   requestContext: RequestContext;
   storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'findActiveRunBinding' | 'get'>;
   sessions?: FactorySessionSourceLookup;
-  /** Public origin the Factory web UI is served from, no trailing slash. */
-  publicOrigin: string;
+  /**
+   * Public origin the Factory web UI is served from, no trailing slash.
+   * In a separate-SPA deployment (API host distinct from UI host) this is the
+   * UI host — the browser-facing origin the emitted session link opens in.
+   * `MastraFactoryConfig.publicUrl` is the API origin and must not be used
+   * here; the caller resolves the UI origin (see `factory.ts`) via the
+   * `MASTRACODE_PUBLIC_URL` env var, falling back to the API origin only
+   * when a single origin serves both.
+   */
+  uiOrigin: string;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -57,15 +65,20 @@ export async function createReviewSourceTool(options: {
   if (!item) return {};
 
   const sessionUrl = buildSessionUrl({
-    publicOrigin: options.publicOrigin,
+    uiOrigin: options.uiOrigin,
     factoryProjectId: binding.factoryProjectId,
     sessionId: binding.sessionId,
     threadId: binding.threadId,
   });
   const triggeredBy = readPullRequestAuthor(item);
-  const linkedIssues = await collectLinkedIssues(item, options.storage);
 
-  const output: ReviewSourceOutput = { sessionUrl, triggeredBy, linkedIssues };
+  // The parent walk runs inside `execute` so a `storage.get` failure surfaces
+  // on the tool call the agent made, not on tool registration (which would
+  // silently drop the whole tool from this session and every other tool
+  // registered in the same batch). The pre-fetched `item` and `binding` are
+  // safe to close over — they were resolved above from data the request
+  // context guarantees is present for a review-role session.
+  const storage = options.storage;
 
   return {
     factory_review_source: createTool({
@@ -73,18 +86,21 @@ export async function createReviewSourceTool(options: {
       description:
         'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the GitHub author of the pull request under review (when known), and any Linear or Jira issue linked as the source of this work. Include the session URL in every review comment or verdict you publish so misattributed reviews can be traced back to their originating session.',
       inputSchema: z.object({}),
-      execute: async () => output,
+      execute: async (): Promise<ReviewSourceOutput> => {
+        const linkedIssues = await collectLinkedIssues(item, storage);
+        return { sessionUrl, triggeredBy, linkedIssues };
+      },
     }),
   };
 }
 
 function buildSessionUrl(input: {
-  publicOrigin: string;
+  uiOrigin: string;
   factoryProjectId: string;
   sessionId: string;
   threadId: string;
 }): string {
-  const origin = input.publicOrigin.replace(/\/+$/, '');
+  const origin = input.uiOrigin.replace(/\/+$/, '');
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
@@ -101,6 +117,15 @@ function readPullRequestAuthor(item: WorkItemRow): string | null {
  * work item sourced from Linear or Jira. The chain is bounded (a review card
  * points at its authoring work item, which may point at a triage/parent) and
  * capped defensively so a malformed cycle can never spin the loop.
+ *
+ * A `storage.get` failure while resolving a parent is **not** swallowed:
+ * returning an empty or partial `linkedIssues` list on a lookup error would
+ * make the published review say "no linked issue" for a review that simply
+ * couldn't be resolved. Instead, the error propagates to `execute` and the
+ * tool call fails — the skill's failure branch stops publication rather than
+ * publishing a review body missing provenance the tool could have surfaced.
+ * Normal termination (no more parents, or a parent we've already seen) still
+ * returns the results collected so far.
  */
 async function collectLinkedIssues(
   reviewItem: WorkItemRow,
@@ -126,11 +151,10 @@ async function collectLinkedIssues(
     const parentId = cursor.parentWorkItemId;
     if (!parentId || seen.has(parentId)) break;
     seen.add(parentId);
-    try {
-      cursor = await storage.get({ orgId: cursor.orgId, id: parentId });
-    } catch {
-      break;
-    }
+    // No try/catch here: a storage error surfaces to the tool caller so the
+    // skill's failure branch can stop publication rather than silently
+    // dropping linked-issue provenance the review body should have carried.
+    cursor = await storage.get({ orgId: cursor.orgId, id: parentId });
     hops += 1;
   }
   return results;

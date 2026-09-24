@@ -113,7 +113,7 @@ describe('factory_review_source', () => {
     const tools = await createReviewSourceTool({
       requestContext: context,
       storage,
-      publicOrigin: PUBLIC_ORIGIN,
+      uiOrigin: PUBLIC_ORIGIN,
     });
     const tool = tools.factory_review_source as ExecutableTool | undefined;
     expect(tool).toBeDefined();
@@ -132,7 +132,7 @@ describe('factory_review_source', () => {
     const tools = await createReviewSourceTool({
       requestContext: context,
       storage,
-      publicOrigin: PUBLIC_ORIGIN,
+      uiOrigin: PUBLIC_ORIGIN,
     });
     const tool = tools.factory_review_source as ExecutableTool;
     const output = (await tool.execute({}, { requestContext: context, agent: { toolCallId: 'tc-1' } })) as {
@@ -173,7 +173,7 @@ describe('factory_review_source', () => {
     const tools = await createReviewSourceTool({
       requestContext: context,
       storage,
-      publicOrigin: PUBLIC_ORIGIN,
+      uiOrigin: PUBLIC_ORIGIN,
     });
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
@@ -189,7 +189,7 @@ describe('factory_review_source', () => {
     const tools = await createReviewSourceTool({
       requestContext: context,
       storage,
-      publicOrigin: PUBLIC_ORIGIN,
+      uiOrigin: PUBLIC_ORIGIN,
     });
     expect(tools.factory_review_source).toBeUndefined();
   });
@@ -201,7 +201,7 @@ describe('factory_review_source', () => {
     const tools = await createReviewSourceTool({
       requestContext: context,
       storage,
-      publicOrigin: `${PUBLIC_ORIGIN}/`,
+      uiOrigin: `${PUBLIC_ORIGIN}/`,
     });
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
@@ -241,12 +241,46 @@ describe('factory_review_source', () => {
     const tools = await createReviewSourceTool({
       requestContext: context,
       storage,
-      publicOrigin: PUBLIC_ORIGIN,
+      uiOrigin: PUBLIC_ORIGIN,
     });
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
       { requestContext: context, agent: { toolCallId: 'tc-1' } },
     )) as { linkedIssues: unknown[] };
     expect(output.linkedIssues).toEqual([]);
+  });
+
+  it('propagates storage failures while walking parent work items instead of returning partial results', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const linearParent = await prepareLinearParent(storage, {
+      url: 'https://linear.app/acme/issue/ACME-42/build-a-thing',
+      identifier: 'ACME-42',
+    });
+    await prepareReviewItem(storage, { author: 'octocat', parentWorkItemId: linearParent.item.id });
+
+    // Wrap the real storage so parent lookups blow up while the initial review
+    // item read still succeeds. The tool must surface the error, not silently
+    // return an empty or partial `linkedIssues` list.
+    const brokenStorage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'findActiveRunBinding' | 'get'> = {
+      findActiveRunBindingByThread: storage.findActiveRunBindingByThread.bind(storage),
+      findActiveRunBinding: storage.findActiveRunBinding.bind(storage),
+      get: async input => {
+        if (input.id === linearParent.item.id) {
+          throw new Error('boom: storage unavailable');
+        }
+        return storage.get(input);
+      },
+    };
+
+    const context = requestContext();
+    const tools = await createReviewSourceTool({
+      requestContext: context,
+      storage: brokenStorage,
+      uiOrigin: PUBLIC_ORIGIN,
+    });
+    const tool = tools.factory_review_source as ExecutableTool;
+    await expect(tool.execute({}, { requestContext: context, agent: { toolCallId: 'tc-1' } })).rejects.toThrow(
+      /boom: storage unavailable/,
+    );
   });
 });
