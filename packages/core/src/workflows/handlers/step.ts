@@ -422,9 +422,11 @@ export async function executeStep(
           abortController?.abort();
         },
         // Only pass resume data if this step was actually suspended before
-        // This prevents pending nested workflows from trying to resume instead of start
+        // This prevents pending nested workflows from trying to resume instead of start.
+        // Foreach iterations share `stepResults`, so a sibling's suspension is visible here;
+        // an iteration only resumes when the foreach handed it resume data.
         resume:
-          stepResults[step.id]?.status === 'suspended'
+          stepResults[step.id]?.status === 'suspended' && (executionContext.foreachIndex === undefined || resume)
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
