@@ -11,7 +11,7 @@
 import type { LanguageModelMiddleware } from 'ai';
 import type { ThinkingLevelSetting } from '../thinking.js';
 
-type GoogleThinkingConfig = { thinkingLevel: 'low' | 'medium' | 'high' } | { thinkingBudget: number };
+type GoogleThinkingConfig = { thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' } | { thinkingBudget: number };
 
 // Budgets stay within the smallest Gemini 2.5 maximum (24576 for Flash / Flash-Lite).
 const GEMINI_25_BUDGETS = { low: 1024, medium: 8192, high: 24576 } as const;
@@ -34,6 +34,10 @@ export function resolveGoogleThinkingConfig(
   // Only Gemini 3 Pro lacks `medium`; Gemini 3.1 Pro accepts it.
   if (id.startsWith('gemini-3-pro')) {
     return { thinkingLevel: clamped === 'low' ? 'low' : 'high' };
+  }
+  // Gemini 3.1 Flash-Lite Image only accepts `minimal|high`.
+  if (id.startsWith('gemini-3.1-flash-lite-image')) {
+    return { thinkingLevel: clamped === 'low' ? 'minimal' : 'high' };
   }
   if (/^gemini-\d/.test(id) && !id.startsWith('gemini-1') && !id.startsWith('gemini-2')) {
     return { thinkingLevel: clamped };
