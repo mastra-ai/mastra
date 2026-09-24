@@ -122,6 +122,24 @@ async function drain(stream: { fullStream: AsyncIterable<{ type: string; payload
   return chunks;
 }
 
+/** Resolves when every eager coordinator the run created has no running work left. */
+function trackEagerWork() {
+  const coordinators = new Set<EagerToolExecutionCoordinator>();
+  const start = EagerToolExecutionCoordinator.prototype.start;
+  const spy = vi.spyOn(EagerToolExecutionCoordinator.prototype, 'start').mockImplementation(function (
+    this: EagerToolExecutionCoordinator,
+    ...args: Parameters<typeof start>
+  ) {
+    coordinators.add(this);
+    return start.apply(this, args);
+  });
+  return {
+    idle: async () => {
+      await Promise.all([...coordinators].map(coordinator => coordinator.settleRunning()));
+      spy.mockRestore();
+    },
+  };
+}
 describe('eager tool dispatch — execution context parity', () => {
   it('hands an eagerly dispatched tool the same context as the deferred path', async () => {
     // The eager dispatch hand-builds the execution context that the foreach would
@@ -928,6 +946,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
       }
     }
 
+    const work = trackEagerWork();
     const agent = new Agent({
       id: 'eager-tool-result-processor-agent',
       name: 'Eager tool-result processor agent',
@@ -953,8 +972,8 @@ describe('eager tool dispatch — unsafe terminations', () => {
     });
 
     const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution }));
-    // Anything dispatched early would land in the window after the stream closes.
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Anything dispatched early must have run before the effects are compared.
+    await work.idle();
 
     return { events, effects, types: chunks.map(chunk => chunk.type) };
   }
@@ -1127,24 +1146,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
   };
   /** One macrotask, so rejections and settlements already queued as microtasks land first. */
   const tick = () => new Promise(resolve => setImmediate(resolve));
-  /** Resolves when every eager coordinator the run created has no running work left. */
-  function trackEagerWork() {
-    const coordinators = new Set<EagerToolExecutionCoordinator>();
-    const start = EagerToolExecutionCoordinator.prototype.start;
-    const spy = vi.spyOn(EagerToolExecutionCoordinator.prototype, 'start').mockImplementation(function (
-      this: EagerToolExecutionCoordinator,
-      ...args: Parameters<typeof start>
-    ) {
-      coordinators.add(this);
-      return start.apply(this, args);
-    });
-    return {
-      idle: async () => {
-        await Promise.all([...coordinators].map(coordinator => coordinator.settleRunning()));
-        spy.mockRestore();
-      },
-    };
-  }
+
   const emitCall = (controller: Controller, toolCallId: string, value: string) =>
     controller.enqueue({ type: 'tool-call', toolCallId, toolName: 'tool-a', input: JSON.stringify({ value }) });
   const recover: Script = controller => {
