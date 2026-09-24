@@ -105,6 +105,7 @@ import {
   supportsObservabilityTraceQueryRootDuration,
   supportsTraceQueryDiscoveryCore,
   withDiscoveryFallback,
+  withNotImplementedAs501,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -749,12 +750,14 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
     }
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(feedbackOrderBySchema, params);
-    const result = await observabilityStore.listFeedback(
-      mode === 'delta'
-        ? { mode, filters, after: typeof after === 'string' ? after : undefined, limit }
-        : mode === 'page'
-          ? { mode, filters, pagination, orderBy }
-          : { filters, pagination, orderBy },
+    const result = await withNotImplementedAs501(() =>
+      observabilityStore.listFeedback(
+        mode === 'delta'
+          ? { mode, filters, after: typeof after === 'string' ? after : undefined, limit }
+          : mode === 'page'
+            ? { mode, filters, pagination, orderBy }
+            : { filters, pagination, orderBy },
+      ),
     );
     const authors = await prepareAuthorEnrichment(
       mastra,
@@ -779,17 +782,19 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
     const user = requestContext.get(MASTRA_USER_KEY);
     const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.createFeedback({
-      feedback: {
-        ...feedback,
-        ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
-          ? { feedbackUserId: authenticatedId }
-          : {}),
-        feedbackId: feedback.feedbackId ?? generateSignalId(),
-        timestamp: new Date(),
-        reviewStatus: feedback.reviewStatus ?? 'needs-review',
-      },
-    });
+    await withNotImplementedAs501(() =>
+      observabilityStore.createFeedback({
+        feedback: {
+          ...feedback,
+          ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+            ? { feedbackUserId: authenticatedId }
+            : {}),
+          feedbackId: feedback.feedbackId ?? generateSignalId(),
+          timestamp: new Date(),
+          reviewStatus: feedback.reviewStatus ?? 'needs-review',
+        },
+      }),
+    );
     return { success: true };
   },
 });
@@ -805,7 +810,7 @@ export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
     }
     const args = pickParams(deleteFeedbackArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.deleteFeedback(args);
+    await withNotImplementedAs501(() => observabilityStore.deleteFeedback(args));
     return { success: true };
   },
 });
@@ -816,7 +821,9 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
   responseSchema: feedbackRecordSchema,
   handler: async ({ mastra, feedbackId, reviewStatus }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    return await withNotImplementedAs501(() =>
+      observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus }),
+    );
   },
 });
 
@@ -826,7 +833,7 @@ export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackAggregateArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getFeedbackAggregate(args);
+    return await withNotImplementedAs501(() => observabilityStore.getFeedbackAggregate(args));
   },
 });
 
@@ -836,7 +843,7 @@ export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackBreakdownArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getFeedbackBreakdown(args);
+    return await withNotImplementedAs501(() => observabilityStore.getFeedbackBreakdown(args));
   },
 });
 
@@ -846,7 +853,7 @@ export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackTimeSeriesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getFeedbackTimeSeries(args);
+    return await withNotImplementedAs501(() => observabilityStore.getFeedbackTimeSeries(args));
   },
 });
 
@@ -856,7 +863,7 @@ export const GET_FEEDBACK_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackPercentilesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getFeedbackPercentiles(args);
+    return await withNotImplementedAs501(() => observabilityStore.getFeedbackPercentiles(args));
   },
 });
 

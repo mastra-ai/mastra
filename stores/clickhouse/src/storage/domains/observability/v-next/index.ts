@@ -949,6 +949,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ] as const;
     }
 
@@ -967,6 +968,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
+      'feedback',
     ] as const;
   }
 

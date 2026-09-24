@@ -116,6 +116,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
+ * - `feedback`: the feedback CRUD, review-status and analytics methods
  */
 export type ObservabilityStorageFeature =
   | 'delta-polling'
@@ -131,7 +132,8 @@ export type ObservabilityStorageFeature =
   | 'trace-query-root-duration'
   | 'trace-query-discovery'
   | 'thread-query'
-  | 'trace-query-tenant-scope';
+  | 'trace-query-tenant-scope'
+  | 'feedback';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

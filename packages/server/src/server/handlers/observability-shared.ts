@@ -27,6 +27,7 @@ const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-roo
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
+const OBSERVABILITY_FEEDBACK_STORAGE_FEATURE = 'feedback';
 export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE = 'observability-trace-query-tenant-scope';
 export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE =
   'Trusted tenant scope requires a newer @mastra/core with trace-query tenant scope support. Please upgrade.';
@@ -207,6 +208,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
+  feedback: boolean;
 };
 
 export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabilities = {
@@ -226,6 +228,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
+  feedback: false,
 };
 
 /**
@@ -297,6 +300,16 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
     threadQuery,
+    feedback: supports(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE, [
+      'listFeedback',
+      'createFeedback',
+      'deleteFeedback',
+      'updateFeedbackReviewStatus',
+      'getFeedbackAggregate',
+      'getFeedbackBreakdown',
+      'getFeedbackTimeSeries',
+      'getFeedbackPercentiles',
+    ]),
   };
 }
 
@@ -323,6 +336,25 @@ export async function withDiscoveryFallback<T>(run: () => Promise<T>, empty: T):
     return await run();
   } catch (error) {
     if (isObservabilityStorageNotImplementedError(error)) return empty;
+    throw error;
+  }
+}
+
+/**
+ * Surfaces the store's `*_NOT_IMPLEMENTED` error as a 501 so adapters log it
+ * as an expected missing capability (warn) instead of a server error. The
+ * store's message is preserved because clients match on it to detect
+ * unsupported operations (e.g. "does not support listing feedback"). Clients
+ * should check `observabilityStorageCapabilities.feedback` from
+ * `GET /observability/capabilities` before calling these routes.
+ */
+export async function withNotImplementedAs501<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (isObservabilityStorageNotImplementedError(error)) {
+      throw new HTTPException(501, { message: (error as Error).message, cause: error });
+    }
     throw error;
   }
 }
