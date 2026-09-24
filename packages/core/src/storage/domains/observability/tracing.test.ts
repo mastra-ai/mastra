@@ -4,6 +4,7 @@ import {
   BATCH_DELETE_TRACES_MAX_IDS,
   batchDeleteTracesArgsSchema,
   buildInputPreview,
+  buildOutputPreview,
   extractBranchSpans,
   getTraceLightResponseSchema,
   INPUT_PREVIEW_MAX_LENGTH,
@@ -360,5 +361,34 @@ describe('buildInputPreview', () => {
   it('falls back to the raw value when input is not a message list', () => {
     expect(buildInputPreview('plain prompt text')).toBe('plain prompt text');
     expect(buildInputPreview({ query: 'lookup' })).toBe('{"query":"lookup"}');
+  });
+});
+
+describe('buildOutputPreview', () => {
+  it('previews the text of agent, workflow, and model results', () => {
+    expect(buildOutputPreview({ text: 'The known interaction is with warfarin.', files: [] })).toBe(
+      'The known interaction is with warfarin.',
+    );
+    expect(buildOutputPreview(JSON.stringify({ text: 'from the wire' }))).toBe('from the wire');
+    expect(buildOutputPreview('"plain scalar answer"')).toBe('plain scalar answer');
+  });
+
+  it('previews assistant turns from message-shaped output and truncates long text', () => {
+    const output = {
+      messages: [
+        { role: 'user', content: 'question that must not preview' },
+        { role: 'assistant', content: [{ type: 'text', text: 'first answer' }] },
+        { role: 'assistant', content: 'second answer' },
+      ],
+    };
+    expect(buildOutputPreview(output)).toBe('first answer | second answer');
+    expect(buildOutputPreview({ text: 'x'.repeat(150) })).toBe(`${'x'.repeat(100)}…`);
+  });
+
+  it('falls back to compact JSON and previews empty or malformed output as empty', () => {
+    expect(buildOutputPreview({ result: { ok: true } })).toBe('{"result":{"ok":true}}');
+    expect(buildOutputPreview(null)).toBeUndefined();
+    expect(buildOutputPreview('   ')).toBeUndefined();
+    expect(buildOutputPreview('{"text":"cut off')).toBeUndefined();
   });
 });

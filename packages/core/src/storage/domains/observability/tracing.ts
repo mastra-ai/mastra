@@ -541,6 +541,62 @@ export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_
   return truncatePreview(JSON.stringify(value) ?? '', maxLength);
 }
 
+/** Maximum length of the rendered `outputPreview` text. */
+export const OUTPUT_PREVIEW_MAX_LENGTH = INPUT_PREVIEW_MAX_LENGTH;
+
+/**
+ * Builds the short text shown in a trace list's output column. Mirrors
+ * `buildInputPreview`: accepts a parsed `output` value or its JSON string, previews
+ * malformed JSON as empty, and never returns more than `maxLength` characters.
+ *
+ * Agent and workflow roots write `{ text }` results; model outputs also carry `text`;
+ * message-shaped outputs preview their assistant turns.
+ */
+export function buildOutputPreview(output: unknown, maxLength = OUTPUT_PREVIEW_MAX_LENGTH): string | undefined {
+  if (output == null) return undefined;
+
+  let value = output;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        return undefined;
+      }
+    } else if (trimmed.startsWith('"')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // Not valid JSON — treat as plain text below.
+      }
+    }
+  }
+
+  if (typeof value === 'string') return truncatePreview(value, maxLength);
+
+  const messages = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
+      ? (value as { messages: unknown[] }).messages
+      : null;
+  if (messages) {
+    const text = (messages as PreviewMessage[])
+      .filter(m => m?.role === 'assistant')
+      .map(m => previewTextFromContent(m.content))
+      .filter(Boolean)
+      .join(' | ');
+    return truncatePreview(text, maxLength);
+  }
+
+  if (value && typeof value === 'object') {
+    const text = (value as { text?: unknown }).text;
+    if (typeof text === 'string') return truncatePreview(text, maxLength);
+  }
+  return truncatePreview(JSON.stringify(value) ?? '', maxLength);
+}
+
 /**
  * Projects a full span record down to the lightweight row a trace list renders,
  * deriving `inputPreview` from `input`.

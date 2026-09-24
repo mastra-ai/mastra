@@ -298,6 +298,9 @@ export class Observability extends BaseResource {
    *
    * Grouped results remain supported but are deprecated. Use `queryTraceThreads()` to retrieve thread identities.
    *
+   * Set `include: { tableSummary: true }` to receive the bounded Traces-table fields on every row: output preview,
+   * tags, model, time to first token, error counts, prompt-cache tokens, and newest-first feedback and score summaries.
+   *
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */

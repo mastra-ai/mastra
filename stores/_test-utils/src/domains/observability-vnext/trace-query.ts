@@ -1,8 +1,15 @@
 import { coreFeatures } from '@mastra/core/features';
 import {
+  buildTraceQueryTableSummary,
+  compareTraceQuerySummaryRecords,
   compareTraceQueryStrings,
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
+  TRACE_QUERY_TABLE_SUMMARY_LLM_SPAN_TYPES,
+  TRACE_QUERY_TABLE_SUMMARY_METRICS,
+  TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES,
+  TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT,
+  TRACE_QUERY_TABLE_SUMMARY_TOOL_SPAN_TYPES,
   getTraceQueryDeltaWatermark,
   TraceQueryCursorError,
   parseQueryThreadsInput,
@@ -18,6 +25,7 @@ import {
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
+  type TraceQueryTableSummary,
   type TraceQueryTrace,
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
@@ -53,6 +61,16 @@ export interface RawTraceQuerySpan {
   environment: string | null;
   organizationId: string | null;
   tags: string[] | null;
+  output?: unknown;
+}
+
+export interface RawTraceQueryMetric {
+  metricId: string;
+  traceId: string | null;
+  spanId: string | null;
+  name: string;
+  value: number;
+  timestamp: string;
 }
 
 export interface RawTraceQueryScore {
@@ -94,6 +112,7 @@ export interface TraceQueryFixtureData {
   spans: RawTraceQuerySpan[];
   scores: RawTraceQueryScore[];
   feedback: RawTraceQueryFeedback[];
+  metrics?: RawTraceQueryMetric[];
 }
 
 const span = (
@@ -1013,6 +1032,195 @@ export const TRACE_QUERY_SCORE_TIE_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
   ],
   feedback: [],
+};
+
+const tableSummaryRange = { from: '2026-08-20T00:00:00Z', to: '2026-08-21T00:00:00Z' };
+const tableSummaryStartedAt = (offsetMs: number) =>
+  new Date(Date.parse('2026-08-20T10:00:00.000Z') + offsetMs).toISOString();
+
+export const TRACE_QUERY_TABLE_SUMMARY_TIME_RANGE = tableSummaryRange;
+
+/**
+ * Traces-table projection fixture. `summary-a` exercises every field: a replaced model
+ * span, LLM and tool errors, tags, bounded feedback, more scores than the per-trace
+ * limit, a rewritten score, and cache-token metrics including rows the projection must
+ * ignore. `summary-b` is a failed root with no related records. `summary-c` has an earliest
+ * model span without model or first-token data, a later complete one, and rewritten feedback.
+ */
+export const TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    span(1, 'summary-a', 'root-a', {
+      startedAt: tableSummaryStartedAt(0),
+      endedAt: tableSummaryStartedAt(5000),
+      tags: ['production', 'needs-review'],
+      output: { text: 'The known interaction is with warfarin.', files: [] },
+      threadId: 'thread-summary',
+    }),
+    span(2, 'summary-a', 'model-a-1', {
+      parentSpanId: 'root-a',
+      spanType: 'model_generation',
+      isPending: true,
+      startedAt: tableSummaryStartedAt(100),
+      endedAt: null,
+      attributes: { model: 'gpt-5', provider: 'openai' },
+    }),
+    span(3, 'summary-a', 'model-a-1', {
+      parentSpanId: 'root-a',
+      spanType: 'model_generation',
+      startedAt: tableSummaryStartedAt(100),
+      endedAt: tableSummaryStartedAt(1500),
+      attributes: { model: 'gpt-5', provider: 'openai', completionStartTime: tableSummaryStartedAt(520) },
+    }),
+    span(4, 'summary-a', 'model-a-2', {
+      parentSpanId: 'root-a',
+      spanType: 'model_generation',
+      startedAt: tableSummaryStartedAt(2000),
+      endedAt: tableSummaryStartedAt(2500),
+      attributes: { model: 'gpt-4o', provider: 'openai', completionStartTime: tableSummaryStartedAt(2100) },
+      error: { message: 'rate limited' },
+    }),
+    span(5, 'summary-a', 'tool-a-1', {
+      parentSpanId: 'root-a',
+      spanType: 'tool_call',
+      startedAt: tableSummaryStartedAt(1600),
+      endedAt: tableSummaryStartedAt(1900),
+      error: { message: 'lookup failed' },
+    }),
+    span(6, 'summary-a', 'tool-a-2', {
+      parentSpanId: 'root-a',
+      spanType: 'tool_call',
+      startedAt: tableSummaryStartedAt(3000),
+      endedAt: tableSummaryStartedAt(3200),
+    }),
+    span(7, 'summary-a', 'generic-a', {
+      parentSpanId: 'root-a',
+      spanType: 'generic',
+      startedAt: tableSummaryStartedAt(3300),
+      endedAt: tableSummaryStartedAt(3400),
+      error: { message: 'post-processing failed' },
+    }),
+    span(8, 'summary-b', 'root-b', {
+      startedAt: tableSummaryStartedAt(10_000),
+      endedAt: tableSummaryStartedAt(11_000),
+      error: { message: 'agent crashed' },
+    }),
+    span(9, 'summary-c', 'root-c', {
+      startedAt: tableSummaryStartedAt(20_000),
+      endedAt: tableSummaryStartedAt(24_000),
+      tags: ['staging'],
+      output: 'plain text answer',
+    }),
+    // Earliest model span: a non-streaming call with no model attribute and no first-token
+    // time. Stores must report null for both rather than borrowing the later span's values.
+    span(10, 'summary-c', 'model-c-1', {
+      parentSpanId: 'root-c',
+      spanType: 'model_generation',
+      startedAt: tableSummaryStartedAt(20_100),
+      endedAt: tableSummaryStartedAt(21_000),
+      attributes: { provider: 'anthropic' },
+    }),
+    span(11, 'summary-c', 'model-c-2', {
+      parentSpanId: 'root-c',
+      spanType: 'model_generation',
+      startedAt: tableSummaryStartedAt(22_000),
+      endedAt: tableSummaryStartedAt(23_000),
+      attributes: {
+        model: 'claude-fable-5-1',
+        provider: 'anthropic',
+        completionStartTime: tableSummaryStartedAt(22_300),
+      },
+    }),
+  ],
+  scores: [
+    ...Array.from({ length: TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1 }, (_, index) =>
+      scoreRecord(100 + index, `score-a-${index}`, 'summary-a', `scorer-${index % 3}`, index / 20, {
+        timestamp: tableSummaryStartedAt(6000 + index * 1000),
+        scorerVersion: index % 2 === 0 ? '1.0' : '2.0',
+        scoreSource: 'automated',
+        spanId: index === 0 ? 'model-a-1' : null,
+      }),
+    ),
+    scoreRecord(200, 'score-a-rewritten', 'summary-a', 'factuality', 0.2, {
+      timestamp: tableSummaryStartedAt(6500),
+      scoreSource: 'automated',
+    }),
+    scoreRecord(201, 'score-a-rewritten', 'summary-a', 'factuality', 0.8, {
+      timestamp: tableSummaryStartedAt(6500),
+      scoreSource: 'automated',
+    }),
+    scoreRecord(202, 'score-c-1', 'summary-c', 'factuality', 0.42, {
+      timestamp: tableSummaryStartedAt(25_000),
+      scorerVersion: '2.0',
+      scoreSource: 'human',
+    }),
+  ],
+  feedback: [
+    feedbackRecord(300, 'feedback-a-1', 'summary-a', 'thumbs_down', 'patient', 0, {
+      timestamp: tableSummaryStartedAt(7000),
+      comment: 'Interaction omitted',
+    }),
+    feedbackRecord(301, 'feedback-a-2', 'summary-a', 'rating', 'clinician', 'helpful', {
+      timestamp: tableSummaryStartedAt(8000),
+    }),
+    feedbackRecord(302, 'feedback-c-1', 'summary-c', 'rating', 'user', 3, {
+      timestamp: tableSummaryStartedAt(26_000),
+      comment: 'first draft',
+    }),
+    feedbackRecord(303, 'feedback-c-1', 'summary-c', 'rating', 'user', 5, {
+      timestamp: tableSummaryStartedAt(26_000),
+      comment: 'revised',
+    }),
+  ],
+  metrics: [
+    {
+      metricId: 'metric-a-read-1',
+      traceId: 'summary-a',
+      spanId: 'model-a-1',
+      name: 'mastra_model_input_cache_read_tokens',
+      value: 1000,
+      timestamp: tableSummaryStartedAt(1500),
+    },
+    {
+      metricId: 'metric-a-read-2',
+      traceId: 'summary-a',
+      spanId: 'model-a-2',
+      name: 'mastra_model_input_cache_read_tokens',
+      value: 200,
+      timestamp: tableSummaryStartedAt(2500),
+    },
+    {
+      metricId: 'metric-a-write-1',
+      traceId: 'summary-a',
+      spanId: 'model-a-1',
+      name: 'mastra_model_input_cache_write_tokens',
+      value: 300,
+      timestamp: tableSummaryStartedAt(1500),
+    },
+    {
+      metricId: 'metric-a-stale-span',
+      traceId: 'summary-a',
+      spanId: 'model-a-stale',
+      name: 'mastra_model_input_cache_read_tokens',
+      value: 9999,
+      timestamp: tableSummaryStartedAt(1500),
+    },
+    {
+      metricId: 'metric-a-other-name',
+      traceId: 'summary-a',
+      spanId: 'model-a-1',
+      name: 'mastra_model_total_input_tokens',
+      value: 5000,
+      timestamp: tableSummaryStartedAt(1500),
+    },
+    {
+      metricId: 'metric-c-read-1',
+      traceId: 'summary-c',
+      spanId: 'model-c-1',
+      name: 'mastra_model_input_cache_read_tokens',
+      value: 0,
+      timestamp: tableSummaryStartedAt(21_000),
+    },
+  ],
 };
 
 export const THREAD_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
@@ -2416,6 +2624,10 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
   }
 
   const head = data.spans.reduce((max, row) => (row.parentSpanId === null ? Math.max(max, row.cursorId) : max), 0);
+  const toTrace = (root: RawTraceQuerySpan): TraceQueryTrace =>
+    plan.tableSummary
+      ? { ...toTraceQueryTrace(root), tableSummary: evaluateTableSummary(root, spans, scores, feedback, data.metrics) }
+      : toTraceQueryTrace(root);
   if (plan.paginationMode === 'delta') {
     const watermark = getTraceQueryDeltaWatermark(plan, 'reference');
     if (watermark !== undefined && (!/^\d+$/.test(watermark) || !Number.isSafeInteger(Number(watermark)))) {
@@ -2425,7 +2637,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     const candidates = roots.filter(root => root.cursorId > after).sort((a, b) => a.cursorId - b.cursorId);
     const visible = candidates.slice(0, plan.limit);
     return {
-      traces: visible.map(toTraceQueryTrace),
+      traces: visible.map(toTrace),
       delta: { limit: plan.limit, hasMore: candidates.length > plan.limit },
       deltaCursor: encodeTraceQueryDeltaCursor(
         plan,
@@ -2434,7 +2646,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
       ),
     };
   }
-  let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
+  let traces = roots.map(toTrace).sort((left, right) => compareTraces(left, right, plan));
   if (plan.paginationMode === 'page') {
     const total = traces.length;
     const start = plan.page * plan.perPage;
@@ -2766,6 +2978,98 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     tags: root.tags,
     ...metadata,
   };
+}
+
+function currentMetrics(metrics: RawTraceQueryMetric[]): RawTraceQueryMetric[] {
+  const records = new Map<string, RawTraceQueryMetric>();
+  for (const candidate of metrics) records.set(candidate.metricId, candidate);
+  return [...records.values()];
+}
+
+function evaluateTableSummary(
+  root: RawTraceQuerySpan,
+  spans: RawTraceQuerySpan[],
+  scores: RawTraceQueryScore[],
+  feedback: RawTraceQueryFeedback[],
+  metrics: RawTraceQueryMetric[] = [],
+): TraceQueryTableSummary {
+  const traceSpans = spans.filter(span => span.traceId === root.traceId);
+  const modelSpan = traceSpans
+    .filter(span => TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES.includes(span.spanType))
+    .sort(
+      (left, right) =>
+        compareTraceQueryStrings(left.startedAt, right.startedAt) ||
+        compareTraceQueryStrings(left.spanId, right.spanId),
+    )[0];
+  const model = modelSpan?.attributes?.model;
+  const completionStartTime = modelSpan?.attributes?.completionStartTime;
+  const timeToFirstTokenMs =
+    modelSpan && typeof completionStartTime === 'string' && !Number.isNaN(Date.parse(completionStartTime))
+      ? Date.parse(completionStartTime) - Date.parse(modelSpan.startedAt)
+      : null;
+  const currentSpanIds = new Set(traceSpans.map(span => span.spanId));
+  const sumMetric = (name: string): number | null => {
+    const rows = currentMetrics(metrics).filter(
+      metric =>
+        metric.name === name &&
+        metric.traceId === root.traceId &&
+        metric.spanId !== null &&
+        currentSpanIds.has(metric.spanId),
+    );
+    return rows.length ? rows.reduce((total, metric) => total + metric.value, 0) : null;
+  };
+  return buildTraceQueryTableSummary({
+    output: root.output ?? null,
+    tags: root.tags,
+    spans: {
+      errorTotal: traceSpans.filter(span => span.error !== null).length,
+      errorLlm: traceSpans.filter(
+        span => span.error !== null && TRACE_QUERY_TABLE_SUMMARY_LLM_SPAN_TYPES.includes(span.spanType),
+      ).length,
+      errorTool: traceSpans.filter(
+        span => span.error !== null && TRACE_QUERY_TABLE_SUMMARY_TOOL_SPAN_TYPES.includes(span.spanType),
+      ).length,
+      model: typeof model === 'string' ? model : null,
+      timeToFirstTokenMs,
+    },
+    feedback: feedback
+      .filter(record => record.traceId === root.traceId)
+      .map(record => ({
+        feedbackId: record.feedbackId,
+        feedbackType: record.feedbackType,
+        feedbackSource: record.feedbackSource,
+        value: record.value,
+        comment: record.comment,
+        timestamp: record.timestamp,
+      }))
+      .sort((left, right) =>
+        compareTraceQuerySummaryRecords(
+          { timestamp: left.timestamp, id: left.feedbackId },
+          { timestamp: right.timestamp, id: right.feedbackId },
+        ),
+      )
+      .slice(0, TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1),
+    scores: scores
+      .filter(record => record.traceId === root.traceId && record.score !== null)
+      .map(record => ({
+        scoreId: record.scoreId,
+        scorerId: record.scorerId,
+        scorerVersion: record.scorerVersion,
+        scoreSource: record.scoreSource,
+        score: record.score!,
+        timestamp: record.timestamp,
+        spanId: record.spanId,
+      }))
+      .sort((left, right) =>
+        compareTraceQuerySummaryRecords(
+          { timestamp: left.timestamp, id: left.scoreId },
+          { timestamp: right.timestamp, id: right.scoreId },
+        ),
+      )
+      .slice(0, TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1),
+    promptCacheReadTokens: sumMetric(TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheReadTokens),
+    promptCacheCreationTokens: sumMetric(TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheCreationTokens),
+  });
 }
 
 function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
