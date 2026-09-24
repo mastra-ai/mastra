@@ -1,6 +1,6 @@
 {
   "name": "@mastra/discord",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Discord integration for Mastra agents — a ChannelProvider over @chat-adapter/discord with Ed25519 interaction verification, guild command registration, and streaming replies",
   "license": "Apache-2.0",
   "type": "module",
