@@ -298,7 +298,7 @@ const traceQueryRequestObjectSchema = z
       .array(
         z
           .object({
-            field: z.enum(['startedAt', 'endedAt']),
+            field: z.enum(['startedAt', 'endedAt', 'durationMs']),
             direction: z.enum(['asc', 'desc']),
           })
           .strict(),
@@ -677,16 +677,18 @@ export interface TrustedTraceQueryPagePlan {
   deltaBinding: string;
 }
 
+export type TraceQueryOrderField = 'startedAt' | 'endedAt' | 'durationMs';
+
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
   orderBy: {
-    field: 'startedAt' | 'endedAt';
+    field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
   };
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
-  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string | number; traceId: string } };
 export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
 export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
   paginationMode: 'delta';
@@ -747,7 +749,7 @@ export type TraceQueryCursorPlan =
   | TrustedTraceQueryGroupsPlan
   | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
-  | { result: 'traces'; sortValue: string; traceId: string }
+  | { result: 'traces'; sortValue: string | number; traceId: string }
   | { result: 'groups'; threadId: string }
   | { result: 'threads'; threadId: string };
 
@@ -1128,6 +1130,9 @@ export function planTraceQuery(
     scope,
   });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
+  if (cursor?.result === 'traces') {
+    assertTraceCursorSortValueKind(orderBy.field, cursor.sortValue);
+  }
   return {
     result,
     timeRange,
@@ -1199,7 +1204,23 @@ export function planThreadQuery(
 
 export function encodeTraceQueryCursor(plan: TraceQueryCursorPlan, values: TraceQueryCursorValues): string {
   if (values.result !== plan.result) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
+  if (values.result === 'traces' && plan.result === 'traces') {
+    assertTraceCursorSortValueKind(plan.orderBy.field, values.sortValue);
+  }
   return Buffer.from(JSON.stringify({ version: 1, binding: plan.binding, values }), 'utf8').toString('base64url');
+}
+
+/**
+ * A trace keyset cursor carries the previous page's boundary sort value. Timestamp order
+ * fields require an ISO datetime string; `durationMs` requires a finite number. The kind is
+ * enforced both when adapters encode a continuation cursor and when the planner accepts one.
+ */
+function assertTraceCursorSortValueKind(field: TraceQueryOrderField, sortValue: string | number): void {
+  const requiresNumber = field === 'durationMs';
+  const isFiniteNumber = typeof sortValue === 'number' && Number.isFinite(sortValue);
+  if (requiresNumber ? !isFiniteNumber : typeof sortValue !== 'string') {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
 }
 
 const deltaCursorEnvelopeSchema = z
@@ -1280,7 +1301,7 @@ const cursorEnvelopeSchema = z
       z
         .object({
           result: z.literal('traces'),
-          sortValue: z.string().datetime({ offset: true }),
+          sortValue: z.union([z.string().datetime({ offset: true }), z.number().finite()]),
           traceId: z.string().min(1),
         })
         .strict(),

@@ -362,6 +362,30 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(3);
   });
 
+  it('orders and pages by the derived root duration with scalar keyset parameters', () => {
+    const DURATION_SQL = "date_diff('millisecond', startedAt, endedAt)";
+    const first = plan({ orderBy: [{ field: 'durationMs', direction: 'desc' }], page: { limit: 2 } });
+    const after = plan({
+      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+      page: {
+        limit: 2,
+        after: queryCursor(first, { sortValue: 2000, traceId: 'trace-c' }),
+      },
+    });
+    const compiled = compileDuckDBTraceQuery(after);
+
+    expect(compiled.sql).toContain(`WHERE (${DURATION_SQL} < ? OR (${DURATION_SQL} = ? AND traceId > ?))`);
+    expect(compiled.sql).toContain(`SELECT *, ${DURATION_SQL} AS orderValue`);
+    expect(compiled.sql).toContain(`ORDER BY ${DURATION_SQL} DESC, traceId ASC`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 2000, 2000, 'trace-c', 3]);
+
+    const page = compileDuckDBTraceQuery(
+      plan({ orderBy: [{ field: 'durationMs', direction: 'asc' }], pagination: { page: 1, perPage: 2 } }),
+    );
+    expect(page.sql).toContain(`ORDER BY ${DURATION_SQL} ASC, traceId ASC`);
+    expect(page.sql).not.toContain('orderValue');
+  });
+
   it('compiles grouped queries as distinct non-null thread IDs', () => {
     const compiled = compileDuckDBTraceQuery(plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
 
@@ -616,7 +640,7 @@ describe('DuckDB advanced trace query', () => {
   });
 });
 
-function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string; traceId: string }): string {
+function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string | number; traceId: string }): string {
   if (plan.result !== 'traces') throw new Error('Expected a trace plan');
   return encodeTraceQueryCursor(plan, { result: 'traces', ...values });
 }

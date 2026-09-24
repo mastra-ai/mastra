@@ -139,8 +139,11 @@ function fieldDefinition<TField extends string>(
   return definition;
 }
 
-function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
-  if (field === 'startedAt' || field === 'endedAt') return field;
+// Duration ordering reuses the exact root-duration expression over the candidates columns so
+// ORDER BY, keyset equality, and keyset continuation all compare the same derived value.
+function resolveOrderField(field: string): FieldDefinition {
+  if (field === 'startedAt' || field === 'endedAt') return { sql: field, parameterType: "DateTime64(3, 'UTC')" };
+  if (field === 'durationMs') return { sql: durationMsSql('startedAt', 'endedAt'), parameterType: 'Float64' };
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
@@ -503,9 +506,9 @@ LIMIT ${limit}`,
     return {
       query: `${candidates},
 page_rows AS (
-  SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+  SELECT *, row_number() OVER (ORDER BY ${orderField.sql} ${direction}, traceId ASC) AS __row_position
   FROM candidates
-  ORDER BY ${orderField} ${direction}, traceId ASC
+  ORDER BY ${orderField.sql} ${direction}, traceId ASC
   LIMIT ${limit} OFFSET ${offset}
 ),
 page_total AS (
@@ -545,17 +548,18 @@ ORDER BY __metadata ASC, __row_position ASC`,
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+    const sortValue = parameters.add(plan.cursor.sortValue, orderField.parameterType);
     const traceId = parameters.add(plan.cursor.traceId, 'String');
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortValue} OR (${orderField} = ${sortValue} AND traceId > ${traceId}))`;
+    pageCondition = `WHERE (${orderField.sql} ${comparison} ${sortValue} OR (${orderField.sql} = ${sortValue} AND traceId > ${traceId}))`;
   }
   const limit = parameters.add(plan.limit + 1, 'UInt64');
+  const durationOrdered = plan.orderBy.field === 'durationMs';
   return {
     query: `${candidates}
-SELECT *
+SELECT *${durationOrdered ? `, ${orderField.sql} AS orderValue` : ''}
 FROM candidates
 ${pageCondition}
-ORDER BY ${orderField} ${direction}, traceId ASC
+ORDER BY ${orderField.sql} ${direction}, traceId ASC
 LIMIT ${limit}`,
     query_params: parameters.params,
   };
@@ -907,6 +911,10 @@ export async function queryTraces(
       deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(watermark)),
     });
   }
+  // The internal orderValue projection carries the derived duration for cursor emission only;
+  // ClickHouse can serialize it as a string, and it never reaches the parsed response.
+  const lastSortValue =
+    plan.orderBy.field === 'durationMs' ? Number(visibleRows.at(-1)?.orderValue) : last?.[plan.orderBy.field];
   return coreStorage.traceQueryResponseSchema.parse({
     traces,
     page: {
@@ -914,7 +922,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: lastSortValue!,
               traceId: last.traceId,
             })
           : null,

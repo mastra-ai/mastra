@@ -411,6 +411,30 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(3);
   });
 
+  it('orders and pages by the derived root duration with numeric keyset parameters', () => {
+    const DURATION_SQL = 'EXTRACT(EPOCH FROM ("endedAt" - "startedAt"))::numeric * 1000';
+    const first = plan({ orderBy: [{ field: 'durationMs', direction: 'desc' }], page: { limit: 2 } });
+    const after = plan({
+      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+      page: { limit: 2, after: queryCursor(first, { sortValue: 2000, traceId: 'trace-c' }) },
+    });
+    const compiled = compilePostgresTraceQuery('public', after);
+
+    expect(compiled.text).toContain(`WHERE (${DURATION_SQL} < $3 OR (${DURATION_SQL} = $3 AND "traceId" > $4))`);
+    expect(compiled.text).toContain(`SELECT *, ${DURATION_SQL} AS "orderValue"`);
+    expect(compiled.text).toContain(`ORDER BY ${DURATION_SQL} DESC, "traceId" ASC`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 2000, 'trace-c', 3]);
+
+    const pagePlan = plan({
+      orderBy: [{ field: 'durationMs', direction: 'asc' }],
+      pagination: { page: 1, perPage: 2 },
+    });
+    const data = compilePostgresTraceQuery('public', pagePlan);
+    expect(data.text).toContain(`ORDER BY ${DURATION_SQL} ASC, "traceId" ASC`);
+    expect(data.text).not.toContain('"orderValue"');
+    expect(data.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 2, 2]);
+  });
+
   it('compiles grouped queries as distinct non-null thread IDs', () => {
     const compiled = compilePostgresTraceQuery('public', plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
 
@@ -619,6 +643,29 @@ describe('Postgres advanced trace query', () => {
     expect(response.traces[0]).not.toHaveProperty('input');
   });
 
+  it('emits numeric duration cursors from the internal order value without leaking it', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const any = vi.fn().mockResolvedValue([
+      { ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'), orderValue: '2000.000' },
+      { ...traceRow('trace-b', '2026-01-01T11:00:00.000Z'), orderValue: '2000.000' },
+    ]);
+    const tx = vi.fn(async callback => callback({ query, any }));
+    const request = { orderBy: [{ field: 'durationMs', direction: 'asc' }] };
+    const response = await queryTraces(
+      { tx } as unknown as DbClient,
+      'public',
+      plan({ ...request, page: { limit: 1 } }),
+      15_000,
+    );
+
+    expect(response.traces).toHaveLength(1);
+    expect(response.traces[0]).not.toHaveProperty('orderValue');
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+
+    const continuation = plan({ ...request, page: { limit: 1, after: response.page.next! } });
+    expect(continuation).toMatchObject({ cursor: { sortValue: 2000, traceId: 'trace-a' } });
+  });
+
   it('returns null for absent optional root span details', async () => {
     const row = {
       ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
@@ -701,7 +748,7 @@ describe('Postgres advanced trace query', () => {
   });
 });
 
-function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string; traceId: string }): string {
+function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string | number; traceId: string }): string {
   if (plan.result !== 'traces') throw new Error('Expected a trace plan');
   return encodeTraceQueryCursor(plan, { result: 'traces', ...values });
 }

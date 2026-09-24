@@ -14,6 +14,7 @@ import {
   type QueryThreadsInput,
   type QueryThreadsResult,
   type TraceQueryGroupResponse,
+  type TraceQueryOrderField,
   type TraceQueryPaginatedTraceResponse,
   type TraceQueryPredicate,
   type TraceQueryRequest,
@@ -1526,6 +1527,31 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'orders by ascending root duration with traceId tie-breaks',
+    request: {
+      timeRange: fullRange,
+      orderBy: [{ field: 'durationMs', direction: 'asc' }],
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-c' }, { traceId: 'trace-d' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'orders by descending root duration without promoting long child spans',
+    request: {
+      timeRange: fullRange,
+      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+    },
+    expected: [{ traceId: 'trace-b' }, { traceId: 'trace-a' }, { traceId: 'trace-c' }, { traceId: 'trace-d' }],
+  },
+  {
+    name: 'combines root duration predicates with root duration ordering',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'lt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-c' }, { traceId: 'trace-d' }],
+  },
+  {
     name: 'evaluates recursive trace predicates',
     request: {
       timeRange: fullRange,
@@ -2461,7 +2487,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     hasNext && last
       ? encodeTraceQueryCursor(plan, {
           result: 'traces',
-          sortValue: last[plan.orderBy.field],
+          sortValue: traceSortValue(last, plan.orderBy.field),
           traceId: last.traceId,
         })
       : null;
@@ -2789,19 +2815,41 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   };
 }
 
+/**
+ * Resolves the keyset sort value for a trace: ISO timestamps for timestamp order fields, and
+ * the completed root's derived duration for `durationMs`. Used for ordering, cursor
+ * continuation checks, and cursor emission so all three stay consistent.
+ */
+function traceSortValue(trace: TraceQueryTrace, field: TraceQueryOrderField): string | number {
+  if (field === 'durationMs') return durationMsBetween(trace.startedAt, trace.endedAt)!;
+  return trace[field];
+}
+
+function compareTraceSortValues(left: string | number, right: string | number): number {
+  if (typeof left === 'number' || typeof right === 'number') {
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    return leftNumber === rightNumber ? 0 : leftNumber < rightNumber ? -1 : 1;
+  }
+  return compareTraceQueryStrings(left, right);
+}
+
 function compareTraces(
   left: TraceQueryTrace,
   right: TraceQueryTrace,
   plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
 ): number {
-  const values = compareTraceQueryStrings(left[plan.orderBy.field], right[plan.orderBy.field]);
+  const values = compareTraceSortValues(
+    traceSortValue(left, plan.orderBy.field),
+    traceSortValue(right, plan.orderBy.field),
+  );
   if (values !== 0) return plan.orderBy.direction === 'asc' ? values : -values;
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
 function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
-  const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
+  const sortComparison = compareTraceSortValues(traceSortValue(trace, plan.orderBy.field), cursor.sortValue);
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;
   return plan.orderBy.direction === 'asc' ? sortComparison > 0 : sortComparison < 0;
 }

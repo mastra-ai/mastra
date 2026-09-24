@@ -566,7 +566,14 @@ LIMIT $${values.length}`,
     };
   }
 
-  const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
+  // Duration ordering reuses the exact numeric root-duration expression over the candidates
+  // columns so ORDER BY, keyset equality, and keyset continuation all compare the same value.
+  const durationOrdered = plan.orderBy.field === 'durationMs';
+  const orderField = durationOrdered
+    ? durationMsSql('"startedAt"', '"endedAt"')
+    : plan.orderBy.field === 'startedAt'
+      ? '"startedAt"'
+      : '"endedAt"';
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
@@ -592,7 +599,7 @@ LIMIT $${values.length - 1} OFFSET $${values.length}`,
 
   return {
     text: `${candidates}
-SELECT *
+SELECT *${durationOrdered ? `, ${orderField} AS "orderValue"` : ''}
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, "traceId" ASC
@@ -958,6 +965,10 @@ export async function queryTraces(
 
   const traces = visibleRows.map(traceRowToResult);
   const last = traces.at(-1);
+  // The internal "orderValue" projection carries the derived numeric duration for cursor
+  // emission only; PostgreSQL returns numeric as text, and it never reaches the parsed response.
+  const lastSortValue =
+    plan.orderBy.field === 'durationMs' ? Number(visibleRows.at(-1)?.orderValue) : last?.[plan.orderBy.field];
   return coreStorage.traceQueryResponseSchema.parse({
     traces,
     page: {
@@ -965,7 +976,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: lastSortValue!,
               traceId: last.traceId,
             })
           : null,

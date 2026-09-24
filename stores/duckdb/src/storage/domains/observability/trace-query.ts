@@ -518,7 +518,10 @@ ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
     };
   }
 
-  const orderField = plan.orderBy.field;
+  // Duration ordering reuses the exact root-duration expression over the candidates columns so
+  // ORDER BY, keyset equality, and keyset continuation all compare the same derived value.
+  const durationOrdered = plan.orderBy.field === 'durationMs';
+  const orderField = durationOrdered ? durationMsSql('startedAt', 'endedAt') : plan.orderBy.field;
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
@@ -545,14 +548,16 @@ ORDER BY page_rows.__row_position ASC NULLS LAST`,
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    pageCondition = `WHERE (${orderField} ${comparison} CAST(? AS TIMESTAMP) OR (${orderField} = CAST(? AS TIMESTAMP) AND traceId > ?))`;
+    // Numeric duration cursors bind as plain scalars; only timestamp cursors take the CAST.
+    const cursorSql = durationOrdered ? '?' : 'CAST(? AS TIMESTAMP)';
+    pageCondition = `WHERE (${orderField} ${comparison} ${cursorSql} OR (${orderField} = ${cursorSql} AND traceId > ?))`;
     values.push(plan.cursor.sortValue, plan.cursor.sortValue, plan.cursor.traceId);
   }
   values.push(plan.limit + 1);
 
   return {
     sql: `${candidates}
-SELECT *
+SELECT *${durationOrdered ? `, ${orderField} AS orderValue` : ''}
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, traceId ASC
@@ -830,6 +835,10 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
   const last = traces.at(-1);
+  // The internal orderValue projection carries the derived duration for cursor emission only;
+  // DuckDB returns date_diff as a BIGINT, and it never reaches the parsed response.
+  const lastSortValue =
+    plan.orderBy.field === 'durationMs' ? Number(visibleRows.at(-1)?.orderValue) : last?.[plan.orderBy.field];
   return coreStorage.traceQueryResponseSchema.parse({
     traces,
     page: {
@@ -837,7 +846,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: lastSortValue!,
               traceId: last.traceId,
             })
           : null,

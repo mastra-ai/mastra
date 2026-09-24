@@ -68,6 +68,7 @@ describe('trace delta contract', () => {
     { mode: 'delta', pagination: {} },
     { mode: 'delta', group: { by: ['threadId'] } },
     { mode: 'delta', orderBy: [{ field: 'startedAt', direction: 'desc' }] },
+    { mode: 'delta', orderBy: [{ field: 'durationMs', direction: 'desc' }] },
     { after: 'cursor' },
     { limit: 10 },
     { mode: 'delta', limit: 0 },
@@ -303,6 +304,22 @@ describe('planTraceQuery', () => {
       limit: 100,
       where: { type: 'comparison', field: 'environment', operator: 'eq', value: 'production' },
     });
+  });
+
+  it('plans root duration ordering for keyset and numbered pagination', () => {
+    for (const direction of ['asc', 'desc'] as const) {
+      const keyset = planTraceQuery(parsed({ ...baseRequest, orderBy: [{ field: 'durationMs', direction }] }));
+      expect(keyset).toMatchObject({
+        result: 'traces',
+        paginationMode: 'keyset',
+        orderBy: { field: 'durationMs', direction },
+      });
+
+      const numbered = planTraceQuery(
+        parsed({ ...baseRequest, pagination: {}, orderBy: [{ field: 'durationMs', direction }] }),
+      );
+      expect(numbered).toMatchObject({ paginationMode: 'page', orderBy: { field: 'durationMs', direction } });
+    }
   });
 
   it('enforces ordered and maximum time ranges', () => {
@@ -1611,6 +1628,90 @@ describe('trace-query cursors', () => {
     expect(() =>
       planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: 'threadId' }, page: { after: cursor } })),
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+  });
+
+  it('round-trips numeric duration cursors while keeping timestamp cursors valid', () => {
+    const durationRequest = { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'asc' }] };
+    const durationPlan = planTraceQuery(parsed(durationRequest));
+    const durationCursor = encodeTraceQueryCursor(durationPlan, {
+      result: 'traces',
+      sortValue: 2000,
+      traceId: 'trace-c',
+    });
+    expect(planTraceQuery(parsed({ ...durationRequest, page: { after: durationCursor } }))).toMatchObject({
+      cursor: { sortValue: 2000, traceId: 'trace-c' },
+    });
+
+    const timestampPlan = planTraceQuery(parsed());
+    const timestampCursor = encodeTraceQueryCursor(timestampPlan, {
+      result: 'traces',
+      sortValue: '2026-08-03T00:00:00.000Z',
+      traceId: 'trace-3',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, page: { after: timestampCursor } }))).toMatchObject({
+      cursor: { sortValue: '2026-08-03T00:00:00.000Z', traceId: 'trace-3' },
+    });
+  });
+
+  it('rejects wrong-kind sort values during encoding and planning', () => {
+    const durationRequest = { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'asc' }] };
+    const durationPlan = planTraceQuery(parsed(durationRequest));
+    const timestampPlan = planTraceQuery(parsed());
+
+    expect(() =>
+      encodeTraceQueryCursor(durationPlan, {
+        result: 'traces',
+        sortValue: '2026-08-03T00:00:00.000Z',
+        traceId: 'trace-3',
+      }),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
+    expect(() =>
+      encodeTraceQueryCursor(durationPlan, { result: 'traces', sortValue: Number.NaN, traceId: 'trace-3' }),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
+    expect(() =>
+      encodeTraceQueryCursor(timestampPlan, { result: 'traces', sortValue: 2000, traceId: 'trace-3' }),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
+
+    // Forged cursors whose binding matches but whose sort-value kind does not are malformed, not conflicts.
+    const forge = (plan: { binding: string }, sortValue: string | number) =>
+      Buffer.from(
+        JSON.stringify({ version: 1, binding: plan.binding, values: { result: 'traces', sortValue, traceId: 't' } }),
+        'utf8',
+      ).toString('base64url');
+    expect(() =>
+      planTraceQuery(parsed({ ...durationRequest, page: { after: forge(durationPlan, '2026-08-03T00:00:00.000Z') } })),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: forge(timestampPlan, 2000) } }))).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+  });
+
+  it('conflicts duration cursors when the query binding changes', () => {
+    const durationRequest = { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'asc' }] };
+    const plan = planTraceQuery(parsed(durationRequest), { scope: { organizationId: 'org-a' } });
+    const cursor = encodeTraceQueryCursor(plan, { result: 'traces', sortValue: 2000, traceId: 'trace-c' });
+
+    const conflicts: Array<[unknown, { authorizationBinding?: string; scope?: { organizationId: string } }]> = [
+      // direction change
+      [{ ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'desc' }] }, { scope: plan.scope! }],
+      // order-field change
+      [{ ...baseRequest, orderBy: [{ field: 'startedAt', direction: 'asc' }] }, { scope: plan.scope! }],
+      // predicate change
+      [{ ...durationRequest, where: { op: 'exists', path: 'threadId' } }, { scope: plan.scope! }],
+      // authorization binding change
+      [durationRequest, { authorizationBinding: 'scope-b', scope: plan.scope as { organizationId: string } }],
+      // trusted tenant scope change
+      [durationRequest, { scope: { organizationId: 'org-b' } }],
+    ];
+    for (const [request, options] of conflicts) {
+      expect(() => planTraceQuery(parsed({ ...(request as object), page: { after: cursor } }), options)).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
+
+    expect(
+      planTraceQuery(parsed({ ...durationRequest, page: { after: cursor } }), { scope: plan.scope }),
+    ).toMatchObject({ cursor: { sortValue: 2000, traceId: 'trace-c' } });
   });
 
   it('binds established shared authorization state only when supplied', () => {

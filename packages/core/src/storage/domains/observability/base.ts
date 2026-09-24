@@ -108,6 +108,7 @@ export type ObservabilityStorageFeature =
   | 'logs'
   | 'trace-query'
   | 'trace-query-root-duration'
+  | 'trace-query-root-duration-ordering'
   | 'trace-query-discovery'
   | 'thread-query'
   | 'trace-query-tenant-scope';

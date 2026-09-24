@@ -252,6 +252,45 @@ describe('trace-query reference evaluator', () => {
     expect(new Set(results.map(result => JSON.stringify(result))).size).toBe(results.length);
   });
 
+  it('traverses duration-ordered keyset pages across equal-duration boundaries', async () => {
+    const walks = [
+      { direction: 'asc' as const, expected: ['trace-a', 'trace-c', 'trace-d', 'trace-b'] },
+      { direction: 'desc' as const, expected: ['trace-b', 'trace-a', 'trace-c', 'trace-d'] },
+    ];
+    for (const walk of walks) {
+      const results = await collectTraceQueryPages(
+        async normalized => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, planTraceQuery(normalized)),
+        {
+          timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+          orderBy: [{ field: 'durationMs', direction: walk.direction }],
+          page: { limit: 2 },
+        },
+      );
+      expect(results).toEqual(walk.expected.map(traceId => ({ traceId })));
+      expect(new Set(results.map(result => JSON.stringify(result))).size).toBe(results.length);
+    }
+  });
+
+  it('returns duration-ordered numbered pages in both directions', () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+    const cases = [
+      { direction: 'asc' as const, pages: [['trace-a', 'trace-c'], ['trace-d', 'trace-b'], []] },
+      { direction: 'desc' as const, pages: [['trace-b', 'trace-a'], ['trace-c', 'trace-d'], []] },
+    ];
+    for (const testCase of cases) {
+      for (const [page, ids] of testCase.pages.entries()) {
+        const response = evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, {
+          timeRange,
+          orderBy: [{ field: 'durationMs', direction: testCase.direction }],
+          pagination: { page, perPage: 2 },
+        });
+        if (!('pagination' in response)) throw new Error('Expected page pagination');
+        expect(response.traces.map(trace => trace.traceId)).toEqual(ids);
+        expect(response.pagination).toEqual({ total: 4, page, perPage: 2, hasMore: page === 0 });
+      }
+    }
+  });
+
   it('paginates tied mixed-case and non-ASCII trace IDs using ordinal order', async () => {
     const results = await collectTraceQueryPages(
       async normalized => {

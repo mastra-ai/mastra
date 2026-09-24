@@ -619,22 +619,41 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
         }
 
-        const pagedTraceIds: string[] = [];
-        let after: string | undefined;
-        do {
-          const pagePlan = planTraceQuery(
-            parseTraceQueryRequest({
-              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
-              page: { limit: 2, ...(after ? { after } : {}) },
-            }),
-          );
-          const response = await storage.queryTraces(pagePlan);
-          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
-          pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
-          after = response.page.next ?? undefined;
-        } while (after);
-        expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
-        expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+        const walkKeysetPages = async (orderBy?: Array<{ field: string; direction: string }>) => {
+          const pagedTraceIds: string[] = [];
+          let after: string | undefined;
+          do {
+            const pagePlan = planTraceQuery(
+              parseTraceQueryRequest({
+                timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+                ...(orderBy ? { orderBy } : {}),
+                page: { limit: 2, ...(after ? { after } : {}) },
+              }),
+            );
+            const response = await storage.queryTraces(pagePlan);
+            if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
+            pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
+            after = response.page.next ?? undefined;
+          } while (after);
+          expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+          return pagedTraceIds;
+        };
+
+        await expect(walkKeysetPages()).resolves.toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        // The three-way 2000 ms duration tie spans a page boundary in both directions, so these
+        // walks prove keyset continuation neither duplicates nor skips equal-duration roots.
+        await expect(walkKeysetPages([{ field: 'durationMs', direction: 'asc' }])).resolves.toEqual([
+          'trace-a',
+          'trace-c',
+          'trace-d',
+          'trace-b',
+        ]);
+        await expect(walkKeysetPages([{ field: 'durationMs', direction: 'desc' }])).resolves.toEqual([
+          'trace-b',
+          'trace-a',
+          'trace-c',
+          'trace-d',
+        ]);
       });
 
       describe('score replacement conformance', () => {
@@ -695,6 +714,28 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         if (!('traces' in filtered) || !('pagination' in filtered)) throw new Error('Expected paginated traces');
         expect(filtered.traces.map(trace => trace.traceId)).toEqual(['trace-a', 'trace-b', 'trace-c']);
         expect(filtered.pagination).toEqual({ total: 3, page: 0, perPage: 3, hasMore: false });
+
+        const durationPages = [
+          { direction: 'asc', pages: [['trace-a', 'trace-c'], ['trace-d', 'trace-b'], []] },
+          { direction: 'desc', pages: [['trace-b', 'trace-a'], ['trace-c', 'trace-d'], []] },
+        ];
+        for (const durationCase of durationPages) {
+          for (const [page, ids] of durationCase.pages.entries()) {
+            const durationPlan = planTraceQuery(
+              parseTraceQueryRequest({
+                timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+                orderBy: [{ field: 'durationMs', direction: durationCase.direction }],
+                pagination: { page, perPage: 2 },
+              }),
+            );
+            const durationResponse = await storage.queryTraces(durationPlan);
+            if (!('traces' in durationResponse) || !('pagination' in durationResponse)) {
+              throw new Error('Expected paginated traces');
+            }
+            expect(durationResponse.traces.map(trace => trace.traceId)).toEqual(ids);
+            expect(durationResponse.pagination).toEqual({ total: 4, page, perPage: 2, hasMore: page === 0 });
+          }
+        }
 
         const emptyPlan = planTraceQuery(
           parseTraceQueryRequest({

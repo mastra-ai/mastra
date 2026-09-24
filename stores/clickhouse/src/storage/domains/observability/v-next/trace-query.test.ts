@@ -606,6 +606,32 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(3);
   });
 
+  it('orders and pages by the derived root duration with Float64 keyset parameters', () => {
+    const DURATION_SQL = "dateDiff('millisecond', startedAt, endedAt)";
+    const first = plan({ orderBy: [{ field: 'durationMs', direction: 'desc' }], page: { limit: 2 } });
+    const after = plan({
+      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+      page: {
+        limit: 2,
+        after: encodeTraceQueryCursor(first, { result: 'traces', sortValue: 2000, traceId: 'trace-c' }),
+      },
+    });
+    const compiled = compileClickHouseTraceQuery(after);
+
+    expect(compiled.query).toContain(`${DURATION_SQL} < {trace_query_3:Float64}`);
+    expect(compiled.query).toContain(`${DURATION_SQL} = {trace_query_3:Float64} AND traceId > {trace_query_4:String}`);
+    expect(compiled.query).toContain(`SELECT *, ${DURATION_SQL} AS orderValue`);
+    expect(compiled.query).toContain(`ORDER BY ${DURATION_SQL} DESC, traceId ASC`);
+    expect(compiled.query_params).toMatchObject({ trace_query_3: 2000, trace_query_4: 'trace-c' });
+
+    const page = compileClickHouseTraceQuery(
+      plan({ orderBy: [{ field: 'durationMs', direction: 'asc' }], pagination: { page: 1, perPage: 2 } }),
+    );
+    expect(page.query).toContain(`ORDER BY ${DURATION_SQL} ASC, traceId ASC`);
+    expect(page.query).not.toContain('orderValue');
+    expect(page.query).toContain('1 AS __metadata');
+  });
+
   it('compiles grouped queries as distinct non-null thread IDs', () => {
     const compiled = compileClickHouseTraceQuery(plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
 
