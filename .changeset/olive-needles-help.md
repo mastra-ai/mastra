@@ -5,4 +5,4 @@
 '@mastra/koa': patch
 ---
 
-Fixed standalone `createAuthMiddleware` in the Express, Fastify, Hono, and Koa adapters dropping refreshed session headers (such as `Set-Cookie`) after a transparent session refresh. The refreshed cookie now reaches the browser on both allowed and denied requests, matching `MastraServer` behavior. Fixes #24963.
+Fixed refreshed session cookies being lost in the standalone `createAuthMiddleware` for Express, Fastify, Hono, and Koa. Browsers now receive the refreshed `Set-Cookie` on both allowed and denied requests. Fixes #24963.
