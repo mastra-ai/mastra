@@ -84,7 +84,7 @@ Monospace is a typeface, not another role. `font="mono"` swaps the family to `--
 | Values a user copies or compares by character      | Status text and badges that name a state  |
 |                                                    | Prose, descriptions, and empty-state copy |
 
-Time is mono: a timestamp marks a moment and a duration measures one, and both are machine values a user compares digit by digit. Other numbers (counts, costs, scores, percentages) stay in the body face; add `tabular-nums` where their digits should line up, such as table columns.
+Time is mono: a timestamp marks a moment and a duration measures one, and both are machine values a user compares digit by digit. Other numbers (counts, costs, scores, percentages) stay in the body face; add `tabular-nums` where their digits should line up, such as table columns. Data visualization is the exception: KPI values, chart axes, and chart tooltips stay in the body face with `tabular-nums`, even for timestamps and durations, so a row of KPIs or a set of charts reads in one face.
 
 Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables and fields, `caption` for secondary identifiers, and `meta` for compact values such as versions. Heading roles stay proportional.
 
