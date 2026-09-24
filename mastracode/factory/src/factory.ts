@@ -97,7 +97,7 @@ import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
-import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -883,7 +883,22 @@ export class MastraFactory {
           ? { orgId: callerOrgId, userId: callerUserId }
           : { orgId: 'local', userId: 'local' };
       const record = await memorySettingsStorage.get(target);
-      requestContext.set('mastra__factoryMemorySettings', record satisfies MemorySettingsRecord | null);
+      // A channel sender's own settings beat the project's for every knob they
+      // saved. Best-effort: a failed personal read keeps the project's row.
+      let personal: MemorySettingsRecord | null = null;
+      if (factoryProjectId && requestContext.get('channel') && callerUserId && callerOrgId) {
+        try {
+          personal = await memorySettingsStorage.get({ orgId: callerOrgId, userId: callerUserId });
+        } catch (error) {
+          console.warn("[Factory Memory Settings] Unable to read the sender's memory settings", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      requestContext.set(
+        'mastra__factoryMemorySettings',
+        layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
+      );
     };
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({

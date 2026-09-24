@@ -2,9 +2,11 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import type { MemorySettingsRecord } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import {
   hydrateSessionMemorySettings,
+  layerPersonalMemorySettings,
   type MemorySettingsHydrationDependencies,
   type MemorySettingsHydrationSession,
 } from './memory-settings-hydration.js';
@@ -107,5 +109,40 @@ describe('hydrateSessionMemorySettings', () => {
     );
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
     warn.mockRestore();
+  });
+});
+
+describe('layerPersonalMemorySettings', () => {
+  const row = (overrides: Partial<MemorySettingsRecord>): MemorySettingsRecord => ({
+    orgId: 'org-1',
+    userId: 'factory-project:fp-1',
+    observerModelId: null,
+    reflectorModelId: null,
+    observationThreshold: null,
+    reflectionThreshold: null,
+    observeAttachments: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    ...overrides,
+  });
+
+  it("lets the sender's saved knobs win and keeps the project's for the rest", () => {
+    const project = row({ observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 });
+    const personal = row({ userId: 'user-1', reflectorModelId: 'openai/gpt-5-mini', observationThreshold: 222 });
+
+    expect(layerPersonalMemorySettings(project, personal)).toMatchObject({
+      userId: 'factory-project:fp-1',
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'openai/gpt-5-mini',
+      observationThreshold: 222,
+    });
+  });
+
+  it('uses whichever row exists when the other is missing', () => {
+    const personal = row({ userId: 'user-1', observerModelId: 'openai/gpt-5-mini' });
+
+    expect(layerPersonalMemorySettings(null, personal)).toBe(personal);
+    expect(layerPersonalMemorySettings(personal, null)).toBe(personal);
+    expect(layerPersonalMemorySettings(null, null)).toBeNull();
   });
 });
