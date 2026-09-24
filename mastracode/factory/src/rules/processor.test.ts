@@ -299,7 +299,10 @@ describe('FactoryPhaseStateProcessor', () => {
     });
 
     const context = requestContext();
+    const emitEvent = vi.fn();
+    context.set('controller', { ...(context.get('controller') as object), emitEvent });
     await expect(processor.prepareMemorySettings(context)).resolves.toBeUndefined();
+    await processor.processInputStep(inputArgs(context, []));
     expect(context.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',
@@ -307,6 +310,15 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to load settings for run', {
       error: 'storage unavailable',
     });
+    // The thread hears about the fallback once per run, not once per retry.
+    expect(emitEvent).toHaveBeenCalledTimes(1);
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        errorType: 'factory_memory_settings_unavailable',
+        error: expect.objectContaining({ message: expect.stringContaining('using Auto models') }),
+      }),
+    );
     warn.mockRestore();
   });
 

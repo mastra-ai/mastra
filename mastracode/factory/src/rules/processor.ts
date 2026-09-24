@@ -221,6 +221,34 @@ async function withRuleTimeout<T>(operation: Promise<T>): Promise<T> {
   }
 }
 
+const reportedUnavailableMemorySettings = new WeakSet<object>();
+
+/**
+ * Marks this run's Factory memory settings as unavailable so memory falls back
+ * to auto, and tells the thread once per request that saved choices were not
+ * applied. The reserved request-context key keeps clients from spoofing it.
+ */
+export function reportMemorySettingsUnavailable(
+  requestContext: NonNullable<ProcessInputArgs['requestContext']>,
+  reason: string,
+): void {
+  requestContext.set('mastra__factoryMemorySettings', { status: 'unavailable', reason });
+  console.warn('[Factory Memory Settings] Failed to load settings for run', { error: reason });
+  if (reportedUnavailableMemorySettings.has(requestContext)) return;
+  reportedUnavailableMemorySettings.add(requestContext);
+  const controller = requestContext.get('controller') as
+    | Pick<AgentControllerRequestContext<MastraCodeState>, 'emitEvent'>
+    | undefined;
+  controller?.emitEvent?.({
+    type: 'error',
+    error: new Error(
+      'Memory settings could not be loaded for this run, so observational memory is using Auto models and default thresholds.',
+    ),
+    errorType: 'factory_memory_settings_unavailable',
+    retryable: false,
+  });
+}
+
 export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   readonly id = STATE_ID;
   readonly stateId = STATE_ID;
@@ -298,8 +326,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
    *
    * The WeakSet covers loaders that do not set the context key themselves, so a
    * request is still loaded once. A failed load records an unavailable sentinel
-   * that disables model-driven memory work, but is not marked loaded so the next
-   * step can retry.
+   * (memory then runs both roles on auto with default thresholds) and is not
+   * marked loaded so the next step can retry.
    */
   private async loadCallerMemorySettings(
     requestContext: ProcessInputStepArgs['requestContext'] | ProcessInputArgs['requestContext'],
@@ -328,9 +356,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       await this.options.loadMemorySettings({ requestContext, binding: runBinding });
       this.loadedMemorySettings.add(requestContext);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      requestContext.set('mastra__factoryMemorySettings', { status: 'unavailable', reason });
-      console.warn('[Factory Memory Settings] Failed to load settings for run', { error: reason });
+      reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
     }
   }
 

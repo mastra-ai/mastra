@@ -521,8 +521,8 @@ export interface UpdateThinkingConfigResponse {
 }
 
 function modelProvider(modelId: string): string {
-  // Mirrors the gateway-prefix stripping in the SDK's `resolveAutoOMModelId` so an
-  // effective ID reports the same provider here as it resolved to there.
+  // Effective IDs keep their `mastra/` route; the provider segment after it is what
+  // the SDK resolver falls back to when the gateway is not configured.
   const normalized = modelId.replace(/^mastracode\//, '').replace(/^mastra\//, '');
   return normalized.split('/', 1)[0] ?? '';
 }

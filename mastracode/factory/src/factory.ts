@@ -75,7 +75,7 @@ import {
 import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
-import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -1031,9 +1031,12 @@ export class MastraFactory {
             await factoryProcessor.prepareMemorySettings(requestContext);
             return [factoryProcessor];
           }
-          const reason = 'work-items unavailable';
-          requestContext.set('mastra__factoryMemorySettings', { status: 'unavailable', reason });
-          console.warn('[Factory Memory Settings] Failed to load settings for run', { error: reason });
+          // Without work items there is no run binding, so the caller's row applies.
+          try {
+            await loadMemorySettings({ requestContext, binding: null });
+          } catch (error) {
+            reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
+          }
           return [];
         },
         ...(vector ? { vector } : {}),

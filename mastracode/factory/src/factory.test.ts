@@ -305,22 +305,45 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
-  it('fails closed when work items are unavailable and project ownership cannot be recovered', async () => {
+  it('still loads the saved memory settings when work items are unavailable', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const config = await prepareFactory({ storage, auth: null });
+    await storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-1' },
+    });
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
     const requestContext = new RequestContext();
 
     await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-1',
+    });
+  });
+
+  it('falls back to auto and tells the thread when settings cannot load without work items', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = await prepareFactory({ storage, auth: null });
+    vi.spyOn(storage.getDomain<MemorySettingsStorage>('memory-settings'), 'get').mockRejectedValue(
+      new Error('storage unavailable'),
+    );
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+    const emitEvent = vi.fn();
+    requestContext.set('controller', { getState: () => ({}), emitEvent });
+
+    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
-      reason: 'work-items unavailable',
+      reason: 'storage unavailable',
     });
-    expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to load settings for run', {
-      error: 'work-items unavailable',
-    });
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', errorType: 'factory_memory_settings_unavailable' }),
+    );
     warn.mockRestore();
   });
 
