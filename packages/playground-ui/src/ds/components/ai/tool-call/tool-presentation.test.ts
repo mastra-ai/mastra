@@ -33,12 +33,15 @@ describe('presentTool', () => {
     });
   });
 
-  it("shows a command's description on the row in place of the label and command, keeping the command for the expanded body", () => {
+  it("adds a command's description, keeping the label, detail, and command for consumers that pick fields", () => {
     const command = "cd packages/core && rg -n 'processor' src | head -20";
     const presentation = presentTool('execute_command', { description: 'Finding  the processor\n wiring', command });
-    // The label stays as the kind of tool, which groups use; the row shows the description alone.
-    expect(presentation).toMatchObject({ label: 'Run', description: 'Finding the processor wiring', command });
-    expect(presentation.detail).toBeUndefined();
+    expect(presentation).toMatchObject({
+      label: 'Run',
+      detail: "rg -n 'processor' src | head -20",
+      description: 'Finding the processor wiring',
+      command,
+    });
   });
 
   it('falls back to the command when the description is blank', () => {

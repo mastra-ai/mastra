@@ -146,7 +146,8 @@ describe('ToolCallGroup', () => {
     );
 
     const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
-    expect(within(group).getByText('Running the unit tests')).toBeTruthy();
+    // Prose, like the row; monospace is for commands and paths.
+    expect(within(group).getByText('Running the unit tests').className).not.toContain('font-mono');
     expect(within(group).queryByText('pnpm test')).toBeNull();
     expect(within(group).getByRole('img', { name: 'Read, Run' })).toBeTruthy();
   });

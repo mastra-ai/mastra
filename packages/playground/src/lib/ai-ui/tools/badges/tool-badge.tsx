@@ -52,7 +52,7 @@ export const ToolBadge = ({
   status = 'idle',
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
-  const { icon, label, detail } = presentTool(toolName, argsObject);
+  const { icon, label, detail, description } = presentTool(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
@@ -71,7 +71,7 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} />}
+      header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} description={description} />}
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (

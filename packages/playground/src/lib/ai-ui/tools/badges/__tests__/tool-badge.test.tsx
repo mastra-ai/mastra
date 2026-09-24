@@ -54,6 +54,30 @@ describe('ToolBadge', () => {
     expect(screen.queryByLabelText('Code editor')).toBeNull();
   });
 
+  it("shows a command's description alone on its row, and the command without one", () => {
+    const command = "cd packages/core && rg -n 'processor' src | head -20";
+    const badge = (args: Record<string, unknown>) => (
+      <ToolBadge
+        toolName="execute_command"
+        args={args}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />
+    );
+
+    const { unmount } = renderWithProviders(badge({ description: 'Finding the processor wiring', command }));
+    expect(screen.getByText('Finding the processor wiring')).toBeTruthy();
+    expect(screen.queryByText('Run')).toBeNull();
+    unmount();
+
+    renderWithProviders(badge({ command }));
+    expect(screen.getByText('Run')).toBeTruthy();
+    expect(screen.getByText("rg -n 'processor' src | head -20")).toBeTruthy();
+  });
+
   it('renders tool results as a static code block', () => {
     renderWithProviders(
       <ToolBadge
