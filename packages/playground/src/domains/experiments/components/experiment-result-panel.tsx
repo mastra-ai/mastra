@@ -7,8 +7,8 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { format } from 'date-fns/format';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -192,11 +192,11 @@ function ExperimentResultPanelBody({
             <>
               <DataKeysAndValues.Key>Input tokens</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>
-                {usage.inputTokens !== undefined ? formatCompact(usage.inputTokens) : '—'}
+                {usage.inputTokens !== undefined ? formatCompactNumber(usage.inputTokens) : '—'}
               </DataKeysAndValues.Value>
               <DataKeysAndValues.Key>Output tokens</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>
-                {usage.outputTokens !== undefined ? formatCompact(usage.outputTokens) : '—'}
+                {usage.outputTokens !== undefined ? formatCompactNumber(usage.outputTokens) : '—'}
               </DataKeysAndValues.Value>
               <DataKeysAndValues.Key>Cost</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>

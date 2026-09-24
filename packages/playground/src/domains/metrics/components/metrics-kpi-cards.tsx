@@ -1,10 +1,11 @@
-import { CompactNumber, formatFullNumber } from '@mastra/playground-ui/components/CompactNumber';
+import { CompactNumber } from '@mastra/playground-ui/components/CompactNumber';
 import { KpiCardView } from '@mastra/playground-ui/domains/metrics/components/kpi-card-view';
 import { useActiveResourcesKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-active-resources-kpi-metrics';
 import { useActiveThreadsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-active-threads-kpi-metrics';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
 import { useModelCostKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-model-cost-kpi-metrics';
 import { useTotalTokensKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-total-tokens-kpi-metrics';
+import { formatFullNumber } from '@mastra/playground-ui/utils/cost';
 
 export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics();

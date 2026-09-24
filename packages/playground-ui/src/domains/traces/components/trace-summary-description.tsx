@@ -14,10 +14,10 @@ import {
 } from '../utils/span-utils';
 import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
-import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { formatCompactNumber, formatCost } from '@/lib/cost';
 
 function formatEntityType(entityType: string): string {
   return entityType
@@ -97,10 +97,10 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
       {usage && (
         <>
           <DataPanel.Meta icon={<ArrowDownToLineIcon />} tooltip="Input tokens">
-            {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
+            {usage.inputTokens === undefined ? '—' : formatCompactNumber(usage.inputTokens)}
           </DataPanel.Meta>
           <DataPanel.Meta icon={<ArrowUpFromLineIcon />} tooltip="Output tokens">
-            {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
+            {usage.outputTokens === undefined ? '—' : formatCompactNumber(usage.outputTokens)}
           </DataPanel.Meta>
           <DataPanel.Meta icon={<CircleDollarSignIcon />} tooltip="Estimated cost">
             {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}

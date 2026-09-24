@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
-import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
+import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { format, formatDistanceToNow } from 'date-fns';
 import { type ReactNode, useMemo } from 'react';
 import type { ExperimentMetrics } from '../hooks/use-experiment-metrics';
@@ -117,7 +117,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
               <span className="text-muted-foreground">—</span>
             ) : (
               <>
-                <span>{formatCompact(metrics.data.totalTokens)}</span>
+                <span>{formatCompactNumber(metrics.data.totalTokens)}</span>
                 {metrics.data.estimatedCost != null && (
                   <span className="text-muted-foreground">
                     · {formatCost(metrics.data.estimatedCost, metrics.data.costUnit)}

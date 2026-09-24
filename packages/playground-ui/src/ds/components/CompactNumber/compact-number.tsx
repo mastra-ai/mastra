@@ -1,6 +1,6 @@
-import { formatCompactNumber, formatFullNumber } from './format-compact-number';
-import type { CompactNumberFormatOptions } from './format-compact-number';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { formatCompactNumber, formatFullNumber } from '@/lib/cost';
+import type { CompactNumberFormatOptions } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 
 export interface CompactNumberProps extends CompactNumberFormatOptions {

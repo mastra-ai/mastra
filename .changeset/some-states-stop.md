@@ -10,3 +10,13 @@ import { CompactNumber } from '@mastra/playground-ui/components/CompactNumber';
 <CompactNumber value={12310} />
 <CompactNumber value={12345.67} currency="USD" />
 ```
+
+The number and cost formatters now live in one place, `@mastra/playground-ui/utils/cost`. `formatCompact` is renamed to `formatCompactNumber`, and `formatCompact` and `formatCost` are no longer exported from the metrics components.
+
+```ts
+// Before
+import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components';
+
+// After
+import { formatCompactNumber, formatCost, formatFullNumber } from '@mastra/playground-ui/utils/cost';
+```

@@ -32,3 +32,10 @@ export function formatFullNumber(value: number, { currency }: CompactNumberForma
   }
   return formatter.format(value);
 }
+
+export function formatCost(value: number, unit?: string | null): string {
+  const isUsd = !unit || unit.toLowerCase() === 'usd';
+  const amount = value > 0 && value < 0.01 ? '<0.01' : value.toFixed(2);
+  if (!isUsd) return `${amount} ${unit}`;
+  return amount.startsWith('<') ? '<$0.01' : `$${amount}`;
+}
