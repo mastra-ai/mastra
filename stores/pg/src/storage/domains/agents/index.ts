@@ -413,6 +413,7 @@ export class AgentsPG extends AgentsStorage {
 
       // Default visibility to 'private' for owned agents; leave null for unowned/legacy rows
       const visibility = agent.visibility ?? (agent.authorId ? 'private' : null);
+      const metadataJson = agent.metadata ? toPgJson(agent.metadata) : null;
 
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
       await this.#db.client.none(
@@ -426,7 +427,7 @@ export class AgentsPG extends AgentsStorage {
           'draft',
           agent.authorId ?? null,
           visibility,
-          agent.metadata ? toPgJson(agent.metadata) : null,
+          metadataJson,
           0,
           null, // activeVersionId starts as null
           nowIso,
@@ -457,7 +458,7 @@ export class AgentsPG extends AgentsStorage {
         activeVersionId: undefined,
         authorId: agent.authorId,
         visibility: visibility ?? undefined,
-        metadata: agent.metadata,
+        metadata: metadataJson ? JSON.parse(metadataJson) : agent.metadata,
         favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -775,7 +776,7 @@ export class AgentsPG extends AgentsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
-      await this.#db.client.none(
+      const row = await this.#db.client.one(
         `INSERT INTO ${tableName} (
           id, "agentId", "versionNumber",
           name, description, instructions, model, tools,
@@ -785,7 +786,7 @@ export class AgentsPG extends AgentsStorage {
           durable, browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING *`,
         [
           input.id,
           input.agentId,
@@ -818,10 +819,7 @@ export class AgentsPG extends AgentsStorage {
         ],
       );
 
-      return {
-        ...input,
-        createdAt: now,
-      };
+      return this.parseVersionRow(row);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

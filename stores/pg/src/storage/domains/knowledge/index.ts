@@ -455,7 +455,7 @@ export class KnowledgePG extends KnowledgeStorage {
           node.kind,
           node.content ?? null,
           node.description ?? null,
-          toPgJson(scope),
+          JSON.stringify(scope),
           knowledgeScopeKey(scope),
           node.version,
           now.toISOString(),
@@ -533,7 +533,7 @@ export class KnowledgePG extends KnowledgeStorage {
           input.kind ?? existing.kind,
           content ?? null,
           description ?? null,
-          toPgJson(scope),
+          JSON.stringify(scope),
           knowledgeScopeKey(scope),
           now.toISOString(),
           input.id,
@@ -664,6 +664,7 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const parent = await this.#resolveTerminalNode(tx, nodeReferenceId(input.node));
       if (!parent) throw new KnowledgeNotFoundError('node', nodeReferenceId(input.node));
+      const metadataJson = input.metadata ? toPgJson(input.metadata) : null;
       const record: KnowledgeRecord = {
         id: input.id ?? createKnowledgeUlid(),
         node: parent.id,
@@ -681,19 +682,19 @@ export class KnowledgePG extends KnowledgeStorage {
           record.id,
           record.node,
           record.text,
-          toPgJson(scope),
+          JSON.stringify(scope),
           knowledgeScopeKey(scope),
           record.sourceThreadId,
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
-          record.metadata ? toPgJson(record.metadata) : null,
+          metadataJson,
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
       await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
-      return record;
+      return metadataJson ? { ...record, metadata: JSON.parse(metadataJson) } : record;
     });
   }
 
@@ -773,7 +774,7 @@ export class KnowledgePG extends KnowledgeStorage {
       assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
-        args: [toPgJson(scope), knowledgeScopeKey(scope), input.id],
+        args: [JSON.stringify(scope), knowledgeScopeKey(scope), input.id],
       });
       await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
       if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
@@ -1078,7 +1079,7 @@ export class KnowledgePG extends KnowledgeStorage {
               node.name,
               canonicalName(node.name),
               node.kind,
-              toPgJson(defaultScope),
+              JSON.stringify(defaultScope),
               knowledgeScopeKey(defaultScope),
               1,
               now.toISOString(),
@@ -1112,7 +1113,7 @@ export class KnowledgePG extends KnowledgeStorage {
         action,
         recordType,
         recordId,
-        toPgJson(scope),
+        JSON.stringify(scope),
         knowledgeScopeKey(scope),
         sourceThreadId ?? null,
         now.toISOString(),
@@ -1138,7 +1139,7 @@ export class KnowledgePG extends KnowledgeStorage {
         documentId,
         documentType,
         operation,
-        toPgJson(scope),
+        JSON.stringify(scope),
         knowledgeScopeKey(scope),
         now.toISOString(),
         now.toISOString(),

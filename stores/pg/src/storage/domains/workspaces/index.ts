@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   WorkspacesStorage,
@@ -303,11 +304,17 @@ export class WorkspacesPG extends WorkspacesStorage {
         } = latestVersion;
 
         const newConfig = { ...latestConfig, ...configFields };
+        const normalized = (value: unknown) => {
+          const json = toPgJson(value);
+          return json === undefined ? undefined : JSON.parse(json);
+        };
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !isDeepStrictEqual(
+              normalized(configFields[field as keyof typeof configFields]),
+              normalized(latestConfig[field as keyof typeof latestConfig]),
+            ),
         );
 
         if (changedFields.length > 0) {
@@ -350,7 +357,8 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       if (metadata !== undefined) {
-        const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...metadata };
+        const normalizedMetadata = JSON.parse(toPgJson(metadata));
+        const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...normalizedMetadata };
         setClauses.push(`metadata = $${paramIndex++}`);
         values.push(toPgJson(mergedMetadata));
       }

@@ -172,6 +172,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
+      const metadataJson = mcpClient.metadata ? toPgJson(mcpClient.metadata) : null;
 
       // 1. Create the thin MCP client record
       await this.#db.client.none(
@@ -179,17 +180,7 @@ export class MCPClientsPG extends MCPClientsStorage {
           id, status, "activeVersionId", "authorId", metadata,
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          mcpClient.id,
-          'draft',
-          null,
-          mcpClient.authorId ?? null,
-          mcpClient.metadata ? toPgJson(mcpClient.metadata) : null,
-          nowIso,
-          nowIso,
-          nowIso,
-          nowIso,
-        ],
+        [mcpClient.id, 'draft', null, mcpClient.authorId ?? null, metadataJson, nowIso, nowIso, nowIso, nowIso],
       );
 
       // 2. Extract snapshot fields and create version 1
@@ -209,7 +200,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: mcpClient.authorId,
-        metadata: mcpClient.metadata,
+        metadata: metadataJson ? JSON.parse(metadataJson) : mcpClient.metadata,
         createdAt: now,
         updatedAt: now,
       };
@@ -447,6 +438,8 @@ export class MCPClientsPG extends MCPClientsStorage {
       });
       const now = new Date();
       const nowIso = now.toISOString();
+      const serversJson = toPgJson(input.servers);
+      const changedFieldsJson = input.changedFields ? toPgJson(input.changedFields) : null;
 
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
@@ -461,8 +454,8 @@ export class MCPClientsPG extends MCPClientsStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          toPgJson(input.servers),
-          input.changedFields ? toPgJson(input.changedFields) : null,
+          serversJson,
+          changedFieldsJson,
           input.changeMessage ?? null,
           nowIso,
           nowIso,
@@ -471,6 +464,8 @@ export class MCPClientsPG extends MCPClientsStorage {
 
       return {
         ...input,
+        servers: JSON.parse(serversJson),
+        changedFields: changedFieldsJson ? JSON.parse(changedFieldsJson) : input.changedFields,
         createdAt: now,
       };
     } catch (error) {

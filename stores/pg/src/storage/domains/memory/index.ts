@@ -731,6 +731,7 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
       const createdAt = toUtcISOString(thread.createdAt);
       const updatedAt = toUtcISOString(thread.updatedAt);
+      const metadataJson = thread.metadata ? toPgJson(thread.metadata) : null;
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id,
@@ -750,19 +751,10 @@ export class MemoryPG extends MemoryStorage {
           "createdAtZ" = EXCLUDED."createdAtZ",
           "updatedAt" = EXCLUDED."updatedAt",
           "updatedAtZ" = EXCLUDED."updatedAtZ"`,
-        [
-          thread.id,
-          thread.resourceId,
-          thread.title,
-          thread.metadata ? toPgJson(thread.metadata) : null,
-          createdAt,
-          createdAt,
-          updatedAt,
-          updatedAt,
-        ],
+        [thread.id, thread.resourceId, thread.title, metadataJson, createdAt, createdAt, updatedAt, updatedAt],
       );
 
-      return thread;
+      return { ...thread, metadata: metadataJson ? JSON.parse(metadataJson) : thread.metadata };
     } catch (error) {
       throw new MastraError(
         {
@@ -1665,7 +1657,7 @@ export class MemoryPG extends MemoryStorage {
               values.push(
                 message.id,
                 message.threadId,
-                typeof message.content === 'string' ? message.content : toPgJson(message.content),
+                typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
                 createdAt,
                 createdAt,
                 message.role,
@@ -1931,17 +1923,18 @@ export class MemoryPG extends MemoryStorage {
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     const createdAt = toUtcISOString(resource.createdAt);
     const updatedAt = toUtcISOString(resource.updatedAt);
+    const metadataJson = toPgJson(resource.metadata);
     await this.#db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: toPgJson(resource.metadata),
+        metadata: metadataJson,
         createdAt,
         updatedAt,
       },
     });
 
-    return resource;
+    return { ...resource, metadata: metadataJson ? JSON.parse(metadataJson) : resource.metadata };
   }
 
   async updateResource({
@@ -1988,9 +1981,11 @@ export class MemoryPG extends MemoryStorage {
       paramIndex++;
     }
 
+    let metadataJson: string | undefined;
     if (metadata) {
+      metadataJson = toPgJson(updatedResource.metadata);
       updates.push(`metadata = $${paramIndex}`);
-      values.push(toPgJson(updatedResource.metadata));
+      values.push(metadataJson);
       paramIndex++;
     }
 
@@ -2004,7 +1999,7 @@ export class MemoryPG extends MemoryStorage {
 
     await this.#db.client.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
-    return updatedResource;
+    return metadataJson ? { ...updatedResource, metadata: JSON.parse(metadataJson) } : updatedResource;
   }
 
   async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {

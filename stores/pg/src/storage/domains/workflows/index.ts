@@ -25,10 +25,8 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
-import { sanitizeJsonForPg, toPgJson } from '../../db/sanitize-json';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
-
-export { sanitizeJsonForPg };
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';

@@ -55,7 +55,7 @@ function jsonbArg(value: unknown): string | null {
 
 /** Preserve JSON null as data, rather than converting it to an absent SQL value. */
 function jsonDataArg(value: unknown): string | null {
-  return value === undefined ? null : toPgJson(value);
+  return value === undefined ? null : JSON.stringify(value);
 }
 
 // Read arbitrary JSON as text so pg cannot collapse JSON null into SQL NULL or
@@ -715,7 +715,7 @@ export class DatasetsPG extends DatasetsStorage {
             args.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
-            toPgJson(args.input),
+            JSON.stringify(args.input),
             jsonDataArg(args.groundTruth),
             jsonDataArg(args.expectedTrajectory),
             jsonbArg(args.toolMocks),
@@ -845,7 +845,7 @@ export class DatasetsPG extends DatasetsStorage {
             existing.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
-            toPgJson(mergedInput),
+            JSON.stringify(mergedInput),
             jsonDataArg(mergedGroundTruth),
             jsonDataArg(mergedExpectedTrajectory),
             jsonbArg(mergedToolMocks),
@@ -940,7 +940,7 @@ export class DatasetsPG extends DatasetsStorage {
             existing.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
-            toPgJson(existing.input),
+            JSON.stringify(existing.input),
             jsonDataArg(existing.groundTruth),
             jsonDataArg(existing.expectedTrajectory),
             jsonbArg(existing.toolMocks),
@@ -1077,7 +1077,7 @@ export class DatasetsPG extends DatasetsStorage {
                 item.externalId ?? null,
                 dataset.organizationId ?? null,
                 dataset.projectId ?? null,
-                toPgJson(item.input),
+                JSON.stringify(item.input),
                 jsonDataArg(item.groundTruth),
                 jsonDataArg(item.expectedTrajectory),
                 jsonbArg(item.toolMocks),
@@ -1190,7 +1190,7 @@ export class DatasetsPG extends DatasetsStorage {
               item.externalId ?? null,
               parentOrganizationId,
               parentProjectId,
-              toPgJson(item.input),
+              JSON.stringify(item.input),
               jsonDataArg(item.groundTruth),
               jsonDataArg(item.expectedTrajectory),
               jsonbArg(item.toolMocks),

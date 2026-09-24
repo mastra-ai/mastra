@@ -26,8 +26,3 @@ export function toPgJson(value: unknown): string {
   if (json === undefined || !/\\u(?:0000|[dD][89a-fA-F][0-9a-fA-F]{2})/.test(json)) return json;
   return JSON.stringify(repairJson(JSON.parse(json)));
 }
-
-/** Sanitize an already-serialized JSON string. Prefer toPgJson for original values. */
-export function sanitizeJsonForPg(jsonString: string): string {
-  return toPgJson(JSON.parse(jsonString.replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\')));
-}

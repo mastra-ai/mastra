@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeJsonForPg, toPgJson } from '../../db/sanitize-json';
+import { toPgJson } from '../../db/sanitize-json';
 
 describe('PostgreSQL JSON serialization', () => {
   it('removes NUL characters from values and keys', () => {
@@ -59,12 +59,5 @@ describe('PostgreSQL JSON serialization', () => {
 
   it('preserves native behavior for top-level values without JSON output', () => {
     expect(toPgJson(undefined)).toBe(JSON.stringify(undefined));
-  });
-
-  it('still accepts already serialized JSON', () => {
-    expect(sanitizeJsonForPg('"before\\u0000after"')).toBe('"beforeafter"');
-    expect(JSON.parse(sanitizeJsonForPg('"before\\uD800after"'))).toBe('before�after');
-    expect(JSON.parse(sanitizeJsonForPg('"literal\\\\uD800"'))).toBe(String.raw`literal\uD800`);
-    expect(JSON.parse(sanitizeJsonForPg('"invalid\\v escape"'))).toBe(String.raw`invalid\v escape`);
   });
 });

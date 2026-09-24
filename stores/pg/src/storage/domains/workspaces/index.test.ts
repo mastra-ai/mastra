@@ -37,5 +37,18 @@ describe('workspace JSONB storage', () => {
       provider: 'local',
       basePath: 'C:\\path\\�-end',
     });
+
+    const versionNumber = (await workspaces.getLatestVersion(id))?.versionNumber;
+    await workspaces.update({ id, filesystem: { provider: 'local', basePath: 'C:\\path\\\uD800-end' } });
+    expect((await workspaces.getLatestVersion(id))?.versionNumber).toBe(versionNumber);
+
+    await workspaces.update({ id, metadata: { 'a\0b': 'new' } });
+    await workspaces.update({ id, metadata: { 'a\0b': 'updated' } });
+    expect((await workspaces.getById(id))?.metadata).toEqual({
+      path: 'C:\\path\\�-end',
+      literal,
+      nul: 'ab',
+      ab: 'updated',
+    });
   });
 });
