@@ -31,8 +31,14 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
   retain = false;
   #retained = new Map<string, any[]>();
 
+  /** Delay each `stream-part` publish, like a remote round trip, so publishing lags production. */
+  streamPartDelayMs = 0;
+
   async publish(topic: string, event: any): Promise<void> {
     if (this.failPublish.has(topic)) throw new Error(`publish to ${topic} failed`);
+    if (this.streamPartDelayMs && event.data?.type === 'stream-part') {
+      await new Promise(resolve => setTimeout(resolve, this.streamPartDelayMs));
+    }
     const stamped = { ...event, id: 'evt', createdAt: event.createdAt ?? new Date() };
     if (this.retain) this.#retained.set(topic, [...(this.#retained.get(topic) ?? []), stamped]);
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {

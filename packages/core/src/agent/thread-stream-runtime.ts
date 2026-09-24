@@ -7,6 +7,7 @@ import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
+import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
@@ -18,7 +19,7 @@ import { createRecentRequests } from './recent-requests';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
-import { createThreadHistoryFilter, stampPartPublishedAt } from './thread-history';
+import { createThreadHistoryFilter, stampPartProducedAt } from './thread-history';
 import type {
   AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
@@ -400,7 +401,15 @@ type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'cr
 
 type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string }
-  | { type: 'stream-part'; runId: string; streamId: string; part: unknown; sourceId: string }
+  | {
+      type: 'stream-part';
+      runId: string;
+      streamId: string;
+      part: unknown;
+      sourceId: string;
+      /** Epoch ms the part was produced; publishing can lag behind it. */
+      producedAt?: number;
+    }
   | {
       type: 'run-completed';
       runId: string;
@@ -1660,7 +1669,8 @@ export class AgentThreadStreamRuntime {
         }
       }
       const part = sanitizeBroadcastPart(rawPart);
-      stampPartPublishedAt(part, Date.now());
+      const producedAt = getChunkProducedAt(rawPart) ?? Date.now();
+      stampPartProducedAt(part, producedAt);
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
@@ -1668,6 +1678,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         part,
         sourceId: runtime.#getSourceId(),
+        producedAt,
       });
       wake();
       // An error chunk settles `_waitUntilFinished()` without closing
@@ -3613,6 +3624,7 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
+        noteRunHalf(data.runId, data.streamId);
         const localRecord = state.threadRunsByStreamId.get(data.streamId);
         if (localRecord) {
           localStreamIds.add(data.streamId);
@@ -3684,7 +3696,7 @@ export class AgentThreadStreamRuntime {
           remoteRun = remoteRuns.get(data.streamId);
           if (!remoteRun) return;
         }
-        stampPartPublishedAt(data.part, new Date(event.createdAt ?? Date.now()).getTime());
+        stampPartProducedAt(data.part, data.producedAt ?? new Date(event.createdAt ?? Date.now()).getTime());
         remoteRun.parts.push(data.part);
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         return;
@@ -3779,6 +3791,8 @@ export class AgentThreadStreamRuntime {
           }
         }
         if (data.type === 'run-suspended') {
+          suspendedStreamIdsByRunId.set(data.runId, eventStreamId);
+          noteRunHalf(data.runId);
           state.suspendedRunIds.add(data.runId);
           const record = state.threadRunsByStreamId.get(eventStreamId) ?? state.threadRunsById.get(data.runId);
           if (record) record.lifecycle = 'suspended';
@@ -3815,6 +3829,23 @@ export class AgentThreadStreamRuntime {
 
     let historyReadAt: number | undefined;
     const storedStreamIds = new Set<string>();
+    const suspendedStreamIdsByRunId = new Map<string, string>();
+    const registeredStreamIdsByRunId = new Map<string, Set<string>>();
+    /** Suspended halves whose run has since resumed: their prompts are already answered. */
+    const answeredStreamIds = new Set<string>();
+    // A run registering again under a new stream means its suspension was
+    // answered. A lagging publisher can deliver that registration before the
+    // suspended half's `run-suspended`, so check whichever arrives second.
+    function noteRunHalf(runId: string, registeredStreamId?: string) {
+      const registered = registeredStreamIdsByRunId.get(runId) ?? new Set<string>();
+      if (registeredStreamId !== undefined) registered.add(registeredStreamId);
+      registeredStreamIdsByRunId.set(runId, registered);
+      const suspendedStreamId = suspendedStreamIdsByRunId.get(runId);
+      if (suspendedStreamId === undefined) return;
+      for (const streamId of registered) {
+        if (streamId !== suspendedStreamId) answeredStreamIds.add(suspendedStreamId);
+      }
+    }
 
     let eventTail = Promise.resolve();
     const onEvent: EventCallback = (event, ack) => {
@@ -3940,6 +3971,10 @@ export class AgentThreadStreamRuntime {
                 if (
                   !isSignalChunkExcluded(partWithRunId, options.hideSignals) &&
                   !storedStreamIds.has(run.streamId) &&
+                  !(
+                    answeredStreamIds.has(run.streamId) &&
+                    (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended')
+                  ) &&
                   (!historyFilter || historyFilter(typedPart, run.runId))
                 ) {
                   yield partWithRunId;

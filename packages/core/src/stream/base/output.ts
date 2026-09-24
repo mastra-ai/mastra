@@ -31,6 +31,7 @@ import type {
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
@@ -2051,6 +2052,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {
+    stampChunkProducedAt(chunk, Date.now());
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
   }

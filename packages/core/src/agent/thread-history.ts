@@ -1,14 +1,14 @@
 import type { MastraDBMessage } from './message-list/types';
 
 /**
- * Epoch ms at which a broadcast stream part was published to the thread topic.
- * Local parts are stamped when the origin emits them; remote parts take the
- * publish time of the event that carried them.
+ * Epoch ms at which a broadcast stream part was produced by the model output.
+ * Publishing can lag production, so the stamp travels with the `stream-part`
+ * event; remote parts from older publishers fall back to the event time.
  */
-export const partPublishedAt = new WeakMap<object, number>();
+const partProducedAt = new WeakMap<object, number>();
 
-export function stampPartPublishedAt(part: unknown, at: number) {
-  if (part && typeof part === 'object') partPublishedAt.set(part, at);
+export function stampPartProducedAt(part: unknown, at: number) {
+  if (part && typeof part === 'object') partProducedAt.set(part, at);
 }
 
 function toEpoch(value: unknown): number | undefined {
@@ -53,7 +53,7 @@ export function indexThreadHistory(messages: MastraDBMessage[]): ThreadHistoryIn
 /**
  * Decides, per streamed part, whether stored history already covers it. Parts
  * are attributed to the assistant message announced by the latest `start` /
- * `step-start` of their run; a part published before history was loaded and no
+ * `step-start` of their run; a part produced before history was loaded and no
  * later than that message's newest stored change is dropped. Pending approval
  * and suspension chunks always pass: controllers build their prompts from them.
  */
@@ -77,12 +77,12 @@ export function createThreadHistoryFilter(messages: MastraDBMessage[], loadedAt:
     ) {
       return true;
     }
-    const publishedAt = partPublishedAt.get(part);
-    if (publishedAt === undefined || publishedAt > loadedAt) return true;
+    const producedAt = partProducedAt.get(part);
+    if (producedAt === undefined || producedAt > loadedAt) return true;
     const messageId = messageIdByRun.get(runId);
     const stamp = messageId ? stamps.get(messageId) : undefined;
     if (stamp === undefined) return true;
-    const changedAt = toEpoch(typed.payload?.updatedAt) ?? publishedAt;
+    const changedAt = toEpoch(typed.payload?.updatedAt) ?? producedAt;
     return changedAt > stamp;
   };
 }
