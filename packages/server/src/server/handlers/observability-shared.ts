@@ -162,6 +162,171 @@ export function assertObservabilityThreadQuerySupported(observabilityStore: Obse
   });
 }
 
+/**
+ * Returns true when the store's class chain overrides `method` below the class
+ * that first declares it (the `ObservabilityStorage` base, whose default
+ * throws `*_NOT_IMPLEMENTED`). Walks the store's own prototype chain instead of
+ * comparing against this package's `ObservabilityStorage.prototype`, so it
+ * works for stores built against older or duplicated `@mastra/core` installs
+ * and for stores that predate {@link ObservabilityStorage.getFeatures}.
+ */
+function implementsObservabilityStorageMethod(observabilityStore: object, method: string): boolean {
+  if (Object.prototype.hasOwnProperty.call(observabilityStore, method)) return true;
+
+  let resolvedOwner: object | undefined;
+  let declaringBase: object | undefined;
+  for (
+    let proto: object | null = Object.getPrototypeOf(observabilityStore);
+    proto && proto !== Object.prototype;
+    proto = Object.getPrototypeOf(proto)
+  ) {
+    if (Object.prototype.hasOwnProperty.call(proto, method)) {
+      resolvedOwner ??= proto;
+      declaringBase = proto;
+    }
+  }
+  return resolvedOwner !== undefined && resolvedOwner !== declaringBase;
+}
+
+export type ObservabilityDiscoveryCapabilities = {
+  entityTypes: boolean;
+  entityNames: boolean;
+  serviceNames: boolean;
+  environments: boolean;
+  tags: boolean;
+  metrics: boolean;
+};
+
+export type ObservabilityStorageCapabilities = {
+  metrics: boolean;
+  logs: boolean;
+  discovery: ObservabilityDiscoveryCapabilities;
+  deltaPolling: boolean;
+  traceQuery: boolean;
+  traceQueryRootDuration: boolean;
+  traceQueryDiscovery: boolean;
+  traceQueryTenantScope: boolean;
+  threadQuery: boolean;
+};
+
+export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabilities = {
+  metrics: false,
+  logs: false,
+  discovery: {
+    entityTypes: false,
+    entityNames: false,
+    serviceNames: false,
+    environments: false,
+    tags: false,
+    metrics: false,
+  },
+  deltaPolling: false,
+  traceQuery: false,
+  traceQueryRootDuration: false,
+  traceQueryDiscovery: false,
+  traceQueryTenantScope: false,
+  threadQuery: false,
+};
+
+/**
+ * Resolves which optional observability APIs the configured store can serve.
+ *
+ * Feature declarations (`getFeatures()`) are optional. When a store declares
+ * a feature list, that list is final. Stores without `getFeatures()` predate
+ * declarations: metrics, logs and filter discovery are detected by whether the
+ * store implements the underlying method, so those packages report accurately
+ * without being upgraded. Delta polling and the trace/thread query APIs depend
+ * on runtime behavior a method check can't see, so they are only reported for
+ * stores that declare them.
+ */
+export function getObservabilityStorageCapabilities(
+  observabilityStore: ObservabilityStorage,
+): ObservabilityStorageCapabilities {
+  const declaredFeatures = getFeatures(observabilityStore);
+  const features = declaredFeatures ?? [];
+  const newApiCore = coreFeatures.has('observability:v1.13.2');
+  const declares = (feature: string) => features.includes(feature);
+  // Undeclared stores must implement every method behind the feature.
+  const supports = (feature: string, methods: readonly string[]) => {
+    if (!newApiCore) return false;
+    if (!declaredFeatures) {
+      return methods.every(method => implementsObservabilityStorageMethod(observabilityStore, method));
+    }
+    return declares(feature);
+  };
+  // Stores released before the per-endpoint discovery features existed declare
+  // `trace-query` and implement every discovery method, so treat it as implying discovery.
+  const supportsDiscovery = (feature: string, methods: readonly string[]) =>
+    supports(feature, methods) || (newApiCore && declares(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE));
+  const traceQuery =
+    newApiCore &&
+    typeof coreStorage.planTraceQuery === 'function' &&
+    declares(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE);
+  const threadQuery =
+    newApiCore &&
+    typeof coreStorage.planThreadQuery === 'function' &&
+    declares(OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE);
+
+  return {
+    // `listMetrics` is left out: it backs a newer route that metric dashboards don't use,
+    // and older stores that implement the OLAP methods predate it.
+    metrics: supports('metrics', [
+      'getMetricAggregate',
+      'getMetricBreakdown',
+      'getMetricTimeSeries',
+      'getMetricPercentiles',
+    ]),
+    logs: supports('logs', ['listLogs']),
+    discovery: {
+      entityTypes: supportsDiscovery('entity-type-discovery', ['getEntityTypes']),
+      entityNames: supportsDiscovery('entity-name-discovery', ['getEntityNames']),
+      serviceNames: supportsDiscovery('service-name-discovery', ['getServiceNames']),
+      environments: supportsDiscovery('environment-discovery', ['getEnvironments']),
+      tags: supportsDiscovery('tag-discovery', ['getTags']),
+      metrics: supportsDiscovery('metric-discovery', ['getMetricNames', 'getMetricLabelKeys', 'getMetricLabelValues']),
+    },
+    deltaPolling:
+      coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
+    traceQuery,
+    traceQueryRootDuration:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
+    traceQueryDiscovery:
+      newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
+    traceQueryTenantScope:
+      (traceQuery || threadQuery) &&
+      coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
+      declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
+    threadQuery,
+  };
+}
+
+/**
+ * Matches the `OBSERVABILITY_STORAGE_*_NOT_IMPLEMENTED` MastraError the base
+ * observability store throws for every optional method a store doesn't
+ * implement. Checked by id (not `instanceof`) so it holds across duplicated
+ * `@mastra/core` installs.
+ */
+function isObservabilityStorageNotImplementedError(error: unknown): boolean {
+  const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
+  return typeof id === 'string' && id.startsWith('OBSERVABILITY_STORAGE_') && id.endsWith('_NOT_IMPLEMENTED');
+}
+
+/**
+ * Discovery is optional for observability stores. When the configured store
+ * doesn't implement a discovery method, answer with an empty result instead of
+ * a 500 so filter lookups degrade quietly on stores without discovery support.
+ * Clients should check `observabilityStorageCapabilities.discovery` from
+ * `GET /system/packages` before calling these routes.
+ */
+export async function withDiscoveryFallback<T>(run: () => Promise<T>, empty: T): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (isObservabilityStorageNotImplementedError(error)) return empty;
+    throw error;
+  }
+}
+
 export function assertObservabilityDeltaSupported(
   observabilityStore: ObservabilityStorage,
   endpoint: ObservabilityListEndpoint,
@@ -446,6 +611,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/discovery/tags',
     summary: 'Get tags',
     description: 'Returns distinct tags with optional entity type filtering',
+  },
+
+  GET_CAPABILITIES: {
+    method: 'GET',
+    path: '/observability/capabilities',
+    summary: 'Get observability capabilities',
+    description:
+      'Returns which optional observability APIs the configured observability storage supports. Every flag is false when no observability storage is configured.',
   },
 } as const satisfies Record<string, RouteDetails>;
 

@@ -239,6 +239,15 @@ function reconstructForAnchorsWithBoundParam(reconstructSelect: string, anchorCt
     GROUP BY traceId, spanId`;
 }
 
+/**
+ * Event spans are point-in-time, so they end at the instant they start. Rows
+ * written before event spans carried an end time have a null endedAt.
+ */
+function rowEndedAt(row: Record<string, unknown>): Date | null {
+  if (row.isEvent) return toDate(row.startedAt);
+  return toDateOrNull(row.endedAt);
+}
+
 function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
   return {
     traceId: row.traceId as string,
@@ -248,13 +257,13 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
     parentSpanId: (row.parentSpanId as string) ?? null,
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
-    endedAt: toDateOrNull(row.endedAt),
+    endedAt: rowEndedAt(row),
     entityType: (row.entityType as LightSpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
     error: parseJson(row.error),
     createdAt: toDate(row.startedAt), // DuckDB event-sourced — use startedAt as proxy
-    updatedAt: toDateOrNull(row.endedAt),
+    updatedAt: rowEndedAt(row),
   };
 }
 
@@ -277,7 +286,7 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     parentSpanId: (row.parentSpanId as string) ?? null,
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
-    endedAt: toDateOrNull(row.endedAt),
+    endedAt: rowEndedAt(row),
     experimentId: (row.experimentId as string) ?? null,
     entityType: (row.entityType as SpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
@@ -582,7 +591,8 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     name: s.name,
     spanType: s.spanType,
     isEvent: s.isEvent,
-    endedAt: null,
+    // Event spans are point-in-time: they end at the instant they start.
+    endedAt: s.isEvent ? s.startedAt : null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -655,7 +665,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
 /** Insert a 'start' event for a new span. */
 export async function createSpan(db: DuckDBConnection, args: CreateSpanArgs): Promise<void> {
   const rows = [createStartSpanRow(args.span)];
-  if (args.span.endedAt) {
+  if (args.span.endedAt && !args.span.isEvent) {
     rows.push(createEndSpanRow(args.span));
   }
   await insertSpanEvents(db, rows);
@@ -666,7 +676,7 @@ export async function batchCreateSpans(db: DuckDBConnection, args: BatchCreateSp
   if (args.records.length === 0) return;
   const rows = args.records.flatMap(record => {
     const events = [createStartSpanRow(record)];
-    if (record.endedAt) {
+    if (record.endedAt && !record.isEvent) {
       events.push(createEndSpanRow(record));
     }
     return events;

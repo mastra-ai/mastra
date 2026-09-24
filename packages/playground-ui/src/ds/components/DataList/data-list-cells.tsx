@@ -151,18 +151,26 @@ export type DataListNumberCellProps = DataListCellProps & {
    * primary metric in a row (e.g. a total or headline number).
    */
   highlight?: boolean;
+  font?: 'sans' | 'mono';
 };
 
 /**
  * Right-aligned numeric cell with tabular figures, for metric and summary
  * tables. Pass `highlight` for the emphasized column.
  */
-export function DataListNumberCell({ children, className, highlight, ...rest }: DataListNumberCellProps) {
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  font = 'sans',
+  ...rest
+}: DataListNumberCellProps) {
   return (
     <DataListCell
       className={cn(
         'justify-items-end text-right text-muted-foreground tabular-nums',
         highlight && 'text-label text-foreground',
+        font === 'mono' && 'font-mono',
         className,
       )}
       {...rest}

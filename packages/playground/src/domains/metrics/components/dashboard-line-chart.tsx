@@ -48,13 +48,13 @@ export function DashboardLineChart({
             <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
               tickLine={false}
               axisLine={false}
               interval={5}
             />
             <YAxis
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontVariantNumeric: 'tabular-nums' }}
               tickLine={false}
               axisLine={false}
               width={30}

@@ -2,6 +2,7 @@ import type { UISpan } from '../types';
 import { getSpanTimingLayout } from '../utils/span-timing';
 import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
 import { formatDurationPrecise } from '@/utils/duration';
 
@@ -53,7 +54,9 @@ export function TimelineTimingCol({
         </div>
 
         <div className={cn('flex justify-end text-meta text-muted-foreground')}>
-          {formatDurationPrecise(span.latency)}
+          <Txt as="span" variant="meta" font="mono">
+            {formatDurationPrecise(span.latency)}
+          </Txt>
         </div>
       </HoverCardTrigger>
       <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />

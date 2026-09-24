@@ -1,4 +1,5 @@
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
@@ -58,7 +59,9 @@ export function ExperimentTraceTimelineTimingCol({
         </div>
 
         <div className={cn('flex justify-end text-caption text-muted-foreground')}>
-          {formatDurationPrecise(span.latency)}
+          <Txt as="span" variant="caption" font="mono">
+            {formatDurationPrecise(span.latency)}
+          </Txt>
         </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>

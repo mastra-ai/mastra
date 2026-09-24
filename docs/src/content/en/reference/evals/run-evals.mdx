@@ -13,17 +13,16 @@ The `runEvals` function enables batch evaluation of agents and workflows by runn
 
 ```typescript
 import { runEvals } from '@mastra/core/evals'
-import { myAgent } from './agents/my-agent'
-import { myScorer1, myScorer2 } from './scorers'
+import { mastra } from './mastra'
 
 const result = await runEvals({
-  target: myAgent,
+  target: mastra.getAgent('myAgent'),
   data: [
     { input: 'What is machine learning?' },
     { input: 'Explain neural networks' },
     { input: 'How does AI work?' },
   ],
-  scorers: [myScorer1, myScorer2],
+  scorers: [mastra.getScorer('myScorer1'), mastra.getScorer('myScorer2')],
   targetOptions: { maxSteps: 5 },
   concurrency: 2,
   onItemComplete: ({ item, targetResult, scorerResults }) => {
@@ -36,15 +35,17 @@ console.log(`Average scores:`, result.scores)
 console.log(`Processed ${result.summary.totalItems} items`)
 ```
 
+Resolve the `target` from the `Mastra` instance with `mastra.getAgent()` or `mastra.getWorkflow()` rather than importing the agent or workflow directly. A directly imported target has no Mastra instance attached, so registry lookups made during execution (a step calling `mastra.getAgent()`, a child workflow, an `.agent('agent-id')` reference, a tool calling `mastra.getWorkflow()`) fail, scores aren't persisted, and trace-based trajectory extraction is unavailable. `runEvals` logs a warning when the target isn't registered.
+
 ### Multi-turn evaluation
 
 ```typescript
 import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
-import { weatherAgent } from './agents/weather-agent'
+import { mastra } from './mastra'
 
 const result = await runEvals({
-  target: weatherAgent,
+  target: mastra.getAgent('weatherAgent'),
   data: [
     {
       inputs: [
@@ -63,13 +64,16 @@ const result = await runEvals({
 ```typescript
 import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
-import { faithfulnessScorer } from './scorers'
+import { mastra } from './mastra'
 
 const result = await runEvals({
-  target: myAgent,
+  target: mastra.getAgent('weatherAgent'),
   data: [{ input: 'What is the weather in Brooklyn?' }],
   gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
-  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }, checks.includes('Brooklyn')],
+  scorers: [
+    { scorer: mastra.getScorer('faithfulnessScorer'), threshold: 0.7 },
+    checks.includes('Brooklyn'),
+  ],
 })
 
 result.verdict // 'passed' | 'scored' | 'failed'
@@ -357,7 +361,7 @@ import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
 
 const result = await runEvals({
-  target: weatherAgent,
+  target: mastra.getAgent('weatherAgent'),
   data: [{ input: 'What is the weather in Brooklyn?' }],
   gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
   scorers: [
@@ -397,7 +401,7 @@ const myScorer = createScorer({
 })
 
 const result = await runEvals({
-  target: chatAgent,
+  target: mastra.getAgent('chatAgent'),
   data: [
     {
       input: 'What is AI?',
@@ -424,7 +428,7 @@ import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/code/t
 const trajectoryScorer = createTrajectoryAccuracyScorerCode()
 
 const result = await runEvals({
-  target: chatAgent,
+  target: mastra.getAgent('chatAgent'),
   data: [
     {
       input: 'What is the weather in London?',
@@ -449,7 +453,7 @@ Pass execution options like `maxSteps` or `modelSettings` to customize agent beh
 
 ```typescript
 const result = await runEvals({
-  target: chatAgent,
+  target: mastra.getAgent('chatAgent'),
   data: [{ input: 'Summarize this article' }, { input: 'Translate to French' }],
   scorers: [relevancyScorer],
   targetOptions: {
@@ -461,9 +465,11 @@ const result = await runEvals({
 
 ### Workflow Evaluation
 
+Resolve the workflow with `mastra.getWorkflow()` so steps that call `mastra.getAgent()` or run child workflows can reach the registry:
+
 ```typescript
 const workflowResult = await runEvals({
-  target: myWorkflow,
+  target: mastra.getWorkflow('myWorkflow'),
   data: [
     { input: { query: 'Process this data', priority: 'high' } },
     { input: { query: 'Another task', priority: 'low' } },
@@ -493,7 +499,7 @@ Add trajectory scoring to workflow evaluations to validate step execution order:
 
 ```typescript
 const workflowResult = await runEvals({
-  target: myWorkflow,
+  target: mastra.getWorkflow('myWorkflow'),
   data: [
     {
       input: { query: 'Process this data' },
@@ -524,7 +530,7 @@ Use `startOptions` on individual data items to customize each workflow run. Per-
 
 ```typescript
 const result = await runEvals({
-  target: myWorkflow,
+  target: mastra.getWorkflow('myWorkflow'),
   data: [
     {
       input: { query: 'hello' },
@@ -546,7 +552,7 @@ Use `inputs` to send sequential turns on a shared thread. Scorers see the accumu
 
 ```typescript
 const result = await runEvals({
-  target: chatAgent,
+  target: mastra.getAgent('chatAgent'),
   data: [
     {
       inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
@@ -569,7 +575,7 @@ Use `turns` to attach `gates`/`scorers` to individual turns. Each per-turn asser
 
 ```typescript
 const result = await runEvals({
-  target: chatAgent,
+  target: mastra.getAgent('chatAgent'),
   data: [
     {
       turns: [

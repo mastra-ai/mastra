@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -137,26 +138,40 @@ const ProgressBar = ({
           <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColor} pointer-events-none`}
           >
-            {isProcessing
-              ? `${activeText} ${formatElapsed(elapsed)}`
-              : showAdaptiveLabel
-                ? 'adaptive'
-                : `${Math.round(percentage)}%`}
+            {isProcessing ? (
+              <>
+                {activeText}{' '}
+                <Txt as="span" variant="meta" font="mono">
+                  {formatElapsed(elapsed)}
+                </Txt>
+              </>
+            ) : showAdaptiveLabel ? (
+              'adaptive'
+            ) : (
+              `${Math.round(percentage)}%`
+            )}
           </span>
           <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
-            {isProcessing
-              ? `${activeText} ${formatElapsed(elapsed)}`
-              : showAdaptiveLabel
-                ? 'adaptive'
-                : `${Math.round(percentage)}%`}
+            {isProcessing ? (
+              <>
+                {activeText}{' '}
+                <Txt as="span" variant="meta" font="mono">
+                  {formatElapsed(elapsed)}
+                </Txt>
+              </>
+            ) : showAdaptiveLabel ? (
+              'adaptive'
+            ) : (
+              `${Math.round(percentage)}%`
+            )}
           </span>
         </div>
 
         <span
-          className={`text-meta ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={`text-meta ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
           <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>

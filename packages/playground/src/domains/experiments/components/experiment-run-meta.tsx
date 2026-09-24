@@ -1,5 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
@@ -120,7 +121,9 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
             {metrics.data?.avgAgentDurationMs == null ? (
               <span className="text-muted-foreground">—</span>
             ) : (
-              <span>{formatDuration(Math.round(metrics.data.avgAgentDurationMs))}</span>
+              <Txt as="span" variant="body-sm" font="mono">
+                {formatDuration(Math.round(metrics.data.avgAgentDurationMs))}
+              </Txt>
             )}
           </MetaRow>
         </>

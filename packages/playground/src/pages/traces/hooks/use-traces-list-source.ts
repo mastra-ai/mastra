@@ -1,6 +1,6 @@
 import { toTracesListViewTraces } from '@mastra/playground-ui/domains/traces/components/traces-list-view-adapter';
 import { useTraceQuery } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query';
-import type { TraceQueryArgs } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query';
+import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query';
 import { useEffect, useState } from 'react';
 
 export function useTracesListSource({
@@ -8,11 +8,15 @@ export function useTracesListSource({
   orderBy,
   rolling = true,
   initialAutoRefetch = true,
+  withQueryTrace,
+  legacyFilters,
 }: {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
   rolling?: boolean;
   initialAutoRefetch?: boolean;
+  withQueryTrace?: boolean;
+  legacyFilters?: UseTraceQueryArgs['legacyFilters'];
 }) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
@@ -20,6 +24,8 @@ export function useTracesListSource({
     query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
     refetchInterval: autoRefetch && !rolling ? 10_000 : false,
     refetchOnWindowFocus: autoRefetch,
+    withQueryTrace,
+    legacyFilters,
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.

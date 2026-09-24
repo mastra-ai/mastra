@@ -8,25 +8,29 @@
  *
  * @example
  * ```typescript
- * import { Workspace } from '@mastra/core';
- * import { LocalFilesystem } from '@mastra/workspace-fs-local';
- * import { AgentFS } from '@mastra/workspace-fs-agentfs';
- * import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+ * import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+ * import { E2BSandbox } from '@mastra/e2b';
+ * import { S3Filesystem } from '@mastra/s3';
  *
- * // Simple workspace with local filesystem
- * const workspace = new Workspace({
+ * // Local filesystems use paths relative to their base directory.
+ * const localWorkspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './workspace' }),
  * });
  *
- * // Full workspace with AgentFS and cloud sandbox
- * const fullWorkspace = new Workspace({
- *   filesystem: new AgentFS({ path: './agent.db' }),
- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+ * await localWorkspace.init();
+ * await localWorkspace.filesystem?.writeFile('app.py', 'print("Hello locally!")');
+ *
+ * // Mounted cloud filesystems use their absolute mount paths.
+ * const cloudWorkspace = new Workspace({
+ *   mounts: {
+ *     '/code': new S3Filesystem({ bucket: 'my-code', region: 'us-east-1' }),
+ *   },
+ *   sandbox: new E2BSandbox(),
  * });
  *
- * await fullWorkspace.init();
- * await fullWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello!")');
- * const result = await fullWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
+ * await cloudWorkspace.init();
+ * await cloudWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello from E2B!")');
+ * const result = await cloudWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
  * ```
  */
 
