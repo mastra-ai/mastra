@@ -35,8 +35,8 @@ export function resolveGoogleThinkingConfig(
   if (id.startsWith('gemini-3-pro')) {
     return { thinkingLevel: clamped === 'low' ? 'low' : 'high' };
   }
-  // Gemini 3.1 Flash-Lite Image only accepts `minimal|high`.
-  if (id.startsWith('gemini-3.1-flash-lite-image')) {
+  // Gemini 3.1 Flash Image models only accept `minimal|high`.
+  if (id.startsWith('gemini-3.1-flash-image') || id.startsWith('gemini-3.1-flash-lite-image')) {
     return { thinkingLevel: clamped === 'low' ? 'minimal' : 'high' };
   }
   if (/^gemini-\d/.test(id) && !id.startsWith('gemini-1') && !id.startsWith('gemini-2')) {
@@ -62,8 +62,8 @@ export function createGoogleThinkingMiddleware(
     transformParams: async ({ params }) => {
       const google = (params.providerOptions?.google ?? {}) as Record<string, unknown>;
       const thinkingConfig = (google.thinkingConfig ?? {}) as Record<string, unknown>;
-      // An explicit caller budget wins; Google rejects budget and level together.
-      if (thinkingConfig.thinkingBudget !== undefined) return params;
+      // Explicit caller settings win; Google rejects budget and level together.
+      if (thinkingConfig.thinkingBudget !== undefined || thinkingConfig.thinkingLevel !== undefined) return params;
       params.providerOptions = {
         ...params.providerOptions,
         google: { ...google, thinkingConfig: { ...thinkingConfig, ...config } },

@@ -34,6 +34,8 @@ describe('resolveGoogleThinkingConfig', () => {
     expect(resolveGoogleThinkingConfig('gemini-3.1-flash-lite-image', 'low')).toEqual({ thinkingLevel: 'minimal' });
     expect(resolveGoogleThinkingConfig('gemini-3.1-flash-lite-image', 'medium')).toEqual({ thinkingLevel: 'high' });
     expect(resolveGoogleThinkingConfig('gemini-3.1-flash-lite-image', 'max')).toEqual({ thinkingLevel: 'high' });
+    expect(resolveGoogleThinkingConfig('gemini-3.1-flash-image-preview', 'low')).toEqual({ thinkingLevel: 'minimal' });
+    expect(resolveGoogleThinkingConfig('gemini-3.1-flash-image', 'medium')).toEqual({ thinkingLevel: 'high' });
   });
 
   it('uses thinkingBudget for Gemini 2.5', () => {
@@ -73,5 +75,12 @@ describe('createGoogleThinkingMiddleware', () => {
       providerOptions: { google: { thinkingConfig: { thinkingBudget: 512 } } },
     });
     expect(result.providerOptions?.google).toEqual({ thinkingConfig: { thinkingBudget: 512 } });
+  });
+
+  it('does not override an explicit caller thinkingLevel', async () => {
+    const result = await transform(createGoogleThinkingMiddleware('gemini-3-flash', 'high')!, {
+      providerOptions: { google: { thinkingConfig: { thinkingLevel: 'low' } } },
+    });
+    expect(result.providerOptions?.google).toEqual({ thinkingConfig: { thinkingLevel: 'low' } });
   });
 });
