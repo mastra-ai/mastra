@@ -1460,10 +1460,15 @@ export function checkTrajectoryEfficiency(
 
   // Detect redundant calls (same tool name + same args in consecutive calls)
   const redundantCalls: Array<{ name: string; index: number }> = [];
-  if (noRedundantCalls) {
-    for (let i = 1; i < trajectory.steps.length; i++) {
-      const prev = trajectory.steps[i - 1]!;
-      const curr = trajectory.steps[i]!;
+  const siblingLists: TrajectoryStep[][] = noRedundantCalls ? [trajectory.steps] : [];
+  while (siblingLists.length > 0) {
+    const steps = siblingLists.pop()!;
+    for (const step of steps) {
+      if (step.children?.length) siblingLists.push(step.children);
+    }
+    for (let i = 1; i < steps.length; i++) {
+      const prev = steps[i - 1]!;
+      const curr = steps[i]!;
       if (
         prev.name === curr.name &&
         prev.stepType === curr.stepType &&
@@ -1547,30 +1552,44 @@ export function checkTrajectoryBlacklist(
   const violatedTools: string[] = [];
   const violatedSequences: string[][] = [];
 
-  const stepNames = trajectory.steps.map(s => s.name);
+  // Collect every sibling list (top level plus each nested `children` list)
+  const siblingLists: string[][] = [];
+  const allNames = new Set<string>();
+  const pending: TrajectoryStep[][] = [trajectory.steps];
+  while (pending.length > 0) {
+    const steps = pending.pop()!;
+    siblingLists.push(steps.map(s => s.name));
+    for (const step of steps) {
+      allNames.add(step.name);
+      if (step.children?.length) pending.push(step.children);
+    }
+  }
 
-  // Check blacklisted tools
+  // Check blacklisted tools at any depth
   for (const forbidden of blacklistedTools) {
-    if (stepNames.includes(forbidden)) {
+    if (allNames.has(forbidden)) {
       violatedTools.push(forbidden);
     }
   }
 
-  // Check blacklisted sequences (contiguous subsequences)
-  for (const sequence of blacklistedSequences) {
-    if (sequence.length === 0) continue;
-    for (let i = 0; i <= stepNames.length - sequence.length; i++) {
+  // Check blacklisted sequences (contiguous subsequences within one sibling list)
+  const containsSequence = (names: string[], sequence: string[]) => {
+    for (let i = 0; i <= names.length - sequence.length; i++) {
       let match = true;
       for (let j = 0; j < sequence.length; j++) {
-        if (stepNames[i + j] !== sequence[j]) {
+        if (names[i + j] !== sequence[j]) {
           match = false;
           break;
         }
       }
-      if (match) {
-        violatedSequences.push(sequence);
-        break; // Only report each sequence once
-      }
+      if (match) return true;
+    }
+    return false;
+  };
+  for (const sequence of blacklistedSequences) {
+    if (sequence.length === 0) continue;
+    if (siblingLists.some(names => containsSequence(names, sequence))) {
+      violatedSequences.push(sequence); // Only report each sequence once
     }
   }
 
