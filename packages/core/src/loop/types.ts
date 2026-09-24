@@ -134,6 +134,8 @@ export type StreamInternal = {
   toolApprovalVerdicts?: Map<string, boolean>;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
+  /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
+  eagerToolExecutionCoordinator?: import('./workflows/agentic-execution/eager-tool-execution').EagerToolExecutionCoordinator;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
   /** @deprecated Use `runScope.get(DELEGATION_BAILED_KEY)` from `loop/run-scope-keys`. */
   _delegationBailed?: boolean;
@@ -247,6 +249,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    */
   agentVersionId?: string;
   toolCallConcurrency?: ToolCallConcurrency;
+  eagerToolExecution?: boolean;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */
