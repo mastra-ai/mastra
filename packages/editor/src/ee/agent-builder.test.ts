@@ -362,6 +362,20 @@ describe('createBuilderAgent stability processors', () => {
     ]);
   });
 
+  it('keeps the builder defaults when a caller adds its own error processor', async () => {
+    const callerProcessor = { id: 'caller-retry', processAPIError: async () => undefined };
+    const agent = createBuilderAgent({ errorProcessors: [callerProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+      'caller-retry',
+    ]);
+    expect(resolved[3]).toBe(callerProcessor);
+  });
+
   it('treats an explicitly empty error processor list as an opt-out', async () => {
     const agent = createBuilderAgent({ errorProcessors: [] });
 
