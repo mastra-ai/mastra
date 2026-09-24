@@ -16,7 +16,7 @@
 { ...deployStates.idle, description } // { tone: 'neutral', glyph: 'ring' }
 ```
 
-**Status labels inherit text style by default.** The label now takes the size and color of its container, so it matches the other cells in a `DataList` without a wrapper. Pass `textVariant` to set a text role where the container has none, such as a card or header.
+**Status labels inherit text style.** The label now always takes the size and color of its container, so it matches the other cells in a `DataList` without a wrapper. The `children` slot is removed; style the container instead.
 
 ```tsx
 // Before
@@ -26,5 +26,4 @@
 
 // After
 <Status presentation={presentation} />
-<Status presentation={presentation} textVariant="meta" /> // previous default
 ```

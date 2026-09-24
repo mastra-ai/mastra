@@ -16,16 +16,12 @@ const meta: Meta<typeof Status> = {
     docs: {
       description: {
         component:
-          'The label inherits the surrounding text size and color by default, so it matches its siblings in a DataList cell, table row, or sentence. Pass `textVariant` with a `TextRole` (for example `meta` in a card or header) when the container sets no text style or the label needs its own level. Pass `children` for custom content.',
+          'The label always inherits the surrounding text size and color, so it matches its siblings in a DataList cell, table row, card, or sentence. Style the container, not the status.',
       },
     },
   },
   args: {
     presentation: RUNNING,
-  },
-  argTypes: {
-    children: { control: false },
-    textVariant: { control: 'select' },
   },
 };
 
@@ -34,27 +30,23 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-export const TextVariants: Story = {
+export const Inherited: Story = {
   render: () => (
     <main className="flex flex-col gap-4">
-      <h1 className="sr-only">Status text variants</h1>
+      <h1 className="sr-only">Status text inherits its container</h1>
       <div className="flex items-center gap-4">
         <Txt as="span" variant="caption" tone="muted" className="w-40">
-          textVariant="meta"
+          Inside meta text
         </Txt>
-        <Status presentation={RUNNING} textVariant="meta" />
+        <span className="text-meta text-foreground">
+          <Status presentation={RUNNING} />
+        </span>
       </div>
       <div className="flex items-center gap-4">
         <Txt as="span" variant="caption" tone="muted" className="w-40">
-          textVariant="body-sm"
+          Inside a muted row
         </Txt>
-        <Status presentation={RUNNING} textVariant="body-sm" />
-      </div>
-      <div className="flex items-center gap-4">
-        <Txt as="span" variant="caption" tone="muted" className="w-40">
-          Default (inherit)
-        </Txt>
-        <span className="text-meta text-muted-foreground">
+        <span className="text-body-sm text-muted-foreground">
           <Status presentation={RUNNING} />
         </span>
       </div>

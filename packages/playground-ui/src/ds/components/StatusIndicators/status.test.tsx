@@ -26,29 +26,10 @@ describe('Status', () => {
     expect(html).toContain('aria-label="Current status: Running"');
   });
 
-  it('accepts text through its content slot', () => {
-    const html = renderToStaticMarkup(
-      <Status presentation={RUNNING}>
-        <strong>Custom running state</strong>
-      </Status>,
-    );
-
-    expect(html).toContain('<strong>Custom running state</strong>');
-    expect(html).not.toContain('>Running<');
-  });
-
-  it('applies a text role when textVariant is set', () => {
-    const html = renderToStaticMarkup(<Status presentation={RUNNING} textVariant="meta" />);
-
-    expect(html).toContain('text-meta');
-    expect(html).toContain('text-foreground');
-  });
-
-  it('inherits surrounding text style by default', () => {
+  it('inherits surrounding text style', () => {
     const html = renderToStaticMarkup(<Status presentation={RUNNING} />);
 
-    expect(html).not.toContain('text-meta');
-    expect(html).not.toContain('text-foreground');
-    expect(html).toContain('>Running<');
+    expect(html).not.toMatch(/text-(meta|body|foreground)/);
+    expect(html).toContain('Running</span>');
   });
 });
