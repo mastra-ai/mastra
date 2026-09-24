@@ -29,7 +29,8 @@ describe('createBrowserFromSettings — model precedence against Codex OAuth', (
 
     const browser = await createBrowserFromSettings(stagehandSettings({ env: 'LOCAL' }));
 
-    expect(configuredModel(browser)).toMatchObject({ modelName: STAGEHAND_CODEX_FALLBACK_MODEL });
+    // Literal on purpose: guards against the constant regressing to a model Codex rejects.
+    expect(configuredModel(browser)).toMatchObject({ modelName: 'openai/gpt-5.5' });
   });
 
   it('prefers the user-configured model over the Codex default', async () => {

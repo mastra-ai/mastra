@@ -89,4 +89,12 @@ describe('stateSchema', () => {
 
     expect(parsed.activeBrowserSettings).toEqual(active);
   });
+
+  it('preserves activeBrowserModel so status reports the model the browser launched with', () => {
+    const activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' as const };
+
+    const parsed = stateSchema.parse({ activeBrowserModel });
+
+    expect(parsed.activeBrowserModel).toEqual(activeBrowserModel);
+  });
 });

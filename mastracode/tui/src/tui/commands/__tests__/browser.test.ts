@@ -142,7 +142,10 @@ describe('handleBrowserCommand', () => {
     expect(dynamicAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     const dynamicMode = (ctx.controller.listModes as ReturnType<typeof vi.fn>).mock.results[0]?.value[1];
     expect(dynamicMode.agent).toHaveBeenCalledWith(controllerState);
-    expect(setState).toHaveBeenCalledWith({ activeBrowserSettings: enabledSettings });
+    expect(setState).toHaveBeenCalledWith({
+      activeBrowserSettings: enabledSettings,
+      activeBrowserModel: { modelName: undefined, source: 'stagehand-default' },
+    });
     expect(browserMocks.setProfileProvider).toHaveBeenCalledWith('/tmp/mastracode-browser-profile', 'stagehand');
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     expect(settings.browser.enabled).toBe(true);
@@ -383,6 +386,43 @@ describe('handleBrowserCommand', () => {
       await handleBrowserCommand(ctx, ['status']);
 
       expect(statusOutput(ctx)).not.toContain('Model:');
+    });
+
+    it('still shows the model after /browser clear removed the stagehand block', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      delete (settings.browser as any).stagehand;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: 'openai/gpt-5.5', source: 'codex-oauth' });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).not.toContain('Environment:');
+      expect(statusOutput(ctx)).toContain('Model: openai/gpt-5.5');
+    });
+
+    it('reports the model the active browser launched with, not what current credentials would resolve to', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      settings.browser.stagehand = { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' };
+      browserMocks.loadSettings.mockReturnValue(settings);
+      // Launched while the model was still the Codex fallback; the file has since changed.
+      const controllerState = ctx.state.session.state.get() as Record<string, unknown>;
+      controllerState.activeBrowserSettings = { ...structuredClone(settings.browser), stagehand: { env: 'LOCAL' } };
+      controllerState.activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' };
+      browserMocks.resolveStagehandModel.mockImplementation((s: any) =>
+        s.stagehand?.model
+          ? { modelName: s.stagehand.model, source: 'settings' }
+          : { modelName: undefined, source: 'stagehand-default' },
+      );
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const out = statusOutput(ctx);
+      const active = out.slice(out.indexOf('Browser (active):'), out.indexOf('Pending changes'));
+      const pending = out.slice(out.indexOf('Pending changes'));
+      expect(active).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+      expect(pending).toContain('Model: anthropic/claude-sonnet-4-5');
     });
 
     it('accepts info as an alias for status', async () => {

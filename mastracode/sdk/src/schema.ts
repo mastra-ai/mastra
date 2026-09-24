@@ -125,6 +125,10 @@ export interface MastraCodeState {
       storageState?: string;
     };
   };
+  activeBrowserModel?: {
+    modelName?: string;
+    source: 'settings' | 'codex-oauth' | 'stagehand-default';
+  };
 }
 
 export const stateSchema = z.object({
@@ -258,6 +262,15 @@ export const stateSchema = z.object({
           storageState: z.string().optional(),
         })
         .optional(),
+    })
+    .optional(),
+  // Model the active Stagehand browser was created with. Resolved once at
+  // launch so /browser status reports what is really running even if the
+  // user signs in/out of Codex afterwards.
+  activeBrowserModel: z
+    .object({
+      modelName: z.string().optional(),
+      source: z.enum(['settings', 'codex-oauth', 'stagehand-default']),
     })
     .optional(),
 });

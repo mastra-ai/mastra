@@ -3,6 +3,7 @@ import type {
   BrowserSettings,
   BrowserViewport,
   GlobalSettings,
+  ResolvedStagehandModel,
   StagehandEnv,
 } from '@mastra/code-sdk/onboarding/settings';
 import {
@@ -29,6 +30,7 @@ import type { SlashCommandContext } from './types.js';
  * which may differ from the settings file if another instance changed it.
  */
 const ACTIVE_BROWSER_KEY = 'activeBrowserSettings';
+const ACTIVE_BROWSER_MODEL_KEY = 'activeBrowserModel';
 
 type BrowserAgent = { browser?: MastraBrowser; setBrowser?: (browser?: MastraBrowser) => void };
 type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: string) => Promise<void> };
@@ -48,8 +50,11 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  * Human-readable line for the model Stagehand will actually use, including the
  * implicit Codex fallback, so users can see it without reading the settings file.
  */
-function describeStagehandModel(settings: Pick<BrowserSettings, 'provider' | 'stagehand'>): string {
-  const { modelName, source } = resolveStagehandModel(settings);
+function describeStagehandModel(
+  settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
+  resolved: ResolvedStagehandModel = resolveStagehandModel(settings),
+): string {
+  const { modelName, source } = resolved;
   switch (source) {
     case 'settings':
       return `  Model: ${modelName}`;
@@ -291,8 +296,12 @@ function applyBrowserToAgents(
     agent?.setBrowser?.(browser);
   }
   ctx.controller.setBrowser?.(browser);
-  // Track the active browser settings in controller state
-  void ctx.state.session.state.set({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
+  // Track the active browser settings in controller state, plus the model the
+  // browser was actually created with (credentials may change afterwards).
+  void ctx.state.session.state.set({
+    [ACTIVE_BROWSER_KEY]: browserSettings,
+    [ACTIVE_BROWSER_MODEL_KEY]: browserSettings?.enabled ? resolveStagehandModel(browserSettings) : undefined,
+  } as any);
 }
 
 /**
@@ -477,6 +486,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     // Get the active browser settings from controller state (what's actually running)
     const state = ctx.state.session.state.get() as any;
     const activeSettings = state?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
+    const activeModel = state?.[ACTIVE_BROWSER_MODEL_KEY] as ResolvedStagehandModel | undefined;
 
     // Check for config drift between file and active instance
     const hasDrift = activeSettings && getBrowserConfigKey(browser) !== getBrowserConfigKey(activeSettings);
@@ -492,9 +502,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         activeSettings.provider === 'stagehand' && activeSettings.stagehand?.env === 'BROWSERBASE';
       lines.push('Browser (active):');
       lines.push(`  Provider: ${activeProvider}`);
-      if (activeSettings.provider === 'stagehand' && activeSettings.stagehand) {
-        lines.push(`  Environment: ${activeSettings.stagehand.env}`);
-        lines.push(describeStagehandModel(activeSettings));
+      if (activeSettings.provider === 'stagehand') {
+        if (activeSettings.stagehand) lines.push(`  Environment: ${activeSettings.stagehand.env}`);
+        lines.push(describeStagehandModel(activeSettings, activeModel));
       }
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
@@ -513,8 +523,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       const fileIsBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
       lines.push('Pending changes (not yet applied):');
       lines.push(`  Provider: ${fileProvider}`);
-      if (browser.provider === 'stagehand' && browser.stagehand) {
-        lines.push(`  Environment: ${browser.stagehand.env}`);
+      if (browser.provider === 'stagehand') {
+        if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
         lines.push(describeStagehandModel(browser));
       }
       if (!fileIsBrowserbase) {
@@ -538,8 +548,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         browser.provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)';
       const isBrowserbase = browser.provider === 'stagehand' && browser.stagehand?.env === 'BROWSERBASE';
       const lines = [`Browser: enabled`, `  Provider: ${providerLabel}`];
-      if (browser.provider === 'stagehand' && browser.stagehand) {
-        lines.push(`  Environment: ${browser.stagehand.env}`);
+      if (browser.provider === 'stagehand') {
+        if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
         lines.push(describeStagehandModel(browser));
       }
       if (!isBrowserbase) {
