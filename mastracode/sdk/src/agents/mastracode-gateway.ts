@@ -27,14 +27,15 @@ import {
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
-import {
-  OPENAI_PREFIX,
-  remapOpenAIModelForCodexOAuth,
-  stripMastraGatewayPrefix,
-} from '../providers/codex-model-ids.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
+import {
+  normalizeAnthropicModelId,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -53,7 +54,7 @@ export {
   OPENAI_PREFIX,
   remapOpenAIModelForCodexOAuth,
   stripMastraGatewayPrefix,
-} from '../providers/codex-model-ids.js';
+} from '../providers/model-ids.js';
 
 export const MASTRACODE_GATEWAY_ID = 'mastracode';
 
@@ -102,10 +103,6 @@ export function getGlobalAuthStorage(): AuthStorage {
 
 export function reloadAuthStorage() {
   getGlobalAuthStorage().reload();
-}
-
-function normalizeAnthropicModelId(modelId: string): string {
-  return modelId.replace(/\.(?=\d)/g, '-');
 }
 
 /**

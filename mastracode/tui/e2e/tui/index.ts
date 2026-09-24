@@ -34,6 +34,7 @@ import { browserModelPickerScenario } from './browser-model-picker.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
+import { browserStatusChatModelScenario } from './browser-status-chat-model.js';
 import { browserStatusModelScenario } from './browser-status-model.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
@@ -253,6 +254,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-viewport': browserViewportScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-status-model': browserStatusModelScenario,
+  'browser-status-chat-model': browserStatusChatModelScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-tool-unavailable': browserToolUnavailableScenario,
   'browserbase-startup-restore': browserbaseStartupRestoreScenario,

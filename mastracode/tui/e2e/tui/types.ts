@@ -38,6 +38,7 @@ export type ScenarioName =
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
   | 'browser-status-model'
+  | 'browser-status-chat-model'
   | 'browser-tool-unavailable'
   | 'browserbase-startup-restore'
   | 'browser-toggle-attach'

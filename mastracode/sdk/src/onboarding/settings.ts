@@ -11,10 +11,12 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
 import {
+  ANTHROPIC_PREFIX,
+  normalizeAnthropicModelId,
   OPENAI_PREFIX,
   remapOpenAIModelForCodexOAuth,
   stripMastraGatewayPrefix,
-} from '../providers/codex-model-ids.js';
+} from '../providers/model-ids.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
 import {
   isThinkingLevelSetting,
@@ -1508,7 +1510,7 @@ export interface ResolveStagehandModelOptions {
  * Kept here instead of importing `@mastra/stagehand`, which would eagerly
  * load the browser stack into every settings consumer.
  */
-const STAGEHAND_PROVIDER_ENV_VARS: Record<string, readonly string[] | null> = {
+export const STAGEHAND_PROVIDER_ENV_VARS: Record<string, readonly string[] | null> = {
   openai: ['OPENAI_API_KEY'],
   anthropic: ['ANTHROPIC_API_KEY'],
   google: ['GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
@@ -1532,6 +1534,15 @@ function hasCodexOAuthLogin(authStorage: AuthStorage): boolean {
 
 function isOpenAIModel(modelId: string): boolean {
   return modelId.startsWith(OPENAI_PREFIX);
+}
+
+/**
+ * Stagehand hands the segment after `provider/` straight to the AI SDK provider,
+ * so apply the same id normalization the chat gateway does before it does.
+ */
+function normalizeForStagehand(modelId: string): string {
+  const bare = stripMastraGatewayPrefix(modelId.trim());
+  return bare.startsWith(ANTHROPIC_PREFIX) ? normalizeAnthropicModelId(bare) : bare;
 }
 
 /** Whether Stagehand could run `provider/model` with the credentials available right now. */
@@ -1560,11 +1571,11 @@ export function resolveStagehandModel(
     return { modelName: undefined, source: 'stagehand-default', viaCodexOAuth: false };
   }
   const codexOAuth = hasCodexOAuthLogin(authStorage);
-  const configured = settings.stagehand?.model;
+  const configured = settings.stagehand?.model ? normalizeForStagehand(settings.stagehand.model) : undefined;
   if (configured) {
     return { modelName: configured, source: 'settings', viaCodexOAuth: codexOAuth && isOpenAIModel(configured) };
   }
-  const chatModel = chatModelId ? stripMastraGatewayPrefix(chatModelId.trim()) : undefined;
+  const chatModel = chatModelId ? normalizeForStagehand(chatModelId) : undefined;
   if (chatModel && stagehandCanRoute(chatModel, codexOAuth)) {
     return { modelName: chatModel, source: 'chat-model', viaCodexOAuth: codexOAuth && isOpenAIModel(chatModel) };
   }

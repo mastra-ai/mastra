@@ -1,3 +1,4 @@
+import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMocks = vi.hoisted(() => ({ get: vi.fn() }));
@@ -10,7 +11,12 @@ vi.mock('../../auth/storage.js', async importOriginal => ({
 }));
 
 import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
-import { createBrowserFromSettings, resolveStagehandModel, toActiveBrowserSettings } from '../settings.js';
+import {
+  createBrowserFromSettings,
+  resolveStagehandModel,
+  STAGEHAND_PROVIDER_ENV_VARS,
+  toActiveBrowserSettings,
+} from '../settings.js';
 import type { BrowserSettings } from '../settings.js';
 
 const codexOAuth = { type: 'oauth', accountId: 'acct_1' };
@@ -39,6 +45,14 @@ afterEach(() => {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];
   }
+});
+
+describe('STAGEHAND_PROVIDER_ENV_VARS', () => {
+  it('covers exactly the providers @mastra/stagehand accepts, so a Stagehand upgrade cannot desync the routing check', () => {
+    // If this fails, a provider was added to or removed from STAGEHAND_MODEL_PROVIDERS;
+    // update the map in settings.ts (see Stagehand's providerEnvVarMap for the env var).
+    expect(Object.keys(STAGEHAND_PROVIDER_ENV_VARS).sort()).toEqual([...STAGEHAND_MODEL_PROVIDERS].sort());
+  });
 });
 
 describe('createBrowserFromSettings — Stagehand model routing', () => {
@@ -161,6 +175,22 @@ describe('resolveStagehandModel', () => {
     expect(
       resolveStagehandModel(stagehandSettings({ env: 'LOCAL' }), { chatModelId: 'mastra/anthropic/claude-sonnet-4-5' }),
     ).toMatchObject({ modelName: 'anthropic/claude-sonnet-4-5', source: 'chat-model' });
+  });
+
+  it('normalizes dotted Anthropic ids the way the chat gateway does, for chat and configured models', () => {
+    authMocks.get.mockReturnValue(undefined);
+    process.env.ANTHROPIC_API_KEY = 'sk-ant';
+
+    expect(
+      resolveStagehandModel(stagehandSettings({ env: 'LOCAL' }), { chatModelId: 'anthropic/claude-opus-4.6' }),
+    ).toMatchObject({ modelName: 'anthropic/claude-opus-4-6', source: 'chat-model' });
+    expect(
+      resolveStagehandModel(stagehandSettings({ env: 'LOCAL', model: 'anthropic/claude-opus-4.6' })),
+    ).toMatchObject({ modelName: 'anthropic/claude-opus-4-6', source: 'settings' });
+    // Only Anthropic ids are dashed; OpenAI ids legitimately contain dots.
+    expect(resolveStagehandModel(stagehandSettings({ env: 'LOCAL', model: 'openai/gpt-5.5' }))).toMatchObject({
+      modelName: 'openai/gpt-5.5',
+    });
   });
 
   it('skips a chat model Stagehand cannot route (no key, unknown provider, or not provider/model)', () => {

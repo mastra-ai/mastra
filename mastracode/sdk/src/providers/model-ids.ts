@@ -1,12 +1,16 @@
 /**
- * Model-id helpers for the OpenAI Codex OAuth route.
- *
- * Kept dependency-free so both the model gateway and the browser settings
- * module can share them without importing the full provider.
+ * Model-id helpers shared by the model gateway and the browser settings
+ * module. Kept dependency-free so neither side has to import the other.
  */
 
 export const OPENAI_PREFIX = 'openai/';
+export const ANTHROPIC_PREFIX = 'anthropic/';
 export const MASTRA_GATEWAY_PREFIX = 'mastra/';
+
+/** Anthropic's API only accepts dashed ids (`claude-opus-4-6`), but catalogs may list dotted ones. */
+export function normalizeAnthropicModelId(modelId: string): string {
+  return modelId.replace(/\.(?=\d)/g, '-');
+}
 
 /**
  * The Codex ChatGPT-account endpoint serves some OpenAI models only under a
