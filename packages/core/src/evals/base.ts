@@ -123,7 +123,7 @@ export interface ScorerJudgeConfig {
   /**
    * Maximum number of times error processors can retry one V2+ judge generation.
    * When errorProcessors are configured and this is omitted, the runtime cap is
-   * 10. Set this explicitly to bound the coordinated retry budget.
+   * 3. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
   /**
