@@ -35,7 +35,8 @@ vi.mock('../utils/project.js', () => ({
   getOmScope: getOmScopeMock,
 }));
 
-vi.mock('./model.js', () => ({
+vi.mock('./model.js', async () => ({
+  resolveActiveModePackId: (await vi.importActual<typeof import('./model.js')>('./model.js')).resolveActiveModePackId,
   resolveModel: resolveModelMock,
   resolvePackMemoryModelChain: resolvePackMemoryModelChainMock,
 }));

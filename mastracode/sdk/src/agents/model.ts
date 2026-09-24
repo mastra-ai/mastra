@@ -405,6 +405,41 @@ function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelCo
   return { model, id: toMemoryModelId(modelId) };
 }
 
+/**
+ * The mode pack whose memory model applies: a pending fallback hop for this
+ * thread, else the session's active pack, else the saved active pack.
+ */
+export function resolveActiveModePackId(
+  settings: ReturnType<typeof loadSettings>,
+  state: Readonly<Record<string, unknown>> | undefined,
+  threadId?: string | null,
+): string | undefined {
+  const pending = state?.mastracodePendingPackFallback as { toPackId?: unknown; threadId?: unknown } | null | undefined;
+  const pendingPackId =
+    pending &&
+    (pending.threadId === undefined || pending.threadId === threadId) &&
+    typeof pending.toPackId === 'string' &&
+    pending.toPackId.length > 0
+      ? pending.toPackId
+      : undefined;
+  const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
+  return typeof packId === 'string' && packId.length > 0 ? packId : undefined;
+}
+
+/**
+ * The active pack's memory model setting: `'auto'`, a concrete model ID, or
+ * `undefined` when unset (both OM roles then follow their `/om` settings).
+ */
+export function getActivePackMemoryModelId(
+  settings: ReturnType<typeof loadSettings>,
+  state: Readonly<Record<string, unknown>> | undefined,
+  threadId?: string | null,
+): string | undefined {
+  const packId = resolveActiveModePackId(settings, state, threadId);
+  const pack = packId ? listResolvableModePacks(settings).find(candidate => candidate.id === packId) : undefined;
+  return pack ? resolveModePackModels(settings, pack).memory || undefined : undefined;
+}
+
 /** OM fallback-chain entry: a pack's OM model resolved through the gateway. Assignable to `ModelWithRetries`. */
 export type PackMemoryModelChainEntry = { id: string; model: GatewayLanguageModel };
 

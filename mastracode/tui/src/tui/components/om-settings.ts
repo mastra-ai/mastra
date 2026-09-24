@@ -23,6 +23,8 @@ export interface OMSettingsConfig {
   reflectorModel: OMModel;
   reflectorModelId: string;
   reflectorAutoModelId: string;
+  /** Set while the active mode pack has its own memory model, which overrides both roles. */
+  packMemoryModelId?: string;
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
@@ -290,7 +292,7 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'observer-model',
         label: 'Observer model',
         description: 'Model used for observing and summarizing message history',
-        currentValue: formatModel(config.observerModel, config.observerModelId),
+        currentValue: formatModel(config.observerModel, config.observerModelId, config.packMemoryModelId),
         submenu: (_currentValue, done) =>
           new OMModelSubmenu({
             tui,
@@ -314,7 +316,7 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'reflector-model',
         label: 'Reflector model',
         description: 'Model used for compressing observations when they grow too large',
-        currentValue: formatModel(config.reflectorModel, config.reflectorModelId),
+        currentValue: formatModel(config.reflectorModel, config.reflectorModelId, config.packMemoryModelId),
         submenu: (_currentValue, done) =>
           new OMModelSubmenu({
             tui,
@@ -454,7 +456,8 @@ function getShortModelName(modelId: string): string {
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
 }
 
-function formatModel(model: OMModel, effectiveModelId: string): string {
+function formatModel(model: OMModel, effectiveModelId: string, packMemoryModelId?: string): string {
+  if (packMemoryModelId) return `${getShortModelName(effectiveModelId)} (set by active pack)`;
   return model === 'auto' ? `Auto (${getShortModelName(effectiveModelId)})` : getShortModelName(model);
 }
 

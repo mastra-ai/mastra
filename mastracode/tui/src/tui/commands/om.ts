@@ -3,9 +3,11 @@ import {
   applyOmRoleOverride,
   persistOmObserveAttachments,
 } from '@mastra/code-sdk/onboarding/om-settings';
+import { getActivePackMemoryModelId } from '@mastra/code-sdk/agents/model';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { OMSettingsComponent } from '../components/om-settings.js';
+import { getEffectiveOMRoleModelId } from '../om-model.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
@@ -53,8 +55,13 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.controller.listAvailableModels();
 
   const agentControllerState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
-  const observerModelId = ctx.state.session.om.observer.modelId() ?? '';
-  const reflectorModelId = ctx.state.session.om.reflector.modelId() ?? '';
+  const observerModelId = getEffectiveOMRoleModelId(ctx.state.session, 'observer') ?? '';
+  const reflectorModelId = getEffectiveOMRoleModelId(ctx.state.session, 'reflector') ?? '';
+  const packMemoryModelId = getActivePackMemoryModelId(
+    loadSettings(),
+    agentControllerState,
+    ctx.state.session.thread.getId(),
+  );
   const autoModelId = resolveAutoOMModelId(ctx.state.session.model.get() ?? undefined);
   const config = {
     observerModel: ctx.state.session.om.observer.model() ?? 'auto',
@@ -63,6 +70,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
     reflectorModel: ctx.state.session.om.reflector.model() ?? 'auto',
     reflectorModelId,
     reflectorAutoModelId: autoModelId,
+    packMemoryModelId,
     observationThreshold: ctx.state.session.om.observer.threshold() ?? 30_000,
     reflectionThreshold: ctx.state.session.om.reflector.threshold() ?? 40_000,
     cavemanObservations: (agentControllerState?.cavemanObservations as boolean | undefined) ?? false,

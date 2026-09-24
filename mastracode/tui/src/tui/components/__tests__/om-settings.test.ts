@@ -63,6 +63,44 @@ describe('OM settings auto selection', () => {
     expect(rendered).toContain('Reflector model');
     expect(rendered.match(/Auto \(claude-haiku-4-5\)/g)).toHaveLength(2);
   });
+
+  it("shows the active pack's memory model for pinned and auto roles", () => {
+    const component = new OMSettingsComponent(
+      {
+        observerModel: 'openai/gpt-5.4-mini',
+        observerModelId: 'deepseek/deepseek-v4-flash',
+        observerAutoModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModel: 'auto',
+        reflectorModelId: 'deepseek/deepseek-v4-flash',
+        reflectorAutoModelId: 'anthropic/claude-haiku-4-5',
+        packMemoryModelId: 'deepseek/deepseek-v4-flash',
+        observationThreshold: 30_000,
+        reflectionThreshold: 40_000,
+        cavemanObservations: false,
+        observeAttachments: 'auto',
+      },
+      {
+        onObserverModelChange: vi.fn(),
+        onObserverAuto: vi.fn(),
+        onReflectorModelChange: vi.fn(),
+        onReflectorAuto: vi.fn(),
+        onObservationThresholdChange: vi.fn(),
+        onReflectionThresholdChange: vi.fn(),
+        onCavemanObservationsChange: vi.fn(),
+        onObserveAttachmentsChange: vi.fn(),
+        onClose: vi.fn(),
+      },
+      makeModels(),
+      { requestRender: vi.fn() } as unknown as TUI,
+    );
+
+    const rendered = component
+      .render(WIDTH)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered.match(/deepseek-v4-flash \(set by active pack\)/g)).toHaveLength(2);
+    expect(rendered).not.toContain('gpt-5.4-mini');
+  });
 });
 
 describe('OM model picker (ModelSelectorComponent)', () => {

@@ -21,6 +21,7 @@ import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
 import {
   createRequestScopedCredentialStore,
+  getActivePackMemoryModelId,
   getDynamicModel,
   resolveModel,
   resolvePackMemoryModelChain,
@@ -402,6 +403,47 @@ describe('getDynamicModel fallback chain', () => {
 
     expect(Array.isArray(model)).toBe(true);
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai']);
+  });
+});
+
+describe('getActivePackMemoryModelId', () => {
+  function seed(models: Record<string, unknown>, memory?: string) {
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models,
+        customModelPacks: [
+          {
+            name: 'Work',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            models: { build: 'anthropic/claude-fable-5', ...(memory ? { memory } : {}) },
+          },
+        ],
+      }),
+      'utf-8',
+    );
+    return loadSettings();
+  }
+
+  it('is unset when the active pack has no memory model', () => {
+    expect(getActivePackMemoryModelId(seed({ activeModelPackId: 'custom:Work' }), undefined)).toBeUndefined();
+  });
+
+  it("reports the active pack's memory model, preferring the session's pack over the saved one", () => {
+    const settings = seed({ activeModelPackId: 'anthropic' }, 'openai/gpt-5.4-mini');
+
+    expect(getActivePackMemoryModelId(settings, { activeModelPackId: 'custom:Work' })).toBe('openai/gpt-5.4-mini');
+    expect(getActivePackMemoryModelId(settings, undefined)).toBeUndefined();
+  });
+
+  it('follows a pending pack hop only for its own thread', () => {
+    const settings = seed({ activeModelPackId: 'anthropic' }, 'auto');
+    const state = { mastracodePendingPackFallback: { toPackId: 'custom:Work', threadId: 'thread-1' } };
+
+    expect(getActivePackMemoryModelId(settings, state, 'thread-1')).toBe('auto');
+    expect(getActivePackMemoryModelId(settings, state, 'thread-2')).toBeUndefined();
   });
 });
 

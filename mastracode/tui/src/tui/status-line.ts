@@ -6,6 +6,7 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
+import { getEffectiveOMRoleModelId } from './om-model.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
 import { theme, mastra, mastraBrand, tintHex, getTermWidth, extendedColors } from './theme.js';
@@ -152,8 +153,8 @@ export function updateStatusLine(state: TUIState): void {
       ? state.activeGoalJudge?.modelId
       : showOMMode
         ? isObserving
-          ? state.session.om.observer.modelId()
-          : state.session.om.reflector.modelId()
+          ? getEffectiveOMRoleModelId(state.session, 'observer')
+          : getEffectiveOMRoleModelId(state.session, 'reflector')
         : state.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')

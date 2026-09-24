@@ -55,7 +55,13 @@ import { createBackgroundCompletionCallbacks } from './agents/background-complet
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
-import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
+import {
+  createMastraCodeGateway,
+  getActivePackMemoryModelId,
+  getDynamicModel,
+  getGoalJudgeModel,
+  resolveModel,
+} from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
@@ -1359,7 +1365,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       defaultObserverModelId: DEFAULT_OM_MODEL_ID,
       reflectorModel: 'auto',
       defaultReflectorModelId: DEFAULT_OM_MODEL_ID,
-      resolveAutoModelId: ({ currentModelId }) => resolveAutoOMModelId(currentModelId),
+      // An Auto role reports the model that actually runs: the active pack's
+      // concrete memory model when one is set (Factory sessions ignore packs).
+      resolveAutoModelId: ({ currentModelId, state }) => {
+        const packMemoryModelId =
+          typeof state.factoryProjectId === 'string'
+            ? undefined
+            : getActivePackMemoryModelId(loadSettings(config?.settingsPath), state);
+        return packMemoryModelId && packMemoryModelId !== 'auto'
+          ? packMemoryModelId
+          : resolveAutoOMModelId(currentModelId);
+      },
     },
     agent: codeAgent,
     subagents,
