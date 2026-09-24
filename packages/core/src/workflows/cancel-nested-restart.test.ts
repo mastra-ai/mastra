@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
@@ -482,6 +482,11 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
     const storage = new MockStore();
     const worker = new Mastra({ logger: false, storage, pubsub, workflows: { parent: build() } });
     const caller = new Mastra({ logger: false, storage, pubsub, workflows: { parent: build() } });
+    const cancelEvents: Array<{ runId?: string; data?: any }> = [];
+    const onEvent = async (event: any) => {
+      if (event.type === 'workflow.cancel') cancelEvents.push(event);
+    };
+    await pubsub.subscribe('workflows', onEvent);
     await worker.startWorkers();
     try {
       const run = await worker.getWorkflow('parent').createRun();
@@ -490,11 +495,17 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
 
       const cancelResult = await (await caller.getWorkflow('parent').createRun({ runId: run.runId })).cancel();
       expect(cancelResult.failed).toEqual([]);
+      await vi.waitFor(() =>
+        expect(cancelEvents).toContainEqual(
+          expect.objectContaining({ runId: run.runId, data: { workflowId: 'parent', runId: run.runId } }),
+        ),
+      );
 
       const result = await execution;
       expect(observedAbort).toBe(true);
       expect(result.status).toBe('canceled');
     } finally {
+      await pubsub.unsubscribe('workflows', onEvent);
       await worker.stopWorkers();
     }
   }, 10_000);
