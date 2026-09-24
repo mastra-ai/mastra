@@ -52,8 +52,12 @@ export function createAuthMiddleware({
     if (result.action === 'error') {
       return new Response(JSON.stringify(result.body), {
         status: result.status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...result.headers, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (result.headers) {
+      ctx.set.headers = { ...ctx.set.headers, ...result.headers };
     }
   };
 }

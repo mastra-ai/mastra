@@ -22,6 +22,29 @@ function createMastraWithAuth() {
   return mastra;
 }
 
+const REFRESHED_COOKIE = 'session=valid; HttpOnly; Path=/';
+
+function createMastraWithSessionRefresh() {
+  const mastra = new Mastra({ logger: false });
+  const originalGetServer = mastra.getServer.bind(mastra);
+
+  mastra.getServer = () =>
+    ({
+      ...originalGetServer(),
+      auth: {
+        authenticateToken: async (_token: string, request: any) =>
+          request.headers.get('cookie')?.includes('session=valid') ? { id: 'user-1' } : null,
+        authorize: async (path: string) => path !== '/custom/forbidden',
+        getSessionIdFromRequest: (request: Request) =>
+          request.headers.get('cookie')?.includes('session=expired') ? 'session-1' : null,
+        refreshSession: async () => ({ id: 'session-1' }),
+        getSessionHeaders: () => ({ 'Set-Cookie': REFRESHED_COOKIE }),
+      },
+    }) as any;
+
+  return mastra;
+}
+
 describe('Express auth middleware helper', () => {
   function createMockResponse(): Response {
     const locals = {
@@ -100,5 +123,42 @@ describe('Express auth middleware helper', () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('forwards refreshed session headers after a transparent session refresh', async () => {
+    const mastra = createMastraWithSessionRefresh();
+    const middleware = createAuthMiddleware({ mastra });
+
+    const createRequest = (path: string) =>
+      ({
+        method: 'GET',
+        path,
+        headers: { cookie: 'session=expired' },
+        query: {},
+        protocol: 'http',
+        get: vi.fn().mockReturnValue('localhost'),
+        originalUrl: path,
+        url: path,
+      }) as unknown as Request;
+    const createResponse = () => {
+      const res = createMockResponse();
+      (res as any).setHeader = vi.fn();
+      return res;
+    };
+
+    const next = vi.fn<NextFunction>();
+    const allowedRes = createResponse();
+    await middleware(createRequest('/custom/protected'), allowedRes, next);
+
+    expect(allowedRes.setHeader).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
+    expect(next).toHaveBeenCalledTimes(1);
+
+    const deniedNext = vi.fn<NextFunction>();
+    const deniedRes = createResponse();
+    await middleware(createRequest('/custom/forbidden'), deniedRes, deniedNext);
+
+    expect(deniedRes.setHeader).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
+    expect(deniedRes.status).toHaveBeenCalledWith(403);
+    expect(deniedNext).not.toHaveBeenCalled();
   });
 });

@@ -73,6 +73,10 @@ export function createAuthMiddleware({
       buildAuthorizeContext: () => toWebRequest(req),
     });
 
+    for (const [key, value] of Object.entries(result.headers ?? {})) {
+      res.setHeader(key, value);
+    }
+
     if (result.action === 'next') {
       next();
       return;
