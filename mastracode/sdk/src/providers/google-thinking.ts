@@ -57,6 +57,8 @@ export function createGoogleThinkingMiddleware(
     transformParams: async ({ params }) => {
       const google = (params.providerOptions?.google ?? {}) as Record<string, unknown>;
       const thinkingConfig = (google.thinkingConfig ?? {}) as Record<string, unknown>;
+      // An explicit caller budget wins; Google rejects budget and level together.
+      if (thinkingConfig.thinkingBudget !== undefined) return params;
       params.providerOptions = {
         ...params.providerOptions,
         google: { ...google, thinkingConfig: { ...thinkingConfig, ...config } },

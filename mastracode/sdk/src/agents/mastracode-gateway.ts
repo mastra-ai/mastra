@@ -510,9 +510,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         apiKey: args.apiKey,
         headers: args.headers,
       });
-      // Custom endpoints only reliably accept the standard low|medium|high efforts.
-      const level = this.#thinkingLevel === 'xhigh' || this.#thinkingLevel === 'max' ? 'high' : this.#thinkingLevel;
-      const reasoningEffort = level ? THINKING_LEVEL_TO_REASONING_EFFORT[level] : undefined;
+      const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
       if (!middleware) {
         return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;

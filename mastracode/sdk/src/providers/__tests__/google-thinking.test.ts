@@ -60,4 +60,11 @@ describe('createGoogleThinkingMiddleware', () => {
     });
     expect(result.providerOptions?.openai).toEqual({ store: false });
   });
+
+  it('does not override an explicit caller thinkingBudget', async () => {
+    const result = await transform(createGoogleThinkingMiddleware('gemini-3-flash', 'high')!, {
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 512 } } },
+    });
+    expect(result.providerOptions?.google).toEqual({ thinkingConfig: { thinkingBudget: 512 } });
+  });
 });
