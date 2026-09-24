@@ -44,7 +44,7 @@ import type {
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
-import type { MastraToolInvocation } from './state/types';
+import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
@@ -137,18 +137,35 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * forward with a state a client produces (an approval answer or an outcome). The client's text,
  * reasoning, and metadata are its own rendering of the stored message, which can differ from
  * what was saved (an output processor may rewrite text before it is persisted), so none of it is
- * layered onto the stored copy.
+ * layered onto the stored copy. Only the new state and its outcome fields are taken; the call's
+ * arguments and metadata stay as stored. A provider-executed call can only take an approval
+ * answer, since the provider, not the client, produces its outcome.
  */
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
-  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  const storedCalls = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
-    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+    if (part.type === 'tool-invocation') storedCalls.set(part.toolInvocation.toolCallId, part);
   }
-  const parts = live.content.parts.filter(part => {
-    if (part.type !== 'tool-invocation') return false;
-    const { state, toolCallId } = part.toolInvocation;
-    const storedState = storedStates.get(toolCallId);
-    return !!storedState && isClientToolInvocationUpdate(state) && advancesToolInvocationState(storedState, state);
+  const parts = live.content.parts.flatMap(part => {
+    if (part.type !== 'tool-invocation') return [];
+    const { state, toolCallId, result, errorText, approval } = part.toolInvocation;
+    const storedCall = storedCalls.get(toolCallId);
+    if (
+      !storedCall ||
+      !isClientToolInvocationUpdate(state) ||
+      !advancesToolInvocationState(storedCall.toolInvocation.state, state) ||
+      (storedCall.providerExecuted && state !== 'approval-responded')
+    ) {
+      return [];
+    }
+    const toolInvocation = {
+      ...storedCall.toolInvocation,
+      state,
+      result,
+      errorText,
+      approval: approval ?? storedCall.toolInvocation.approval,
+    };
+    return [{ type: 'tool-invocation' as const, toolInvocation }];
   });
   return { ...live, content: { format: 2, parts } };
 }

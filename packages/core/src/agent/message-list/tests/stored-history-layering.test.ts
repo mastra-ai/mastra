@@ -197,6 +197,63 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
     expect(part?.type === 'tool-invocation' && part.toolInvocation.state).toBe('call');
   });
 
+  it('keeps the stored call arguments and metadata when the client sends an outcome', () => {
+    const live = withToolState('assistant', 2, {
+      state: 'result',
+      args: { color: 'purple' },
+      result: { applied: true },
+    });
+    const livePart = live.content.parts[0]!;
+    if (livePart.type === 'tool-invocation') livePart.providerMetadata = { client: { edited: true } };
+    const stored = withToolState('assistant', 1, { state: 'call' });
+    const storedPart = stored.content.parts[0]!;
+    if (storedPart.type === 'tool-invocation') storedPart.providerMetadata = { openai: { itemId: 'fc_1' } };
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+    list.add(stored, 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation).toMatchObject({
+      state: 'result',
+      result: { applied: true },
+      args: { color: 'green' },
+    });
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({ openai: { itemId: 'fc_1' } });
+  });
+
+  it('does not let a client complete a provider-executed call', () => {
+    const stored = withToolState('assistant', 1, { state: 'call' });
+    const storedPart = stored.content.parts[0]!;
+    if (storedPart.type === 'tool-invocation') storedPart.providerExecuted = true;
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(withToolState('assistant', 2, { state: 'result', result: { forged: true } }), 'input');
+    list.add(stored, 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation.state).toBe('call');
+  });
+
+  it('still lets a client answer the approval of a provider-executed call', () => {
+    const stored = withToolState('assistant', 1, { state: 'approval-requested', approval: { id: 'approval-1' } });
+    const storedPart = stored.content.parts[0]!;
+    if (storedPart.type === 'tool-invocation') storedPart.providerExecuted = true;
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(
+      withToolState('assistant', 2, { state: 'approval-responded', approval: { id: 'approval-1', approved: true } }),
+      'input',
+    );
+    list.add(stored, 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation).toMatchObject({
+      state: 'approval-responded',
+      approval: { id: 'approval-1', approved: true },
+    });
+  });
+
   it('still layers new text from a response message in the current run', () => {
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
     list.add(withText(toolMessage('assistant', 'result'), 'Live text.'), 'response');
