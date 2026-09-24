@@ -7,6 +7,7 @@ Fixed Anthropic extended-thinking threads with working memory getting stuck on e
 Threads already saved in this state recover when `ProviderHistoryCompat` is in the agent's error processors: on that Anthropic error it drops the leftover thinking step and retries once.
 
 ```ts
+import { Agent } from '@mastra/core/agent';
 import { ProviderHistoryCompat } from '@mastra/core/processors';
 
 const agent = new Agent({
