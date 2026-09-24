@@ -87,6 +87,8 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
 
   const newUsage = calculateAccumulatedUsage(currentState.accumulatedUsage, executionOutput.output.usage);
   const stepRecord = buildStepRecord(executionOutput);
+  const lastStepResult = { ...executionOutput.stepResult };
+  delete lastStepResult.request;
 
   return {
     runId: currentState.runId,
@@ -104,7 +106,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     iterationCount: currentState.iterationCount + 1,
     accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
     accumulatedUsage: newUsage,
-    lastStepResult: executionOutput.stepResult,
+    lastStepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,
     // Preserve the two-phase stop flag set by the dowhile predicate's

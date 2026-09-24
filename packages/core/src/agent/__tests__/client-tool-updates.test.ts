@@ -43,7 +43,7 @@ function createModel(prompts: any[], firstTurn: 'client-call' | 'text') {
   });
 }
 
-async function setup() {
+async function setup({ retainFullInput = false } = {}) {
   const prompts: any[] = [];
   const memory = new MockMemory();
   const agent = new Agent({
@@ -61,7 +61,7 @@ async function setup() {
     },
   });
   const threadId = randomUUID();
-  const memoryOpts = { memory: { thread: threadId, resource: 'r', options: { lastMessages: 20 } } };
+  const memoryOpts = { memory: { thread: threadId, resource: 'r', options: { lastMessages: 20, retainFullInput } } };
 
   const turn1 = await agent.stream(
     [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] }],
@@ -244,6 +244,74 @@ describe('client tool updates on an existing thread', () => {
         { toolCallId: 'call_1', state: 'output-error', errorText: 'user closed the picker' },
       ]);
       expect(messages.some(message => message.id === 'u2')).toBe(true);
+    });
+  });
+
+  describe('when the stored text differs from the client copy', () => {
+    // The stored text can differ from what the client rendered: an output processor may rewrite it
+    // before it is saved, or the app may edit the stored message. With `retainFullInput` the client's
+    // copy is not trimmed, so the stored-history layering alone has to keep the stored text.
+    async function setupWithStoredText() {
+      const context = await setup({ retainFullInput: true });
+      const { assistant, memory } = context;
+      await memory.saveMessages({
+        messages: [
+          {
+            ...assistant,
+            content: {
+              ...assistant.content,
+              parts: [{ type: 'text', text: 'Stored wording.' }, ...assistant.content.parts],
+            },
+          },
+        ],
+      });
+      return context;
+    }
+
+    const clientCopy = (id: string) => ({
+      id,
+      role: 'assistant' as const,
+      parts: [
+        { type: 'text' as const, text: 'Client wording.' },
+        {
+          type: 'tool-pickColor' as const,
+          toolCallId: 'call_1',
+          state: 'output-available' as const,
+          input: { hint: 'warm' },
+          output: { color: 'red' },
+        },
+      ],
+    });
+
+    const assistantText = (messages: any[]) =>
+      messages
+        .filter(message => message.role === 'assistant')
+        .flatMap(message => (Array.isArray(message.content) ? message.content : message.content.parts))
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text);
+
+    it.each([
+      ['on its own', (id: string) => [clientCopy(id)]],
+      [
+        'with the next user message',
+        (id: string) => [clientCopy(id), { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'thanks' }] }],
+      ],
+    ])('keeps the stored text when the client sends a tool result %s', async (_, messages) => {
+      const { assistant, stream, stored } = await setupWithStoredText();
+
+      const prompt = await stream(messages(assistant.id));
+
+      expect(promptToolResults(prompt)).toEqual([{ type: 'json', value: { color: 'red' } }]);
+      expect(assistantText(prompt)).toContain('Stored wording.');
+      expect(assistantText(prompt)).not.toContain('Client wording.');
+
+      const saved = await stored();
+      const savedAssistant = saved.find(message => message.id === assistant.id)!;
+      expect(assistantText([savedAssistant])[0]).toBe('Stored wording.');
+      expect(assistantText(saved)).not.toContain('Client wording.');
+      expect(toolParts([savedAssistant])).toMatchObject([
+        { toolCallId: 'call_1', state: 'result', result: { color: 'red' } },
+      ]);
     });
   });
 

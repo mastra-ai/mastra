@@ -7,7 +7,7 @@ description: "Browse Tempr model IDs, capabilities, context windows, and pricing
 
 # <img src="https://models.dev/logos/tempr.svg" alt="Tempr logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Tempr
 
-Access 29 Tempr models through Mastra's model router. Authentication is handled automatically using the `TEMPR_API_KEY` environment variable.
+Access 39 Tempr models through Mastra's model router. Authentication is handled automatically using the `TEMPR_API_KEY` environment variable.
 
 Learn more in the [Tempr documentation](https://temprhq.io/docs/gateway-reference.html).
 
@@ -392,6 +392,126 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "tempr/mistral/mistral-embed",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8000,
+    "maxOutput": 3072,
+    "inputCost": 0.1,
+    "outputCost": null
+  },
+  {
+    "model": "tempr/mistral/mistral-large-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "tempr/mistral/mistral-large-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "tempr/mistral/mistral-medium-2604",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1.5,
+    "outputCost": 7.5
+  },
+  {
+    "model": "tempr/mistral/mistral-medium-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1.5,
+    "outputCost": 7.5
+  },
+  {
+    "model": "tempr/mistral/mistral-small-2603",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "tempr/mistral/mistral-small-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "tempr/mistral/voxtral-small-latest",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "tempr/mistral/zai-glm-5-2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
+    "model": "tempr/mistral/zai-glm-5-3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.4,
+    "outputCost": 4.4
   }
 ]}
 />
@@ -426,7 +546,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "tempr/google/gemma-4-31b-it"
+      ? "tempr/mistral/zai-glm-5-3"
       : "tempr/anthropic/claude-fable-5";
   }
 });

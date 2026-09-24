@@ -1,5 +1,111 @@
 # @mastra/server
 
+## 1.70.0
+
+### Minor Changes
+
+- Added `POST /api/agents/:agentId/threads/signals/cancel` to cancel selected pending input across Agents sharing a memory thread. The route checks thread ownership and accepts 1–1,000 signal IDs: ([#23942](https://github.com/mastra-ai/mastra/pull/23942))
+
+  ```json
+  { "resourceId": "user-123", "threadId": "thread-abc", "signalIds": ["signal-123"] }
+  ```
+
+  The response contains `cancelledSignalIds`, listing only IDs cancelled on the receiving process. Those IDs are published through shared PubSub so other subscribed processes can remove matching pending copies. Propagation is asynchronous and best-effort, without remote acknowledgements. Thread abort requests also accept `clearPendingSignals: true` to clear pending input before aborting. Omitting the flag preserves existing behavior.
+
+  Both cancellation routes enforce thread write access when fine-grained authorization is configured, even before a thread is saved. Thread-wide cancellation and clear-on-abort return HTTP 501 when the Agent's core version doesn't support them. Upgrade `@mastra/core` alongside `@mastra/server` on every worker.
+
+- Added capability-aware routing for trace-level root duration predicates. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering used the existing span relation, which remains available on older adapters and can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Stores that advertise root duration support now accept the top-level field, while older stores return a structured unsupported response and omit the field from trace discovery:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+- Trace query, thread query, and trace-query discovery routes now resolve a trusted tenant scope from the reserved `organizationId` request-context key and pass it to the planner. Requests from hosts that set that key server-side only see their own organization's traces, related spans, scores, feedback, and discovery values, and cursors are bound to that scope. Without the key the routes behave as before. Scoped requests are rejected with `501` when the installed `@mastra/core` or observability store predates tenant scope, so a scope can never be silently dropped. ([#24566](https://github.com/mastra-ai/mastra/pull/24566))
+
+  Set the key from server-side authentication, for example in server middleware:
+
+  ```typescript
+  const mastra = new Mastra({
+    server: {
+      middleware: [
+        async (c, next) => {
+          c.get('requestContext').set('organizationId', getSession(c).organizationId);
+          await next();
+        },
+      ],
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Return HTTP 409 when a feedback review-status update conflicts with a newer version of the feedback, so clients can retry instead of treating it as a server error. ([#24033](https://github.com/mastra-ai/mastra/pull/24033))
+
+- Expose the optional tool `title` on the tool endpoints and in `GetToolResponse`, and copy it from `tool-call` and `tool-call-input-streaming-start` chunks onto the tool-invocation message part in the `useChat` accumulator. Part of #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  ```ts
+  const tool = await client.getTool('get_weather_by_coordinates').details();
+  tool.title; // 'Weather Lookup'
+  ```
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+
+## 1.70.0-alpha.4
+
+### Patch Changes
+
+- Return HTTP 409 when a feedback review-status update conflicts with a newer version of the feedback, so clients can retry instead of treating it as a server error. ([#24033](https://github.com/mastra-ai/mastra/pull/24033))
+
+- Updated dependencies [[`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec)]:
+  - @mastra/core@1.70.0-alpha.4
+
+## 1.70.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e)]:
+  - @mastra/core@1.70.0-alpha.3
+
+## 1.70.0-alpha.2
+
+### Minor Changes
+
+- Added capability-aware routing for trace-level root duration predicates. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering used the existing span relation, which remains available on older adapters and can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Stores that advertise root duration support now accept the top-level field, while older stores return a structured unsupported response and omit the field from trace discovery:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
 ## 1.70.0-alpha.1
 
 ### Minor Changes
