@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `CompactNumber`, which shows a compact metric such as `12.3K` or `$1.2K` and reveals the full value (`12,310`) in a tooltip on hover or focus. Costs keep the precision of their currency, and an amount smaller than the currency's smallest unit shows as `<$0.01`.
+Added `CompactNumber`, which shows a compact metric such as `12.3K` or `$1.2K` and reveals the full value (`12,310`) in a tooltip on hover or focus. The compact value can hide digits (`$123.45` shows as `$123`), and the full value in the tooltip keeps the currency's precision. An amount smaller than the currency's smallest unit shows as `<$0.01`, and a unit that isn't a currency, such as `credits`, shows as a plain number.
 
 ```tsx
 import { CompactNumber } from '@mastra/playground-ui/components/CompactNumber';

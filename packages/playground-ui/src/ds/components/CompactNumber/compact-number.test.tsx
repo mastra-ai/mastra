@@ -42,6 +42,11 @@ describe('formatFullNumber', () => {
     expect(formatFullNumber(-0.0012, { currency: 'USD' })).toBe('-<$0.01');
   });
 
+  it('formats a unit that is not a currency as a plain number', () => {
+    expect(formatFullNumber(12_310, { currency: 'credits' })).toBe('12,310');
+    expect(formatCompactNumber(12_310, { currency: 'credits' })).toBe('12.3K');
+  });
+
   it('uses the precision of the currency', () => {
     expect(formatFullNumber(1234.5, { currency: 'JPY' })).toBe('¥1,235');
     expect(formatFullNumber(0.4, { currency: 'JPY' })).toBe('<¥1');
