@@ -3794,16 +3794,18 @@ export class Run<
         if (!nestedWorkflowId) continue;
 
         // Suspended foreach iterations keep their links under `suspendPayload.__workflow_meta`
-        // (default engine: `foreachOutput`; evented engine: per-iteration entries in `output`).
-        // `output` is only read for suspended foreach steps, and only for engine-written suspend
-        // metadata, so completed user outputs are never treated as child-run links.
+        // (default engine: `foreachOutput`). The evented engine persists suspended iterations inline in
+        // `output`, so for suspended foreach steps only entries shaped as suspended iteration results
+        // are read; completed iterations' user output is ignored.
         const linkedRunIds = (result: any): unknown[] => [
           result?.metadata?.nestedRunId,
           result?.suspendPayload?.__workflow_meta?.runId,
         ];
         const suspendedForeachOutput =
           stepGraph?.type === 'foreach' && stepResult?.status === 'suspended' && Array.isArray(stepResult.output)
-            ? stepResult.output.map((entry: any) => entry?.suspendPayload?.__workflow_meta?.runId)
+            ? stepResult.output
+                .filter((entry: any) => entry?.status === 'suspended')
+                .map((entry: any) => entry.suspendPayload?.__workflow_meta?.runId)
             : [];
         const nestedRunIds = [stepResult, ...(Array.isArray(stepResult) ? stepResult : [])]
           .flatMap(result => [result, ...(result?.suspendPayload?.__workflow_meta?.foreachOutput ?? [])])
