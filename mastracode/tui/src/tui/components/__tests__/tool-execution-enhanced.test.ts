@@ -1255,6 +1255,30 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(normal).not.toContain('Drilling into');
   });
 
+  it('renders the quiet description as plain text instead of shell-highlighting it', () => {
+    const previousLevel = chalk.level;
+    chalk.level = 3;
+    try {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'git status', description: 'Checking for uncommitted changes' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
+
+      // Shell highlighting colors each word token separately, so the raw line would not contain
+      // the description as one contiguous run.
+      expect(component.render(80).join('\n')).toContain('Checking for uncommitted changes');
+
+      component.setExpanded(true);
+      expect(component.render(80).join('\n')).not.toContain('git status');
+      expect(stripAnsi(component.render(80).join('\n'))).toContain('$ git status');
+    } finally {
+      chalk.level = previousLevel;
+    }
+  });
+
   it('falls back to the command when the description is blank', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',

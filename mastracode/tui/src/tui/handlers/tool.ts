@@ -419,6 +419,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
   if (existingComponent) {
     // Component was created during input streaming — update with final args
+    existingComponent.setArgsStreaming?.(false);
     existingComponent.updateArgs(args);
     reconcileToolBoundaries(ctx);
   } else if (existingSubmitPlanComponent) {
@@ -645,6 +646,7 @@ function applyParsedToolArgs(
 
   const component = state.pendingTools.get(toolCallId);
   if (component) {
+    component.setArgsStreaming?.(true);
     component.updateArgs(partialArgs, false);
     reconcileToolBoundaries(ctx);
     component.refresh?.();
@@ -757,6 +759,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
 export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
   flushLatestParsedToolArgs(ctx, toolCallId);
   closeToolInputParser(toolCallId);
+  ctx.state.pendingTools.get(toolCallId)?.setArgsStreaming?.(false);
 }
 
 export function handleToolEnd(

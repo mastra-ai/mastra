@@ -9,6 +9,7 @@ import {
   clearToolInputParsers,
   handleToolEnd,
   handleToolInputDelta,
+  handleToolInputEnd,
   handleToolInputStart,
   handleToolStart,
 } from './tool.js';
@@ -247,5 +248,50 @@ describe('task tool rendering', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(80).join('\n'));
     expect(output).toContain('.mastracode/plans/ship-it.md');
     expect(output).toContain('Submitting plan…');
+  });
+});
+
+describe('quiet shell description streaming', () => {
+  it('never shows the streamed command before the description arrives', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const render = () => stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+
+    handleToolInputStart(ctx, 'call-1', 'execute_command');
+    // Models may stream `command` before `description` regardless of schema order.
+    handleToolInputDelta(ctx, 'call-1', '{"command":"gh run view 123 --log-failed | grep FAIL"');
+    await flushParser();
+    expect(render()).not.toContain('gh run view');
+    expect(render()).toContain('$ ...');
+
+    handleToolInputDelta(ctx, 'call-1', ',"description":"Drilling into the failed CI job"}');
+    await flushParser();
+    expect(render()).toContain('$ Drilling into the failed CI job');
+    expect(render()).not.toContain('gh run view');
+
+    handleToolInputEnd(ctx, 'call-1');
+    handleToolStart(ctx, 'call-1', 'execute_command', {
+      command: 'gh run view 123 --log-failed | grep FAIL',
+      description: 'Drilling into the failed CI job',
+    });
+    expect(render()).toContain('$ Drilling into the failed CI job');
+    expect(render()).not.toContain('gh run view');
+  });
+
+  it('falls back to the command once args finish without a description', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+
+    handleToolInputStart(ctx, 'call-1', 'execute_command');
+    handleToolInputDelta(ctx, 'call-1', '{"command":"git status"}');
+    await flushParser();
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('git status');
+
+    handleToolInputEnd(ctx, 'call-1');
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('$ git status');
   });
 });
