@@ -1145,6 +1145,10 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 toolComponent.setRecordedTiming(part.startedAt, part.endedAt);
               }
             }
+          } else {
+            // Nothing will deliver this call's result to a reloaded row, so show it stopped rather
+            // than running forever.
+            toolComponent.stopLiveUpdates();
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {

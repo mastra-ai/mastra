@@ -5,7 +5,7 @@
 
 Quiet mode now shows a short description of each shell command, like `Drilling into the failed CI job`, instead of the raw command, so you can follow what the agent is doing without reading long commands and scripts. The agent is asked to write the description first and to phrase descriptions as a running narrative across commands. The description streams in as the agent writes it, and the raw command never flashes first.
 
-Consecutive shell calls in the same directory share one compact box. With quiet mode tool preview lines above None, the latest output streams into a shared preview at the top of the box:
+Consecutive shell calls in the same directory share one compact box. When the quiet mode tool preview lines setting is 1 or more, the latest output streams into a shared preview at the top of the box:
 
 ```
 ╭──────────────────────────────────────────────────────────╮

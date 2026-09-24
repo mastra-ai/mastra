@@ -434,7 +434,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private isShellDirectoryPending(): boolean {
     if (!this.argsStreaming || this.result) return false;
     const argsObj = this.args as Record<string, unknown> | undefined;
-    if (argsObj?.cwd !== undefined) return true;
+    // A string `cwd` may still be partial; a streamed `null` is complete and means "no cwd".
+    if (typeof argsObj?.cwd === 'string') return true;
     if (typeof argsObj?.command !== 'string') return true;
     if (this.parseShellCommand().cdPath) return false;
     // Still undecided while the command could be the start of a `cd <dir> &&` prefix.

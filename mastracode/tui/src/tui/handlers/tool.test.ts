@@ -359,12 +359,14 @@ describe('quiet shell description streaming', () => {
     await call('c3', ['{"description":"Reading y","command":"cd /tmp', ' && cat y"}'], ['1\n', '2\n']);
     await call('c4', ['{"command":"sed -n 1,5p', ' f.ts","description":"Reading f"}'], ['x\n']);
     await call('c5', ['{"description":"Listing opt","com', 'mand":"cd /opt && ls"}'], ['y\n', 'z\n']);
+    // Strict-schema models send every nullable argument; a `cwd: null` after the command is not a directory.
+    await call('c6', ['{"description":"Listing root","command":"ls"', ',"cwd":null}'], ['r\n']);
 
     for (let i = 1; i < frames.length; i++) {
       expect(frames[i]!.length, `frame ${i}`).toBeGreaterThanOrEqual(frames[i - 1]!.length);
     }
     const final = stripAnsi(frames.at(-1)!.join('\n'));
-    expect(final.match(/╭/g)).toHaveLength(3);
+    expect(final.match(/╭/g)).toHaveLength(4);
   }, 20_000);
 
   it('marks a shell call failed from its live exit record when the result text does not say', () => {

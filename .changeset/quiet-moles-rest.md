@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Quiet mode now shows `Thinking...` in the status line above the input instead of leaving a line in the chat for every reasoning step. The indicator replaces the idle time while the agent is thinking, so it appears and disappears without shifting the chat.
+Improved quiet mode's thinking indicator. `Thinking...` now appears in the status line above the input, in place of the idle time, instead of adding a line to the chat for every reasoning step. It comes and goes without shifting the chat.
