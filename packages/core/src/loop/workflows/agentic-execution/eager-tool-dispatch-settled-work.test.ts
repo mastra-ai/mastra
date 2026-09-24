@@ -69,7 +69,7 @@ function textOnly() {
 function createAgent(
   model: MockLanguageModelV2,
   executions: string[],
-  opts: { delayMs?: number; retry?: boolean; gate?: ReturnType<typeof inFlightGate> },
+  opts: { delayMs?: number; retry?: boolean; gate?: ReturnType<typeof inFlightGate>; onAPIError?: () => void },
 ) {
   return new Agent({
     id: 'eager-settled-work-agent',
@@ -81,7 +81,10 @@ function createAgent(
           errorProcessors: [
             {
               id: 'retry-once',
-              processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
+              processAPIError: async ({ retryCount }: { retryCount: number }) => {
+                opts.onAPIError?.();
+                return { retry: retryCount < 1 };
+              },
             },
           ] as never,
         }
@@ -114,9 +117,10 @@ function deferred() {
  * wall-clock sleeps. `started` lets the model fail only once the tool is running; the
  * body is released when the pipeline starts waiting out running work (a build that
  * cancels instead never waits, and the test releases it after the run); `settled`
- * resolves once the body has returned or thrown.
+ * resolves once the body has returned or thrown. `onWait` replaces the release, to
+ * act at the moment the pipeline starts waiting.
  */
-function inFlightGate() {
+function inFlightGate(opts: { onWait?: () => void } = {}) {
   const started = deferred();
   const release = deferred();
   const settled = deferred();
@@ -128,7 +132,8 @@ function inFlightGate() {
       this: EagerToolExecutionCoordinator,
       signal?: AbortSignal,
     ) {
-      release.resolve();
+      if (opts.onWait) opts.onWait();
+      else release.resolve();
       return settleRunning.call(this, signal);
     });
   }
@@ -364,6 +369,47 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('answered-a');
+  });
+
+  it('does not run error processing when the run is aborted while waiting out an in-flight call', async () => {
+    const executions: string[] = [];
+    const caller = new AbortController();
+    const gate = inFlightGate({ onWait: () => caller.abort() });
+    let attempts = 0;
+    let apiErrorCalls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        attempts += 1;
+        if (attempts > 1) return textOnly();
+        return toolCallThen(async controller => {
+          await gate.started;
+          controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+          controller.close();
+        });
+      },
+    });
+
+    const stream = await createAgent(model, executions, {
+      retry: true,
+      gate,
+      onAPIError: () => apiErrorCalls++,
+    }).stream('go', {
+      maxSteps: 3,
+      eagerToolExecution: true,
+      abortSignal: caller.signal,
+    });
+    const types: string[] = [];
+    try {
+      for await (const c of stream.fullStream as AsyncIterable<{ type: string }>) types.push(c.type);
+    } catch {}
+    gate.release();
+    await gate.settled;
+
+    // The abort ends the wait, so no error processor may act on the dead attempt.
+    expect(apiErrorCalls).toBe(0);
+    expect(types).toContain('abort');
+    expect(attempts).toBe(1);
+    expect(executions).toEqual(['a']);
   });
 
   it('lets an in-flight call finish on fallback so the fallback model never runs it again', async () => {

@@ -2412,6 +2412,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // by the retry gates below rather than after the attempt was already retried.
           // After the abort branch: an abort cancels running work instead of waiting.
           await eagerCoordinator?.settleRunning(runAbortSignal);
+          // The wait ends early when the run aborts; that abort wins over any retry or fallback.
+          if (runAbortSignal?.aborted) {
+            await options?.onAbort?.({
+              steps: inputData?.output?.steps ?? [],
+              text: runState.state.partialText,
+            });
+            safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+            return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+          }
 
           const isUpstreamError = APICallError.isInstance(error);
 
@@ -2499,6 +2508,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
             // Retried or failed over: this attempt's calls are dropped either way.
             await discardAttemptEagerWork();
+            if (runAbortSignal?.aborted) {
+              await options?.onAbort?.({
+                steps: inputData?.output?.steps ?? [],
+                text: runState.state.partialText,
+              });
+              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            }
 
             if (errorResult.retry && canRetryError) {
               // Signal retry - store on runState so it's handled after the callback returns
@@ -2614,6 +2631,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         // Settled first so the suspension gate below sees calls still running.
         await eagerCoordinator?.settleRunning(runAbortSignal);
+        if (runAbortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution();
+        }
         const currentRetryCount = inputData.processorRetryCount || 0;
         // Never retry an attempt holding a call that already ran up to a runtime suspend().
         const canRetryError =
@@ -2684,6 +2710,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         await discardAttemptEagerWork();
+        if (runAbortSignal?.aborted) {
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution();
+        }
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -3006,6 +3040,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // two lines are therefore insurance against that arrangement changing, not a live
         // path: cheap, and the thing they prevent is a second real side effect.
         await discardAttemptEagerWork();
+        if (runAbortSignal?.aborted) {
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution();
+        }
       }
 
       const retryFeedbackText =
