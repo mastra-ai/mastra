@@ -1426,6 +1426,8 @@ const response = await agent.generate([
 console.log(response.text)
 ```
 
+The `image` value, or `data` for a `type: 'file'` part, must be an absolute URL, a data URL, or base64 content. Relative paths such as `/api/images/foo.png` throw an `INVALID_FILE_PART_DATA` error, so resolve them to absolute URLs before sending. If an attachment in the thread's history can no longer be downloaded, the agent replaces it with a placeholder instead of failing. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures).
+
 ### Using `maxSteps`
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step generates a response and executes any tool calls before processing the result. Limiting steps helps prevent infinite loops and reduce latency. It also controls token usage for agents that use tools. The default is 5, but can be increased:
