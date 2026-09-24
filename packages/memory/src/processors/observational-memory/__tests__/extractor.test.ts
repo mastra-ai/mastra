@@ -678,6 +678,27 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(result.failures).toBeUndefined();
   });
 
+  it('rejects a null for a key a strict schema does not declare', async () => {
+    const { memory, result } = await runWorkingMemoryHook(z.strictObject({ name: z.string() }), {
+      name: 'Tyler',
+      unexpected: null,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('unexpected') }]);
+  });
+
+  it('keeps null values allowed by a record schema', async () => {
+    const { memory } = await runWorkingMemoryHook(z.record(z.string(), z.string().nullable()), {
+      city: null,
+      name: 'Tyler',
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ city: null, name: 'Tyler' }) }),
+    );
+  });
+
   it('still rejects a null in a required field', async () => {
     const { memory, result } = await runWorkingMemoryHook(z.object({ name: z.string() }), { name: null });
 
