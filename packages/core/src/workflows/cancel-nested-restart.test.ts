@@ -316,6 +316,48 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
     });
   }
 
+  // The evented engine refuses to run on stores without concurrent updates, so only the default engine applies.
+  it('cancels through snapshots on stores without concurrent updates', async () => {
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const parent = createWorkflow({ id: 'parent', inputSchema: schema, outputSchema: schema })
+      .then(createStep({ id: 'child', inputSchema: schema, outputSchema: schema, execute: async () => ({}) }))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { parent } });
+
+    await store.persistWorkflowSnapshot({
+      workflowName: 'parent',
+      runId: 'p1',
+      resourceId: 'user-1',
+      snapshot: seedParentWithChildren(['c-active', 'c-done']),
+    });
+    await store.persistWorkflowSnapshot({
+      workflowName: 'child',
+      runId: 'c-active',
+      resourceId: 'user-1',
+      snapshot: snapshot('c-active', 'suspended'),
+    });
+    await store.persistWorkflowSnapshot({
+      workflowName: 'child',
+      runId: 'c-done',
+      snapshot: snapshot('c-done', 'success'),
+    });
+
+    // Mirrors Cloudflare D1/KV/DO, ClickHouse and LanceDB, which don't implement updateWorkflowState.
+    store.supportsConcurrentUpdates = () => false;
+    store.updateWorkflowState = async () => {
+      throw new Error('updateWorkflowState is not implemented');
+    };
+
+    const result = await (await parent.createRun({ runId: 'p1' })).cancel();
+
+    expect(result.failed).toEqual([]);
+    const run = (workflowName: string, runId: string) => store.getWorkflowRunById({ workflowName, runId });
+    expect(await run('parent', 'p1')).toMatchObject({ resourceId: 'user-1', snapshot: { status: 'canceled' } });
+    expect(await run('child', 'c-active')).toMatchObject({ resourceId: 'user-1', snapshot: { status: 'canceled' } });
+    expect(await run('child', 'c-done')).toMatchObject({ snapshot: { status: 'success' } });
+  });
+
   it.each([
     ['default', createWorkflow],
     ['evented', createEventedWorkflow],

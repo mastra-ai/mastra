@@ -59,7 +59,7 @@ import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { StorageListWorkflowRunsInput } from '../storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -3563,6 +3563,22 @@ export class Workflow<
  * Represents a workflow run that can be executed
  */
 
+/**
+ * Marks a run canceled by rewriting its snapshot. Used for stores that don't support concurrent
+ * updates, several of which (Cloudflare D1/KV/DO, ClickHouse, LanceDB) don't implement `updateWorkflowState`.
+ */
+async function persistCanceledSnapshot(workflowsStore: WorkflowsStorage, record: WorkflowRun): Promise<void> {
+  const snapshot =
+    typeof record.snapshot === 'string' ? (JSON.parse(record.snapshot) as WorkflowRunState) : record.snapshot;
+  await workflowsStore.persistWorkflowSnapshot({
+    workflowName: record.workflowName,
+    runId: record.runId,
+    resourceId: record.resourceId,
+    snapshot: { ...snapshot, status: 'canceled' },
+    createdAt: record.createdAt,
+  });
+}
+
 export class Run<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -3752,11 +3768,16 @@ export class Run<
     let workflowsStore: WorkflowsStorage | undefined;
     try {
       workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      await workflowsStore?.updateWorkflowState({
-        workflowName: this.workflowId,
-        runId: this.runId,
-        opts: { status: 'canceled' },
-      });
+      if (workflowsStore && !workflowsStore.supportsConcurrentUpdates()) {
+        const record = await workflowsStore.getWorkflowRunById({ runId: this.runId, workflowName: this.workflowId });
+        if (record) await persistCanceledSnapshot(workflowsStore, record);
+      } else {
+        await workflowsStore?.updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'canceled' },
+        });
+      }
     } catch (error) {
       this.mastra?.getLogger()?.error(`Failed to persist cancellation for workflow run ${this.runId}`, { error });
       failed.push({ workflowName: this.workflowId, runId: this.runId, error });
@@ -3783,9 +3804,11 @@ export class Run<
 
     while (queue.length > 0) {
       const { runId, workflowName } = queue.shift()!;
+      let record: WorkflowRun | null | undefined;
       let snapshot: WorkflowRunState | string | undefined;
       try {
-        snapshot = (await workflowsStore.getWorkflowRunById({ runId, workflowName }))?.snapshot;
+        record = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+        snapshot = record?.snapshot;
         if (typeof snapshot === 'string') snapshot = JSON.parse(snapshot) as WorkflowRunState;
       } catch (error) {
         this.mastra?.getLogger()?.error(`Failed to load workflow run ${runId} while canceling descendants`, { error });
@@ -3841,7 +3864,7 @@ export class Run<
         continue;
       try {
         if (!workflowsStore.supportsConcurrentUpdates()) {
-          await workflowsStore.updateWorkflowState({ workflowName, runId, opts: { status: 'canceled' } });
+          await persistCanceledSnapshot(workflowsStore, { ...record!, snapshot });
           continue;
         }
         // Guard against a descendant changing status between our read and this write:
