@@ -118,6 +118,37 @@ Truncated text`;
     expect(stripObservationGroups(observations)).toContain('Truncated text');
   });
 
+  it('recovers a complete group after an incomplete group that quotes an opening tag inline', () => {
+    const quoted = '- The format is <observation-group id="example" range="2:3"> with attributes';
+    const observations = `<observation-group id="incomplete" range="1:2">
+${quoted}
+<observation-group id="complete" range="3:4">
+- A later fact
+</observation-group>`;
+
+    expect(parseObservationGroups(observations)).toEqual([
+      { id: 'complete', range: '3:4', kind: undefined, content: '- A later fact' },
+    ]);
+    expect(stripObservationGroups(observations)).toBe(`${quoted}\n- A later fact`);
+    expect(renderObservationGroupsForReflection(observations)).toBe(`${quoted}
+## Group \`complete\`
+_range: \`3:4\`_
+
+- A later fact`);
+  });
+
+  it('stays linear when many groups quote opening tags inline', () => {
+    const groups = Array.from(
+      { length: 10_000 },
+      (_, i) =>
+        `<observation-group id="g${i}" range="${i}:${i}">\n- mentions <observation-group id="x"> inline\n</observation-group>`,
+    ).join('\n');
+
+    const started = performance.now();
+    expect(parseObservationGroups(groups)).toHaveLength(10_000);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
   it('drops a lone unterminated opening tag and keeps its text', () => {
     const observations = `<observation-group id="only" range="1:2">
 Lone text`;
