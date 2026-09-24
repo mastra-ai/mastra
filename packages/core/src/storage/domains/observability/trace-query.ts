@@ -761,6 +761,7 @@ export type TraceQueryIssueCode =
   | 'invalid_operands'
   | 'invalid_literal'
   | 'too_many_buckets'
+  | 'too_many_rows'
   | 'group_order_not_supported'
   | 'pagination_mode_conflict'
   | 'group_pagination_not_supported';

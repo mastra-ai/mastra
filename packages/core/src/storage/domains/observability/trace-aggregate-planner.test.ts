@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseTraceAggregateRequest, TRACE_AGGREGATE_DEFAULT_LIMIT } from './trace-aggregate';
 import {
+  countTraceAggregateBuckets,
   planTraceAggregate,
   TRACE_AGGREGATE_INTERVAL_MS,
   TRACE_AGGREGATE_MAX_BUCKETS,
+  TRACE_AGGREGATE_MAX_ROWS,
 } from './trace-aggregate-planner';
 import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import { TRACE_AGGREGATE_DIMENSION_REGISTRY, TRACE_AGGREGATE_IDENTITY_FIELDS } from './trace-aggregate-registry';
@@ -123,9 +125,15 @@ describe('planTraceAggregate', () => {
       expect(result.limit).toBe(100);
     });
 
-    it('lets orderBy target count even when count is not a requested measure', () => {
-      const result = plan({ timeRange, measures: ['errorRate'], orderBy: { field: 'count', direction: 'asc' } });
+    it('lets orderBy and having target count even when count is not a requested measure', () => {
+      const result = plan({
+        timeRange,
+        measures: ['errorRate'],
+        having: { op: 'gte', left: { path: 'count' }, right: { literal: 10 } },
+        orderBy: { field: 'count', direction: 'asc' },
+      });
       expect(result.orderBy).toEqual({ target: 'measure', measure: 'count', direction: 'asc' });
+      expect(result.having).toEqual({ type: 'comparison', measure: 'count', operator: 'gte', value: 10 });
       expect(result.measures).toEqual([{ type: 'canonical', name: 'errorRate' }]);
     });
 
@@ -361,12 +369,32 @@ describe('planTraceAggregate', () => {
       to: new Date(Date.parse('2026-01-01T00:00:00Z') + ms).toISOString(),
     });
 
-    it('accepts 365 days at 1d and exactly 1000 buckets', () => {
-      expect(plan({ timeRange: range(365 * day), interval: '1d', measures: ['count'] }).interval).toBe('1d');
+    it('accepts 365 days at 1d and exactly 1000 aligned buckets', () => {
+      expect(plan({ timeRange: range(365 * day), interval: '1d', measures: ['count'], limit: 10 }).interval).toBe('1d');
       expect(
-        plan({ timeRange: range(1000 * TRACE_AGGREGATE_INTERVAL_MS['1m']), interval: '1m', measures: ['count'] })
-          .interval,
+        plan({
+          timeRange: range(1000 * TRACE_AGGREGATE_INTERVAL_MS['1m']),
+          interval: '1m',
+          measures: ['count'],
+          limit: 10,
+        }).interval,
       ).toBe('1m');
+    });
+
+    it('counts UTC-aligned buckets, so an unaligned from touches one more bucket', () => {
+      const minute = TRACE_AGGREGATE_INTERVAL_MS['1m'];
+      const start = Date.parse('2026-01-01T00:00:30Z');
+      const unaligned = { from: new Date(start).toISOString(), to: new Date(start + 1000 * minute).toISOString() };
+      expect(countTraceAggregateBuckets(start, start + 1000 * minute, '1m')).toBe(1001);
+      const issue = expectIssue(
+        { timeRange: unaligned, interval: '1m', measures: ['count'], limit: 10 },
+        'too_many_buckets',
+        ['interval'],
+      );
+      expect(issue.message).toContain('5m');
+      // One millisecond short of the boundary keeps the last bucket unopened.
+      expect(countTraceAggregateBuckets(0, 1000 * minute, '1m')).toBe(1000);
+      expect(countTraceAggregateBuckets(0, 1000 * minute + 1, '1m')).toBe(1001);
     });
 
     it('rejects too many buckets and names the smallest permitted interval', () => {
@@ -380,6 +408,24 @@ describe('planTraceAggregate', () => {
           'interval',
         ]).message,
       ).toContain('1h');
+    });
+
+    it('caps limit × buckets at 10,000 rows when interval is present (Decision 5)', () => {
+      // Canonical example 1: default limit 100 × 62 daily buckets = 6,200.
+      expect(plan({ timeRange: range(62 * day), interval: '1d', measures: ['count'] }).limit).toBe(100);
+      const hours16 = 16 * TRACE_AGGREGATE_INTERVAL_MS['1h'];
+      const issue = expectIssue(
+        { timeRange: range(hours16), interval: '1m', measures: ['count'], limit: 1000 },
+        'too_many_rows',
+        ['limit'],
+      );
+      expect(issue.message).toContain(`${TRACE_AGGREGATE_MAX_ROWS}`);
+      // Without an interval the row count equals the group count, so no cap applies.
+      expect(plan({ timeRange: range(365 * day), measures: ['count'], limit: 1000 }).limit).toBe(1000);
+      // The bucket cap wins when both are exceeded.
+      expect(
+        validationError(() => plan({ timeRange: range(day), interval: '1m', measures: ['count'], limit: 1000 })).issues,
+      ).toEqual([expect.objectContaining({ code: 'too_many_buckets' })]);
     });
 
     it('re-checks the window even though the schema already does', () => {

@@ -37,11 +37,14 @@ import type {
  *
  * `planTraceAggregate` enforces everything the request schema leaves to the planner: the
  * groupable-dimension allowlist, `countDistinct` targets, `having` / `orderBy` referencing
- * requested measures or dimensions, the 365-day window, and the 1000-bucket cap. Only
- * allowlisted identifiers and finite numeric literals reach the plan.
+ * requested measures or dimensions, the 365-day window, the 1000-bucket cap, and the 10,000-row
+ * cap. Only allowlisted identifiers and finite numeric literals reach the plan.
  */
 
 export const TRACE_AGGREGATE_MAX_BUCKETS = 1000;
+
+/** Upper bound on `limit × bucket count` when `interval` is present (Decision 5). */
+export const TRACE_AGGREGATE_MAX_ROWS = 10_000;
 
 export const TRACE_AGGREGATE_INTERVAL_MS: Record<TraceAggregateInterval, number> = {
   '1m': 60_000,
@@ -58,6 +61,11 @@ export type TrustedTraceAggregateMeasure =
 /** A measure name that survived allowlisting; narrower than the request-level `TraceAggregateMeasure`. */
 export type TrustedTraceAggregateMeasureName = TrustedTraceAggregateMeasure['name'];
 
+/**
+ * Predicate over a group's whole-window measures. `measure` is a requested measure or `count`
+ * (always available, Decision 5); when `count` is not in `measures`, backends compute it for
+ * filtering without projecting it into the response.
+ */
 export type TrustedTraceAggregateHavingPredicate =
   | {
       type: 'comparison';
@@ -78,15 +86,30 @@ export type TrustedTraceAggregateOrderBy =
   | {
       target: 'measure';
       /**
-       * A requested measure, or `count`. `count` is always orderable because it is the schema
-       * default; when it is not in `measures`, backends compute it for ordering without
-       * projecting it into the response (Decision 11).
+       * A requested measure, or `count` (always available, Decision 5). When `count` is not in
+       * `measures`, backends compute it for ordering without projecting it into the response.
        */
       measure: TrustedTraceAggregateMeasureName;
       direction: 'asc' | 'desc';
     }
   | { target: 'dimension'; dimension: TraceAggregateDimension; direction: 'asc' | 'desc' };
 
+/**
+ * Group semantics every evaluator and store compiler must implement (Decision 5):
+ *
+ * - A **group** is one distinct tuple of `dimensions` values (null values form their own group).
+ *   `having`, `orderBy`, and `limit` operate on groups, never on individual bucket rows.
+ * - `having` and `orderBy` are evaluated on each group's measures computed over the **whole**
+ *   `timeRange`, even when `interval` is present. `having` applies after grouping and before
+ *   ordering and `limit`. `orderBy` ties break on dimension values ascending. `bucket` is never
+ *   an ordering target.
+ * - `limit` counts groups. `truncated` is `true` when more groups survived `having` than `limit`.
+ * - When `interval` is present, each surviving group expands to one row per non-empty UTC-aligned
+ *   bucket (`floor(startedAt / interval)`), emitted in `bucket` ascending order within the group;
+ *   empty buckets are omitted, and buckets are never dropped from the middle of a series.
+ * - The planner alone enforces the bucket cap and the row cap (`limit × buckets ≤ 10,000`);
+ *   backends trust the plan and do not re-check them.
+ */
 export interface TrustedTraceAggregatePlan {
   result: 'aggregate';
   timeRange: { from: string; to: string };
@@ -99,7 +122,17 @@ export interface TrustedTraceAggregatePlan {
   measures: TrustedTraceAggregateMeasure[];
   having?: TrustedTraceAggregateHavingPredicate;
   orderBy: TrustedTraceAggregateOrderBy;
+  /** Maximum number of groups (not rows) in the response. */
   limit: number;
+}
+
+/**
+ * Number of UTC-aligned buckets a `[from, to)` range touches (Decision 6). A range that does not
+ * start on a bucket boundary touches one more bucket than `(to - from) / interval`.
+ */
+export function countTraceAggregateBuckets(fromMs: number, toMs: number, interval: TraceAggregateInterval): number {
+  const intervalMs = TRACE_AGGREGATE_INTERVAL_MS[interval];
+  return Math.floor((toMs - 1) / intervalMs) - Math.floor(fromMs / intervalMs) + 1;
 }
 
 type IssuePath = Array<string | number>;
@@ -124,27 +157,34 @@ export function planTraceAggregate(
 
   const from = new Date(request.timeRange.from);
   const to = new Date(request.timeRange.to);
-  const rangeMs = to.getTime() - from.getTime();
-  if (from >= to) {
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  if (fromMs >= toMs) {
     issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
-  } else if (rangeMs > TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS * 24 * 60 * 60 * 1000) {
+  } else if (toMs - fromMs > TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS * 24 * 60 * 60 * 1000) {
     issues.push({
       code: 'time_range_too_large',
       path: ['timeRange'],
       message: `The time range cannot exceed ${TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS} days`,
     });
-  } else if (
-    request.interval &&
-    rangeMs / TRACE_AGGREGATE_INTERVAL_MS[request.interval] > TRACE_AGGREGATE_MAX_BUCKETS
-  ) {
-    const smallest = TRACE_AGGREGATE_INTERVALS.find(
-      interval => rangeMs / TRACE_AGGREGATE_INTERVAL_MS[interval] <= TRACE_AGGREGATE_MAX_BUCKETS,
-    );
-    issues.push({
-      code: 'too_many_buckets',
-      path: ['interval'],
-      message: `The interval produces more than ${TRACE_AGGREGATE_MAX_BUCKETS} buckets; the smallest permitted interval is ${smallest}`,
-    });
+  } else if (request.interval) {
+    const buckets = countTraceAggregateBuckets(fromMs, toMs, request.interval);
+    if (buckets > TRACE_AGGREGATE_MAX_BUCKETS) {
+      const smallest = TRACE_AGGREGATE_INTERVALS.find(
+        interval => countTraceAggregateBuckets(fromMs, toMs, interval) <= TRACE_AGGREGATE_MAX_BUCKETS,
+      );
+      issues.push({
+        code: 'too_many_buckets',
+        path: ['interval'],
+        message: `The interval produces more than ${TRACE_AGGREGATE_MAX_BUCKETS} buckets; the smallest permitted interval is ${smallest}`,
+      });
+    } else if (request.limit * buckets > TRACE_AGGREGATE_MAX_ROWS) {
+      issues.push({
+        code: 'too_many_rows',
+        path: ['limit'],
+        message: `limit × buckets cannot exceed ${TRACE_AGGREGATE_MAX_ROWS} rows; lower limit or widen interval`,
+      });
+    }
   }
 
   const where = request.where ? planTraceQuerySelectionPredicate(request.where, issues) : undefined;
@@ -182,11 +222,14 @@ export function planTraceAggregate(
     measures.push(measure);
   });
 
+  // `count` is always available to `having` and `orderBy`, requested or not (Decision 5).
+  const referenceable = new Map(measureNames).set('count', 'count');
+
   const having = request.having
-    ? planHaving(request.having, ['having'], 1, { nodes: 0, issues, measureNames })
+    ? planHaving(request.having, ['having'], 1, { nodes: 0, issues, measureNames: referenceable })
     : undefined;
 
-  const orderBy = planOrderBy(request.orderBy, measureNames, dimensions, issues);
+  const orderBy = planOrderBy(request.orderBy, referenceable, dimensions, issues);
 
   if (issues.length > 0 || !orderBy) throw new TraceQueryValidationError(issues);
 
@@ -330,7 +373,11 @@ function resolveHavingMeasure(
 ): TrustedTraceAggregateMeasureName | undefined {
   const measure = state.measureNames.get(normalizeTraceAggregateMeasureName(raw));
   if (measure) return measure;
-  state.issues.push({ code: 'field_not_allowed', path, message: 'having may only reference requested measures' });
+  state.issues.push({
+    code: 'field_not_allowed',
+    path,
+    message: 'having may only reference requested measures or count',
+  });
   return undefined;
 }
 
@@ -341,7 +388,7 @@ function planOrderBy(
   issues: TraceQueryIssue[],
 ): TrustedTraceAggregateOrderBy | undefined {
   const field = normalizeTraceAggregateMeasureName(orderBy.field);
-  const measure = field === 'count' ? field : measureNames.get(field);
+  const measure = measureNames.get(field);
   if (measure) return { target: 'measure', measure, direction: orderBy.direction };
   const dimension = dimensions.find(candidate => candidate === field);
   if (dimension) return { target: 'dimension', dimension, direction: orderBy.direction };
