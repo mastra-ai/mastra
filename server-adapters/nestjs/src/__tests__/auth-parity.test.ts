@@ -142,6 +142,29 @@ describe('NestJS Adapter - auth parity with other adapters', () => {
     expect(await urlencoded.json()).toEqual({ a: '1' });
   });
 
+  it('authenticates custom routes matched by Hono-only patterns', async () => {
+    await start({
+      auth: cookieAuth,
+      apiRoutes: [
+        registerApiRoute('/files/:name{.+\\.png}', {
+          method: 'GET',
+          handler: async c => c.json({ name: c.req.param('name') }),
+        }),
+      ],
+    });
+
+    const anonymous = await executeExpressRequest(expressApp, { method: 'GET', path: '/files/a/b.png' });
+    expect(anonymous.status).toBe(401);
+
+    const authed = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/files/a/b.png',
+      headers: { authorization: 'Bearer valid' },
+    });
+    expect(authed.status).toBe(200);
+    expect(authed.body).toEqual({ name: 'a/b.png' });
+  });
+
   it('still returns 404 for unknown non-Mastra paths', async () => {
     await start({ auth: cookieAuth, apiRoutes: [] });
     const response = await executeExpressRequest(expressApp, { method: 'GET', path: '/nope' });

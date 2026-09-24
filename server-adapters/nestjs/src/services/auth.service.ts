@@ -17,6 +17,8 @@ export interface AuthenticateOptions {
   response?: Response;
   /** Force authentication even for publicly accessible paths. */
   requiresAuth?: boolean;
+  /** Set when `requiresAuth` comes from a matched `server.apiRoutes` entry. */
+  customRoute?: boolean;
 }
 
 /**
@@ -34,6 +36,15 @@ export class AuthService {
   ) {}
 
   /**
+   * Whether Mastra auth should run: module options enable it, or the Mastra
+   * server has auth configured (unless module options explicitly disable it).
+   */
+  isEnabled(): boolean {
+    if (this.options.auth?.enabled === false) return false;
+    return Boolean(this.options.auth?.enabled || this.mastra.getServer()?.auth);
+  }
+
+  /**
    * Check authentication for a request.
    * Returns the authenticated user if auth succeeds, undefined if no auth required.
    * Throws UnauthorizedException or ForbiddenException if auth fails.
@@ -45,9 +56,15 @@ export class AuthService {
     }
 
     const requestContext = options.requestContext ?? new RequestContext();
-    const customRouteAuthConfig = this.customRoutes.customRouteAuthConfig;
     const path = request.path;
     const method = request.method;
+    let customRouteAuthConfig = this.customRoutes.customRouteAuthConfig;
+    if (options.customRoute && options.requiresAuth !== undefined) {
+      // The custom route was matched by Hono's router, which supports patterns the
+      // shared path matcher does not. Pin its auth requirement to the concrete path.
+      customRouteAuthConfig = new Map(customRouteAuthConfig);
+      customRouteAuthConfig.set(`${method.toUpperCase()}:${path}`, options.requiresAuth);
+    }
     const webRequest = toWebRequest(request);
 
     const result = await coreAuthMiddleware({

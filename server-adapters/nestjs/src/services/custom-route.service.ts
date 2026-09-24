@@ -2,7 +2,6 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import { findMatchingCustomRoute } from '@mastra/server/auth';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -14,7 +13,12 @@ const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
 
 type HonoApiRoute = Exclude<ApiRoute, { readonly _mastraSchemaRoute: true }>;
 
-type CustomRouteFetch = (request: globalThis.Request, requestContext: RequestContext) => Promise<globalThis.Response>;
+/** Authenticates a matched custom route. Throws to reject the request. */
+export type CustomRouteAuthenticate = (requiresAuth: boolean) => Promise<void>;
+
+type CustomRouteEnv = { requestContext: RequestContext; authenticate: CustomRouteAuthenticate; authError?: unknown };
+
+type CustomRouteFetch = (request: globalThis.Request, env: CustomRouteEnv) => Promise<globalThis.Response>;
 
 /**
  * Serves custom routes registered with `registerApiRoute()` via `server.apiRoutes`,
@@ -47,19 +51,29 @@ export class CustomRouteService {
     return this.authConfig;
   }
 
-  match(method: string, path: string): ApiRoute | undefined {
-    return findMatchingCustomRoute(path, method, this.routes)?.route;
-  }
-
   /**
    * Runs a matched custom route and writes its response.
    * Returns false if no custom route handled the request.
+   *
+   * `authenticate` runs after Hono's router selects the route, so auth is enforced
+   * for exactly the routes Hono dispatches (including regex-constrained params).
    */
-  async handle(req: Request, res: ExpressResponse, requestContext: RequestContext): Promise<boolean> {
+  async handle(
+    req: Request,
+    res: ExpressResponse,
+    requestContext: RequestContext,
+    authenticate: CustomRouteAuthenticate,
+  ): Promise<boolean> {
     if (this.routes.length === 0) return false;
 
-    const fetch = await (this.fetchPromise ??= this.build());
-    const response = await fetch(this.toFetchRequest(req), requestContext);
+    this.fetchPromise ??= this.build().catch(err => {
+      this.fetchPromise = undefined;
+      throw err;
+    });
+    const fetch = await this.fetchPromise;
+    const env: CustomRouteEnv = { requestContext, authenticate };
+    const response = await fetch(this.toFetchRequest(req), env);
+    if (env.authError !== undefined) throw env.authError;
     if (response.headers.get(NOT_FOUND_HEADER) === 'true') return false;
 
     res.status(response.status);
@@ -77,13 +91,26 @@ export class CustomRouteService {
     }
 
     const reader = response.body.getReader();
+    const onClose = () => void reader.cancel().catch(() => {});
+    res.once('close', onClose);
     try {
-      while (true) {
+      while (!res.destroyed) {
         const { done, value } = await reader.read();
         if (done) break;
-        res.write(value);
+        if (!res.write(value)) {
+          await new Promise<void>(resolve => {
+            const resume = () => {
+              res.off('drain', resume);
+              res.off('close', resume);
+              resolve();
+            };
+            res.once('drain', resume);
+            res.once('close', resume);
+          });
+        }
       }
     } finally {
+      res.off('close', onClose);
       res.end();
     }
     return true;
@@ -92,7 +119,7 @@ export class CustomRouteService {
   private async build(): Promise<CustomRouteFetch> {
     const mastra = this.mastra;
     const app = new Hono<{
-      Bindings: { requestContext?: RequestContext };
+      Bindings: CustomRouteEnv;
       Variables: { mastra: Mastra; requestContext: RequestContext };
     }>();
 
@@ -127,7 +154,21 @@ export class CustomRouteService {
           ? route.middleware
           : [route.middleware]
         : [];
-      const handlers: any[] = [...middlewares, handler];
+      const requiresAuth = this.authConfig.get(`${route.method}:${route.path}`) ?? route.requiresAuth !== false;
+      const authMiddleware = async (
+        c: { env: CustomRouteEnv; body: (data: null, status: 401) => Response },
+        next: () => Promise<void>,
+      ) => {
+        try {
+          await c.env.authenticate(requiresAuth);
+        } catch (err) {
+          // Surface Nest HTTP exceptions (401/403) to the caller instead of Hono's onError.
+          c.env.authError = err;
+          return c.body(null, 401);
+        }
+        await next();
+      };
+      const handlers: any[] = [authMiddleware, ...middlewares, handler];
       if (route.method === 'ALL') {
         app.all(route.path, handlers[0], ...handlers.slice(1));
       } else {
@@ -137,7 +178,7 @@ export class CustomRouteService {
 
     app.notFound(() => new Response(null, { status: 404, headers: { [NOT_FOUND_HEADER]: 'true' } }));
 
-    return (request, requestContext) => Promise.resolve(app.fetch(request, { requestContext }));
+    return (request, env) => Promise.resolve(app.fetch(request, env));
   }
 
   private toFetchRequest(req: Request): globalThis.Request {
