@@ -3114,18 +3114,22 @@ LIMIT 1`,
         await scopedClient.command({
           query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, key2, value)`,
         });
-        // Legacy views without APPEND, as created by older releases.
+        // Legacy views without APPEND, as created by older releases. A
+        // non-APPEND refresh swaps the target table, so a refresh running
+        // while the test inserts or checks the marker row would replace the
+        // table under it. EMPTY skips the refresh at creation and STOP VIEW
+        // disables the scheduled ones.
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
         });
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
         });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_VALUES}` });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_PAIRS}` });
 
         // Marker row proving the table (and its data) survives init()'s view
-        // migration. Inserted after the legacy views because a non-APPEND
-        // view's initial refresh atomically swaps the target table — the very
-        // behavior this fix removes.
+        // migration.
         await scopedClient.command({
           query: `INSERT INTO ${TABLE_DISCOVERY_VALUES} VALUES ('entityType', '', 'marker-survivor')`,
         });

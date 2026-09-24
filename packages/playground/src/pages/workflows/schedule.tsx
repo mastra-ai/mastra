@@ -6,7 +6,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -16,7 +18,6 @@ import { ScheduleTriggersList } from '@/domains/schedules/components/schedule-tr
 import { useSchedule } from '@/domains/schedules/hooks/use-schedule';
 import { useScheduleTriggers } from '@/domains/schedules/hooks/use-schedule-triggers';
 import { useToggleSchedule } from '@/domains/schedules/hooks/use-toggle-schedule';
-import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
 import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -146,8 +147,8 @@ export default function SchedulePage() {
               <ScheduleStatusText status={schedule.status} />
             </MetaItem>
             <MetaItem label="Next fire">
-              <span title={formatScheduleTimestamp(schedule.nextFireAt)}>
-                {formatRelativeTime(schedule.nextFireAt)}
+              <span title={schedule.nextFireAt ? formatDate(schedule.nextFireAt, 'date-time') : '—'}>
+                {schedule.nextFireAt ? formatRelativeTime(schedule.nextFireAt) : '—'}
               </span>
             </MetaItem>
           </div>

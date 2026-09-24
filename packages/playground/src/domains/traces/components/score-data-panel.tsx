@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { format } from 'date-fns/format';
+import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
@@ -78,9 +78,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.createdAt && (
                   <>
                     <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-                    <DataKeysAndValues.Value>
-                      {format(new Date(score.createdAt), 'MMM dd, HH:mm:ss.SSS')}
-                    </DataKeysAndValues.Value>
+                    <DataKeysAndValues.Value>{formatTimestampPrecise(score.createdAt)}</DataKeysAndValues.Value>
                   </>
                 )}
                 {score.traceId && (

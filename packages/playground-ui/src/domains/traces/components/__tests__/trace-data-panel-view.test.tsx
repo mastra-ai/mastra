@@ -246,7 +246,7 @@ describe('TraceDataPanelView — trace summary description', () => {
 
     expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
     // 1s between the fixture's startedAt and endedAt.
-    expect(screen.getAllByText('1.0s').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1s').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /weather-agent/ })).toBeTruthy();
   });
 

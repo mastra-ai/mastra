@@ -17,11 +17,15 @@ describe('TraceSummaryDescription', () => {
   it('shows the start time with full precision on hover and the duration next to it', async () => {
     render(<TraceSummaryDescription rootSpan={rootSpan} />);
 
-    const startedAt = screen.getByText('5:09:59 PM');
+    const startedAt = screen.getByText(
+      new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(rootSpan.startedAt),
+    );
     expect(screen.getByText('46.3s')).not.toBeNull();
 
     fireEvent.focus(startedAt);
-    expect((await screen.findByRole('tooltip')).textContent).toBe('Started at Jun 1, 2026, 5:09:59.665 PM');
+    expect((await screen.findByRole('tooltip')).textContent).toBe(
+      `Started at ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(rootSpan.startedAt)}`,
+    );
   });
 
   it('shows the readable entity type in a tooltip', async () => {
@@ -97,13 +101,21 @@ describe('TraceSummaryDescription', () => {
     render(<TraceSummaryDescription rootSpan={{ startedAt: rootSpan.startedAt, endedAt: rootSpan.endedAt }} />);
 
     expect(screen.queryByText('Agent')).toBeNull();
-    expect(screen.getByText('5:09:59 PM')).not.toBeNull();
+    expect(
+      screen.getByText(
+        new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(rootSpan.startedAt),
+      ),
+    ).not.toBeNull();
   });
 
   it('shows no duration while the trace is still running', () => {
     render(<TraceSummaryDescription rootSpan={{ ...rootSpan, endedAt: null }} />);
 
     expect(screen.queryByText('46.3s')).toBeNull();
-    expect(screen.getByText('5:09:59 PM')).not.toBeNull();
+    expect(
+      screen.getByText(
+        new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(rootSpan.startedAt),
+      ),
+    ).not.toBeNull();
   });
 });
