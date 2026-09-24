@@ -148,12 +148,10 @@ describe('aiV5PromptToAIV7Prompt tool-result content', () => {
     ]);
   });
 
-  it('passes unparseable url strings through instead of throwing', () => {
+  it('converts unparseable urls to text parts instead of throwing', () => {
     const result = aiV5PromptToAIV7Prompt(toolResultPrompt([{ type: 'image-url', url: 'not a url' }]));
 
-    expect(firstOutputValue(result)).toEqual([
-      { type: 'file', data: { type: 'url', url: 'not a url' }, mediaType: 'image/jpeg' },
-    ]);
+    expect(firstOutputValue(result)).toEqual([{ type: 'text', text: 'not a url' }]);
   });
 
   it('defaults file-url parts without a mediaType to application/octet-stream', () => {

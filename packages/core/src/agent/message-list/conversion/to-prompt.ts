@@ -385,7 +385,8 @@ export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageM
     if (partType !== `media`) return contentPart;
     const isImage = mediaType.startsWith(`image/`);
     const data = contentPart.data as string;
-    if (isRemoteUrl(data)) {
+    const remoteUrl = isRemoteUrl(data) ? parseUrl(data) : undefined;
+    if (remoteUrl) {
       const rest = { ...contentPart };
       delete rest.data;
       return { ...rest, type: isImage ? `image-url` : `file-url`, url: data };
@@ -396,36 +397,41 @@ export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageM
 
 // V4 file parts carry `url: URL`. Unparseable strings pass through so a bad
 // tool output reaches the provider instead of throwing mid-request.
-function toUrl(url: unknown): unknown {
-  if (url instanceof URL || typeof url !== 'string') return url;
+function parseUrl(url: unknown): URL | undefined {
+  if (url instanceof URL) return url;
+  if (typeof url !== 'string') return undefined;
   try {
     return new URL(url);
   } catch {
-    return url;
+    return undefined;
   }
 }
 
 export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
   return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
     if (partType === `image-url` || partType === `file-url`) {
+      const url = parseUrl(contentPart.url);
+      // Unparseable URLs can't be a V4 url file part; surface them to the model as text.
+      if (!url) return { type: `text`, text: String(contentPart.url) };
       const rest = { ...contentPart };
       delete rest.url;
       return {
         ...rest,
         type: `file`,
-        data: { type: `url`, url: toUrl(contentPart.url) },
+        data: { type: `url`, url },
         // V4 file parts require a mediaType.
         mediaType: mediaType || (partType === `image-url` ? `image/jpeg` : `application/octet-stream`),
       };
     }
     const data = contentPart.data as string;
-    if (isRemoteUrl(data)) {
+    const remoteUrl = isRemoteUrl(data) ? parseUrl(data) : undefined;
+    if (remoteUrl) {
       const rest = { ...contentPart };
       delete rest.data;
       return {
         ...rest,
         type: `file`,
-        data: { type: `url`, url: toUrl(data) },
+        data: { type: `url`, url: remoteUrl },
         mediaType: mediaType || `application/octet-stream`,
       };
     }
