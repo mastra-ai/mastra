@@ -644,6 +644,21 @@ describe('get_process_output tool', () => {
       expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: -5 }).success).toBe(true);
     });
 
+    it('execute_command accepts an optional description and keeps it on the parsed input', () => {
+      const parsed = executeCommandInputSchema.parse({ command: 'ls', description: 'Listing the project root' });
+      expect(parsed.description).toBe('Listing the project root');
+      expect(executeCommandInputSchema.safeParse({ command: 'ls' }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', description: null }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', description: 42 }).success).toBe(false);
+      expect(
+        executeCommandWithBackgroundTool.inputSchema.parse({
+          command: 'npm run dev',
+          description: 'Starting the dev server',
+          background: true,
+        }).description,
+      ).toBe('Starting the dev server');
+    });
+
     it('get_process_output rejects a fractional tail', () => {
       expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2.5 }).success).toBe(false);
       expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2.5' }).success).toBe(false);

@@ -158,6 +158,7 @@ import { providerHistoryRejectionRetryScenario } from './provider-history-reject
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietShellDescriptionScenario } from './quiet-shell-description.js';
 import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -373,6 +374,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-render-state': pruneRenderStateScenario,
   'cross-agent-settings': crossAgentSettingsScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-shell-description': quietShellDescriptionScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,

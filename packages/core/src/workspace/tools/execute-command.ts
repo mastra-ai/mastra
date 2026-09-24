@@ -19,6 +19,12 @@ export const executeCommandInputSchema = z.object({
   command: z
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
+  description: z
+    .string()
+    .nullish()
+    .describe(
+      'Short plain-language description of what this command does, shown to the user in place of the raw command (5-10 words, e.g. "Running the auth unit tests"). Write it as the next step in an ongoing narrative: it can build on your previous commands implicitly, e.g. after "Searching open PRs for failing CI" the next command can be "Drilling into the first of 15 failures".',
+    ),
   timeout: z
     .preprocess(coerceNumericString, z.number())
     .nullish()

@@ -1226,6 +1226,47 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(component.render(80).join('\n'))).not.toContain('out 1');
   });
 
+  it('shows the command description in place of the command in quiet mode', () => {
+    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', 'EOF'].join('\n');
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command, description: 'Drilling into the first of 15 failures', cwd: '/tmp/work' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    const quiet = stripAnsi(component.render(80).join('\n'));
+    expect(quiet).toContain('$ Drilling into the first of 15 failures in /tmp/work');
+    expect(quiet).not.toContain('python3');
+    // top, description line, bottom
+    expect(quiet.split('\n')).toHaveLength(3);
+
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(80).join('\n'));
+    expect(expanded).toContain("$ python3 - <<'EOF'");
+    expect(expanded).toContain('open(p)');
+    expect(expanded).not.toContain('Drilling into');
+
+    component.setExpanded(false);
+    component.setQuietModeDisplay('normal');
+    const normal = stripAnsi(component.render(80).join('\n'));
+    expect(normal).toContain("$ python3 - <<'EOF'");
+    expect(normal).not.toContain('Drilling into');
+  });
+
+  it('falls back to the command when the description is blank', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'git status', description: '  \n ' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
+
+    expect(stripAnsi(component.render(80).join('\n'))).toContain('$ git status');
+  });
+
   it('caps long quiet shell commands at the preview limit with a hidden-line count', () => {
     const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', "open(p, 'w').write(s)", 'EOF'].join(
       '\n',

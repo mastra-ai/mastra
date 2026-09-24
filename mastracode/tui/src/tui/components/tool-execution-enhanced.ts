@@ -1487,6 +1487,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
     const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : cdPath ? shortenPath(cdPath) : '';
 
+    // Quiet mode shows the model's plain-language description in place of the raw command;
+    // expanding (ctrl+e) or normal mode shows the command itself.
+    const description = typeof argsObj?.description === 'string' ? argsObj.description.replace(/\s+/g, ' ').trim() : '';
+    const footerText = this.quietDisplayMode === 'quiet' && !this.expanded && description ? description : command;
+
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;
     const tailMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
@@ -1521,7 +1526,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       }
       const footerPromptWidth = visibleWidth(footerPrompt);
       const footerWrapWidth = Math.max(1, contentWidth - 2 - footerPromptWidth);
-      const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(command, footerWrapWidth));
+      const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(footerText, footerWrapWidth));
       const footerSuffixWidth = visibleWidth(footerSuffix);
       const continuationIndent = ' '.repeat(footerPromptWidth);
       footerLines.forEach((footerLine, index) => {
