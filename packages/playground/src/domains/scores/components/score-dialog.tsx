@@ -4,7 +4,7 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import {
   HashIcon,
   GaugeIcon,
@@ -138,7 +138,7 @@ export function ScoreDialog({
                   : []),
                 {
                   label: 'Created at',
-                  value: score?.createdAt ? format(new Date(score?.createdAt), 'MMM d, h:mm:ss aaa') : 'n/a',
+                  value: formatDate(score?.createdAt, 'date-time') ?? 'n/a',
                   key: 'date',
                 },
                 ...(usageContext !== 'SpanDialog'

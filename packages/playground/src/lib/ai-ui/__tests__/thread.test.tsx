@@ -1137,6 +1137,9 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop, taskCook]);
 
     expect(await screen.findByTestId('task-panel')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Collapse tasks' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByLabelText('In progress')).toBeTruthy();
+    expect(screen.getAllByLabelText('Pending')).toHaveLength(2);
     expect(screen.getByText('Planning menu')).toBeTruthy();
     expect(screen.getByText('Create shopping list')).toBeTruthy();
     expect(screen.getByText('Cook meal')).toBeTruthy();
@@ -1157,10 +1160,13 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop]);
     await pushTasks([completedPlan, activeShop], 'task-list-update');
 
-    expect(await screen.findByText('Shopping for ingredients')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Completed')).toBeTruthy();
+      expect(screen.getByLabelText('In progress')).toBeTruthy();
+    });
     expect(screen.getByText('Plan menu')).toBeTruthy();
+    expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
     expect(screen.getByText('Planning menu').closest('[aria-hidden="true"]')).toBeTruthy();
-
     fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
     const progress = screen.getByRole('progressbar', { name: 'Task completion' });
     expect(progress.getAttribute('aria-valuenow')).toBe('1');
@@ -1170,22 +1176,30 @@ describe('TaskPanel', () => {
   });
 
   it('scrolls the active task into view when task state updates', async () => {
-    const scrollTo = vi.fn();
-    const originalScrollTo = Element.prototype.scrollTo;
-    Element.prototype.scrollTo = scrollTo;
-
+    const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+    const matchMedia = window.matchMedia;
+    const reducedMotion = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      ...matchMedia(query),
+      matches: query === '(prefers-reduced-motion: reduce)',
+    }));
     const { pushTasks, close } = await renderWithControlledSubscription();
 
     try {
-      const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+      await pushTasks([taskPlanMenu, taskShop, taskCook]);
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+      scrollTo.mockClear();
 
-      await pushTasks([taskPlanMenu, activeShop, taskCook], 'task-list-update');
+      const completedPlan: TaskItem = { ...taskPlanMenu, status: 'completed' };
+      const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+      await pushTasks([completedPlan, activeShop, taskCook], 'task-list-update');
 
       await waitFor(() => {
-        expect(scrollTo).toHaveBeenCalled();
+        expect(scrollTo).toHaveBeenCalledWith({ top: 28 });
       });
+      expect(screen.getByRole('listitem').textContent).toContain('Shopping for ingredients');
     } finally {
-      Element.prototype.scrollTo = originalScrollTo;
+      reducedMotion.mockRestore();
+      scrollTo.mockRestore();
       await close();
     }
   });

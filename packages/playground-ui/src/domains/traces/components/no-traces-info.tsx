@@ -1,6 +1,6 @@
-import { format } from 'date-fns';
 import type { TraceDatePreset } from '../types';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { formatDate } from '@/utils/date-format';
 
 const PRESET_LABELS: Record<Exclude<TraceDatePreset, 'all' | 'custom'>, string> = {
   'last-24h': 'the last 24 hours',
@@ -16,8 +16,6 @@ export interface NoTracesInfoProps {
   dateTo?: Date;
 }
 
-const DATE_FORMAT = 'MMM d, yyyy HH:mm';
-
 const RANGE_TIP = 'Pick a wider time range — older traces may fall outside the current window.';
 
 function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { title: string; description: string } {
@@ -29,13 +27,13 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { t
   }
   if (dateFrom && dateTo) {
     return {
-      title: `No traces between ${format(dateFrom, DATE_FORMAT)} and ${format(dateTo, DATE_FORMAT)}`,
+      title: `No traces between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
       description: RANGE_TIP,
     };
   }
   if (dateFrom) {
     return {
-      title: `No traces since ${format(dateFrom, DATE_FORMAT)}`,
+      title: `No traces since ${formatDate(dateFrom, 'date-time')}`,
       description: RANGE_TIP,
     };
   }

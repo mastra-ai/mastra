@@ -1459,6 +1459,60 @@ function browserRecordingOptions() {
 }
 
 /**
+ * Model Stagehand will actually use for AI operations (act/observe/extract).
+ * `gpt-5.5` is used for the Codex fallback: the Codex ChatGPT-account endpoint
+ * only accepts a small whitelist (currently `gpt-5.5` and `gpt-5.6-sol`; every
+ * `-mini` and `-codex` variant is rejected with 400 "not supported when using
+ * Codex with a ChatGPT account"), and `gpt-5.5` handles Stagehand's
+ * vision + strict-JSON-schema workload.
+ */
+export const STAGEHAND_CODEX_FALLBACK_MODEL = 'openai/gpt-5.5';
+
+export type StagehandModelSource =
+  /** `browser.stagehand.model` in settings. */
+  | 'settings'
+  /** No model configured; routed through the user's OpenAI Codex (ChatGPT) OAuth login. */
+  | 'codex-oauth'
+  /** No model configured and no Codex login; Stagehand picks its own default from env API keys. */
+  | 'stagehand-default';
+
+export interface ResolvedStagehandModel {
+  /** `provider/model` id, or undefined when Stagehand's own default applies. */
+  modelName: string | undefined;
+  source: StagehandModelSource;
+}
+
+/**
+ * Resolve which model Stagehand will use and why, without creating a browser.
+ * Mirrors the selection in `createBrowserFromSettings` so the UI can show it.
+ */
+/**
+ * Snapshot of browser settings safe to store in session state (which session clients can read).
+ * Strips credentials; keeps everything `/browser status` needs for drift detection.
+ */
+export function toActiveBrowserSettings(settings: BrowserSettings): BrowserSettings {
+  if (!settings.stagehand) return { ...settings };
+  const { apiKey: _apiKey, ...stagehand } = settings.stagehand;
+  return { ...settings, stagehand };
+}
+
+export function resolveStagehandModel(
+  settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
+  authStorage: AuthStorage = new AuthStorage(),
+): ResolvedStagehandModel {
+  if (settings.provider !== 'stagehand') {
+    return { modelName: undefined, source: 'stagehand-default' };
+  }
+  if (settings.stagehand?.model) {
+    return { modelName: settings.stagehand.model, source: 'settings' };
+  }
+  if (authStorage.get('openai-codex')?.type === 'oauth') {
+    return { modelName: STAGEHAND_CODEX_FALLBACK_MODEL, source: 'codex-oauth' };
+  }
+  return { modelName: undefined, source: 'stagehand-default' };
+}
+
+/**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
  * Returns undefined if browser is disabled.
@@ -1497,21 +1551,20 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     //     since AI SDK takes `apiKey` as a static string.
     //   - middleware: createCodexMiddleware() sets `store: false`, which Codex
     //     requires on every request.
-    // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
-    // pick suited to Stagehand's vision + structured-output workload.
     //
     // An explicitly configured model wins: Codex is a fallback for users who
     // have no model of their own, not an override of one they chose. Stagehand
     // resolves the provider's API key from the environment for plain
     // `provider/model` strings, so no key plumbing is needed here.
+    // See resolveStagehandModel() for the selection rules and model choice.
     const authStorage = new AuthStorage();
-    const cred = authStorage.get('openai-codex');
-    if (stagehand?.model) {
-      stagehandOpts.model = stagehand.model;
-    } else if (cred?.type === 'oauth') {
-      const accountId = (cred as any).accountId as string | undefined;
+    const resolved = resolveStagehandModel(settings, authStorage);
+    if (resolved.source === 'settings') {
+      stagehandOpts.model = resolved.modelName;
+    } else if (resolved.source === 'codex-oauth') {
+      const accountId = (authStorage.get('openai-codex') as any)?.accountId as string | undefined;
       stagehandOpts.model = {
-        modelName: 'openai/gpt-5.4-mini',
+        modelName: resolved.modelName,
         apiKey: 'codex-oauth',
         baseURL: 'https://chatgpt.com/backend-api/codex',
         headers: {

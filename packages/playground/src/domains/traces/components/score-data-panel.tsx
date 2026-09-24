@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { format } from 'date-fns/format';
+import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
@@ -78,9 +78,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.createdAt && (
                   <>
                     <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-                    <DataKeysAndValues.Value>
-                      {format(new Date(score.createdAt), 'MMM dd, HH:mm:ss.SSS')}
-                    </DataKeysAndValues.Value>
+                    <DataKeysAndValues.Value>{formatTimestampPrecise(score.createdAt)}</DataKeysAndValues.Value>
                   </>
                 )}
                 {score.traceId && (
@@ -122,9 +120,9 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 >
                   <GaugeIcon />
                   <span className="">Score:</span>
-                  <b className="font-mono text-muted-foreground">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+                  <b className="text-muted-foreground tabular-nums">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
                 </div>
-                <div className="mt-2 font-mono text-body-sm">
+                <div className="mt-2 text-body-sm">
                   {score.reason ||
                     (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
                 </div>
