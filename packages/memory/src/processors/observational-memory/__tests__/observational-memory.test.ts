@@ -45,7 +45,7 @@ import { getObservationsAsOf } from '../observation-utils';
 import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
-  buildMultiThreadObserverPrompt,
+  buildMultiThreadObserverRequestMessage,
   buildObserverSystemPrompt,
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
@@ -3177,7 +3177,7 @@ describe('Observer Agent Helpers', () => {
     });
   });
 
-  describe('buildMultiThreadObserverPrompt', () => {
+  describe('buildMultiThreadObserverRequestMessage', () => {
     it('should include per-thread prior metadata when provided', () => {
       const messagesByThread = new Map<string, MastraDBMessage[]>([
         ['thread-1', [createTestMessage('Thread 1 message', 'user')]],
@@ -3188,11 +3188,8 @@ describe('Observer Agent Helpers', () => {
         ['thread-1', { currentTask: 'Handle billing issue', suggestedResponse: 'Ask for invoice id.' }],
       ]);
 
-      const prompt = buildMultiThreadObserverPrompt(
-        undefined,
-        messagesByThread,
-        ['thread-1', 'thread-2'],
-        priorMetadata,
+      const prompt = observerTextContent(
+        buildMultiThreadObserverRequestMessage(undefined, messagesByThread, ['thread-1', 'thread-2'], priorMetadata),
       );
 
       expect(prompt).toContain('Prior Thread Metadata');
@@ -3200,6 +3197,8 @@ describe('Observer Agent Helpers', () => {
       expect(prompt).toContain('prior current-task: Handle billing issue');
       expect(prompt).toContain('prior suggested-response: Ask for invoice id.');
       expect(prompt).not.toContain('thread thread-2\n  - prior current-task');
+      expect(prompt.indexOf('Prior Thread Metadata')).toBeLessThan(prompt.indexOf('<thread id="thread-1">'));
+      expect(prompt.indexOf('<thread id="thread-2">')).toBeLessThan(prompt.indexOf('## Your Task'));
     });
   });
 
@@ -3254,21 +3253,20 @@ describe('Observer Agent Helpers', () => {
       await om.observer.call(undefined, [message]);
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
-      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt).toHaveLength(1);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[1]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[1].content[1].text).toContain('[Image #1: reference-board.png]');
-      expect(capturedPrompt[1].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
-      expect(capturedPrompt[1].content[1].text).toContain('[File #1: floorplan.pdf]');
-      expect(capturedPrompt[1].content[2]).toMatchObject({
+      expect(capturedPrompt[0].content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(capturedPrompt[0].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(capturedPrompt[0].content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(capturedPrompt[0].content[2]).toMatchObject({
         type: 'image',
         image: 'https://example.com/reference-board.png',
       });
-      expect(capturedPrompt[1].content[3]).toMatchObject({
+      expect(capturedPrompt[0].content[3]).toMatchObject({
         type: 'image',
         image: 'https://example.com/annotated-photo.jpg',
       });
-      expect(capturedPrompt[1].content).toContainEqual(
+      expect(capturedPrompt[0].content).toContainEqual(
         expect.objectContaining({
           type: 'file',
           data: 'https://example.com/floorplan.pdf',
@@ -3335,7 +3333,7 @@ describe('Observer Agent Helpers', () => {
         // The function model should be resolved with requestContext, looked up,
         // found to not support attachments, and attachments should be dropped
         expect(spy).toHaveBeenCalledWith('deepseek/deepseek-v4-flash');
-        const content = capturedPrompt[1].content as any[];
+        const content = capturedPrompt[0].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(false);
         const joined = content
           .filter((part: any) => part.type === 'text')
@@ -3394,7 +3392,7 @@ describe('Observer Agent Helpers', () => {
         await observer.call(undefined, [message]);
 
         expect(spy).toHaveBeenCalledWith('openrouter/deepseek/deepseek-v4-flash');
-        const content = capturedPrompt[1].content as any[];
+        const content = capturedPrompt[0].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(false);
         const joined = content
           .filter((part: any) => part.type === 'text')
@@ -3459,7 +3457,7 @@ describe('Observer Agent Helpers', () => {
         });
 
         expect(spy.mock.calls[0][0]).toBe('openai/gpt-4o');
-        const content = capturedPrompt[1].content as any[];
+        const content = capturedPrompt[0].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(true);
       } finally {
         spy.mockRestore();
@@ -3508,8 +3506,12 @@ describe('Observer Agent Helpers', () => {
       });
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
-      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt).toHaveLength(1);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      const promptText = (capturedPrompt[0].content as any[])
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('');
       const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
         createCurrentTaskExtractor(),
         createSuggestedResponseExtractor(),
@@ -3517,19 +3519,17 @@ describe('Observer Agent Helpers', () => {
         new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
       ]);
 
-      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
-      expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(promptText).not.toContain('Also output a <thread-title>');
+      expect(promptText).toContain('- prior thread-title: Old thread title');
       expect(systemPrompt).toContain('<current-task>');
       expect(systemPrompt).toContain('<suggested-response>');
       expect(systemPrompt).toContain('<thread-title>');
       expect(systemPrompt).toContain('<user-info>');
-      expect(capturedPrompt[0].content).toContain('Output <observations> every time.');
-      expect(capturedPrompt[0].content).not.toContain(
-        'If the observations include information relevant to <thread-title>',
-      );
-      expect(capturedPrompt[0].content).not.toContain('Only output <observations> and <thread-title>');
-      expect(capturedPrompt[0].content).not.toContain('Do NOT include <current-task> or <suggested-response>');
-      expect(capturedPrompt[0].content).toContain(
+      expect(promptText).toContain('Output <observations> every time.');
+      expect(promptText).not.toContain('If the observations include information relevant to <thread-title>');
+      expect(promptText).not.toContain('Only output <observations> and <thread-title>');
+      expect(promptText).not.toContain('Do NOT include <current-task> or <suggested-response>');
+      expect(promptText).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
     });

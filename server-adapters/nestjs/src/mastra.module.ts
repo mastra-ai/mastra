@@ -18,6 +18,7 @@ import { MastraService } from './mastra.service';
 import { BodyLimitMiddleware } from './middleware/body-limit.middleware';
 import { JsonBodyMiddleware } from './middleware/json-body.middleware';
 import { AuthService } from './services/auth.service';
+import { CustomRouteService } from './services/custom-route.service';
 import { RequestContextService } from './services/request-context.service';
 import { RouteHandlerService } from './services/route-handler.service';
 import { ShutdownService } from './services/shutdown.service';
@@ -218,6 +219,7 @@ export class MastraModule implements NestModule {
         RequestContextService,
         ShutdownService,
         AuthService,
+        CustomRouteService,
         BodyLimitMiddleware,
         JsonBodyMiddleware,
         // Guards are available for use but NOT registered as APP_GUARD
@@ -308,6 +310,7 @@ export class MastraModule implements NestModule {
         RequestContextService,
         ShutdownService,
         AuthService,
+        CustomRouteService,
         BodyLimitMiddleware,
         JsonBodyMiddleware,
         // Guards are available for use but NOT registered as APP_GUARD

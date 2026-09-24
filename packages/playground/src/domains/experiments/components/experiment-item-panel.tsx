@@ -9,11 +9,16 @@ import { useExperimentItemPanel } from '@/domains/experiments/context/experiment
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 
+export interface ExperimentItemPanelProps {
+  withQueryTrace: boolean;
+  withFeedback: boolean;
+}
+
 /**
  * Result drawer for the `items/:itemId` child route. Always mounted by the
  * experiment page so the drawer animates in and out; `currentItemId` drives `open`.
  */
-export function ExperimentItemPanel() {
+export function ExperimentItemPanel({ withQueryTrace, withFeedback }: ExperimentItemPanelProps) {
   const {
     currentItemId: itemId,
     experimentId,
@@ -83,6 +88,8 @@ export function ExperimentItemPanel() {
       }
       scores={resultScores}
       state={detailState}
+      withQueryTrace={withQueryTrace}
+      withFeedback={withFeedback}
       onPrevious={goToPreviousItem}
       onNext={goToNextItem}
       onClose={close}

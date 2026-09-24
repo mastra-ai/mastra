@@ -2,6 +2,7 @@
   "attachment": [
     "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
     "accounts/fireworks/models/deepseek-v4p1-flash",
+    "accounts/fireworks/models/ember-1",
     "accounts/fireworks/models/glm-5p3-flash",
     "accounts/fireworks/models/inkling",
     "accounts/fireworks/models/kimi-k2p6",

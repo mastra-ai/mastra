@@ -203,7 +203,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown overflow-x-auto overflow-y-auto p-3 font-mono text-caption whitespace-pre">
+              <pre className="text-mastra-el-6 max-h-dropdown overflow-x-auto overflow-y-auto p-3 text-caption whitespace-pre">
                 {treeOutput}
               </pre>
             </div>

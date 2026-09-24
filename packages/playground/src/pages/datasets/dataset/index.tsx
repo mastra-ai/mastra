@@ -5,8 +5,8 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -141,7 +141,7 @@ function DatasetPage() {
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
                 <span className="mr-3 text-caption whitespace-nowrap text-muted-foreground">
-                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
+                  {dataset?.createdAt ? `Created ${formatDate(dataset.createdAt, 'date-time')}` : ''}
                 </span>
               }
               rightSlot={

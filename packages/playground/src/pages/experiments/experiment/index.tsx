@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft } from 'lucide-react';
@@ -59,6 +60,8 @@ function ExperimentPage() {
   ];
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // Servers without the trace-query API don't expose feedback either.
+  const traceQuery = useTraceQueryAvailable();
   const [searchParams, setSearchParams] = useSearchParams();
   const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: RESULTS_SORT_KEYS });
   const orderBy = useMemo(
@@ -195,7 +198,7 @@ function ExperimentPage() {
         </PageLayout>
 
         {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
-        <ExperimentItemPanel />
+        <ExperimentItemPanel withQueryTrace={traceQuery.enabled} withFeedback={traceQuery.enabled} />
 
         <DeleteExperimentDialog
           open={deleteDialogOpen}

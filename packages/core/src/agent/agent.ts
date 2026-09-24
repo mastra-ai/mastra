@@ -1937,6 +1937,12 @@ export class Agent<
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
       );
+      committedWorkflow.__processOutputStep = validProcessors.some(
+        processor => isProcessorWorkflow(processor) || !!processor.processOutputStep || !!processor.processLLMResponse,
+      );
+      committedWorkflow.__processToolResult = validProcessors.some(
+        processor => isProcessorWorkflow(processor) || !!processor.processToolResult,
+      );
       if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
         committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
           let result = inputData;
@@ -7771,6 +7777,12 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
+      // Resolved to a boolean here, at the one entry point the contract covers, rather
+      // than left undefined and defaulted deep in the loop. Anything that reaches the
+      // agentic-execution workflow without coming through a regular agent call — the
+      // durable steps, a direct `loop()` caller — therefore has to opt in by passing
+      // `true`, instead of inheriting the default by omission.
+      eagerToolExecution: options.eagerToolExecution ?? true,
       resumeContext,
       agentId: this.id,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
