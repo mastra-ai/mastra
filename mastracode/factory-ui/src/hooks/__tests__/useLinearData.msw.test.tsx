@@ -12,9 +12,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
-import type { LinearIssue, LinearIssueDetail, LinearProject, LinearStatus } from '../../ui/domains/factory/services/linear';
+import type {
+  LinearIssue,
+  LinearIssueDetail,
+  LinearProject,
+  LinearStatus,
+} from '../../ui/domains/factory/services/linear';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../useIntakeConfig';
-import { useLinearIssueDetail, useLinearIssuesQuery, useLinearProjectsQuery, useLinearStatusQuery } from '../useLinearData';
+import {
+  useLinearIssueDetail,
+  useLinearIssuesQuery,
+  useLinearProjectsQuery,
+  useLinearStatusQuery,
+} from '../useLinearData';
 
 const STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const ISSUES_URL = `${TEST_BASE_URL}/web/linear/issues`;
