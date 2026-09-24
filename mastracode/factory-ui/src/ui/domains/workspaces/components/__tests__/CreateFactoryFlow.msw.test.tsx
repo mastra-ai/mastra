@@ -866,6 +866,32 @@ describe('back navigation', () => {
     expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
   });
+
+  it('preserves the repository pick when Back rewinds through name back to vcs', async () => {
+    seedDraft('project-management');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    // Back twice: project-management → vcs → name. The repository the user
+    // already picked must survive the rewind so it is still there when they
+    // continue back to vcs.
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+
+    // The repository pick is still in sessionStorage after landing on name.
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
+    expect(sessionStorage.getItem(REPO_KEY)).not.toBeNull();
+    expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
+  });
 });
 
 /** Seed a mid-flow draft: name typed, repository picked, nothing created yet. */
