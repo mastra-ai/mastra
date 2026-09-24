@@ -11,11 +11,8 @@
 import { AddedToken, Tokenizer } from '@anush008/tokenizers';
 import fs from 'node:fs';
 import type { PathLike } from 'node:fs';
-import https from 'node:https';
 import path from 'node:path';
 import * as ort from 'onnxruntime-node';
-import Progress from 'progress';
-import * as tar from 'tar';
 import { downloadFileToCacheDir } from '@huggingface/hub';
 
 export enum ExecutionProvider {
@@ -36,6 +33,18 @@ export enum EmbeddingModel {
   MLE5Large = 'fast-multilingual-e5-large',
   CUSTOM = 'custom',
 }
+
+const COMMON_MODEL_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json'];
+
+const HF_MODEL_SOURCES: Record<Exclude<EmbeddingModel, EmbeddingModel.CUSTOM>, { repo: string; files: string[] }> = {
+  [EmbeddingModel.AllMiniLML6V2]: { repo: 'Qdrant/all-MiniLM-L6-v2-onnx', files: ['model.onnx'] },
+  [EmbeddingModel.BGEBaseEN]: { repo: 'Qdrant/fast-bge-base-en', files: ['model_optimized.onnx'] },
+  [EmbeddingModel.BGEBaseENV15]: { repo: 'Qdrant/bge-base-en-v1.5-onnx-Q', files: ['model_optimized.onnx'] },
+  [EmbeddingModel.BGESmallEN]: { repo: 'Qdrant/bge-small-en', files: ['model_optimized.onnx'] },
+  [EmbeddingModel.BGESmallENV15]: { repo: 'Qdrant/bge-small-en-v1.5-onnx-Q', files: ['model_optimized.onnx'] },
+  [EmbeddingModel.BGESmallZH]: { repo: 'Qdrant/bge-small-zh-v1.5', files: ['model_optimized.onnx'] },
+  [EmbeddingModel.MLE5Large]: { repo: 'Qdrant/multilingual-e5-large-onnx', files: ['model.onnx', 'model.onnx_data'] },
+};
 
 export enum SparseEmbeddingModel {
   SpladePPEnV1 = 'prithivida/Splade_PP_en_v1',
@@ -245,101 +254,40 @@ export class FlagEmbedding extends Embedding {
     return new FlagEmbedding(tokenizer, session, model);
   }
 
-  private static async downloadFileFromGCS(
-    outputFilePath: PathLike,
-    model: string,
-    showDownloadProgress: boolean = true,
-  ): Promise<PathLike> {
-    if (fs.existsSync(outputFilePath)) {
-      return outputFilePath;
-    }
-
-    // The AllMiniLML6V2 model URL doesn't follow the same naming convention as the other models
-    if (model === EmbeddingModel.AllMiniLML6V2) {
-      model = 'sentence-transformers' + model.substring(model.indexOf('-'));
-    }
-    const url = `https://storage.googleapis.com/qdrant-fastembed/${model}.tar.gz`;
-    const fileStream = fs.createWriteStream(outputFilePath);
-
-    return new Promise<PathLike>((resolve, reject) => {
-      https
-        .get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, response => {
-          const status = response.statusCode ?? 0;
-          if (status < 200 || status >= 300) {
-            response.resume();
-            reject(new Error(`Failed to download ${model}: HTTP ${status}`));
-            return;
-          }
-          const totalSizeInBytes = parseInt(response.headers['content-length'] || '0', 10);
-
-          if (totalSizeInBytes === 0) {
-            console.warn(`Warning: Content-length header is missing or zero in the response from ${url}.`);
-          }
-
-          if (showDownloadProgress) {
-            const progressBar = new Progress(`Downloading ${model} [:bar] :percent :etas`, {
-              complete: '=',
-              width: 20,
-              total: totalSizeInBytes,
-            });
-
-            response.on('data', (chunk: Buffer) => {
-              progressBar.tick(chunk.length, { speed: 'N/A' });
-            });
-          }
-          response.on('error', error => {
-            reject(error);
-          });
-
-          response.pipe(fileStream);
-
-          fileStream.on('finish', () => {
-            fileStream.close();
-            resolve(outputFilePath);
-          });
-
-          fileStream.on('error', error => {
-            reject(error);
-          });
-        })
-        .on('error', error => {
-          fs.unlink(outputFilePath, () => {
-            reject(error);
-          });
-        });
-    });
-  }
-
-  private static async decompressToCache(targzPath: PathLike, cacheDir: PathLike) {
-    if (path.extname(targzPath.toString()) === '.gz') {
-      await tar.x({
-        file: targzPath.toString(),
-        cwd: cacheDir.toString(),
-      });
-    } else {
-      throw new Error(`Unsupported file extension: ${targzPath}`);
-    }
-  }
-
   static async retrieveModel(
     model: EmbeddingModel,
     cacheDir: PathLike,
     showDownloadProgress: boolean = true,
   ): Promise<PathLike> {
+    if (model === EmbeddingModel.CUSTOM) {
+      throw new Error('Custom models must be loaded from modelAbsoluteDirPath');
+    }
     if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { mode: 0o755 });
+      fs.mkdirSync(cacheDir, { recursive: true, mode: 0o755 });
     }
 
     const modelDir = path.join(cacheDir.toString(), model);
-
     if (fs.existsSync(modelDir)) {
       return modelDir;
     }
 
-    const modelTarGz = path.join(cacheDir.toString(), `${model}.tar.gz`);
-    await this.downloadFileFromGCS(modelTarGz, model, showDownloadProgress);
-    await this.decompressToCache(modelTarGz, cacheDir);
-    fs.unlinkSync(modelTarGz);
+    const { repo, files } = HF_MODEL_SOURCES[model];
+    const tmpDir = `${modelDir}.tmp-${process.pid}-${Date.now()}`;
+    fs.mkdirSync(tmpDir, { recursive: true, mode: 0o755 });
+
+    try {
+      if (showDownloadProgress) {
+        console.info(`Downloading ${model} from Hugging Face (${repo})...`);
+      }
+      for (const file of [...COMMON_MODEL_FILES, ...files]) {
+        const downloaded = await downloadFileToCacheDir({ repo, path: file });
+        fs.copyFileSync(downloaded, path.join(tmpDir, file));
+      }
+      fs.renameSync(tmpDir, modelDir);
+    } catch (error) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      throw error;
+    }
     return modelDir;
   }
 
