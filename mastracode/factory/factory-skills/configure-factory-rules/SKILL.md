@@ -22,7 +22,9 @@ Installed board definitions exclusively own lifecycle handlers: use `phases.<pha
 
 Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred: do not invent a board override API, derive replacements, or use reserved IDs `work` and `review`. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, Review declares none, and custom boards inherit nothing.
 
-Work automatic intake requires both `linked_item_materialized` and `autoStartCandidate: true`. Do not remove these guards to reproduce the web deployment's former unconditional intake override. Noncandidate and manual arrivals stay unstarted merely from entering Intake; explicit issue triage and human-approval safeguards remain. Linear Intake and Review retain their existing defaults and guards.
+By default, every integration arrival stays in its routed board's initial phase (Intake for Work and Review) without starting or suggesting a run. This applies to GitHub, GitLab, Linear, Jira, and incident.io; explicit trusted GitHub review requests without an existing card go directly to Reviewing. Do not restore default arrival automation on the built-in boards.
+
+`authorTrusted` and `autoStartCandidate` remain available as metadata for custom rules. A custom board can add guarded arrival triage on its initial phase by checking both `context.cause === 'linked_item_materialized'` and `context.item.metadata?.autoStartCandidate === true`, then returning an `invokeSkill` decision for `factory-triage`.
 
 Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor, and Linear on `LinearIntegration` or `PlatformLinearIntegration`, instead:
 

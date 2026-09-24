@@ -1,5 +1,26 @@
 # @mastra/mongodb
 
+## 1.19.0-alpha.0
+
+### Minor Changes
+
+- Added Automated Embedding support to `MongoDBVector`. Create an index with `autoEmbed` and a Voyage AI model such as `voyage-4`, then write plain text through `documents` and search with `queryText`. MongoDB generates the embeddings server-side, so your application needs no embedding provider, no model wiring, and no dimension bookkeeping. ([#24383](https://github.com/mastra-ai/mastra/pull/24383))
+
+  ```ts
+  await store.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+  await store.upsert({ indexName: 'movies', documents: ['A lonely astronaut adrift near Saturn.'] });
+  const results = await store.query({ indexName: 'movies', queryText: 'space opera', topK: 5 });
+  ```
+
+  `hybridQuery` accepts `queryText` for its vector branch, and both query methods take an optional `model` to override the index's model for a single search. Indexes that supply their own vectors keep working exactly as before.
+
+  Automated Embedding is a MongoDB Preview feature. It requires an Atlas cluster with Automated Embedding enabled, or the `mongodb/mongodb-atlas-local:preview` image locally.
+
+### Patch Changes
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+
 ## 1.18.10
 
 ### Patch Changes
