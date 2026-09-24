@@ -11,6 +11,7 @@ import {
   traceASpans,
   traceBSpans,
 } from './fixtures/thread-traces';
+import { traceQueryCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -28,6 +29,7 @@ const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1]
 
 const installHandlers = () => {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
       HttpResponse.json(queryPageFromList(newestFirstList)),
     ),

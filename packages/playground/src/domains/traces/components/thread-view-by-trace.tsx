@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
@@ -118,7 +119,8 @@ function ThreadTraceRowContent() {
   const navigate = useNavigate();
   // First page only, for the tab badges; the Feedback and Scores bodies own their own pagination
   // and share these queries through the React Query cache.
-  const { data: feedbackData } = useTraceFeedback({ traceId });
+  const { enabled: feedbackEnabled } = useTraceQueryAvailable();
+  const { data: feedbackData } = useTraceFeedback({ traceId, enabled: feedbackEnabled });
   // Same query the span tree observes (passive: the tree drives refetches).
   const { data: traceData } = useTraceSpans(traceId, { passive: true });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
@@ -137,12 +139,14 @@ function ThreadTraceRowContent() {
               </Icon>
               Messages
             </ThreadTrace.Tab>
-            <ThreadTrace.Tab value="feedback">
-              <Icon size="xs">
-                <MessageSquareReplyIcon />
-              </Icon>
-              Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
-            </ThreadTrace.Tab>
+            {feedbackEnabled && (
+              <ThreadTrace.Tab value="feedback">
+                <Icon size="xs">
+                  <MessageSquareReplyIcon />
+                </Icon>
+                Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
+              </ThreadTrace.Tab>
+            )}
             <ThreadTrace.Tab value="scores">
               <Icon size="xs">
                 <ScorersIcon />
@@ -154,9 +158,11 @@ function ThreadTraceRowContent() {
         <ThreadTrace.TabContent value="messages" flush>
           <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
         </ThreadTrace.TabContent>
-        <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3 pl-2">
-          <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
-        </ThreadTrace.TabContent>
+        {feedbackEnabled && (
+          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3 pl-2">
+            <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+          </ThreadTrace.TabContent>
+        )}
         <ThreadTrace.TabContent value="scores" className="min-h-0 py-3 pl-2">
           {rootSpanId ? (
             <TraceScoresTab

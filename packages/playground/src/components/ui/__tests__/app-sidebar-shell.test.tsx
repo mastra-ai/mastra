@@ -1,4 +1,4 @@
-import type { ListFeedbackResponse, ReviewSummaryResponse } from '@mastra/client-js';
+import type { ReviewSummaryResponse } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,11 +13,6 @@ const authDisabledCapabilities = {
   login: { type: 'credentials' as const },
 } satisfies AuthCapabilities;
 
-const emptyFeedback: ListFeedbackResponse = {
-  feedback: [],
-  pagination: { total: 0, page: 0, perPage: 1, hasMore: false },
-};
-
 const emptyReviewSummary: ReviewSummaryResponse = { counts: [] };
 
 beforeEach(() => {
@@ -29,7 +24,6 @@ beforeEach(() => {
     systemPackagesHandler(),
     http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(noMcpServers)),
     http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(noWorkspaces)),
-    http.get(`${BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
     http.get(`${BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
   );
 });

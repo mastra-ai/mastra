@@ -5,7 +5,7 @@ import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/Fi
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useObservabilityCapabilities } from '@mastra/playground-ui/domains/capabilities';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import {
@@ -138,10 +138,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // another trace (row click, prev/next) falls back to the trace panel without an effect.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
+  // Servers without the trace-query API list through `listTracesLight` and don't expose feedback.
+  // Older servers without the capabilities endpoint fall back to the trace-query API.
+  const traceQuery = useTraceQueryAvailable();
+  const withQueryTrace = traceQuery.enabled;
+
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
-  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam });
-  const { data: spanFeedbackData } = useSpanFeedback({ traceId: url.traceIdParam, spanId: url.spanIdParam });
+  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam, enabled: traceQuery.enabled });
+  const { data: spanFeedbackData } = useSpanFeedback({
+    traceId: url.traceIdParam,
+    spanId: url.spanIdParam,
+    enabled: traceQuery.enabled,
+  });
 
   const {
     spans: traceSpans,
@@ -191,13 +200,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ),
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
-  // Servers without the trace-query API list through `listTracesLight`. Older servers without the
-  // capabilities endpoint fall back to the trace-query API.
-  const { data: capabilitiesData, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
-  const withQueryTrace = capabilitiesData?.capabilities.traceQuery ?? true;
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
-    enabled: withQueryTrace && !isCapabilitiesLoading,
+    enabled: traceQuery.enabled,
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
@@ -301,7 +306,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
-    enabled: !isCapabilitiesLoading,
+    enabled: !traceQuery.isLoading,
     legacyFilters: buildTraceListFilters({
       rootEntityType: url.selectedEntityOption?.entityType,
       status: url.selectedStatus,
@@ -428,7 +433,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
   // FilterBar never appears without the metadata fields it will offer. Only `isLoading` (never
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
-  if (isCapabilitiesLoading || isDiscoveryLoading) {
+  if (traceQuery.isLoading || isDiscoveryLoading) {
     return (
       <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Traces</h1>
@@ -519,8 +524,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         showPartialThread
         featuredSpanIds={url.highlightSpanIdsParam}
         onHighlightSpans={url.handleHighlightSpans}
-        feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
-        feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+        feedbackTabBadge={traceQuery.enabled ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
+        feedbackTabSlot={traceQuery.enabled ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} /> : null
@@ -529,9 +534,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onSpanViewChange={url.handleSpanViewChange}
         spanActiveTab={url.spanTabParam ?? 'details'}
         onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-        spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
-        spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
-          tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+        spanFeedbackTabBadge={traceQuery.enabled ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
+        spanFeedbackTabSlot={
+          traceQuery.enabled
+            ? ({ traceId: tid, spanId: sid }) =>
+                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+            : undefined
         }
       />
       <ScoreDataPanel depth={2} score={featuredScore} onClose={() => url.handleScoreChange(null)} />
