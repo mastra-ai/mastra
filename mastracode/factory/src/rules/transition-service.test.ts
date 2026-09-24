@@ -1354,6 +1354,37 @@ describe('FactoryTransitionService', () => {
     });
   });
 
+  it('caps a long invalid_transition reason at the rejection limit', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const targets = Array.from({ length: 40 }, (_, index) => `target-phase-number-${index}`);
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: {
+          title: 'Queued',
+          kind: 'resting',
+          outcomes: Object.fromEntries(targets.map(target => [target, target])),
+        },
+        ...Object.fromEntries(targets.map(target => [target, { title: target, kind: 'terminal' as const }])),
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['queued'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+    const replayed = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason.length).toBe(512);
+    expect(replayed).toEqual(result);
+  });
+
   it('starts nothing when a person parks a card back in Intake', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });

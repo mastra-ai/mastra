@@ -560,7 +560,11 @@ export class FactoryTransitionService {
     code: FactoryRuleRejectionCode,
     reason: string,
   ): Promise<FactoryTransitionResult> {
-    return this.#commit(request, transitionId, { outcome: 'rejected', code, reason });
+    return this.#commit(request, transitionId, {
+      outcome: 'rejected',
+      code,
+      reason: reason.slice(0, MAX_REJECTION_REASON),
+    });
   }
 
   async #commit(
