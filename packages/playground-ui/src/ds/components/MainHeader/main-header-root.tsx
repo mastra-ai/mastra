@@ -40,7 +40,7 @@ export function MainHeaderRoot({
           'flex items-center gap-2 text-heading text-foreground',
           '[&>svg]:size-6 [&>svg]:text-muted-foreground',
           {
-            'bg-muted w-60 max-w-[50%] rounded-md animate-pulse': titleIsLoading,
+            'w-60 max-w-[50%] animate-pulse rounded-md bg-muted': titleIsLoading,
           },
         )}
       >
@@ -55,7 +55,7 @@ export function MainHeaderRoot({
       {description && (
         <p
           className={cn('m-0 text-caption text-muted-foreground', {
-            'bg-muted w-[40rem] max-w-[80%] rounded-md animate-pulse': descriptionIsLoading,
+            'w-[40rem] max-w-[80%] animate-pulse rounded-md bg-muted': descriptionIsLoading,
           })}
         >
           {descriptionIsLoading ? <>&nbsp;</> : description}

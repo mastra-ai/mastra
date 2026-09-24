@@ -204,7 +204,7 @@ export function AddSkillDialog({
         <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
           {/* Search Input */}
           <div className="relative">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search skills..."
               value={searchQuery}
@@ -216,11 +216,11 @@ export function AddSkillDialog({
           <div className="flex min-h-0 flex-1 gap-4">
             {/* Skills List */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-muted-foreground text-column mb-2 tracking-wide uppercase">
+              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
               <ScrollArea
-                className="border-border flex-1 rounded-lg border"
+                className="flex-1 rounded-lg border border-border"
                 viewPortClassName={
                   !isLoadingPopular && !isSearching && displaySkills.length === 0
                     ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
@@ -229,10 +229,10 @@ export function AddSkillDialog({
               >
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
-                    <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-muted-foreground flex flex-1 flex-col items-center-safe justify-center-safe py-5">
+                  <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
                     <CircleSlashIcon className="mb-2 h-8 w-8" />
                     <p className="text-body">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
@@ -251,25 +251,25 @@ export function AddSkillDialog({
                           key={skillUniqueId}
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
-                            'w-full text-left px-3 py-2 rounded-md',
+                            'w-full rounded-md px-3 py-2 text-left',
                             'hover:bg-fill-subtle',
-                            selectedSkillUniqueId === skillUniqueId && 'bg-fill-hover border border-accent1',
+                            selectedSkillUniqueId === skillUniqueId && 'border border-accent1 bg-fill-hover',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-foreground text-subheading truncate">{skill.name}</span>
+                                <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="bg-accent1/20 text-accent1 text-meta inline-flex items-center gap-1 rounded px-1.5 py-0.5">
+                                  <span className="inline-flex items-center gap-1 rounded bg-accent1/20 px-1.5 py-0.5 text-meta text-accent1">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
                                 )}
                               </div>
-                              <div className="text-muted-foreground text-caption truncate">{skill.topSource}</div>
+                              <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
                             </div>
-                            <div className="text-muted-foreground text-caption flex shrink-0 items-center gap-1">
+                            <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
                             </div>
@@ -284,24 +284,24 @@ export function AddSkillDialog({
 
             {/* Preview Panel */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-muted-foreground text-column mb-2 tracking-wide uppercase">Preview</div>
-              <div className="border-border flex flex-1 flex-col overflow-hidden rounded-lg border">
+              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">Preview</div>
+              <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
-                  <div className="text-muted-foreground flex h-full flex-col items-center justify-center">
+                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                     <Package className="mb-2 h-8 w-8" />
                     <p className="text-body">Select a skill to preview</p>
                   </div>
                 ) : (
                   <>
                     {/* Skill Header */}
-                    <div className="border-border bg-card border-b p-4">
+                    <div className="border-b border-border bg-card p-4">
                       <div className="flex items-start gap-3">
-                        <div className="bg-muted rounded-lg p-2">
-                          <SkillIcon className="text-muted-foreground h-5 w-5" />
+                        <div className="rounded-lg bg-muted p-2">
+                          <SkillIcon className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-foreground text-subheading truncate">{selectedSkill.name}</h3>
-                          <div className="text-muted-foreground text-caption mt-1 flex items-center gap-3">
+                          <h3 className="truncate text-subheading text-foreground">{selectedSkill.name}</h3>
+                          <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <GithubIcon className="h-3 w-3" />
                               {selectedSkill.topSource}
@@ -329,7 +329,7 @@ export function AddSkillDialog({
                     {/* Skill Content */}
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
-                        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
@@ -338,7 +338,7 @@ export function AddSkillDialog({
                         </div>
                       </ScrollArea>
                     ) : (
-                      <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center">
+                      <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
                         <Package className="mb-2 h-8 w-8" />
                         <p className="text-body">Preview unavailable</p>
                         {skillsUrl && (
@@ -346,7 +346,7 @@ export function AddSkillDialog({
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-accent1 text-caption mt-2 flex items-center gap-1 hover:underline"
+                            className="mt-2 flex items-center gap-1 text-caption text-accent1 hover:underline"
                           >
                             View on skills.sh <ExternalLink className="h-3 w-3" />
                           </a>
@@ -361,11 +361,11 @@ export function AddSkillDialog({
 
           {/* Install Actions */}
           {selectedSkill && (
-            <div className="border-border flex flex-col gap-3 border-t pt-4">
+            <div className="flex flex-col gap-3 border-t border-border pt-4">
               {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
                 <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
-                  <Folder className="text-muted-foreground h-4 w-4 shrink-0" />
+                  <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
                     Install to
                   </FieldBlock.Label>
@@ -373,7 +373,7 @@ export function AddSkillDialog({
                     id="mount-select"
                     value={selectedMount ?? ''}
                     onChange={e => setSelectedMount(e.target.value)}
-                    className="border-border bg-background text-foreground text-body flex-1 rounded-md border px-3 py-1.5"
+                    className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-body text-foreground"
                   >
                     {writableMounts.map(m => {
                       const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
@@ -396,7 +396,7 @@ export function AddSkillDialog({
                     const skillPath = installedSkillPaths[selectedSkill.name]!;
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
                     return mount ? (
-                      <span className="text-muted-foreground text-caption">Installed at {mount.path}</span>
+                      <span className="text-caption text-muted-foreground">Installed at {mount.path}</span>
                     ) : null;
                   })()}
                 <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>

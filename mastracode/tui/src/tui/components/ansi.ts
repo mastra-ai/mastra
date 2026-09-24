@@ -7,6 +7,7 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 const ANSI_CLOSERS = '\x1b]8;;\x07\x1b[0m';
 const ELLIPSIS = '…';
 const ELLIPSIS_WIDTH = visibleWidth(ELLIPSIS);
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 function fitVisibleText(text: string, maxWidth: number): { text: string; width: number; truncated: boolean } {
   if (maxWidth <= 0) return { text: '', width: 0, truncated: text.length > 0 };
@@ -16,7 +17,7 @@ function fitVisibleText(text: string, maxWidth: number): { text: string; width: 
   let result = '';
   let resultWidth = 0;
 
-  for (const char of text) {
+  for (const { segment: char } of graphemeSegmenter.segment(text)) {
     const charWidth = visibleWidth(char);
     if (width + charWidth > maxWidth) {
       return { text: `${result}${ELLIPSIS}`, width: resultWidth + ELLIPSIS_WIDTH, truncated: true };

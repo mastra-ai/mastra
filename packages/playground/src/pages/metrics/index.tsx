@@ -1,10 +1,11 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
@@ -233,7 +234,7 @@ function MetricsContent() {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <h1 className="sr-only">Metrics</h1>
-        <ErrorState variant="fill" title="Failed to load metrics" message={error.message} />
+        <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
       </PageLayout>
     );
   }
@@ -250,13 +251,13 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsFlexGrid>
+        <MetricsCardGroup>
           <AgentRunsKpiCard />
           <ModelCostKpiCard />
           <TotalTokensKpiCard />
           <ActiveThreadsKpiCard />
           <ActiveResourcesKpiCard />
-        </MetricsFlexGrid>
+        </MetricsCardGroup>
 
         <MetricsFlexGrid>
           <ModelUsageCostCard />

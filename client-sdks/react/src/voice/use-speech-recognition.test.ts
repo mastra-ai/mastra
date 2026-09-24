@@ -9,6 +9,8 @@ const getSpeakersMock = vi.fn(async () => [{ voiceId: 'voice-1' }]);
 const listenMock = vi.fn(async () => ({ text: 'mastra transcript' }));
 const lastGetAgentArgs: string[] = [];
 
+// Tests run with isolate: false, so reset modules before installing this file's client mock.
+vi.resetModules();
 vi.mock('@mastra/client-js', () => ({
   MastraClient: class MockMastraClient {
     constructor(public options: any) {}

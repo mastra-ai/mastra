@@ -550,8 +550,18 @@ export const environmentRoute = registerApiRoute('/environment', {
       const originalPackageJsons = await Promise.all(packageJsonPaths.map(path => readFile(path, 'utf-8')));
       const sourceLockfilePath = join(fixturePath, 'pnpm-lock.yaml');
       const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
+      const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+      const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
 
       try {
+        // Keep the lockfile probe external so optimization cannot remove it from the output manifest.
+        await writeFile(
+          mastraConfigPath,
+          originalMastraConfig.replace(
+            "externals: ['bcrypt', '@inner/subpath-only']",
+            "externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic']",
+          ),
+        );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
           packageJson.dependencies['unicorn-magic'] = '>=0.2.0';
@@ -575,6 +585,7 @@ export const environmentRoute = registerApiRoute('/environment', {
       } finally {
         await Promise.all(packageJsonPaths.map((path, index) => writeFile(path, originalPackageJsons[index]!)));
         await writeFile(sourceLockfilePath, sourceLockfile);
+        await writeFile(mastraConfigPath, originalMastraConfig);
       }
 
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
@@ -1213,6 +1224,14 @@ export const mastra = new Mastra({
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Runtime externals skip resolution; this case must exercise bundling the missing subpath.
+          const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(
+            mastraConfigPath,
+            mastraConfig.replace("externals: ['bcrypt', '@inner/subpath-only']", "externals: ['bcrypt']"),
+          );
 
           const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
           await mkdir(join(corePath, 'runtime-context'), { recursive: true });

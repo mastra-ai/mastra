@@ -71,23 +71,18 @@ export interface SlackIntegrationConfig {
   adapterOptions?: SlackAdapterChannelConfig;
 }
 
-const factoryTypingStatus: TypingStatusFn = (chunk, ctx) => {
+const factoryTypingStatus: TypingStatusFn = chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
-      return `is thinking${nextDots(ctx.currentStatus)}`;
+      return 'is thinking...';
     case 'text-delta':
       return 'is typing...';
     case 'tool-call':
-      return `is working${nextDots(ctx.currentStatus)}`;
+      return 'is working...';
     default:
       return undefined;
   }
 };
-
-function nextDots(currentStatus: string | undefined): string {
-  const dotCount = currentStatus?.match(/\.*$/)?.[0].length ?? 1;
-  return '.'.repeat(dotCount >= 5 ? 2 : dotCount + 1);
-}
 
 /**
  * Drops keys the caller set to `undefined` so spreading the overrides cannot
@@ -142,6 +137,7 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControls,
       memorySettings: ctx.storage.memorySettings,
+      modelPacks: ctx.storage.modelPacks,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
       adapterOptions: {

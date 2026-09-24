@@ -3,11 +3,11 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon, iconSizeClasses, type IconSize } from '@/ds/icons/Icon';
+import { Icon } from '@/ds/icons/Icon';
+import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
-  disabledOutlineSurfaceStyle,
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
@@ -76,12 +76,6 @@ export const buttonVariants = cva(
         ghost: cn(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
           'disabled:bg-transparent aria-disabled:bg-transparent',
-        ),
-        outline: cn(
-          'border border-border-strong bg-transparent text-foreground not-disabled:hover:border-border-hover not-disabled:hover:bg-fill-subtle not-disabled:active:bg-fill',
-          NEUTRAL_ICON_STATE,
-          disabledOutlineSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-transparent',
         ),
       },
       size: {

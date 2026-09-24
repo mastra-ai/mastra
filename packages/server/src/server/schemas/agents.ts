@@ -179,10 +179,10 @@ export const serializedProcessorSchema = z.object({
 
 /**
  * Schema for serialized tool with JSON schemas
- * Uses passthrough() to allow additional tool properties beyond core fields
  */
 export const serializedToolSchema = z.object({
   id: z.string(),
+  title: z.string().optional(),
   description: z.string().optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
@@ -780,7 +780,18 @@ export const subscribeAgentThreadBodySchema = z.object({
 });
 
 export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  clearPendingSignals: z.boolean().optional(),
   expectedRunId: z.string().optional(),
+});
+
+export const cancelPendingAgentSignalsBodySchema = subscribeAgentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  signalIds: z.array(z.string().min(1)).min(1).max(1000),
+});
+
+export const cancelPendingAgentSignalsResponseSchema = z.object({
+  cancelledSignalIds: z.array(z.string()),
 });
 
 export const sendToolApprovalBodySchema = z.object({

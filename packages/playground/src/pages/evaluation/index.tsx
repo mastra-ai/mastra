@@ -1,11 +1,11 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -71,7 +71,12 @@ export default function Evaluation() {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Overview</h1>
-        <ErrorState variant="fill" title="Failed to load evaluation data" message={error.message} />
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load evaluation data"
+          descriptionSlot={error.message}
+        />
       </PageLayout>
     );
   }
@@ -97,7 +102,7 @@ export default function Evaluation() {
     >
       <h1 className="sr-only">Overview</h1>
       <div className="flex flex-col gap-4">
-        <MetricsFlexGrid>
+        <MetricsCardGroup>
           <EvaluationKpiCards
             scorers={scorers}
             datasets={datasets}
@@ -111,7 +116,7 @@ export default function Evaluation() {
             isLoadingScores={isLoadingScores}
             isLoadingReview={isLoadingReview}
           />
-        </MetricsFlexGrid>
+        </MetricsCardGroup>
         <ScoresOverTimeCard
           summaryData={scoreMetrics?.summaryData ?? []}
           overTimeData={scoreMetrics?.overTimeData ?? []}

@@ -132,7 +132,7 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
           } else if (e.key === 'Escape') {
             e.preventDefault();
             setDraft(value);
-            (e.target as HTMLInputElement).blur();
+            e.currentTarget.blur();
           }
         }}
       />
@@ -230,7 +230,7 @@ export function PropertyFilterApplied({
           );
         }
 
-        if (field.kind === 'text' && typeof token.value === 'string') {
+        if (field.kind === 'text' && !Array.isArray(token.value)) {
           return (
             <TextTokenPill
               key={`${token.fieldId}-${index}`}

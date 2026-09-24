@@ -20,7 +20,6 @@ import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
 interface StepChrome {
   title: string;
   placeholder: string;
-  searchLabel: string;
   searchable?: boolean;
 }
 
@@ -28,23 +27,19 @@ const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
   name: {
     title: 'Name your new Factory',
     placeholder: 'e.g. Mastra',
-    searchLabel: 'Factory name',
     searchable: false,
   },
   vcs: {
     title: 'Choose your codebase',
     placeholder: 'Search repositories…',
-    searchLabel: 'Search repositories',
   },
   'project-management': {
     title: 'Connect the work behind the code',
     placeholder: 'Search options…',
-    searchLabel: 'Search project management options',
   },
   'model-provider': {
     title: 'Choose your Factory model',
     placeholder: 'Search models and providers…',
-    searchLabel: 'Search models and providers',
   },
 };
 
@@ -81,10 +76,7 @@ export function CreateFactoryWizard() {
     },
   });
 
-  // The commit is one move: while it runs, and once one of its stages landed on
-  // the server, the picks behind it are settled — no step back to edit them.
   const committing = createFactory.isPending;
-  const picksSettled = committing || Boolean(draft?.factoryId);
 
   const leave = () => {
     if (location.key === 'default') void navigate(factoryId ? `/factories/${factoryId}` : '/');
@@ -95,20 +87,17 @@ export function CreateFactoryWizard() {
   const step = draft?.step;
   if (!step) return null;
 
-  const goBack = step === 'name' ? leave : () => void flow.back();
-
   // Each step starts from its own field value — the name step from the name already given.
   const typedOnThisStep = typed?.step === step ? typed.value : undefined;
   const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-center">
+    <div className="flex min-h-0 flex-col gap-2 pt-6">
       <CreateFactoryPalette
         {...STEP_CHROME[step]}
         step={step}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
-        onBack={picksSettled ? undefined : goBack}
         onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
       >
         {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}

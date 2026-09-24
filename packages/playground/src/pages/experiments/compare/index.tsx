@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
@@ -66,9 +66,9 @@ function CompareExperimentsPage() {
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Compare</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Select two experiments to compare.</p>
-            <p className="text-body mt-2">
+            <p className="mt-2 text-body">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
             </p>
@@ -84,7 +84,12 @@ function CompareExperimentsPage() {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Compare</h1>
-        <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load experiments"
+          descriptionSlot={error.message}
+        />
       </PageLayout>
     );
   }
@@ -95,9 +100,9 @@ function CompareExperimentsPage() {
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Compare</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
-            <p className="text-body mt-2 flex items-center justify-center gap-2">
+            <p className="mt-2 flex items-center justify-center gap-2 text-body">
               One of
               <ExperimentIdLink experimentId={experimentIdA} />
               and
@@ -121,7 +126,7 @@ function CompareExperimentsPage() {
                 Experiments comparison
               </Txt>
 
-              <p className="text-caption text-muted-foreground flex items-center gap-2">
+              <p className="flex items-center gap-2 text-caption text-muted-foreground">
                 <ExperimentIdLink experimentId={experimentIdA} />
                 and
                 <ExperimentIdLink experimentId={experimentIdB} />

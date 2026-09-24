@@ -4,9 +4,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
@@ -136,7 +136,7 @@ function DatasetItemVersionsComparePage() {
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Item Version History</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Item not found.</p>
           </div>
         </div>
@@ -184,14 +184,14 @@ function DatasetItemVersionsComparePage() {
           </CardHeader>
           <CardContent className="grid content-start gap-5 overflow-y-auto">
             {isLoading ? (
-              <div className="text-muted-foreground text-body">Loading...</div>
+              <div className="text-body text-muted-foreground">Loading...</div>
             ) : leftItem ? (
               <DatasetItemDetails
                 item={leftItem}
                 diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
             ) : (
-              <div className="text-muted-foreground text-body">Item data not available</div>
+              <div className="text-body text-muted-foreground">Item data not available</div>
             )}
           </CardContent>
         </Card>
@@ -214,14 +214,14 @@ function DatasetItemVersionsComparePage() {
                 descriptionSlot="Pick a version above to compare it with the one on the left."
               />
             ) : isRightLoading ? (
-              <div className="text-muted-foreground text-body">Loading...</div>
+              <div className="text-body text-muted-foreground">Loading...</div>
             ) : rightItem ? (
               <DatasetItemDetails
                 item={rightItem}
                 diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
               />
             ) : (
-              <div className="text-muted-foreground text-body">Version {rightNumber} not found</div>
+              <div className="text-body text-muted-foreground">Version {rightNumber} not found</div>
             )}
           </CardContent>
         </Card>

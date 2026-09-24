@@ -67,7 +67,7 @@ const RoleRow = ({ role }: { role: TextRole }) => {
   }, []);
 
   return (
-    <div className="border-border grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b py-3 last:border-b-0 sm:grid-cols-[7rem_5.5rem_minmax(0,1fr)] sm:gap-3">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-b-0 sm:grid-cols-[7rem_5.5rem_minmax(0,1fr)] sm:gap-3">
       <Txt variant="meta" font="mono" tone="muted">
         --text-{role}
       </Txt>
@@ -100,7 +100,7 @@ const FamilySpecimen = ({ token, use, className, sample }: (typeof families)[num
   return (
     <Specimen name={token} note={use}>
       <div className="flex min-w-0 flex-col gap-2">
-        <p ref={measure} className={cn('text-title text-foreground min-w-0 truncate', className)}>
+        <p ref={measure} className={cn('min-w-0 truncate text-title text-foreground', className)}>
           {sample}
         </p>
         <Txt variant="meta" font="mono" tone="faint" className="min-w-0 truncate" title={stack}>

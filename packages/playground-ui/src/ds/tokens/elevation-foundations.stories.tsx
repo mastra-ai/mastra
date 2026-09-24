@@ -34,7 +34,7 @@ export const ElevationFoundations: Story = {
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Specimen name="shadow-raised" note="raisedSurfaceStyle — the class pair components share">
-            <div className="bg-card shadow-raised flex h-32 flex-col justify-end rounded-xl p-4">
+            <div className="flex h-32 flex-col justify-end rounded-xl bg-card p-4 shadow-raised">
               <Txt variant="label">Raised surface</Txt>
               <Txt variant="caption" tone="muted">
                 Rim and drop from one token
@@ -42,9 +42,9 @@ export const ElevationFoundations: Story = {
             </div>
           </Specimen>
           <Specimen name="Tiles in a grid" note="Short bleed, so neighbours and the container edge stay clean">
-            <div className="bg-background grid h-32 grid-cols-2 gap-2 overflow-hidden rounded-xl p-2">
+            <div className="grid h-32 grid-cols-2 gap-2 overflow-hidden rounded-xl bg-background p-2">
               {['Tile', 'Tile'].map((label, index) => (
-                <div key={index} className="bg-card shadow-raised rounded-lg p-3">
+                <div key={index} className="rounded-lg bg-card p-3 shadow-raised">
                   <Txt variant="caption" tone="muted">
                     {label}
                   </Txt>
@@ -61,7 +61,7 @@ export const ElevationFoundations: Story = {
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Specimen name="shadow-overlay" note="overlaySurfaceStyle — the class pair popups share">
-            <div className="bg-card shadow-overlay flex h-32 flex-col justify-end rounded-xl p-4">
+            <div className="flex h-32 flex-col justify-end rounded-xl bg-card p-4 shadow-overlay">
               <Txt variant="label">Overlay surface</Txt>
               <Txt variant="caption" tone="muted">
                 Same rim, longer falloff
@@ -69,8 +69,8 @@ export const ElevationFoundations: Story = {
             </div>
           </Specimen>
           <Specimen name="Over content" note="A nested surface keeps the recipe, never a second border">
-            <div className="bg-background flex h-32 items-center justify-center rounded-xl p-4">
-              <div className="bg-card shadow-overlay w-full rounded-lg p-3">
+            <div className="flex h-32 items-center justify-center rounded-xl bg-background p-4">
+              <div className="w-full rounded-lg bg-card p-3 shadow-overlay">
                 <Txt variant="caption" tone="muted">
                   Reads as lifted off the surface beneath it.
                 </Txt>
@@ -85,8 +85,8 @@ export const ElevationFoundations: Story = {
         description="The focus halo is the only other box-shadow in the system. It belongs to focus, not to depth — it is documented on the Surface page beside --border-focus and --ring."
       >
         <Specimen name="--shadow-focus-ring" note="Paired with ring-accent1 by focusRing.visible">
-          <div className="bg-background flex h-20 items-center justify-center rounded-xl p-4">
-            <div className="bg-fill shadow-focus-ring ring-accent1 rounded-md px-3 py-1.5 ring-1">
+          <div className="flex h-20 items-center justify-center rounded-xl bg-background p-4">
+            <div className="rounded-md bg-fill px-3 py-1.5 shadow-focus-ring ring-1 ring-accent1">
               <Txt variant="label">Focused row</Txt>
             </div>
           </div>

@@ -59,6 +59,7 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
+import { withToolTitle } from '../../../tools/tool-title';
 import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
 import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
@@ -334,6 +335,7 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
   }
 
   const tool = resolveTool(toolName);
+  chunk = withToolTitle(chunk, tool);
   const source = {
     policy,
     toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
@@ -1449,6 +1451,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               : undefined;
 
             const processInputStepResult = await processorRunner.runProcessInputStep({
+              llmRequestProcessorIds: ProcessorRunner.getLLMRequestProcessorIds(
+                getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
+              ),
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
               ...createObservabilityContext(stepTracingContext),

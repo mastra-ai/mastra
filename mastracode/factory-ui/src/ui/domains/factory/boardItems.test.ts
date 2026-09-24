@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { externalLinkLabel, metadataLabelColors, workItemMeta } from './boardItems';
-import type { WorkItem } from './services/workItems';
+import { externalLinkLabel, itemThreadSession, metadataLabelColors, workItemMeta } from './boardItems';
+import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -91,5 +91,28 @@ describe('metadataLabelColors', () => {
         },
       }),
     ).toEqual({ bug: '#d73a4a', documentation: 'rebeccapurple' });
+  });
+});
+
+describe('itemThreadSession', () => {
+  const session = (id: string): WorkItemSessionRef => ({
+    sessionId: id,
+    threadId: id,
+    branch: 'factory/issue-24244',
+    startedBy: 'user-1',
+  });
+
+  it('keeps the original triage conversation when session keys arrive in different orders', () => {
+    const triage = session('triage-session');
+    const work = session('work-session');
+
+    expect(itemThreadSession({ triage, plan: work, work })).toBe(triage);
+    expect(itemThreadSession({ work, plan: work, triage })).toBe(triage);
+  });
+
+  it('falls back to a custom role session', () => {
+    const custom = session('custom-session');
+
+    expect(itemThreadSession({ release: custom })).toBe(custom);
   });
 });

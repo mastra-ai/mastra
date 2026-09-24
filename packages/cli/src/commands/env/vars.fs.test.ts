@@ -28,10 +28,10 @@ vi.mock('./resolve-project.js', () => ({
   resolveProject: mockResolveProject,
 }));
 
-const mockFetchEnvironments = vi.fn();
+const mockFetchEnvironmentList = vi.fn();
 
 vi.mock('./platform-api.js', () => ({
-  fetchEnvironments: mockFetchEnvironments,
+  fetchEnvironmentList: mockFetchEnvironmentList,
 }));
 
 const mockGetServerProjectEnv = vi.fn();
@@ -70,7 +70,7 @@ beforeEach(() => {
   mockResolveCurrentOrg.mockResolvedValue({ orgId: 'org-1', orgName: 'Org' });
   mockResolveProject.mockResolvedValue({ id: 'proj-1', name: 'My App', slug: 'my-app', organizationId: 'org-1' });
   mockGetServerProjectEnv.mockResolvedValue({});
-  mockFetchEnvironments.mockResolvedValue([environment({ envVars: { PULLED: 'from-cloud' } })]);
+  mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { PULLED: 'from-cloud' } })] });
   vi.spyOn(console, 'info').mockImplementation(() => {});
 });
 

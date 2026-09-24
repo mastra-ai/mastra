@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.6.1-alpha.0",
+  "version": "1.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -82,7 +82,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "eslint-plugin-storybook": "^10.5.0",
+    "eslint-plugin-storybook": "^10.6.0",
     "jsdom": "^26.1.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

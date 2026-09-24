@@ -40,7 +40,7 @@ Catalog entries show the number of action templates available; installed entries
 
 ```bash
 pnpm --filter @mastra/connect add-provider linear
-pnpm --filter @mastra/connect add-provider gitlab --as gitlab-group-token
+pnpm --filter @mastra/connect add-provider gitlab --as gitlab-self-managed
 ```
 
 `--as` changes the local integration ID, generated directory name, tool prefix, registry ID, and connection environment variable. It must not collide with another installed provider — collisions are a hard error.
@@ -85,7 +85,7 @@ Generated action implementations are adapted from `NangoHQ/integration-templates
 
 ## Pending provider contributions
 
-Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Each has its own entry in `TEMPLATE_PIN_OVERRIDES`, so the shared pin stays on the upstream repository and every other provider is generated from it.
+Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot are generated from the head commit of [#677](https://github.com/NangoHQ/integration-templates/pull/677), which is upstream main plus agent-focused gap actions; they share one pin in `TEMPLATE_PIN_OVERRIDES`. That pin names the upstream repository directly — GitHub serves a PR's head commit from the base repository, so no fork remote is involved. The shared pin stays on the upstream repository and every other provider is generated from it.
 
 ```sh
 pnpm --filter @mastra/connect sync-templates resend

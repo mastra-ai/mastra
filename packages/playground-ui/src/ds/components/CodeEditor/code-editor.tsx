@@ -17,6 +17,7 @@ import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
@@ -232,7 +233,7 @@ const codeEditorVariants = cva(
   {
     variants: {
       variant: {
-        default: 'rounded-md border border-border bg-card p-1 focus-within:border-border-focus',
+        default: cn(inputSurfaceAndFocusWithinStyle, 'rounded-md p-1', fieldErrorRimWithin),
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },

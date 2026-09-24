@@ -96,8 +96,8 @@ function WorkflowInformationTopSection({
         className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}
       >
         <div className="flex shrink-0 items-center gap-1 pr-2">
-          <CollapsibleTrigger className="text-column text-muted-foreground flex min-w-0 flex-1 items-center gap-2 px-4 py-3">
-            <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0 motion-reduce:transition-none" />
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-column text-muted-foreground">
+            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
             <span>Workflow run</span>
             {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
           </CollapsibleTrigger>
@@ -114,7 +114,7 @@ function WorkflowInformationTopSection({
         <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
-            className="border-border/50 min-h-0 flex-1 border-t"
+            className="min-h-0 flex-1 border-t border-border/50"
             viewPortClassName="h-full"
             mask={{ top: false, bottom: false }}
           >

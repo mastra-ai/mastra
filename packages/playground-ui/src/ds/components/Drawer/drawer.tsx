@@ -5,7 +5,7 @@ import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
@@ -73,7 +73,7 @@ const drawerPopupVariants = cva(
   cn(
     'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
     'text-foreground',
-    overlaySurfaceStyle,
+    dialogSurfaceStyle,
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
     'data-[nested-drawer-open]:after:bg-black/25',
@@ -96,13 +96,13 @@ const drawerPopupVariants = cva(
         side: 'bottom',
         variant: 'default',
         className:
-          'h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full -mb-12 pb-12 rounded-t-xl border-x border-t',
+          '-mb-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl border-x border-t pb-12',
       },
       {
         side: 'top',
         variant: 'default',
         className:
-          'h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full -mt-12 pt-12 rounded-b-xl border-x border-b',
+          '-mt-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl border-x border-b pt-12',
       },
       {
         side: 'left',
@@ -176,8 +176,6 @@ const DrawerContext = React.createContext<DrawerContextValue>({
 });
 
 const useDrawerContext = () => React.useContext(DrawerContext);
-
-export const useDrawerSide = () => useDrawerContext().side;
 
 const resolveDrawerViewportLayout = (
   variant: DrawerVariant,
@@ -269,7 +267,6 @@ const DrawerProvider = DrawerPrimitive.Provider;
 const DrawerIndent = DrawerPrimitive.Indent;
 const DrawerIndentBackground = DrawerPrimitive.IndentBackground;
 const DrawerSwipeArea = DrawerPrimitive.SwipeArea;
-const createDrawerHandle = DrawerPrimitive.createHandle;
 // Inner region where pointer drags select text / scroll instead of swiping the drawer closed.
 const DrawerInteractive = DrawerPrimitive.Content;
 
@@ -380,7 +377,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="bg-border-strong h-10 w-1 rounded-full" />
+      <div className="h-10 w-1 rounded-full bg-border-strong" />
     </div>
   );
 };
@@ -492,7 +489,6 @@ export {
   DrawerIndentBackground,
   DrawerSwipeArea,
   DrawerInteractive,
-  createDrawerHandle,
 };
 
 export type {

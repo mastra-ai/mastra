@@ -1,5 +1,11 @@
 # @mastra/auth-google
 
+## 0.1.4
+
+### Patch Changes
+
+- Improved Google authentication portability by signing service account tokens with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes

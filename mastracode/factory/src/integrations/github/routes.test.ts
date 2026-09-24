@@ -509,6 +509,18 @@ vi.mock('./sandbox', () => {
   };
 });
 
+const filesystemCaptureMock = vi.hoisted(() => ({ waitError: null as Error | null }));
+vi.mock('../../session/filesystem-capture.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../session/filesystem-capture.js')>();
+  return {
+    ...actual,
+    waitForPendingFilesystemCapture: vi.fn(async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
+      if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
+      return actual.waitForPendingFilesystemCapture(...args);
+    }),
+  };
+});
+
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
@@ -836,6 +848,10 @@ describe('webhook route', () => {
       pullRequestNumber: 34,
       sessionId: 'session-1',
       ownerId: 'owner-1',
+      // Delivery builds the run's request context from the subscription, which
+      // needs the subscribing user: a webhook carries no signed-in identity, and
+      // tenant credential resolution fails closed without one.
+      subscribedByUserId: 'owner-1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
       sessionScope: '/worktrees/a',
@@ -864,6 +880,9 @@ describe('webhook route', () => {
         priority: 'high',
         dedupeKey: 'delivery-1:session-1:thread-1',
       }),
+      // Delivery hands the run a primed request context. A webhook carries no
+      // signed-in user, so the subscription's own identity is what lets the
+      // session resolve credentials instead of failing closed.
       expect.objectContaining({ requestContext: expect.anything() }),
     );
     const runContext = sendNotificationSignal.mock.calls[0]![1].requestContext;
@@ -2310,6 +2329,31 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
     await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     error.mockRestore();
+  });
+
+  it('still tears down the controller session when draining the filesystem capture fails', async () => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    filesystemCaptureMock.waitError = new Error('drain failed');
+    try {
+      const controller = { deleteSession: vi.fn(async () => {}) } as any;
+      const app = buildApp({ workosId: 'u1' }, { controller });
+      const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+      const sessionId = (await created.json()).session.sessionId;
+
+      const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+      expect(deleted.status).toBe(200);
+      expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+      expect(tables.sessions).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(
+        '[GitHub Sessions] Failed to drain filesystem capture before delete',
+        expect.objectContaining({ sessionId }),
+      );
+    } finally {
+      filesystemCaptureMock.waitError = null;
+      warn.mockRestore();
+    }
   });
 
   it('destroys the deleted session sandbox held by this process instead of pooling it', async () => {
