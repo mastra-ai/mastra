@@ -2069,7 +2069,7 @@ export class DurableAgent<
     };
 
     // Whether this caller's stream closes at the suspension boundary. Defaults
-    // to true (parity with non-durable Agent and Workflow). The same value
+    // to false (stream stays open for a same-reader resume). The same value
     // gates the `across-suspension` continuation so the two cannot drift.
     const closeOnSuspend = options?.closeOnSuspend ?? false;
 
@@ -2474,7 +2474,7 @@ export class DurableAgent<
     }
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
-    // Same default-true semantics as the initial stream() path.
+    // Same default-false semantics as the initial stream() path.
     const closeOnSuspend = (resolvedOptions as DurableAgentStreamOptions<TOutput>).closeOnSuspend ?? false;
 
     const {
