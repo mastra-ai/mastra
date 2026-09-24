@@ -49,6 +49,10 @@ const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'String' },
   threadId: { sql: 'r.threadId', parameterType: 'String' },
   resourceId: { sql: 'r.resourceId', parameterType: 'String' },
+  runId: { sql: 'r.runId', parameterType: 'String' },
+  sessionId: { sql: 'r.sessionId', parameterType: 'String' },
+  userId: { sql: 'r.userId', parameterType: 'String' },
+  organizationId: { sql: 'r.organizationId', parameterType: 'String' },
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
@@ -75,6 +79,10 @@ const SPAN_FIELDS = {
   entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
   parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
   rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
+  runId: { sql: 's.runId', parameterType: 'String' },
+  sessionId: { sql: 's.sessionId', parameterType: 'String' },
+  userId: { sql: 's.userId', parameterType: 'String' },
+  organizationId: { sql: 's.organizationId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -365,7 +373,11 @@ function compileClickHouseTraceScope(
       entityName,
       entityVersionId,
       parentEntityVersionId,
-      rootEntityVersionId
+      rootEntityVersionId,
+      runId,
+      sessionId,
+      userId,
+      organizationId
     FROM ${TABLE_SPAN_EVENTS}
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)${tenant}

@@ -3,16 +3,7 @@ import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/cor
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
-export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
-  'tags',
-  'runId',
-  'sessionId',
-  'requestId',
-  'userId',
-  'organizationId',
-  'serviceName',
-  'experimentId',
-]);
+export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set(['tags', 'requestId', 'serviceName', 'experimentId']);
 
 export const TRACE_FILTER_OPERATOR_IDS = [
   'is',
@@ -70,11 +61,23 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'traceId',
   'threadId',
   'resourceId',
+  'runId',
+  'sessionId',
+  'userId',
+  'organizationId',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
  *  where the field is missing, so the predicate is `or[ne, notExists]`. */
-export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment']);
+export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
+  'threadId',
+  'resourceId',
+  'environment',
+  'runId',
+  'sessionId',
+  'userId',
+  'organizationId',
+]);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
 const NEGATIVE_TO_POSITIVE = { isNot: 'is', notIn: 'in', notExists: 'exists' } as const satisfies Partial<

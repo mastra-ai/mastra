@@ -40,6 +40,27 @@ describe('buildTraceQueryRequest', () => {
     expect(buildTraceQueryRequest({ tokens: [{ fieldId, value: 'value' }], now }).where).toBeUndefined();
   });
 
+  it.each(['runId', 'sessionId', 'userId', 'organizationId'])('queries %s on the trace root', fieldId => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId, value: 'value-1' }], now })?.where).toEqual({
+      op: 'and',
+      args: [{ op: 'eq', left: { path: fieldId }, right: { literal: 'value-1' } }],
+    });
+    expect(
+      buildTraceQueryRequest({ tokens: [{ fieldId, value: 'value-1', operatorId: 'isNot' }], now })?.where,
+    ).toEqual({
+      op: 'and',
+      args: [
+        {
+          op: 'or',
+          args: [
+            { op: 'ne', left: { path: fieldId }, right: { literal: 'value-1' } },
+            { op: 'notExists', path: fieldId },
+          ],
+        },
+      ],
+    });
+  });
+
   it('ignores unsupported running status filters', () => {
     expect(buildTraceQueryRequest({ tokens: [], status: 'running', now }).where).toBeUndefined();
     expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['running'] }], now }).where).toBeUndefined();
