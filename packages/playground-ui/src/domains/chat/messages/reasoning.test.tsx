@@ -15,6 +15,17 @@ describe('Reasoning', () => {
       expect(screen.getByRole('button', { name: 'Reasoning' }).getAttribute('aria-expanded')).toBe('true');
     });
 
+    it('starts collapsed when asked to, and opens on click', () => {
+      render(<Reasoning text="Let me think" defaultOpen={false} />);
+      const toggle = screen.getByRole('button', { name: 'Reasoning' });
+
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByText('Let me think')).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(screen.getByText('Let me think')).not.toBeNull();
+    });
+
     it('collapses and re-expands when the toggle is clicked', () => {
       render(<Reasoning text="Let me think" />);
       const toggle = screen.getByRole('button', { name: 'Reasoning' });
