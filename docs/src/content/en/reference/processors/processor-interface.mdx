@@ -1667,7 +1667,7 @@ abort('Blocked content detected', { retry: false, metadata: { category: 'pii' } 
 ```
 
 - `reason`: A human-readable explanation. Appears as `tripwire.payload.reason`.
-- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. When `errorProcessors` are configured, `maxProcessorRetries` falls back to a safety cap of `3` for that call.
+- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. The safety cap of `3` that applies when no cap is set covers only error-processor retries from `processAPIError` — it does not give abort retries a budget.
 - `metadata`: Optional structured data attached to the `tripwire` chunk for downstream consumers.
 
 The emitted `tripwire` chunk has the shape:

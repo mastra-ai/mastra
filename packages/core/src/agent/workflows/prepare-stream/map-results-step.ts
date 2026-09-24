@@ -256,6 +256,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ? await capabilities.llmRequestInputProcessors({
             requestContext: result.requestContext!,
             overrides: options.inputProcessors,
+            errorOverrides: options.errorProcessors,
           })
         : options.inputProcessors || capabilities.llmRequestInputProcessors
       : effectiveInputProcessors;
@@ -276,7 +277,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // defaults self-limit, so warning about them is noise on every bare agent.
     const hasConfiguredErrorProcessors = options.errorProcessors
       ? options.errorProcessors.length > 0
-      : (await capabilities.agent.getConfiguredProcessorIds(result.requestContext!)).errorProcessorIds.length > 0;
+      : (await capabilities.agent.getConfiguredErrorProcessorIds(result.requestContext!)).length > 0;
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
