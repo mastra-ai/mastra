@@ -396,8 +396,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private limitQuietShellLines(lines: string[]): string[] {
     if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
     const limit = this.quietPreviewLineLimit;
-    if (lines.length <= limit) return lines;
     if (limit <= 0) return [];
+    if (this.fitsQuietLimit(lines.length, limit)) return lines;
     return [this.quietHiddenLinesMarker(lines.length - limit), ...lines.slice(-limit)];
   }
 
@@ -408,8 +408,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private limitQuietShellCommandLines(lines: string[]): string[] {
     if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
     const limit = Math.max(1, this.quietPreviewLineLimit);
-    if (lines.length <= limit) return lines;
+    if (this.fitsQuietLimit(lines.length, limit)) return lines;
     return [...lines.slice(0, limit), this.quietHiddenLinesMarker(lines.length - limit)];
+  }
+
+  /** A `⋯ (+1 line)` marker costs the same row as the line it hides, so just show the line. */
+  private fitsQuietLimit(count: number, limit: number): boolean {
+    return count <= limit + 1;
   }
 
   private quietHiddenLinesMarker(hidden: number): string {
@@ -1469,7 +1474,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Helper to render shell command with terminal-like bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
       const border = (char: string) => this.formatToolBorder(char);
-      const footerPrompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
+      // Quiet mode names the tool like every other compact tool does, so a
+      // shell box is recognisable as an execute_command call at a glance.
+      const toolNamePrefix = this.quietDisplayMode === 'quiet' ? `${theme.fg('muted', this.toolName)} ` : '';
+      const footerPrompt = `${toolNamePrefix}${theme.bold(theme.fg('toolTitle', '$'))} `;
       const footerSuffix = `${cwdSuffix}${timeSuffix}${status}`;
       const termWidth = this.renderWidth;
       const contentWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
@@ -1487,11 +1495,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.contentBox.addChild(new Text(displayOutput, 0, 0));
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
-      const footerWrapWidth = Math.max(1, contentWidth - 4);
+      const footerPromptWidth = visibleWidth(footerPrompt);
+      const footerWrapWidth = Math.max(1, contentWidth - 2 - footerPromptWidth);
       const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(command, footerWrapWidth));
       const footerSuffixWidth = visibleWidth(footerSuffix);
+      const continuationIndent = ' '.repeat(footerPromptWidth);
       footerLines.forEach((footerLine, index) => {
-        const prefix = index === 0 ? footerPrompt : '  ';
+        const prefix = index === 0 ? footerPrompt : continuationIndent;
         const isLast = index === footerLines.length - 1;
         const suffixFits = isLast && visibleWidth(footerLine) + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
@@ -1507,7 +1517,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (visibleWidth(lastFooterLine) + footerSuffixWidth > footerWrapWidth) {
         this.contentBox.addChild(
           new Text(
-            renderLine(`  ${footerSuffix}`, value => value),
+            renderLine(`${continuationIndent}${footerSuffix}`, value => value),
             0,
             0,
           ),

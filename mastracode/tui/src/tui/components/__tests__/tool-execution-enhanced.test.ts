@@ -1020,6 +1020,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).toContain('line 16');
     expect(visible).not.toMatch(/line 1\b/);
     expect(visible).not.toContain('line 14');
+    // Quiet mode names the tool, like every other compact tool.
+    expect(visible).toContain('execute_command $ pnpm');
     // The command wraps rather than truncates so the whole thing is still readable.
     expect(visible).toContain('--reporter=dot');
     expect(visible).toContain('echo done');
@@ -1032,13 +1034,30 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
-    component.appendStreamingOutput(['stream 1', 'stream 2', 'stream 3'].join('\n'));
+    component.appendStreamingOutput(['stream 1', 'stream 2', 'stream 3', 'stream 4'].join('\n'));
 
     const streaming = stripAnsi(component.render(60).join('\n'));
     expect(streaming).not.toContain('stream 1');
-    expect(streaming).toContain('stream 2');
+    expect(streaming).not.toContain('stream 2');
     expect(streaming).toContain('stream 3');
-    expect(streaming).toContain('⋯ (+1 line)');
+    expect(streaming).toContain('stream 4');
+    expect(streaming).toContain('⋯ (+2 lines)');
+  });
+
+  it('shows one extra quiet shell line instead of a marker that would take the same row', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'printf "a\\nb\\nc"' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(60).join('\n'));
+    expect(visible).toContain('out 1');
+    expect(visible).toContain('out 2');
+    expect(visible).toContain('out 3');
+    expect(visible).not.toContain('⋯ (+');
   });
 
   it('hides quiet shell output entirely when the preview limit is None', () => {
