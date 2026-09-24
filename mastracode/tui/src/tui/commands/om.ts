@@ -1,9 +1,9 @@
+import { getActivePackMemoryModelId } from '@mastra/code-sdk/agents/model';
 import {
   applyOmRoleAuto,
   applyOmRoleOverride,
   persistOmObserveAttachments,
 } from '@mastra/code-sdk/onboarding/om-settings';
-import { getActivePackMemoryModelId } from '@mastra/code-sdk/agents/model';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { OMSettingsComponent } from '../components/om-settings.js';

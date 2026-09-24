@@ -147,14 +147,25 @@ export function updateStatusLine(state: TUIState): void {
   }
 
   // --- Collect raw data ---
+  // The status line redraws on every animation tick, so the OM role model
+  // (which reads settings for the active pack) resolves once per phase.
+  if (showOMMode) {
+    const status = isObserving ? 'observing' : 'reflecting';
+    if (state.omStatusLineModel?.status !== status) {
+      state.omStatusLineModel = {
+        status,
+        modelId: getEffectiveOMRoleModelId(state.session, isObserving ? 'observer' : 'reflector'),
+      };
+    }
+  } else {
+    state.omStatusLineModel = undefined;
+  }
   // Show judge/OM model during background activity, otherwise main model
   const rawModelId =
     (isJudging
       ? state.activeGoalJudge?.modelId
       : showOMMode
-        ? isObserving
-          ? getEffectiveOMRoleModelId(state.session, 'observer')
-          : getEffectiveOMRoleModelId(state.session, 'reflector')
+        ? state.omStatusLineModel?.modelId
         : state.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')

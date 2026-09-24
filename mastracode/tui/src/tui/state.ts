@@ -247,6 +247,8 @@ export interface TUIState {
   quietModeMaxToolPreviewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
   activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
+  /** OM role model shown in the status line, resolved once per observing/reflecting phase. */
+  omStatusLineModel?: { status: 'observing' | 'reflecting'; modelId: string | undefined };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */

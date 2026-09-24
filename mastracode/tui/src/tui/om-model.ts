@@ -1,7 +1,7 @@
-import type { Session } from '@mastra/core/agent-controller';
 import { getActivePackMemoryModelId } from '@mastra/code-sdk/agents/model';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { Session } from '@mastra/core/agent-controller';
 
 /**
  * The model an OM role actually runs. An active pack's memory model is more
