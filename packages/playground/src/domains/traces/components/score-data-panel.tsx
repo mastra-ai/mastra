@@ -122,9 +122,9 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 >
                   <GaugeIcon />
                   <span className="">Score:</span>
-                  <b className="font-mono text-muted-foreground">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+                  <b className="text-muted-foreground tabular-nums">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
                 </div>
-                <div className="mt-2 font-mono text-body-sm">
+                <div className="mt-2 text-body-sm">
                   {score.reason ||
                     (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
                 </div>

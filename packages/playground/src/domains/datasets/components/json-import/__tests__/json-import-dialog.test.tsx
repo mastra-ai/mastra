@@ -12,11 +12,14 @@ type BatchInsertResponse = RouteResponse<'POST /datasets/:datasetId/items/batch'
 
 // CodeMirror doesn't render in jsdom; stub it so we can assert on the props it receives.
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
-  CodeEditor: ({ value, language }: CodeEditorProps) => (
-    <pre data-testid="code-editor" data-language={language}>
-      {value}
-    </pre>
-  ),
+  CodeEditor: ({ value, language, onChange, 'aria-label': label }: CodeEditorProps) =>
+    onChange ? (
+      <textarea aria-label={label} value={value} onChange={event => onChange(event.target.value)} />
+    ) : (
+      <pre data-testid="code-editor" data-language={language}>
+        {value}
+      </pre>
+    ),
 }));
 
 const DATASET_ID = 'ds-1';

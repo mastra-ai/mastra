@@ -14,6 +14,7 @@ import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-
 import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
 
 export type TracesListViewTrace = {
@@ -221,7 +222,9 @@ export function TracesListView({
                   <DropdownMenu.Label>Filter by value</DropdownMenu.Label>
                   {filterValues.map(value => (
                     <DropdownMenu.Item key={value} onSelect={() => onFilterByField(field, value)}>
-                      <span className="min-w-0 truncate font-mono">{value}</span>
+                      <Txt as="span" variant="body-sm" font="mono" className="min-w-0 truncate">
+                        {value}
+                      </Txt>
                     </DropdownMenu.Item>
                   ))}
                 </DropdownMenu.Content>

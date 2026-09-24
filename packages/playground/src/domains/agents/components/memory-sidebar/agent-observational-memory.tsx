@@ -182,7 +182,7 @@ const ProgressBar = ({
         </div>
 
         <span
-          className={`text-meta ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={`text-meta ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
           <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
