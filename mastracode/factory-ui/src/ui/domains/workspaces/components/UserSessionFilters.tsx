@@ -10,6 +10,7 @@ import {
   ALL_SESSION_OWNERS,
   MY_SESSIONS,
   activeUserSessionFilterCount,
+  defaultUserSessionFilters,
   sessionOwnerFilterValue,
 } from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
@@ -24,15 +25,15 @@ export function UserSessionFilters({
   owners,
   viewerUserId,
   onChange,
-  onClear,
+  onReset,
 }: {
   filters: UserSessionFiltersState;
   owners: readonly UserSessionOwnerOption[];
   viewerUserId?: string;
   onChange: (filters: UserSessionFiltersState) => void;
-  onClear: () => void;
+  onReset: () => void;
 }) {
-  const activeCount = activeUserSessionFilterCount(filters);
+  const activeCount = activeUserSessionFilterCount(filters, defaultUserSessionFilters(viewerUserId));
   const triggerLabel = activeCount === 0 ? 'Filter sessions' : `Filter sessions, ${activeCount} active`;
 
   return (
@@ -86,8 +87,8 @@ export function UserSessionFilters({
             <SelectItem value="30d">Last 30 days</SelectItem>
           </FilterSelect>
 
-          <Button type="button" variant="ghost" size="sm" disabled={activeCount === 0} onClick={onClear}>
-            Clear filters
+          <Button type="button" variant="ghost" size="sm" disabled={activeCount === 0} onClick={onReset}>
+            Reset filters
           </Button>
         </div>
       </PopoverContent>
