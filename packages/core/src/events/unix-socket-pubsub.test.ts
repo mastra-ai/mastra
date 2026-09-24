@@ -1029,6 +1029,64 @@ describe('UnixSocketPubSub', () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
+  describe('filesystem leases', () => {
+    it('allows exactly one process-local instance to acquire a shared key', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+
+      const results = await Promise.all([
+        first.acquireLease('thread-key', 'first-owner', 10_000),
+        second.acquireLease('thread-key', 'second-owner', 10_000),
+      ]);
+
+      expect(results.filter(result => result.acquired)).toHaveLength(1);
+      const winner = results.find(result => result.acquired)!.owner;
+      const loser = results.find(result => !result.acquired)!;
+      expect(loser.owner).toBe(winner);
+      await expect(first.getLeaseOwner('thread-key')).resolves.toBe(winner);
+      await expect(second.getLeaseOwner('thread-key')).resolves.toBe(winner);
+    });
+
+    it('renews, transfers, and owner-guards release without an unowned gap', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+
+      await expect(first.acquireLease('thread-key', 'first-owner', 10_000)).resolves.toEqual({
+        acquired: true,
+        owner: 'first-owner',
+      });
+      await expect(second.renewLease('thread-key', 'second-owner', 10_000)).resolves.toBe(false);
+      await expect(first.transferLease('thread-key', 'first-owner', 'second-owner', 10_000)).resolves.toBe(true);
+      await expect(first.renewLease('thread-key', 'first-owner', 10_000)).resolves.toBe(false);
+
+      await first.releaseLease('thread-key', 'first-owner');
+      await expect(second.getLeaseOwner('thread-key')).resolves.toBe('second-owner');
+      await second.releaseLease('thread-key', 'second-owner');
+      await expect(first.getLeaseOwner('thread-key')).resolves.toBeUndefined();
+    });
+
+    it('reclaims an expired lease', async () => {
+      vi.useFakeTimers();
+      try {
+        const first = new UnixSocketPubSub(await socketPath('first.sock'));
+        const second = new UnixSocketPubSub(await socketPath('second.sock'));
+        pubsubs.push(first, second);
+
+        await first.acquireLease('thread-key', 'first-owner', 100);
+        await vi.advanceTimersByTimeAsync(101);
+
+        await expect(second.acquireLease('thread-key', 'second-owner', 100)).resolves.toEqual({
+          acquired: true,
+          owner: 'second-owner',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('local nack redelivery', () => {
     it('redelivers nacked events to the same subscriber with bumped deliveryAttempt', async () => {
       const path = await socketPath();

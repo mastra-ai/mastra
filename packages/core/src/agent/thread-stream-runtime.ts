@@ -48,11 +48,7 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
-// Claim requests run off the hot path (boot claim is already time-boxed by the
-// caller; retries are background), so give a busy owner time to answer. A
-// silent 100ms window reads as "no owner" and lets two processes claim a
-// thread the user has open in both.
-const AGENT_THREAD_CLAIM_DISCOVERY_TIMEOUT_MS = 1_000;
+const AGENT_THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
@@ -292,6 +288,7 @@ type ClaimedThreadOwner<OUTPUT = unknown> = {
   threadId: string;
   streamOptions?: ClaimedThreadOwnerStreamOptions;
   peer?: AdvertisedThreadPeer;
+  claimLeaseRenewalTimer?: ReturnType<typeof setInterval>;
   unsubscribe: () => void;
 };
 
@@ -447,6 +444,8 @@ type AgentThreadOwnerDiscoveryEvent =
        * looking the owner up for signal delivery). Owners may yield to it.
        */
       intent?: 'claim';
+      /** Lease owner the request is addressed to. Older senders omit it. */
+      targetSourceId?: string;
     }
   | { type: 'thread-owner-response'; key: string; requestId: string; sourceId: string };
 
@@ -988,6 +987,7 @@ export class AgentThreadStreamRuntime {
       streamOptions?: ClaimedThreadOwnerStreamOptions;
       peer?: false | AgentClaimThreadPeerOptions;
       yieldOwnership?: () => boolean;
+      onOwnershipYielded?: () => void;
     },
     pubsub?: PubSub,
   ): Promise<{ claimed: boolean; unsubscribe: () => void }> {
@@ -995,19 +995,36 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const topic = this.#threadTopic(key);
+    const sourceId = this.#getSourceId();
     const initialLocalClaim = state.claimedThreadOwners.get(key);
+    const claimLeaseKey = `${AGENT_THREAD_CLAIM_LEASE_PREFIX}${key}`;
+    const { provider: leaseProvider, isFallback: isLeaseFallback } = this.#resolveLeaseProvider(resolvedPubSub);
 
-    if (!initialLocalClaim) {
-      const remoteOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, key, {
-        includeLocal: false,
-        intent: 'claim',
-      });
-      if (remoteOwnerSourceId) {
+    if (isLeaseFallback) {
+      if (!initialLocalClaim) {
+        const remoteOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, key, {
+          includeLocal: false,
+          intent: 'claim',
+        });
+        if (remoteOwnerSourceId) {
+          return { claimed: false, unsubscribe: () => {} };
+        }
+      }
+    } else {
+      let lease = await leaseProvider.acquireLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS);
+      if (!lease.acquired) {
+        await this.#findClaimedThreadOwner(resolvedPubSub, key, {
+          includeLocal: false,
+          intent: 'claim',
+          targetSourceId: lease.owner,
+        });
+        lease = await leaseProvider.acquireLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS);
+      }
+      if (!lease.acquired) {
         return { claimed: false, unsubscribe: () => {} };
       }
     }
 
-    const sourceId = this.#getSourceId();
     const peerOptions = options.peer === false ? undefined : (options.peer ?? {});
     const peerAgentId = peerOptions?.agentId ?? agent.id;
     const peer: AdvertisedThreadPeer | undefined = peerOptions
@@ -1160,7 +1177,14 @@ export class AgentThreadStreamRuntime {
     const onOwnerDiscovery: EventCallback = withAck(async event => {
       if (!active) return;
       const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;
-      if (data?.type !== 'thread-owner-request' || data.key !== key || data.sourceId === sourceId) return;
+      if (
+        data?.type !== 'thread-owner-request' ||
+        data.key !== key ||
+        data.sourceId === sourceId ||
+        (data.targetSourceId !== undefined && data.targetSourceId !== sourceId)
+      ) {
+        return;
+      }
       // A stale request's caller has timed out and released its reply topic;
       // replying would recreate the stream on persistent backends. Fan-out
       // groups anchor at the stream start, so a fresh claimant replays the
@@ -1168,11 +1192,29 @@ export class AgentThreadStreamRuntime {
       // request ever retained.
       if (isStaleRequest(data.expiresAt)) return;
       // Yield-on-demand: a requester that wants to own this thread asks first.
-      // If the caller no longer needs the claim (e.g. the thread is not the one
-      // the user is looking at), release it and stay silent so the requester's
-      // discovery sees no owner and claims the thread itself.
+      // Lease-backed transports hand the claim over atomically before this
+      // owner unsubscribes. Lease-less transports preserve the legacy silent
+      // release, allowing the requester's discovery to settle without an owner.
       if (data.intent === 'claim' && options.yieldOwnership?.()) {
+        if (!isLeaseFallback) {
+          const transferred = await leaseProvider.transferLease(
+            claimLeaseKey,
+            sourceId,
+            data.sourceId,
+            AGENT_THREAD_LEASE_TTL_MS,
+          );
+          if (!transferred) return;
+          unsubscribe();
+          options.onOwnershipYielded?.();
+          await resolvedPubSub.publish(data.replyTopic, {
+            type: 'thread-owner-response',
+            runId: data.requestId,
+            data: { type: 'thread-owner-response', key, requestId: data.requestId, sourceId },
+          });
+          return;
+        }
         unsubscribe();
+        options.onOwnershipYielded?.();
         return;
       }
       await resolvedPubSub.publish(data.replyTopic, {
@@ -1215,14 +1257,20 @@ export class AgentThreadStreamRuntime {
         peerDiscoverySubscribed
           ? resolvedPubSub.unsubscribe(AGENT_THREAD_PEER_DISCOVERY_TOPIC, onPeerDiscovery).catch(() => {})
           : Promise.resolve(),
+        !isLeaseFallback && !initialLocalClaim
+          ? leaseProvider.releaseLease(claimLeaseKey, sourceId).catch(() => {})
+          : Promise.resolve(),
       ]);
       throw error;
     }
 
     const unsubscribe = () => {
       active = false;
-      if (state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe) {
+      const currentOwner = state.claimedThreadOwners.get(key);
+      if (currentOwner?.unsubscribe === unsubscribe) {
         state.claimedThreadOwners.delete(key);
+        if (currentOwner.claimLeaseRenewalTimer) clearInterval(currentOwner.claimLeaseRenewalTimer);
+        if (!isLeaseFallback) void leaseProvider.releaseLease(claimLeaseKey, sourceId).catch(() => {});
       }
       if (peer && state.advertisedThreadPeers.get(peer.id)?.unsubscribe === unsubscribe) {
         state.advertisedThreadPeers.delete(peer.id);
@@ -1241,12 +1289,24 @@ export class AgentThreadStreamRuntime {
       state.advertisedThreadPeers.set(peer.id, peer);
     }
 
+    const claimLeaseRenewalTimer = isLeaseFallback
+      ? undefined
+      : setInterval(() => {
+          void leaseProvider
+            .renewLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS)
+            .then(renewed => {
+              if (!renewed) unsubscribe();
+            })
+            .catch(() => {});
+        }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+    claimLeaseRenewalTimer?.unref?.();
     state.claimedThreadOwners.set(key, {
       agent,
       resourceId: options.resourceId,
       threadId: options.threadId,
       streamOptions: options.streamOptions,
       peer,
+      claimLeaseRenewalTimer,
       unsubscribe,
     });
     active = true;
@@ -1426,10 +1486,22 @@ export class AgentThreadStreamRuntime {
       if (!lease.acquired || !ownerActive || expired) {
         state.activeThreadRunIds.delete(key);
         state.threadKeysByRunId.delete(runId);
-        const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
-        if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
-        if (!ownerActive) return { runId, error: `Claimed thread owner was released for ${key}` };
-        if (expired) return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+        if (!ownerActive || expired) {
+          const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
+          if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
+          if (!ownerActive) return { runId, error: `Claimed thread owner was released for ${key}` };
+          return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+        }
+        if (lease.owner) {
+          this.#publish(pubsub, key, {
+            type: 'signal-enqueued',
+            runId: lease.owner,
+            signal: this.#serializeSignal(signal),
+            sourceId: this.#getSourceId(),
+          });
+          return { runId: lease.owner };
+        }
+        await this.#drainPendingIdleSignals(state, pubsub, key);
         return undefined;
       }
 
@@ -1570,7 +1642,7 @@ export class AgentThreadStreamRuntime {
   async #findClaimedThreadOwner(
     pubsub: PubSub,
     key: string,
-    options?: { includeLocal?: boolean; intent?: 'claim' },
+    options?: { includeLocal?: boolean; intent?: 'claim'; targetSourceId?: string },
   ): Promise<string | undefined> {
     const hasLocalOwner = this.#getState(pubsub).claimedThreadOwners.has(key);
     if (options?.includeLocal !== false && hasLocalOwner) {
@@ -1596,8 +1668,7 @@ export class AgentThreadStreamRuntime {
         }
       });
       // Absolute deadline carried on the request; see discoverThreadPeers.
-      const timeoutMs =
-        options?.intent === 'claim' ? AGENT_THREAD_CLAIM_DISCOVERY_TIMEOUT_MS : AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
+      const timeoutMs = AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
       const expiresAt = Date.now() + timeoutMs;
       const timeout = setTimeout(() => finish(), timeoutMs);
 
@@ -1623,6 +1694,7 @@ export class AgentThreadStreamRuntime {
               sourceId: this.#getSourceId(),
               expiresAt,
               ...(options?.intent ? { intent: options.intent } : {}),
+              ...(options?.targetSourceId ? { targetSourceId: options.targetSourceId } : {}),
             },
           });
         })

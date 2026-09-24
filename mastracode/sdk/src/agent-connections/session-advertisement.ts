@@ -9,13 +9,14 @@ import { createThreadOwnershipManager } from './ownership.js';
  * so every thread the user has loaded has to stay claimed for as long as the
  * session lives — a thread that is silently released becomes unreachable, and a
  * peer that saved it can no longer send to it. Claims are therefore keyed per
- * thread and only released when this session is torn down.
+ * thread and remain live until the thread is deleted, the session is torn down,
+ * or ownership is handed to another active session.
  *
- * The one exception is yield-on-demand: when another process asks to claim a
- * thread that is *not* this session's current thread, this session lets it go.
- * The user is in that other process now, so peers should reach it there. A
- * thread the user is actually looking at is never yielded; the other process
- * keeps retrying and reports the contention instead.
+ * When another process asks to claim a thread that is *not* this session's
+ * current thread, the lease is transferred to that requester atomically. The
+ * user is in that other process now, so peers should reach it there. A thread
+ * the user is actually looking at is never yielded; the requester keeps
+ * retrying until the current session moves away.
  */
 export function createSessionThreadAdvertisement<TState>(options: {
   session: Session<TState>;
@@ -45,13 +46,10 @@ export function createSessionThreadAdvertisement<TState>(options: {
         label: projectName,
         ...(thread?.title ? { title: thread.title } : {}),
       },
-      yieldOwnership: () => {
-        // Read the current thread live rather than tracking events: whichever
-        // path moved the session (including silent switches) is reflected here.
-        if (session.thread.getId() === threadId) return false;
-        onYield();
-        return true;
-      },
+      // Read the current thread live rather than tracking events: whichever
+      // path moved the session (including silent switches) is reflected here.
+      yieldOwnership: () => session.thread.getId() !== threadId,
+      onOwnershipYielded: onYield,
     });
     const observedTitle = latestObservedTitles.get(threadId);
     if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {

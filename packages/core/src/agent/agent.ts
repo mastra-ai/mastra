@@ -8501,10 +8501,12 @@ export class Agent<
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to
-     * release this claim so the requester can take it; the claim is
-     * unsubscribed before the requester's discovery settles.
+     * transfer the claim to that requester when leasing is available, or release
+     * it on lease-less transports.
      */
     yieldOwnership?: () => boolean;
+    /** Called after this claim has been transferred or released for the requester. */
+    onOwnershipYielded?: () => void;
   }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
     return agentThreadStreamRuntime.claimThreadOwnership(
       this.#getThreadRuntimeAgent(),

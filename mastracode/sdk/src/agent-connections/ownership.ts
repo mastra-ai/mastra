@@ -29,6 +29,10 @@ type ThreadClaimState = {
   retryDelayMs: number;
 };
 
+/**
+ * Keeps one renewable ownership claim per session thread, retries contention,
+ * and discards superseded attempts without creating a release-before-acquire gap.
+ */
 export function createThreadOwnershipManager(
   claimThread: (threadId: string, context: ThreadClaimContext) => Promise<ThreadOwnershipClaim>,
 ): {
@@ -63,7 +67,7 @@ export function createThreadOwnershipManager(
   const yieldClaim = (threadId: string, claimGeneration: number) => {
     const state = states.get(threadId);
     if (!state || state.generation !== claimGeneration) return;
-    // Core already unsubscribed the claim before asking us to yield. Forget the
+    // Core completed the transfer or release before notifying us. Forget the
     // thread entirely: the user is not on it, and switching back re-claims it.
     clearRetry(state);
     states.delete(threadId);
@@ -83,8 +87,10 @@ export function createThreadOwnershipManager(
         scheduleRetry(threadId, claimGeneration);
         return false;
       }
+      const previousClaim = state.claim;
       state.retryDelayMs = OWNERSHIP_RETRY_INITIAL_DELAY_MS;
       state.claim = nextClaim;
+      previousClaim?.unsubscribe();
       return true;
     } catch (error) {
       scheduleRetry(threadId, claimGeneration);
@@ -102,15 +108,14 @@ export function createThreadOwnershipManager(
 
       // Re-claiming the thread supersedes only that thread's previous attempt —
       // the core claim is re-published so title/metadata changes made while the
-      // session was away are picked up. Other threads' claims are untouched.
+      // session was away are picked up. Keep the live claim until its replacement
+      // is ready so lease-backed ownership never has a release-then-acquire gap.
       const existing = states.get(threadId);
-      if (existing) {
-        clearRetry(existing);
-        existing.claim?.unsubscribe();
-      }
+      if (existing) clearRetry(existing);
       const state: ThreadClaimState = {
         generation: ++nextGeneration,
         retryDelayMs: OWNERSHIP_RETRY_INITIAL_DELAY_MS,
+        claim: existing?.claim,
       };
       states.set(threadId, state);
       return attemptClaim(threadId, state.generation, true);

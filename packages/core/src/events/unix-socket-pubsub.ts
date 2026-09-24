@@ -1,11 +1,12 @@
-import { mkdir, open, stat, unlink } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { link, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { decode, encode } from './codec';
 import { PubSub } from './pubsub';
-import type { PubSubDeliveryMode } from './pubsub';
+import type { LeaseProvider, PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 type ClientFrame =
@@ -61,6 +62,30 @@ const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MEMBERSHIP_ACK_TIMEOUT_MS = 5_000;
 const NEWLINE_BYTE = 0x0a;
+const LEASE_LOCK_RETRY_MS = 10;
+const PROCESS_NONCE_KEY = Symbol.for('@mastra/core/unix-socket-pubsub/process-nonce');
+const processGlobals = globalThis as typeof globalThis & { [PROCESS_NONCE_KEY]?: string };
+const PROCESS_NONCE = (processGlobals[PROCESS_NONCE_KEY] ??= randomUUID());
+
+type FileLeaseRecord = {
+  owner: string;
+  expiresAt: number;
+  pid: number;
+  processNonce: string;
+};
+
+type FileLeaseMutationLock = {
+  pid: number;
+  processNonce: string;
+};
+
+function leaseFileName(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
  * Max number of times a local subscriber callback may be redelivered after a
@@ -218,8 +243,11 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameB
   });
 }
 
-export class UnixSocketPubSub extends PubSub {
+export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   readonly socketPath: string;
+  readonly #leaseDirectory: string;
+  readonly #leaseMutationDirectory: string;
+  readonly #leaseProcessDirectory: string;
   #server?: net.Server;
   #clientSocket?: net.Socket;
   #isBroker = false;
@@ -236,10 +264,15 @@ export class UnixSocketPubSub extends PubSub {
   #maxRemoteClientQueuedBytes: number;
   #maxInboundFrameBytes: number;
   #membershipAckTimeoutMs: number;
+  #leaseDirectoriesReady?: Promise<void>;
+  #pendingLeaseOperations = new Set<Promise<unknown>>();
 
   constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
     this.socketPath = socketPath;
+    this.#leaseDirectory = join(dirname(socketPath), 'leases');
+    this.#leaseMutationDirectory = join(this.#leaseDirectory, 'mutations');
+    this.#leaseProcessDirectory = join(this.#leaseDirectory, 'processes');
     this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
 
     const maxInboundFrameBytes = options.maxInboundFrameBytes ?? DEFAULT_MAX_INBOUND_FRAME_BYTES;
@@ -266,6 +299,80 @@ export class UnixSocketPubSub extends PubSub {
   /** Number of remote clients currently connected to this broker. Always 0 for non-broker instances. */
   get remoteClientCount(): number {
     return this.#isBroker ? this.#brokerClients.size : 0;
+  }
+
+  /**
+   * Atomically acquires or renews a filesystem-backed lease shared by every
+   * UnixSocketPubSub instance in this socket directory.
+   */
+  async acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    this.#validateLeaseTtl(ttlMs);
+    return this.#trackLeaseOperation(
+      this.#withLeaseMutation(key, async leasePath => {
+        const existing = await this.#readLease(leasePath);
+        if (existing && (await this.#isLeaseRecordLive(existing)) && existing.owner !== owner) {
+          return { acquired: false, owner: existing.owner };
+        }
+        await this.#writeLease(leasePath, owner, ttlMs);
+        return { acquired: true, owner };
+      }),
+    );
+  }
+
+  /** Reads the current lease owner, reclaiming an expired or dead-process record. */
+  async getLeaseOwner(key: string): Promise<string | undefined> {
+    return this.#trackLeaseOperation(
+      this.#withLeaseMutation(key, async leasePath => {
+        const existing = await this.#readLease(leasePath);
+        if (!existing) return undefined;
+        if (!(await this.#isLeaseRecordLive(existing))) {
+          await unlink(leasePath).catch(() => {});
+          return undefined;
+        }
+        return existing.owner;
+      }),
+    );
+  }
+
+  /** Releases the lease only when `owner` still matches the stored owner. */
+  async releaseLease(key: string, owner: string): Promise<void> {
+    await this.#trackLeaseOperation(
+      this.#withLeaseMutation(key, async leasePath => {
+        const existing = await this.#readLease(leasePath);
+        if (existing?.owner === owner) {
+          await unlink(leasePath).catch(() => {});
+        }
+      }),
+    );
+  }
+
+  /** Renews the lease only when it remains live and owned by `owner`. */
+  async renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    this.#validateLeaseTtl(ttlMs);
+    return this.#trackLeaseOperation(
+      this.#withLeaseMutation(key, async leasePath => {
+        const existing = await this.#readLease(leasePath);
+        if (!existing || !(await this.#isLeaseRecordLive(existing)) || existing.owner !== owner) return false;
+        await this.#writeLease(leasePath, owner, ttlMs);
+        return true;
+      }),
+    );
+  }
+
+  /**
+   * Transfers a live lease without leaving the key unowned. The owner check and
+   * replacement are serialized by the same per-key filesystem mutation lock.
+   */
+  async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+    this.#validateLeaseTtl(ttlMs);
+    return this.#trackLeaseOperation(
+      this.#withLeaseMutation(key, async leasePath => {
+        const existing = await this.#readLease(leasePath);
+        if (!existing || !(await this.#isLeaseRecordLive(existing)) || existing.owner !== fromOwner) return false;
+        await this.#writeLease(leasePath, toOwner, ttlMs);
+        return true;
+      }),
+    );
   }
 
   async publish(
@@ -378,6 +485,150 @@ export class UnixSocketPubSub extends PubSub {
     await Promise.allSettled([...this.#pendingWrites]);
   }
 
+  /** Tracks filesystem mutations so close waits for their temporary files and locks to be removed. */
+  #trackLeaseOperation<T>(operation: Promise<T>): Promise<T> {
+    this.#pendingLeaseOperations.add(operation);
+    operation.then(
+      () => this.#pendingLeaseOperations.delete(operation),
+      () => this.#pendingLeaseOperations.delete(operation),
+    );
+    return operation;
+  }
+
+  /** Rejects lease TTLs that cannot produce a finite future expiry. */
+  #validateLeaseTtl(ttlMs: number): void {
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+      throw new Error('UnixSocketPubSub lease ttlMs must be a positive finite number');
+    }
+  }
+
+  /** Creates the shared lease directories and records this process incarnation. */
+  async #ensureLeaseDirectories(): Promise<void> {
+    if (!this.#leaseDirectoriesReady) {
+      this.#leaseDirectoriesReady = (async () => {
+        await Promise.all([
+          mkdir(this.#leaseDirectory, { recursive: true }),
+          mkdir(this.#leaseMutationDirectory, { recursive: true }),
+          mkdir(this.#leaseProcessDirectory, { recursive: true }),
+        ]);
+        const markerPath = join(this.#leaseProcessDirectory, `${process.pid}.json`);
+        await this.#writeJsonAtomically(markerPath, { pid: process.pid, processNonce: PROCESS_NONCE });
+      })().catch(error => {
+        this.#leaseDirectoriesReady = undefined;
+        throw error;
+      });
+    }
+    await this.#leaseDirectoriesReady;
+  }
+
+  /** Serializes one lease key's read-modify-write operation across processes. */
+  async #withLeaseMutation<T>(key: string, mutate: (leasePath: string) => Promise<T>): Promise<T> {
+    await this.#ensureLeaseDirectories();
+    const fileName = leaseFileName(key);
+    const leasePath = join(this.#leaseDirectory, `${fileName}.json`);
+    const lockPath = join(this.#leaseMutationDirectory, `${fileName}.lock`);
+    const lockRecord: FileLeaseMutationLock = { pid: process.pid, processNonce: PROCESS_NONCE };
+
+    while (true) {
+      const candidatePath = `${lockPath}.${process.pid}.${randomUUID()}.tmp`;
+      await writeFile(candidatePath, JSON.stringify(lockRecord), { flag: 'wx' });
+      try {
+        await link(candidatePath, lockPath);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        if (await this.#isLeaseMutationLockStale(lockPath)) {
+          await unlink(lockPath).catch(() => {});
+        } else {
+          await delay(LEASE_LOCK_RETRY_MS);
+        }
+      } finally {
+        await unlink(candidatePath).catch(() => {});
+      }
+    }
+
+    try {
+      return await mutate(leasePath);
+    } finally {
+      await unlink(lockPath).catch(() => {});
+    }
+  }
+
+  /** Detects abandoned mutation locks using both PID liveness and process incarnation. */
+  async #isLeaseMutationLockStale(lockPath: string): Promise<boolean> {
+    const lock = await this.#readJson<FileLeaseMutationLock>(lockPath);
+    if (!lock || !Number.isInteger(lock.pid) || typeof lock.processNonce !== 'string') return true;
+    try {
+      process.kill(lock.pid, 0);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') return true;
+      if (code !== 'EPERM') throw error;
+    }
+    const marker = await this.#readJson<FileLeaseMutationLock>(join(this.#leaseProcessDirectory, `${lock.pid}.json`));
+    return marker?.processNonce !== lock.processNonce;
+  }
+
+  /** Reads and validates a persisted lease record. */
+  async #readLease(leasePath: string): Promise<FileLeaseRecord | undefined> {
+    const record = await this.#readJson<FileLeaseRecord>(leasePath);
+    if (
+      !record ||
+      typeof record.owner !== 'string' ||
+      !Number.isFinite(record.expiresAt) ||
+      !Number.isInteger(record.pid) ||
+      typeof record.processNonce !== 'string'
+    ) {
+      return undefined;
+    }
+    return record;
+  }
+
+  /** Verifies that a lease is unexpired and still belongs to the recorded process incarnation. */
+  async #isLeaseRecordLive(record: FileLeaseRecord): Promise<boolean> {
+    if (record.expiresAt <= Date.now()) return false;
+    try {
+      process.kill(record.pid, 0);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') return false;
+      if (code !== 'EPERM') throw error;
+    }
+    const marker = await this.#readJson<FileLeaseMutationLock>(join(this.#leaseProcessDirectory, `${record.pid}.json`));
+    return marker?.processNonce === record.processNonce;
+  }
+
+  /** Persists a lease for this process incarnation with a refreshed expiry. */
+  async #writeLease(leasePath: string, owner: string, ttlMs: number): Promise<void> {
+    await this.#writeJsonAtomically(leasePath, {
+      owner,
+      expiresAt: Date.now() + ttlMs,
+      pid: process.pid,
+      processNonce: PROCESS_NONCE,
+    } satisfies FileLeaseRecord);
+  }
+
+  /** Reads JSON while treating missing or partially written files as absent. */
+  async #readJson<T>(path: string): Promise<T | undefined> {
+    try {
+      return JSON.parse(await readFile(path, 'utf8')) as T;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return undefined;
+      throw error;
+    }
+  }
+
+  /** Replaces a JSON file atomically so readers never observe partial contents. */
+  async #writeJsonAtomically(path: string, value: unknown): Promise<void> {
+    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(tempPath, JSON.stringify(value), { flag: 'wx' });
+    try {
+      await rename(tempPath, path);
+    } finally {
+      await unlink(tempPath).catch(() => {});
+    }
+  }
+
   #hasLocalMembership(topic: string, group?: string): boolean {
     return [...(this.#subscriptions.get(topic)?.values() ?? [])].some(subscription => subscription.group === group);
   }
@@ -420,6 +671,8 @@ export class UnixSocketPubSub extends PubSub {
       await new Promise<void>(resolve => this.#server?.close(() => resolve()));
       this.#server = undefined;
     }
+
+    await Promise.allSettled([...this.#pendingLeaseOperations]);
 
     if (this.#isBroker) {
       await unlink(this.socketPath).catch(() => {});

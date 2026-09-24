@@ -1,10 +1,12 @@
 import { createInterface } from 'node:readline';
 
 import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 
 import { createSignalsPubSub } from '../../../utils/signals-pubsub.js';
 import { createThreadOwnershipManager } from '../../ownership.js';
+import { createSessionThreadAdvertisement } from '../../session-advertisement.js';
 
 const [role, resourceIdArg, scenario = 'request-reply', startAtArg] = process.argv.slice(2);
 if ((role !== 'owner' && role !== 'sender') || !resourceIdArg) {
@@ -276,11 +278,10 @@ async function runYieldOnDemand() {
       threadId: claimThreadId,
       streamOptions: { memory: { resource: resourceId, thread: claimThreadId } },
       peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
-      yieldOwnership: () => {
-        if (currentThreadId === claimThreadId) return false;
+      yieldOwnership: () => currentThreadId !== claimThreadId,
+      onOwnershipYielded: () => {
         onYield();
         emit('yielded', { threadId: claimThreadId });
-        return true;
       },
     });
     // The manager retries silently; report every attempt so the test can see
@@ -337,6 +338,103 @@ async function runYieldOnDemand() {
   manager.close();
 }
 
+/** Races two processes to reclaim a filesystem lease from a killed holder. */
+async function runStaleLeaseTakeover() {
+  const leaseProvider = pubsub.getLeaseProvider();
+  const leaseKey = 'stale-holder-race';
+  if (role === 'sender') await waitUntil(Number(startAtArg));
+  const result = await leaseProvider.acquireLease(leaseKey, `${role}:${process.pid}`, 15_000);
+  emit('lease-result', result);
+  await waitForCommand('close');
+}
+
+/** Drives the real session advertisement closure across two processes. */
+async function runSessionAdvertisementYield() {
+  const controller = new AgentController({
+    id: `${role}-session-advertisement-controller`,
+    resourceId,
+    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    pubsub,
+  } as any);
+  await controller.init();
+  const session = await controller.createSession({
+    id: `${role}-session-advertisement-session`,
+    ownerId: role,
+    resourceId,
+  });
+  const advertisement = createSessionThreadAdvertisement({
+    session,
+    controller,
+    projectName: `${role}:session-advertisement`,
+  });
+
+  const claimLeaseKey = `thread-claim:${resourceId}\u0000${ownerThreadId}`;
+  const probe = async () => {
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
+    const shared = peers.find(peer => peer.threadId === ownerThreadId);
+    emit('discovered', {
+      threadId: ownerThreadId,
+      currentThreadId: session.thread.getId(),
+      leaseOwner: await pubsub.getLeaseProvider().getLeaseOwner(claimLeaseKey),
+      hasPeer: Boolean(shared),
+      selfAdvertised: shared?.selfAdvertised === true,
+      label: shared?.label,
+    });
+  };
+
+  if (role === 'owner') {
+    await session.thread.create({ id: ownerThreadId });
+    while (!(await pubsub.getLeaseProvider().getLeaseOwner(claimLeaseKey))) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    emit('thread-owned', { threadId: ownerThreadId });
+    for (;;) {
+      const command = await waitForCommand([
+        'reclaim',
+        'switch-away',
+        'switch-back',
+        'switch-away-and-back',
+        'probe',
+        'close',
+      ]);
+      if (command === 'close') break;
+      if (command === 'probe') {
+        await probe();
+      } else if (command === 'reclaim') {
+        await advertisement.claim(ownerThreadId);
+        emit('reclaimed', { threadId: ownerThreadId });
+      } else if (command === 'switch-away' || command === 'switch-away-and-back') {
+        await session.thread.create({ id: 'owner-thread-2' });
+        emit(command === 'switch-away' ? 'switched' : 'switched-away', { threadId: session.thread.getId() });
+        if (command === 'switch-away-and-back') {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await session.thread.switch({ threadId: ownerThreadId });
+          emit('switched-back', { threadId: session.thread.getId() });
+        }
+      } else {
+        await session.thread.switch({ threadId: ownerThreadId });
+        emit('switched', { threadId: session.thread.getId() });
+      }
+    }
+  } else {
+    await waitForCommand('claim');
+    await session.thread.create({ id: ownerThreadId });
+    emit('claim-started', { threadId: ownerThreadId });
+    for (;;) {
+      const command = await waitForCommand(['switch-away', 'probe', 'close']);
+      if (command === 'close') break;
+      if (command === 'probe') {
+        await probe();
+      } else {
+        await session.thread.create({ id: 'sender-thread-2' });
+        emit('switched', { threadId: session.thread.getId() });
+      }
+    }
+  }
+
+  advertisement.close();
+}
+
 const STALL_TOTAL_MS = 6_000;
 const STALL_BURST_MS = 400;
 const STALL_GAP_MS = 20;
@@ -344,6 +442,8 @@ const STALL_GAP_MS = 20;
 async function main() {
   if (scenario === 'thread-transition') await runThreadTransition();
   else if (scenario === 'yield-on-demand') await runYieldOnDemand();
+  else if (scenario === 'session-advertisement-yield') await runSessionAdvertisementYield();
+  else if (scenario === 'stale-lease-takeover') await runStaleLeaseTakeover();
   else if (scenario === 'claim-only') await runClaimOnly();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
   else if (scenario === 'ownership-contention') await runOwnershipContention();

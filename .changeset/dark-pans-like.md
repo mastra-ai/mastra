@@ -3,6 +3,6 @@
 'mastracode': patch
 ---
 
-Fixed cross-agent thread ownership so a thread you open in a new mastracode instance is no longer held by an instance that merely visited it earlier.
+Fixed cross-agent thread ownership so peers advertise the mastracode instance that currently owns the thread instead of an instance that only visited it earlier.
 
-Instances keep every thread they have loaded advertised so saved peers stay reachable after `/new`. Before, the instance that loaded a thread first kept it forever: opening that thread in a second instance silently failed to advertise it, other instances saw a stale title, and signals routed to the old instance. Now, when another instance asks to own a thread that is not your current one, your instance yields it within a few seconds. A thread you are actively looking at is never yielded.
+Sessions still keep every loaded thread advertised so saved peers remain reachable after `/new`. When another instance requests a thread that is no longer current, the SDK now transfers its lease during that claim attempt and forgets the yielded advertisement. A thread that is still current is retained, and retries succeed as soon as its current owner moves away. This prevents stale titles, missing peers, timeout races during event-loop stalls, and release-before-reclaim gaps.

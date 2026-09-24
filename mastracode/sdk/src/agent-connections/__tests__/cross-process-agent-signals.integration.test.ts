@@ -289,6 +289,122 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(contenderCode).toBe(0);
   }, 30_000);
 
+  it('uses the live session thread to keep, yield, and reclaim an advertised thread across processes', async () => {
+    const owner = startChild('owner', resourceId, 'session-advertisement-yield');
+    await owner.waitFor('thread-owned');
+
+    const contender = startChild('sender', resourceId, 'session-advertisement-yield');
+    contender.child.stdin.write('claim\n');
+    await contender.waitFor('claim-started');
+
+    const probe = async (child: ReturnType<typeof startChild>) => {
+      const previousCount = child.events.filter(event => event.event === 'discovered').length;
+      child.child.stdin.write('probe\n');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const discoveries = child.events.filter(event => event.event === 'discovered');
+        if (discoveries.length > previousCount) return discoveries.at(-1)!;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out probing session advertisement. Events: ${JSON.stringify(child.events)}`);
+    };
+
+    // The current owner refuses to yield, so the contender still discovers it
+    // as a remote peer instead of hiding the thread as its own claim.
+    const initialDiscovery = await probe(contender);
+    expect(
+      initialDiscovery,
+      JSON.stringify({ initialDiscovery, ownerEvents: owner.events, contenderEvents: contender.events }),
+    ).toMatchObject({
+      hasPeer: true,
+      selfAdvertised: false,
+    });
+
+    // Re-claiming the current thread replaces its advertisement without first
+    // dropping the live lease, so the waiting contender cannot slip in.
+    owner.child.stdin.write('reclaim\n');
+    await owner.waitFor('reclaimed');
+    expect(await probe(contender)).toMatchObject({ hasPeer: true, selfAdvertised: false });
+
+    // Once the owner moves away, the contender's retry atomically receives the
+    // claim. The original owner now sees the shared thread as remote.
+    owner.child.stdin.write('switch-away\n');
+    await owner.waitFor('switched');
+    await expect
+      .poll(() => probe(owner), { timeout: 10_000, interval: 250 })
+      .toMatchObject({
+        hasPeer: true,
+        selfAdvertised: false,
+        label: 'sender:session-advertisement',
+      });
+
+    // Switching back cannot steal a current claim from the contender.
+    owner.child.stdin.write('switch-back\n');
+    await owner.waitFor('switched');
+    expect(await probe(owner)).toMatchObject({ hasPeer: true, selfAdvertised: false });
+
+    // After the contender moves on, the original session's retry reclaims the
+    // shared thread and discovery hides it as self-advertised again.
+    contender.child.stdin.write('switch-away\n');
+    await contender.waitFor('switched');
+    await expect
+      .poll(() => probe(owner), { timeout: 10_000, interval: 250 })
+      .toMatchObject({
+        hasPeer: true,
+        selfAdvertised: true,
+        label: 'owner:session-advertisement',
+      });
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 40_000);
+
+  it('keeps exactly one claim when an owner yields and switches back 300 ms later', async () => {
+    const owner = startChild('owner', resourceId, 'session-advertisement-yield');
+    await owner.waitFor('thread-owned');
+    const contender = startChild('sender', resourceId, 'session-advertisement-yield');
+    contender.child.stdin.write('claim\n');
+    await contender.waitFor('claim-started');
+
+    const probe = async (child: ReturnType<typeof startChild>) => {
+      const previousCount = child.events.filter(event => event.event === 'discovered').length;
+      child.child.stdin.write('probe\n');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const discoveries = child.events.filter(event => event.event === 'discovered');
+        if (discoveries.length > previousCount) return discoveries.at(-1)!;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out probing ownership race. Events: ${JSON.stringify(child.events)}`);
+    };
+
+    owner.child.stdin.write('switch-away-and-back\n');
+    await owner.waitFor('switched-away');
+    await owner.waitFor('switched-back');
+    const [ownerDiscovery, contenderDiscovery] = await Promise.all([probe(owner), probe(contender)]);
+
+    expect(ownerDiscovery.leaseOwner).toBe(contenderDiscovery.leaseOwner);
+    expect([ownerDiscovery.selfAdvertised, contenderDiscovery.selfAdvertised].filter(Boolean)).toHaveLength(1);
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
   it('never lets a contender take a thread from a live owner that is merely slow to answer', async () => {
     const owner = startChild('owner', resourceId, 'yield-on-demand');
     expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
@@ -362,6 +478,36 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(contenderCode).toBe(0);
   }, 40_000);
 
+  it('lets exactly one contender reclaim a filesystem lease from a killed holder', async () => {
+    const holder = startChild('owner', resourceId, 'stale-lease-takeover');
+    expect(await holder.waitFor('lease-result')).toMatchObject({ acquired: true });
+    holder.child.kill('SIGKILL');
+    await holder.result;
+
+    const startAt = String(Date.now() + 2_000);
+    const first = startChild('sender', resourceId, 'stale-lease-takeover', [startAt]);
+    const second = startChild('sender', resourceId, 'stale-lease-takeover', [startAt]);
+    const [firstResult, secondResult] = await Promise.all([
+      first.waitFor('lease-result'),
+      second.waitFor('lease-result'),
+    ]);
+
+    first.child.stdin.write('close\n');
+    second.child.stdin.write('close\n');
+    first.child.stdin.end();
+    second.child.stdin.end();
+    const [firstCode, secondCode] = await Promise.all([first.result, second.result]);
+
+    expect([firstResult.acquired, secondResult.acquired].filter(Boolean)).toHaveLength(1);
+    const winner = firstResult.acquired ? firstResult.owner : secondResult.owner;
+    const loser = firstResult.acquired ? secondResult : firstResult;
+    expect(loser).toMatchObject({ acquired: false, owner: winner });
+    expect(first.stderr).toBe('');
+    expect(second.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+  }, 30_000);
+
   it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
     const startAt = String(Date.now() + 3_000);
     const firstOwner = startChild('owner', resourceId, 'simultaneous-owner-wake', [startAt]);
@@ -388,8 +534,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
       wakeSender.result,
     ]);
 
-    expect(firstClaim.claimed).toBe(true);
-    expect(secondClaim.claimed).toBe(true);
+    expect([firstClaim.claimed, secondClaim.claimed].filter(Boolean)).toHaveLength(1);
     expect(sendResult.action).toBe('deliver');
     if (modelStreams.length !== 1) {
       throw new Error(
