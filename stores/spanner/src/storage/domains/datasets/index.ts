@@ -178,7 +178,10 @@ export class DatasetsSpanner extends DatasetsStorage {
           await tx.commit();
           return result;
         } catch (error) {
-          await tx.rollback();
+          // Keep the original error first so runWithAbortRetry still sees an ABORTED cause.
+          await tx.rollback().catch(rollbackError => {
+            throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+          });
           throw error;
         }
       }),
