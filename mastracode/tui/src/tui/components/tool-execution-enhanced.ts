@@ -239,6 +239,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private liveUpdatesStopped = false;
   private quietShellTicker?: ReturnType<typeof setInterval>;
   private quietShellGroupWidth?: number;
+  private quietShellGroupPreview?: string[];
+  /** Rows the shell box preview has used so far; it never shrinks, so rows below don't jump. */
+  private quietShellPreviewRowFloor = 0;
   private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
   private quietPreviewRowFloor = 0;
@@ -352,6 +355,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
     this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
     this.quietPreviewRowFloor = Math.min(this.quietPreviewRowFloor, this.quietPreviewLineLimit);
+    this.quietShellPreviewRowFloor = Math.min(this.quietShellPreviewRowFloor, this.quietPreviewLineLimit);
     this.rebuild();
   }
 
@@ -417,16 +421,32 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * With no quiet preview lines, a described shell call has nothing to show but its one-line
-   * description, so consecutive calls share one box: a `$ <path>` header, then one status row each.
+   * In quiet mode, consecutive shell calls in one directory share a box: an optional preview of the
+   * latest output, a `$ <path>` header, then one status row per call. Expanding shows the full box.
    */
   private isQuietCompactShell(): boolean {
-    return (
-      this.quietDisplayMode === 'quiet' &&
-      this.toolName === MC_TOOLS.EXECUTE_COMMAND &&
-      this.quietPreviewLineLimit <= 0 &&
-      !this.expanded
-    );
+    return this.quietDisplayMode === 'quiet' && this.toolName === MC_TOOLS.EXECUTE_COMMAND && !this.expanded;
+  }
+
+  /**
+   * The last `quietPreviewLineLimit` lines this call printed, for its box's shared preview; `[]` when
+   * it printed nothing and `undefined` when previews are off.
+   */
+  getQuietShellPreviewLines(): string[] | undefined {
+    if (!this.isQuietCompactShell() || this.quietPreviewLineLimit <= 0) return undefined;
+    const output = this.streamingOutput.trim() ? this.streamingOutput : this.getFormattedOutput();
+    const lines = output.split('\n').filter(line => !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line.trim()));
+    while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
+    while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
+    return lines.slice(-this.quietPreviewLineLimit);
+  }
+
+  /** Set on the first call of a shell box, which draws the box's preview above its header. */
+  setQuietShellGroupPreview(lines: string[] | undefined): void {
+    const current = this.quietShellGroupPreview;
+    if (current === lines || (current && lines && current.join('\n') === lines.join('\n'))) return;
+    this.quietShellGroupPreview = lines;
+    if (this.isQuietCompactShell()) this.rebuild();
   }
 
   /**
@@ -508,39 +528,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (this.shouldShowLeadingPadding()) {
       this.contentBox.addChild(new Text('', 0, 0));
     }
-  }
-
-  /**
-   * Quiet shell output follows the same rule as every other tool's preview:
-   * `quietPreviewLineLimit` output lines (the tail, since that is where errors
-   * land), or none at all when the limit is 0. Expanding (ctrl+e) shows everything.
-   */
-  private limitQuietShellLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
-    const limit = this.quietPreviewLineLimit;
-    if (limit <= 0) return [];
-    if (this.fitsQuietLimit(lines.length, limit)) return lines;
-    return [this.quietHiddenLinesMarker(lines.length - limit), ...lines.slice(-limit)];
-  }
-
-  /**
-   * The command is the shell tool's header, so at least one line always shows;
-   * the rest of a long command (heredocs, inline scripts) is capped like output.
-   */
-  private limitQuietShellCommandLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
-    const limit = Math.max(1, this.quietPreviewLineLimit);
-    if (this.fitsQuietLimit(lines.length, limit)) return lines;
-    return [...lines.slice(0, limit), this.quietHiddenLinesMarker(lines.length - limit)];
-  }
-
-  /** A `⋯ (+1 line)` marker costs the same row as the line it hides, so just show the line. */
-  private fitsQuietLimit(count: number, limit: number): boolean {
-    return count <= limit + 1;
-  }
-
-  private quietHiddenLinesMarker(hidden: number): string {
-    return theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`);
   }
 
   /**
@@ -767,7 +754,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { line: highlighted, quote: activeQuote };
   }
 
-  private wrapQuietShellCommand(command: string, width: number, highlightShell = true): string[] {
+  private wrapQuietShellCommand(command: string, width: number): string[] {
     const lines: string[] = [];
     let current = '';
     let currentWidth = 0;
@@ -775,12 +762,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     let quote: 'single' | 'double' | undefined;
 
     const pushCurrent = () => {
-      if (!highlightShell) {
-        lines.push(current);
-        current = '';
-        currentWidth = 0;
-        return;
-      }
       const highlightLength = Math.min(current.length, QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
       const highlighted = this.highlightQuietShellCommandLine(current.slice(0, highlightLength), quote);
       lines.push(highlighted.line + current.slice(highlightLength));
@@ -1609,15 +1590,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : cdPath ? shortenPath(cdPath) : '';
 
-    // Quiet mode shows the model's plain-language description in place of the raw command;
-    // expanding (ctrl+e) or normal mode shows the command itself. While args are still
-    // streaming the description may not have arrived yet, so the command stays hidden
-    // rather than flashing before the description replaces it.
-    const description = this.getShellDescription();
-    const showDescription =
-      this.quietDisplayMode === 'quiet' && !this.expanded && (!!description || this.argsStreaming);
-    const footerText = showDescription ? description || '...' : command;
-
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;
     const tailMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
@@ -1652,9 +1624,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       }
       const footerPromptWidth = visibleWidth(footerPrompt);
       const footerWrapWidth = Math.max(1, contentWidth - 2 - footerPromptWidth);
-      const footerLines = this.limitQuietShellCommandLines(
-        this.wrapQuietShellCommand(footerText, footerWrapWidth, !showDescription),
-      );
+      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
       const footerSuffixWidth = visibleWidth(footerSuffix);
       const continuationIndent = ' '.repeat(footerPromptWidth);
       footerLines.forEach((footerLine, index) => {
@@ -1698,7 +1668,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (maxStreamLines && lines.length > maxStreamLines) {
         lines = lines.slice(-maxStreamLines);
       }
-      renderBorderedShell(status, this.limitQuietShellLines(lines));
+      renderBorderedShell(status, lines);
       return;
     }
 
@@ -1721,7 +1691,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     const failed = this.getShellFailureLine() !== undefined;
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    renderBorderedShell(this.getStatusIndicator(failed), this.limitQuietShellLines(prepareOutputLines(output)));
+    renderBorderedShell(this.getStatusIndicator(failed), prepareOutputLines(output));
   }
 
   /**
@@ -1750,7 +1720,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const headerPath = singleLine(this.getShellHeaderPath());
     const header = row(`${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('muted', headerPath)}`);
     const lines: string[] = [];
-    if (!this.compactToolContinuation) lines.push(rule('╭', '╮'), header, rule('├', '┤'));
+    if (!this.compactToolContinuation) {
+      lines.push(rule('╭', '╮'));
+      const preview = this.quietShellGroupPreview ?? [];
+      this.quietShellPreviewRowFloor = Math.min(
+        this.quietPreviewLineLimit,
+        Math.max(this.quietShellPreviewRowFloor, preview.length),
+      );
+      if (this.quietShellPreviewRowFloor > 0) {
+        for (let i = 0; i < this.quietShellPreviewRowFloor; i++) {
+          lines.push(row(theme.fg('toolOutput', singleLine(preview[i] ?? ''))));
+        }
+        lines.push(rule('├', '┤'));
+      }
+      lines.push(header, rule('├', '┤'));
+    }
 
     const rowText = this.getQuietShellRowText();
     const description = rowText.isCommand ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);

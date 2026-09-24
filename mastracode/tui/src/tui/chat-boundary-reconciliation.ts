@@ -12,6 +12,8 @@ interface CompactToolGroupingParticipant {
   setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
   getQuietShellNaturalWidth?(): number | undefined;
   setQuietShellGroupWidth?(width: number | undefined): void;
+  getQuietShellPreviewLines?(): string[] | undefined;
+  setQuietShellGroupPreview?(lines: string[] | undefined): void;
 }
 
 /**
@@ -85,10 +87,14 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
       .map(participant => participant.getQuietShellNaturalWidth?.())
       .filter((width): width is number => width !== undefined);
     const groupWidth = widths.length > 0 ? Math.max(...widths) : undefined;
-    for (const participant of currentCompactRun) {
+    // The box's first call draws its preview: the latest output of any call in the box.
+    const previews = currentCompactRun.map(participant => participant.getQuietShellPreviewLines?.());
+    const preview = previews.findLast(lines => lines && lines.length > 0) ?? previews.find(lines => lines);
+    currentCompactRun.forEach((participant, index) => {
       participant.setCompactToolGroupLabelColor?.(color);
       participant.setQuietShellGroupWidth?.(groupWidth);
-    }
+      participant.setQuietShellGroupPreview?.(index === 0 ? preview : undefined);
+    });
     currentCompactRun = [];
   };
 

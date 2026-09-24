@@ -264,11 +264,11 @@ describe('quiet shell description streaming', () => {
     handleToolInputDelta(ctx, 'call-1', '{"command":"gh run view 123 --log-failed | grep FAIL"');
     await flushParser();
     expect(render()).not.toContain('gh run view');
-    expect(render()).toContain('$ ...');
+    expect(render()).toMatch(/│ \S \.\.\. /);
 
     handleToolInputDelta(ctx, 'call-1', ',"description":"Drilling into the failed CI job"}');
     await flushParser();
-    expect(render()).toContain('$ Drilling into the failed CI job');
+    expect(render()).toMatch(/│ \S Drilling into the failed CI job /);
     expect(render()).not.toContain('gh run view');
 
     handleToolInputEnd(ctx, 'call-1');
@@ -276,14 +276,14 @@ describe('quiet shell description streaming', () => {
       command: 'gh run view 123 --log-failed | grep FAIL',
       description: 'Drilling into the failed CI job',
     });
-    expect(render()).toContain('$ Drilling into the failed CI job');
+    expect(render()).toMatch(/│ \S Drilling into the failed CI job /);
     expect(render()).not.toContain('gh run view');
+    ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
 
   it('streams the description into a grouped row as it arrives', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
-    ctx.state.quietModeMaxToolPreviewLines = 0;
     const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
     const row = () =>
@@ -316,7 +316,8 @@ describe('quiet shell description streaming', () => {
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('git status');
 
     handleToolInputEnd(ctx, 'call-1');
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('$ git status');
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/│ \S git status /);
+    ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
 
   it('marks a call rejected by input validation as failed', () => {
