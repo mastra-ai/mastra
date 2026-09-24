@@ -42,7 +42,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
                 {experiment.variants.map(option => (
                   <label
                     key={option.value}
-                    className="text-caption text-muted-foreground flex cursor-pointer items-center gap-3"
+                    className="flex cursor-pointer items-center gap-3 text-caption text-muted-foreground"
                   >
                     <RadioGroupItem value={option.value} />
                     {option.label}

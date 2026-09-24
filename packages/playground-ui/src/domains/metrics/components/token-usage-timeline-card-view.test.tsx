@@ -37,8 +37,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     expect(screen.getByText('Token usage over time')).toBeTruthy();
     expect(screen.getByText('Input and output tokens per hour.')).toBeTruthy();
-    expect(screen.getByText('2.5K')).toBeTruthy();
-    expect(screen.getByText('Total tokens')).toBeTruthy();
+    expect(screen.queryByText('Total tokens')).toBeNull();
     expect(screen.getByText('Input tokens')).toBeTruthy();
     expect(screen.getByText('Output tokens')).toBeTruthy();
   });
@@ -48,8 +47,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
-    expect(screen.getAllByText('$0.07')).toHaveLength(2);
-    expect(screen.getByText('Total cost')).toBeTruthy();
+    expect(screen.getByText('$0.07')).toBeTruthy();
     // The tab and the chart legend both name the series being drawn.
     expect(screen.getAllByText('Cost')).toHaveLength(2);
   });
@@ -88,22 +86,22 @@ describe('TokenUsageTimelineCardView', () => {
     render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError={false} />);
 
     // 1200 + 800 input, 300 + 200 output — not one combined figure.
-    expect(screen.getByText('2.0K')).toBeTruthy();
+    expect(screen.getByText('2k')).toBeTruthy();
     expect(screen.getByText('500')).toBeTruthy();
   });
 
-  it('goes back to the token total when the user returns to the tokens tab', () => {
+  it('goes back to the token legend when the user returns to the tokens tab', () => {
     render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError={false} />);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
-    expect(screen.getByText('Total cost')).toBeTruthy();
+    expect(screen.getByText('$0.07')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
-    expect(screen.getByText('Total tokens')).toBeTruthy();
-    expect(screen.queryByText('Total cost')).toBeNull();
+    expect(screen.getByText('2k')).toBeTruthy();
+    expect(screen.queryByText('$0.07')).toBeNull();
   });
 
-  it('keeps the token total on the cost tab when there is no cost to show', () => {
+  it('shows no legend on the cost tab when there is no cost to show', () => {
     render(
       <TokenUsageTimelineCardView
         data={data.map(point => ({ ...point, cost: null, costUnit: null }))}
@@ -116,7 +114,7 @@ describe('TokenUsageTimelineCardView', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
     expect(screen.getByText('No cost data yet')).toBeTruthy();
-    expect(screen.getByText('Total tokens')).toBeTruthy();
+    expect(screen.queryByText('Input tokens')).toBeNull();
   });
 
   it('ignores buckets that cost nothing', () => {
@@ -136,7 +134,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
-    expect(screen.getAllByText('$0.03')).toHaveLength(2);
+    expect(screen.getByText('$0.03')).toBeTruthy();
     expect(screen.queryByText('No cost data yet')).toBeNull();
   });
 
@@ -158,7 +156,7 @@ describe('TokenUsageTimelineCardView', () => {
     // A bucket that cost nothing names no currency, and is no reason to
     // call the trace's costs mixed.
     expect(screen.queryByText('No cost data yet')).toBeNull();
-    expect(screen.getAllByText('$0.03')).toHaveLength(2);
+    expect(screen.getByText('$0.03')).toBeTruthy();
   });
 
   it('will not total a cost when one of the buckets names no unit', () => {
@@ -177,7 +175,7 @@ describe('TokenUsageTimelineCardView', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
     expect(screen.getByText('No cost data yet')).toBeTruthy();
-    expect(screen.queryByText('Total cost')).toBeNull();
+    expect(screen.queryByText('$0.07')).toBeNull();
   });
 
   it('reports the cost in whatever currency the buckets agree on', () => {
@@ -192,7 +190,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
-    expect(screen.getAllByText('0.0700 eur')).toHaveLength(2);
+    expect(screen.getByText('0.0700 eur')).toBeTruthy();
   });
 
   it('shows a spinner while loading', () => {

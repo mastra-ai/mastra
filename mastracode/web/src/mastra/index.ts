@@ -97,7 +97,14 @@ function credentialEncryption() {
 // in favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev)
 // the in-process default applies.
 const redisUrl = process.env.REDIS_URL;
-const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
+// Backstop TTL for idle streams: every write (publish, group creation, nack
+// retry) refreshes it — reads do not — so actively written topics never
+// expire. Open-ended topics (per-thread streams, feed
+// topics) are never clearTopic'd, and topics whose eager cleanup was missed
+// (e.g. a crashed run, or a reply landing after the requester's clearTopic)
+// would otherwise stay in Redis forever.
+const STREAM_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
+const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl, streamIdleTtlMs: STREAM_IDLE_TTL_MS }) : undefined;
 if (redisUrl) {
   // Redact credentials before logging (REDIS_URL may embed a password).
   let redisTarget = 'redis';
@@ -146,11 +153,22 @@ if (authDisabled) {
 }
 const secretEncryption = auth === null ? undefined : credentialEncryption();
 
+// Platform-backed integrations are installed by the factory only when Platform
+// credentials are present — the same check it makes internally.
+const platformCredentialsConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
+
 // Direct GitHub App fallback: when the platform-backed integration isn't in
 // play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
 // a GithubIntegration so the app still gets a real GitHub connection — Connect
 // GitHub in onboarding, the repo picker, and webhooks. A partial group stays
 // disabled so the status route can report exactly what's missing.
+//
+// This integration carries the deployment's GitHub event-rule overrides. When
+// the group is absent the factory installs the Platform-backed integration
+// instead, and `platform.github` (below) hands it the same overrides — only one
+// of the two is ever installed.
 const githubAppId = process.env.GITHUB_APP_ID?.trim();
 const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
 const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
@@ -207,9 +225,6 @@ const linear =
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
-const platformJiraConfigured = Boolean(
-  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
-);
 const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
 if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
   // A partial group silently disables direct Jira (no /web/jira routes mount),
@@ -225,7 +240,7 @@ const jira =
         email: jiraEmail,
         apiToken: jiraApiToken,
       })
-    : platformJiraConfigured
+    : platformCredentialsConfigured
       ? new PlatformJiraIntegration()
       : undefined;
 

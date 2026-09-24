@@ -18,7 +18,7 @@ export const Kbd = ({ children, size = 'default', className }: KbdProps) => {
   return (
     <kbd
       className={cn(
-        'bg-card shadow-raised text-foreground inline-flex items-center justify-center font-mono',
+        'inline-flex items-center justify-center bg-card font-mono text-foreground shadow-raised',
         sizeClasses[size],
         transitions.transform,
         'active:scale-95 active:shadow-none',

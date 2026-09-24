@@ -38,7 +38,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
       y1={DIAL_CENTER}
       x2={tip.x}
       y2={tip.y}
-      className="stroke-muted-foreground stroke-[1.5]"
+      className="stroke-1.5 stroke-muted-foreground"
       strokeLinecap="round"
     />
   );
@@ -46,7 +46,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
 
 function DialFace({ tickAngles, children }: { tickAngles: number[]; children: ReactNode }) {
   return (
-    <span className="text-muted-foreground block size-28 shrink-0" aria-hidden>
+    <span className="block size-28 shrink-0 text-muted-foreground" aria-hidden>
       <svg viewBox="0 0 116 116" fill="none" className="block size-full overflow-visible">
         {tickAngles.map((angle, index) => (
           <DialTick key={angle} angle={angle} major={index % 5 === 0} />
@@ -78,10 +78,10 @@ export function DurationDial({ amount, unit }: { amount: number; unit: DurationU
         className="stroke-foreground stroke-2"
         strokeLinecap="round"
       />
-      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-muted-foreground text-meta font-body">
+      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-muted-foreground font-body text-meta">
         {scale} {unit}
       </text>
-      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-placeholder text-meta font-body">
+      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-placeholder font-body text-meta">
         scale
       </text>
     </DialFace>

@@ -51,7 +51,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
             focusFolderItem(e.currentTarget, { focus: false });
           }}
         >
-          <ChevronRight aria-hidden="true" className="text-muted-foreground size-3 shrink-0" />
+          <ChevronRight aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
           {children}
         </CollapsibleTrigger>
         {actions && (

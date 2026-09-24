@@ -3,5 +3,6 @@
 export const Shadows = {
   raised: 'var(--elevation-raised)',
   overlay: 'var(--elevation-overlay)',
+  input: 'var(--elevation-raised)',
   'focus-ring': 'var(--shadow-focus-ring)',
 };

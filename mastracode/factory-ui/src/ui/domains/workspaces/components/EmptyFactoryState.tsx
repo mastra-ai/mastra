@@ -19,6 +19,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
+import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
@@ -38,7 +39,11 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   },
   'model-provider': {
     title: 'Choose your Factory model.',
-    description: 'Connect a provider and select the default model for Factory runs.',
+    description: 'Connect a shared organization provider and select the default model for Factory runs.',
+  },
+  'personal-provider': {
+    title: 'Connect your personal providers.',
+    description: 'Optionally add personal provider credentials before you start using your Factory.',
   },
 };
 
@@ -92,9 +97,13 @@ export function EmptyFactoryState() {
     setMutationError(null);
     setConnectingRepositoryId(repo.id);
     try {
-      const factory = await createFactory.mutateAsync({ name: repo.name });
-      setPendingFactory(factory);
-      persistOnboardingFactory(factory.id);
+      // A prior attempt may have created the Factory before the link step
+      // failed. Reuse that Factory so retrying cannot create a duplicate.
+      const factory = pendingFactory ?? (await createFactory.mutateAsync({ name: repo.name }));
+      if (!pendingFactory) {
+        setPendingFactory(factory);
+        persistOnboardingFactory(factory.id);
+      }
       const linkedRepository = await linkRepository.mutateAsync({
         factoryProjectId: factory.id,
         repo,
@@ -128,7 +137,7 @@ export function EmptyFactoryState() {
     }
   };
 
-  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider'];
+  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider', 'personal-provider'];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -198,8 +207,11 @@ export function EmptyFactoryState() {
                 <ModelProviderFactoryStep
                   factoryId={pendingFactory.id}
                   completionError={completionError ?? undefined}
-                  onComplete={() => void finish()}
+                  onComplete={() => goTo('personal-provider')}
                 />
+              )}
+              {step === 'personal-provider' && pendingFactory && (
+                <PersonalProviderFactoryStep onContinue={() => void finish()} />
               )}
             </div>
           </div>

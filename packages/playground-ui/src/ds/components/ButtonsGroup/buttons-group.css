@@ -1,5 +1,5 @@
 /* ButtonsGroup seam. Plain CSS rather than `[&>*]` class strings: every rule keys off the
- * same four negations, and Tailwind only emits a utility whose class string appears
+ * same three negations, and Tailwind only emits a utility whose class string appears
  * literally in the source — composing those selectors from constants silently emits
  * nothing at all.
  *
@@ -18,6 +18,66 @@
  * guards plus positioner anchor a Menu or Popover inserts while OPEN — a split button must
  * not lose its seam the moment its menu opens. */
 @layer utilities {
+  /* The rung. A segment brings its own height off the control ladder, so two segments on
+     different rungs render a step in the pill — a 30px `md` input beside a 32px `lg`
+     trigger. The group names one rung for every segment instead, and these rules win over
+     the segment's own `h-control-*` on specificity inside the same layer: a child's `size`
+     can no longer lift it off the group's rung.
+
+     Only the box and the glyph. Type is `text-label` on every rung for a button, a select
+     trigger and a text segment alike, so there is nothing to restate here. The values are
+     the same `--spacing-*` tokens the components read, so the ladder stays in one place. */
+  [data-slot='buttons-group'] {
+    --segment-height: var(--spacing-control-md);
+    --segment-glyph: var(--spacing-icon-md);
+    --segment-glyph-stroke: 1.5;
+  }
+
+  [data-slot='buttons-group'][data-size='sm'] {
+    --segment-height: var(--spacing-control-sm);
+    --segment-glyph: var(--spacing-icon-sm);
+    --segment-glyph-stroke: 1.75;
+  }
+
+  [data-slot='buttons-group'][data-size='lg'] {
+    --segment-height: var(--spacing-control-lg);
+    --segment-glyph: var(--spacing-icon-lg);
+    --segment-glyph-stroke: 1.25;
+  }
+
+  /* An InputGroup wrapping a textarea or a stacked addon is deliberately auto-height and
+     is not a rung — it would be the tallest thing in the group either way. */
+  [data-slot='buttons-group']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :has(textarea, [data-align='block-start'], [data-align='block-end'])
+    ) {
+    height: var(--segment-height);
+  }
+
+  /* Icon-mode is a circle, so its width moves with its height or it renders as a pill. */
+  [data-slot='buttons-group'] > [data-shape='icon'] {
+    width: var(--segment-height);
+  }
+
+  /* The glyph rung: an `<Icon>` wrapper, or the bare `<svg>` a label-less button passes as
+     its child. Not `svg` at any depth — a Select's chevron is pinned at one size on purpose
+     and sits deeper, and a text segment's glyph is sized in `em` against its own label. */
+  [data-slot='buttons-group']
+    > :not([data-slot='buttons-group-text'])
+    > :is([data-slot='icon'], [data-slot='button-icon'])
+    > svg,
+  [data-slot='buttons-group'] > :not([data-slot='buttons-group-text']) > svg {
+    width: var(--segment-glyph);
+    height: var(--segment-glyph);
+    stroke-width: var(--segment-glyph-stroke);
+  }
+
+  /* The control inside an InputGroup is sized to the root's content box, so it follows the
+     rung the group just set rather than the one the InputGroup was given. */
+  [data-slot='buttons-group'] > [data-slot='input-group'] > [data-slot='input-group-control'] {
+    height: calc(var(--segment-height) - 2px);
+  }
+
   [data-slot='buttons-group'] > input {
     flex: 1;
   }
@@ -37,7 +97,6 @@
      borderless, and take a shadow divider below instead. */
   [data-slot='buttons-group']
     > :not(
-      [data-slot='buttons-group-separator'],
       [aria-hidden='true'],
       [data-base-ui-focus-guard],
       [aria-owns],
@@ -47,12 +106,13 @@
     border-color: var(--border);
   }
 
-  /* A field trigger (`Combobox`/`Select` in their default variant) carries no border at all:
-     its edge is the raised material's inset rim, which paints all four sides at once. The
-     seam rules below can only halve a border, so that rim survives next to its neighbour's
-     edge and the seam reads as two lines. Inside a group the edges belong to the group, so
-     the material goes flat and the segment takes the same 1px border as every other one —
-     the border its focus state already moves (`focus-visible:border-border-focus`).
+  /* Anything in the raised material — a `default` Button, the Select/Combobox trigger built
+     on it, an InputGroup — carries no border at all: its edge is that material's inset rim,
+     which paints all four sides at once. The seam rules below can only halve a border, so
+     that rim survives next to its neighbour's edge and the seam reads as two lines. Inside a
+     group the edges belong to the group, so the material goes flat and the segment takes the
+     same 1px border as every other one — the border its focus state already moves
+     (`focus-visible:border-border-focus`).
      What has to go is only the rim: it paints all four sides, so it survives beside a
      neighbour's edge and the seam reads as two lines. The rest of the shadow list must
      stay, because `--surface-tint` is the layer a field expresses every state in — hover
@@ -72,9 +132,7 @@
      to double the alpha and out-read the ring around the group. The left segment owns the
      seam with its right border; the segment after it drops its left edge entirely. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
-      :first-child
-    ) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
     border-left-width: 0;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
@@ -82,9 +140,7 @@
 
   /* `:has(~ …)` rather than `:not(:last-child)`, for the injected children above. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > *:has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
-    ) {
+    > *:has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])) {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
   }
@@ -92,7 +148,7 @@
   /* A borderless filled segment cannot own its seam, so it draws one inside its own box. */
   [data-slot='buttons-group'][data-orientation='horizontal']
     > :is([data-variant='primary'], [data-variant='destructive']):has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+      ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
     ) {
     box-shadow: inset -1px 0 0 0 var(--border);
   }
@@ -100,18 +156,14 @@
   /* Vertical mirrors it: the top segment owns the seam. The children are capsules, so the
      outer ends are re-rounded to the container radius. */
   [data-slot='buttons-group'][data-orientation='vertical']
-    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
-      :first-child
-    ) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
     border-top-width: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
   }
 
   [data-slot='buttons-group'][data-orientation='vertical']
-    > *:has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
-    ) {
+    > *:has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])) {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
   }
@@ -128,8 +180,35 @@
 
   [data-slot='buttons-group'][data-orientation='vertical']
     > :is([data-variant='primary'], [data-variant='destructive']):has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+      ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
     ) {
     box-shadow: inset 0 -1px 0 0 var(--border);
+  }
+
+  /* The ring colour above ties a segment's own `focus-visible:` border on specificity and
+     wins on source order, so the group repaints the focus edge itself — at the weight the
+     segment focuses at alone: a raised surface moves its rim to `--surface-rim-focus`,
+     not the `--border-focus` a bare border needs. */
+  [data-slot='buttons-group'] {
+    --segment-focus-edge: var(--border-focus);
+  }
+
+  [data-slot='buttons-group']:has(> .shadow-raised:focus-visible, > .shadow-raised :focus-visible) {
+    --segment-focus-edge: var(--surface-rim-focus);
+  }
+
+  [data-slot='buttons-group'] > :is(:focus-visible, :has(:focus-visible)) {
+    border-color: var(--segment-focus-edge);
+  }
+
+  /* A segment's leading edge is its neighbour's border, so a state that recolours the
+     segment's own border (focus) lights three sides only.
+     The neighbour that owns the seam takes the state colour for it. */
+  [data-slot='buttons-group'][data-orientation='horizontal'] > :has(+ :focus-visible, + * :focus-visible) {
+    border-right-color: var(--segment-focus-edge);
+  }
+
+  [data-slot='buttons-group'][data-orientation='vertical'] > :has(+ :focus-visible, + * :focus-visible) {
+    border-bottom-color: var(--segment-focus-edge);
   }
 }

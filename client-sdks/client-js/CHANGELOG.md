@@ -1,5 +1,247 @@
 # @mastra/client-js
 
+## 1.49.0
+
+### Minor Changes
+
+- Added `cancelQueuedMessages()` to cancel selected pending input without stopping the active run. The server propagates all requested signal IDs through shared PubSub, even when none are pending locally, to other processes subscribed to the thread. The response reports only local cancellations, without remote acknowledgements. Added `clearPendingSignals` to `abortThread()` and subscription `abort()` options. ([#23942](https://github.com/mastra-ai/mastra/pull/23942))
+
+  ```typescript
+  const thread = { resourceId: 'user-123', threadId: 'thread-abc' };
+
+  await agent.cancelQueuedMessages({ ...thread, signalIds: ['signal-123'] });
+  await agent.abortThread({ ...thread, clearPendingSignals: true });
+
+  // Existing behavior: abort without clearing pending input.
+  await agent.abortThread(thread);
+  ```
+
+- Added the `includes` and `notIncludes` trace-query operators and the `array` value kind to the generated trace-query types. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+  **Example**
+
+  ```ts
+  const result = await mastraClient.queryTraces({
+    timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-21T00:00:00.000Z' },
+    where: { op: 'includes', path: 'tags', value: 'manual-review' },
+  });
+  ```
+
+### Patch Changes
+
+- Expose the optional tool `title` on the tool endpoints and in `GetToolResponse`, and copy it from `tool-call` and `tool-call-input-streaming-start` chunks onto the tool-invocation message part in the `useChat` accumulator. Part of #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  ```ts
+  const tool = await client.getTool('get_weather_by_coordinates').details();
+  tool.title; // 'Weather Lookup'
+  ```
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+
+## 1.49.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec)]:
+  - @mastra/core@1.70.0-alpha.4
+
+## 1.49.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e)]:
+  - @mastra/core@1.70.0-alpha.3
+
+## 1.49.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
+## 1.49.0-alpha.1
+
+### Minor Changes
+
+- Added `cancelQueuedMessages()` to cancel selected pending input without stopping the active run. The server propagates all requested signal IDs through shared PubSub, even when none are pending locally, to other processes subscribed to the thread. The response reports only local cancellations, without remote acknowledgements. Added `clearPendingSignals` to `abortThread()` and subscription `abort()` options. ([#23942](https://github.com/mastra-ai/mastra/pull/23942))
+
+  ```typescript
+  const thread = { resourceId: 'user-123', threadId: 'thread-abc' };
+
+  await agent.cancelQueuedMessages({ ...thread, signalIds: ['signal-123'] });
+  await agent.abortThread({ ...thread, clearPendingSignals: true });
+
+  // Existing behavior: abort without clearing pending input.
+  await agent.abortThread(thread);
+  ```
+
+- Added the `includes` and `notIncludes` trace-query operators and the `array` value kind to the generated trace-query types. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+  **Example**
+
+  ```ts
+  const result = await mastraClient.queryTraces({
+    timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-21T00:00:00.000Z' },
+    where: { op: 'includes', path: 'tags', value: 'manual-review' },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0-alpha.1
+
+## 1.48.1-alpha.0
+
+### Patch Changes
+
+- Expose the optional tool `title` on the tool endpoints and in `GetToolResponse`, and copy it from `tool-call` and `tool-call-input-streaming-start` chunks onto the tool-invocation message part in the `useChat` accumulator. Part of #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  ```ts
+  const tool = await client.getTool('get_weather_by_coordinates').details();
+  tool.title; // 'Weather Lookup'
+  ```
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+
+## 1.48.0
+
+### Minor Changes
+
+- Added `transports` to MCP server info responses so consumers can tell which endpoints a server serves. MCP v2 servers report `['streamable-http']` only; MCP 1.x servers also report `'sse'`. Servers that predate the field omit it, so treat absence as 1.x. ([#24388](https://github.com/mastra-ai/mastra/pull/24388))
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const { servers } = await client.getMcpServers();
+
+  for (const server of servers) {
+    const hasSse = server.transports?.includes('sse') ?? true;
+    const path = hasSse ? 'sse' : 'mcp';
+    console.log(`${server.name}: http://localhost:4111/api/mcp/${server.id}/${path}`);
+  }
+  ```
+
+- Deprecated grouped results from `queryTraces()`. Existing grouped queries continue to work until the next major release; use `queryTraceThreads()` for new code. ([#23790](https://github.com/mastra-ai/mastra/pull/23790))
+
+  **Before:**
+
+  ```ts
+  await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
+  ```
+
+  **After:**
+
+  ```ts
+  await mastraClient.queryTraceThreads({ traces: { timeRange } });
+  ```
+
+### Patch Changes
+
+- Added client support for classifier workflow steps and their rendered workflow graph entries. ([#24747](https://github.com/mastra-ai/mastra/pull/24747))
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0
+
+## 1.48.0-alpha.4
+
+### Minor Changes
+
+- Deprecated grouped results from `queryTraces()`. Existing grouped queries continue to work until the next major release; use `queryTraceThreads()` for new code. ([#23790](https://github.com/mastra-ai/mastra/pull/23790))
+
+  **Before:**
+
+  ```ts
+  await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
+  ```
+
+  **After:**
+
+  ```ts
+  await mastraClient.queryTraceThreads({ traces: { timeRange } });
+  ```
+
+### Patch Changes
+
+- Added client support for classifier workflow steps and their rendered workflow graph entries. ([#24747](https://github.com/mastra-ai/mastra/pull/24747))
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Updated dependencies [[`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0-alpha.4
+
+## 1.48.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c)]:
+  - @mastra/core@1.69.0-alpha.3
+
+## 1.48.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+
+## 1.48.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
+## 1.48.0-alpha.0
+
+### Minor Changes
+
+- Added `transports` to MCP server info responses so consumers can tell which endpoints a server serves. MCP v2 servers report `['streamable-http']` only; MCP 1.x servers also report `'sse'`. Servers that predate the field omit it, so treat absence as 1.x. ([#24388](https://github.com/mastra-ai/mastra/pull/24388))
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const { servers } = await client.getMcpServers();
+
+  for (const server of servers) {
+    const hasSse = server.transports?.includes('sse') ?? true;
+    const path = hasSse ? 'sse' : 'mcp';
+    console.log(`${server.name}: http://localhost:4111/api/mcp/${server.id}/${path}`);
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed)]:
+  - @mastra/core@1.69.0-alpha.0
+
 ## 1.47.0
 
 ### Minor Changes

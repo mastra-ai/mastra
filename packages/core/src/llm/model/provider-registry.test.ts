@@ -197,6 +197,19 @@ describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () =>
     expect(modelSupportsTemperature('amazon-bedrock/us.xai.grok-4.6')).toBe(false);
     expect(modelSupportsTemperature('xai/grok-4.6')).toBe(true);
   });
+
+  it('uses OpenAI capabilities for Bedrock-hosted models without changing gpt-oss handling', () => {
+    for (const model of [
+      'us.openai.gpt-6-sol',
+      'us.openai.gpt-6-luna',
+      'global.openai.gpt-6-sol',
+      'us.openai.gpt-5.6-sol',
+    ]) {
+      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(false);
+    }
+    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-4o')).toBe(true);
+    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-oss-120b')).toBeUndefined();
+  });
 });
 
 describe('modelSupportsStructuredOutput', () => {

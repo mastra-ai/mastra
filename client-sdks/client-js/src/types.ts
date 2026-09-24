@@ -160,12 +160,13 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export interface AbortAgentThreadParams extends SubscribeAgentThreadParams {
-  expectedRunId?: string;
-}
+/** @experimental Agent thread cancellation is experimental. */
+export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
+
+/** @experimental Cancels pending signals on the server process handling the request. */
+export type CancelQueuedAgentMessagesParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/signals/cancel'>>;
+
+export type CancelQueuedAgentMessagesResponse = GeneratedResponse<'POST /agents/:agentId/threads/signals/cancel'>;
 
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
@@ -666,6 +667,14 @@ export interface LoopVNextNetworkResponse {
 }
 
 export type McpServerListResponse = GeneratedResponse<'GET /mcp/v0/servers'>;
+
+/** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
+export type McpServerInfo = McpServerListResponse['servers'][number];
+
+export type McpServerDetailInfo = GeneratedResponse<'GET /mcp/v0/servers/:id'>;
+
+/** Protocol transports the Mastra server exposes for a registered MCP server. */
+export type McpServerTransport = NonNullable<McpServerInfo['transports']>[number];
 
 export type McpToolInfo = GeneratedResponse<'GET /mcp/:serverId/tools/:toolId'>;
 

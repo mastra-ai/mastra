@@ -22,13 +22,20 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
-/** Reason the GitHub feature is in its current state, returned by the server. */
+/**
+ * Reason the GitHub feature is in its current state. Every value but
+ * `unavailable` comes from the server; `unavailable` is set by the browser
+ * when the status endpoint could not be reached or answered with an error,
+ * so consumers can tell a transient failure from a deliberately disabled
+ * feature.
+ */
 export type GithubStatusReason =
   | 'missing_config'
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
-  | 'ready';
+  | 'ready'
+  | 'unavailable';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -90,10 +97,12 @@ export function isGitLabRepository(repo: SourceControlRepository): repo is GitLa
 }
 
 /**
- * Read GitHub feature/connection status. Resolves to a disabled status on 404,
- * a network error, or when the feature is off, so the SPA can cleanly hide the
- * feature. A 401 is reported distinctly via `authRequired` so the SPA can prompt
- * re-login instead of treating the feature as disabled.
+ * Read GitHub feature/connection status. Never throws: a 401 is reported via
+ * `authRequired` so the SPA can prompt re-login, and any other failed response
+ * or network error resolves to a disabled status with `reason: 'unavailable'`
+ * so the SPA can offer a retry instead of reporting the feature as
+ * unconfigured. A server that has the feature off answers 200 with
+ * `enabled: false` and its own reason.
  */
 export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> {
   try {
@@ -104,11 +113,20 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
     if (res.status === 401) {
       return { enabled: false, connected: false, installations: [], authRequired: true, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, connected: false, installations: [] };
+    if (!res.ok) return unavailableStatus();
     return (await res.json()) as GithubStatus;
   } catch {
-    return { enabled: false, connected: false, installations: [] };
+    return unavailableStatus();
   }
+}
+
+/**
+ * Status used when the endpoint failed or could not be reached. It is not a
+ * `missing_config` answer: the server never said the feature is off, so the
+ * UI should offer a retry rather than report the feature as unconfigured.
+ */
+function unavailableStatus(): GithubStatus {
+  return { enabled: false, connected: false, installations: [], reason: 'unavailable' };
 }
 
 function currentPageRedirectTo(): string {

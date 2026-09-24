@@ -31,13 +31,13 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="border-border border-b border-l-4 py-2">
+    <div className="border-b border-l-4 border-border py-2">
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-2">
             <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
 
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-card w-full" />
+            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="w-full [&_button]:bg-card" />
             <JSONSchemaForm.FieldRemove variant="default" className="shrink-0" />
           </div>
 
@@ -227,14 +227,14 @@ export function AgentEditSidebar({
 
         <TabContent value="variables" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
-            <div className="border-border flex flex-col gap-4 border-b p-4">
+            <div className="flex flex-col gap-4 border-b border-border p-4">
               <SectionHeader
                 title="Variables"
                 subtitle={
                   <>
                     Variables are dynamic values that change based on the context of each request. Use them in your
                     agent's instructions with the{' '}
-                    <code className="text-warning1 font-medium">{'{{variableName}}'}</code> syntax.
+                    <code className="font-medium text-warning1">{'{{variableName}}'}</code> syntax.
                   </>
                 }
               />
@@ -249,7 +249,7 @@ export function AgentEditSidebar({
                 </JSONSchemaForm.FieldList>
 
                 <div className="p-2">
-                  <JSONSchemaForm.AddField variant="outline" size="sm">
+                  <JSONSchemaForm.AddField size="sm">
                     <PlusIcon className="mr-2 h-4 w-4" />
                     Add variable
                   </JSONSchemaForm.AddField>

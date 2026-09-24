@@ -1,11 +1,13 @@
 import {
   encodeTraceQueryCursor,
   parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
   planTraceQueryObservedFields,
+  planTraceQueryValues,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
@@ -15,6 +17,7 @@ import type { DuckDBConnection } from '../../db/index';
 import {
   compileDuckDBThreadQuery,
   compileDuckDBTraceQuery,
+  compileDuckDBTraceQueryValues,
   getTraceQueryObservedFields,
   queryThreads,
   queryTraces,
@@ -31,6 +34,17 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.sql).toContain(
+      `date_diff('millisecond', r.startedAt, r.endedAt) IS NOT NULL AND date_diff('millisecond', r.startedAt, r.endedAt) > ?`,
+    );
+    expect(compiled.values).toContain(5000);
+  });
+
   it('normalizes discovery resource exhaustion without exposing driver details', async () => {
     const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
     const discoveryPlan = planTraceQueryObservedFields(
@@ -283,6 +297,46 @@ describe('DuckDB advanced trace query', () => {
     expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
+  it('binds the trusted tenant scope into root_scope and every related CTE in emission order', () => {
+    const scope = { organizationId: 'org-a', resourceId: 'res-a' };
+    const compiled = compileDuckDBTraceQuery(
+      planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: TIME_RANGE,
+          where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+          page: { limit: 2 },
+        }),
+        { scope },
+      ),
+    );
+
+    expect(compiled.sql).toMatch(/root_scope AS \([\s\S]*?r\.organizationId = \?\s+AND r\.resourceId = \?/);
+    expect(compiled.sql).toMatch(/current_scores AS \([\s\S]*?WHERE s\.organizationId = \? AND s\.resourceId = \?/);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'org-a',
+      'res-a',
+      'org-a',
+      'res-a',
+      'factuality',
+      3,
+    ]);
+  });
+
+  it('adds no tenant condition when the plan is unscoped', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+        page: { limit: 2 },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain('organizationId = ?');
+    expect(compiled.sql).not.toContain('resourceId = ?');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
+  });
+
   it('uses total null semantics for negative predicates', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
@@ -409,6 +463,44 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toContain('ORDER BY threadId ASC');
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
+  it('compiles tag predicates as null-safe list checks over the JSON tags column', () => {
+    const members = `coalesce(TRY_CAST(r.tags AS VARCHAR[]), []::VARCHAR[])`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'beta' },
+            { op: 'notIncludes', path: 'tags', value: 'alpha' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).toContain(`(list_contains(${members}, ?))`);
+    expect(compiled.sql).toContain(`(len(${members}) > 0 AND NOT list_contains(${members}, ?))`);
+    expect(compiled.sql).toContain(`(len(${members}) > 0)`);
+    expect(compiled.sql).toContain(`(len(${members}) = 0)`);
+    expect(compiled.sql).not.toContain('r.tags IS');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'beta', 'alpha', 101]);
+  });
+
+  it('discovers tag values as one row per current root and distinct tag', () => {
+    const compiled = compileDuckDBTraceQueryValues(
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', search: 'be' }),
+      ),
+    );
+
+    expect(compiled.sql).toContain(
+      'SELECT unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[]))) AS value FROM root_scope r WHERE r.tags IS NOT NULL',
+    );
+    expect(compiled.sql).toContain('GROUP BY value\nORDER BY count DESC, value ASC\nLIMIT ?');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'be', 26]);
   });
 
   it('fails closed when a trusted plan contains an unmapped field', () => {
