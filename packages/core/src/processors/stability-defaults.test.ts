@@ -96,8 +96,19 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
     return defaultStabilityErrorProcessors()[2];
   }
 
-  it('retries a bad-request (400) error exactly once, then stops', async () => {
+  it('does not retry a bad-request (400) error by default', async () => {
     const processor = retryProcessor();
+    const error = makeApiError(400);
+
+    // Most 400s are deterministic, so the shared default carries no
+    // bad-request matcher. The repair processors ahead of this one claim
+    // every fixable 400 before it is consulted.
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toBeUndefined();
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+  });
+
+  it('retries a bad-request (400) error exactly once when the caller opts into `retryBadRequests`', async () => {
+    const processor = defaultStabilityErrorProcessors({ retryBadRequests: true })[2];
     const error = makeApiError(400);
 
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });

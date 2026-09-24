@@ -186,8 +186,11 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
       // the caller configured outputProcessors — in that case the default
       // output-lane handler is not built, so nothing else covers refusals.
       outputProcessors
-        ? [...defaultStabilityErrorProcessors({ retryUnknownErrors: true }), new CyberRefusalHandler()]
-        : defaultStabilityErrorProcessors({ retryUnknownErrors: true }),
+        ? [
+            ...defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true }),
+            new CyberRefusalHandler(),
+          ]
+        : defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true }),
     // Output-step retries only read the raw option; the implicit error-lane cap
     // from `resolveMaxProcessorRetries` never reaches them. Default it here so
     // the default output-lane handler can retry instead of ending as a tripwire.

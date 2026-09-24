@@ -51,12 +51,12 @@ function createSucceedOnRetryModel(responseText: string, failuresBeforeSuccess: 
       callCount++;
       if (callCount <= failuresBeforeSuccess) {
         throw new APICallError({
-          message: 'bad request',
+          message: 'overloaded',
           url: 'https://api.example.com/v1/messages',
           requestBodyValues: {},
-          statusCode: 400,
-          responseBody: JSON.stringify({ error: { message: 'bad request' } }),
-          isRetryable: false,
+          statusCode: 500,
+          responseBody: JSON.stringify({ error: { message: 'overloaded' } }),
+          isRetryable: true,
         });
       }
       return {
@@ -71,12 +71,12 @@ function createSucceedOnRetryModel(responseText: string, failuresBeforeSuccess: 
       callCount++;
       if (callCount <= failuresBeforeSuccess) {
         throw new APICallError({
-          message: 'bad request',
+          message: 'overloaded',
           url: 'https://api.example.com/v1/messages',
           requestBodyValues: {},
-          statusCode: 400,
-          responseBody: JSON.stringify({ error: { message: 'bad request' } }),
-          isRetryable: false,
+          statusCode: 500,
+          responseBody: JSON.stringify({ error: { message: 'overloaded' } }),
+          isRetryable: true,
         });
       }
       return {
@@ -262,7 +262,7 @@ describe('implicit maxProcessorRetries warning', () => {
 
     const result = await agent.generate('hello');
 
-    // The framework default retry processor recovered the transient 400…
+    // The framework default retry processor recovered the transient 500…
     expect(result.text).toBe('recovered');
     expect(getCallCount()).toBe(2);
     // …and the safety cap still applied, but silently.
