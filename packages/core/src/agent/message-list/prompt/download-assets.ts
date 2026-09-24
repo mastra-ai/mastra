@@ -17,6 +17,13 @@ import type { AIV5Type } from '../types';
  * server config).
  */
 function redactUrlForLog(url: URL): string {
+  if (url.protocol === 'data:') {
+    // `origin` is "null" for data URLs and the pathname is the whole (possibly huge) payload.
+    const commaIndex = url.pathname.indexOf(',');
+    const header = commaIndex === -1 ? url.pathname : url.pathname.slice(0, commaIndex);
+    const payloadLength = commaIndex === -1 ? 0 : url.pathname.length - commaIndex - 1;
+    return `data:${header},<${payloadLength} chars>`;
+  }
   return `${url.origin}${url.pathname}`;
 }
 
@@ -30,7 +37,8 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
       {
         method: 'GET',
       },
-      downloadRetries,
+      // Decoding a data URL is deterministic, so retrying a failure only adds delay.
+      url.protocol === 'data:' ? 1 : downloadRetries,
       {
         shouldRetryResponse: response => response.status >= 500,
       },

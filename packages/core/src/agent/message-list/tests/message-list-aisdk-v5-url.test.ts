@@ -186,10 +186,10 @@ describe('MessageList AI SDK v5 URL handling', () => {
   });
 
   describe('Edge cases that trigger the bug', () => {
-    it('should NOT wrap non-http URLs as data URIs when they are actual URLs', () => {
+    it('should reject protocol-relative URLs instead of wrapping them as data URIs', () => {
       const messageList = new MessageList();
 
-      // Some systems might use protocol-relative URLs or other URL schemes
+      // A protocol-relative URL has no scheme, so it can neither be fetched nor sent as base64.
       const userMessage: MastraDBMessage = {
         id: 'msg-edge-1',
         role: 'user',
@@ -211,18 +211,9 @@ describe('MessageList AI SDK v5 URL handling', () => {
         },
       };
 
-      messageList.add([userMessage], 'input');
-
-      const v5Messages = messageList.get.all.aiV5.ui();
-
-      expect(v5Messages).toHaveLength(1);
-      const filePart = v5Messages[0].parts[0];
-
-      if (filePart.type === 'file') {
-        // With the buggy code, this would become 'data:image/png;base64,//storage.example.com/image.png'
-        // With the fix, it should handle it correctly
-        expect(filePart.url).not.toMatch(/^data:.*base64,\/\//);
-      }
+      expect(() => messageList.add([userMessage], 'input')).toThrow(
+        expect.objectContaining({ id: 'INVALID_FILE_PART_DATA' }),
+      );
     });
 
     it('should NOT double-wrap URLs that look like they might be base64', () => {

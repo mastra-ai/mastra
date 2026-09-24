@@ -1037,7 +1037,7 @@ describe('MessageList', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Here is a document:' },
-          { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' }, // Dummy base64
+          { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQK' }, // Dummy base64
         ],
         threadId,
         resourceId,
@@ -1059,7 +1059,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'file',
                 mimeType: 'application/pdf',
-                data: 'JVBERi0xLjQKJ...',
+                data: 'JVBERi0xLjQK',
                 createdAt: expect.any(Number),
               }),
             ],
