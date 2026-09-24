@@ -1686,6 +1686,56 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ ls: .*No such file or directory +│$/));
   });
 
+  it('never passes escape sequences from a description, output, or error to the terminal', () => {
+    // Cursor moves and screen clears (CSI), a clipboard write and a hyperlink (OSC), device control
+    // (DCS), an 8-bit CSI, and a stray ESC.
+    const hostile = [
+      '\x1b[2J\x1b[1A',
+      '\x1b]52;c;aGVsbG8=\x07',
+      '\x1b]8;;https://evil.example\x1b\\',
+      '\x1bPpayload\x1b\\',
+      '\x9b2J',
+      '\x1b=',
+    ].join('');
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'ls', description: `Listing${hostile} files` },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult(
+      {
+        content: [{ type: 'text', text: `out${hostile}put\n\nstderr:\nerror: bad${hostile}\n\nExit code: 1` }],
+        isError: false,
+      },
+      false,
+    );
+    const container = new Container();
+    container.addChild(component);
+    reconcileChatBoundarySpacers(container);
+    const raw = container.render(120).join('\n');
+
+    for (const sequence of [
+      '\x1b[2J',
+      '\x1b[1A',
+      '\x1b]52',
+      'aGVsbG8=',
+      'evil.example',
+      '\x1bP',
+      'payload',
+      '\x9b',
+      '\x1b=',
+    ]) {
+      expect(raw).not.toContain(sequence);
+    }
+    const lines = stripAnsi(raw)
+      .split('\n')
+      .map(line => line.trimEnd());
+    expect(lines).toContainEqual(expect.stringMatching(/^│ ✗ Listing files +\d+ms │$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ error: bad +│$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ error: bad +│$/));
+  });
+
   it('keeps quiet shell box borders aligned for long git output', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',

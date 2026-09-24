@@ -31,6 +31,9 @@ import { WidthAwareContainer } from './width-aware-container.js';
 
 export type { ToolResult };
 
+/** CSI, OSC, and DCS/SOS/PM/APC sequences (terminated or not), and other two-byte ESC sequences. */
+const TERMINAL_SEQUENCE_RE =
+  /\x1b\[[\x20-\x3f]*[\x40-\x7e]?|\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?|\x9b[\x20-\x3f]*[\x40-\x7e]?|\x1b[\x20-\x7e]?/g;
 const CODE_HIGHLIGHT_THEME: HighlightTheme = {
   default: text => theme.fg('toolArgs', text),
   keyword: chalk.hex('#c084fc'),
@@ -1754,8 +1757,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Every row must stay on one terminal line: a row that wraps adds a line that disappears again
     // on the next update, jumping everything below it. Tabs and other control characters would make
     // the measured width disagree with what the terminal draws, so they become plain spaces.
+    // Descriptions come from the model and output from the command, so neither may reach the
+    // terminal as escape sequences (colors, cursor moves, hyperlinks, clipboard writes).
     const singleLine = (text: string) =>
-      text.replace(/[\t\n\r\v\f]/g, ' ').replace(/[\x00-\x08\x0e-\x1a\x1c-\x1f\x7f]/g, '');
+      text
+        .replace(TERMINAL_SEQUENCE_RE, '')
+        .replace(/[\t\n\r\v\f]/g, ' ')
+        .replace(/[\x00-\x08\x0e-\x1f\x7f-\x9f]/g, '');
     const row = (left: string, right = '') => {
       const rightWidth = visibleWidth(right);
       const leftText = truncateAnsi(left, Math.max(1, contentWidth - (rightWidth ? rightWidth + 1 : 0)));
