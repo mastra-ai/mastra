@@ -294,6 +294,26 @@ describe('Memory', () => {
         expect(result?.content.toolInvocations?.map(invocation => invocation.toolName)).toEqual(['lookupWeather']);
       });
 
+      it('drops a step left with only reasoning and whitespace text', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '\n\n' },
+            toolInvocation('wm-1', 'updateWorkingMemory'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        );
+
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          reasoning('SIG_B'),
+          { type: 'text', text: 'Done' },
+        ]);
+      });
+
       it('keeps reasoning when the step has other content besides the working-memory call', () => {
         const result = memory.testUpdateMessageToHideWorkingMemoryV2(
           assistantMessage([

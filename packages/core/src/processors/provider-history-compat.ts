@@ -920,7 +920,9 @@ export const anthropicOrphanedThinkingStep: CompatRule = {
       );
 
       const kept = steps.filter((step, i) => {
-        const content = step.filter(part => part.type !== 'step-start');
+        const content = step.filter(
+          part => part.type !== 'step-start' && !(part.type === 'text' && !part.text?.trim()),
+        );
         const reasoningOnly = content.length > 0 && content.every(part => part.type === 'reasoning');
         return !reasoningOnly || (i === steps.length - 1 && !followedByAssistant);
       });

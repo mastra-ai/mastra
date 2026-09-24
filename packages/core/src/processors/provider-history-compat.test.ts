@@ -2045,6 +2045,28 @@ describe('anthropicOrphanedThinkingStep', () => {
     expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text', 'tool-call']]);
   });
 
+  it('treats whitespace-only text as empty when finding an orphaned thinking step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '\n\n' },
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text']]);
+  });
+
   it('drops a trailing thinking-only step when the next stored message is also from the assistant', async () => {
     const args = argsFor(list => {
       list.add([createUserMessage('weather?')], 'input');
