@@ -28,7 +28,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@fastify/busboy": "^3.2.2",
-    "@mastra/server": "workspace:*"
+    "@mastra/server": "workspace:*",
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.115",

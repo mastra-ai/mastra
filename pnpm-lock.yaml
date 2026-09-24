@@ -6917,6 +6917,9 @@ importers:
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
+      hono:
+        specifier: 4.13.8
+        version: 4.13.8
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.115
