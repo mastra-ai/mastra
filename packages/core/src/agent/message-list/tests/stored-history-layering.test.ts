@@ -188,6 +188,15 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
     expect(merged.content.metadata).toEqual({ stored: true });
   });
 
+  it('does not apply a tool state a client never sends', () => {
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(withToolState('assistant', 2, { state: 'approval-requested' }), 'input');
+    list.add(withToolState('assistant', 1, { state: 'call' }), 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation.state).toBe('call');
+  });
+
   it('still layers new text from a response message in the current run', () => {
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
     list.add(withText(toolMessage('assistant', 'result'), 'Live text.'), 'response');

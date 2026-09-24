@@ -49,7 +49,7 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
-import { advancesToolInvocationState } from './utils/tool-invocation-state';
+import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -134,9 +134,10 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
 
 /**
  * Returns only the tool parts of a client-sent assistant message that move a stored call
- * forward. The client's text, reasoning, and metadata are its own rendering of the stored
- * message, which can differ from what was saved (an output processor may rewrite text before
- * it is persisted), so none of it is layered onto the stored copy.
+ * forward with a state a client produces (an approval answer or an outcome). The client's text,
+ * reasoning, and metadata are its own rendering of the stored message, which can differ from
+ * what was saved (an output processor may rewrite text before it is persisted), so none of it is
+ * layered onto the stored copy.
  */
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
   const storedStates = new Map<string, MastraToolInvocation['state']>();
@@ -145,8 +146,9 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
   }
   const parts = live.content.parts.filter(part => {
     if (part.type !== 'tool-invocation') return false;
-    const storedState = storedStates.get(part.toolInvocation.toolCallId);
-    return !!storedState && advancesToolInvocationState(storedState, part.toolInvocation.state);
+    const { state, toolCallId } = part.toolInvocation;
+    const storedState = storedStates.get(toolCallId);
+    return !!storedState && isClientToolInvocationUpdate(state) && advancesToolInvocationState(storedState, state);
   });
   return { ...live, content: { format: 2, parts } };
 }
