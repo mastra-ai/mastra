@@ -500,7 +500,7 @@ mastra env restart <env>
 
 ### `mastra env vars pull`
 
-Pulls an environment's env vars into a local env file (default: `.env`). The file contains the merged set used by a deploy. It combines vars stored on the environment (for example, added in the dashboard's environment editor) with project-level vars. Project values win on conflict. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
+Pulls an environment's env vars into a local env file (default: `.env`). The file contains the set a deploy of that environment runs with: the vars stored on the environment itself (for example, added in the dashboard's environment editor). Each environment is pulled on its own, and values stored on another environment are never merged in. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys) run from project-level vars instead, so pulling any of their environments returns those shared project-level values. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
 
 ```bash
 mastra env vars pull

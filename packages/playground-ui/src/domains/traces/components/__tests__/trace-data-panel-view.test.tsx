@@ -334,6 +334,13 @@ describe('TraceDataPanelView — the header', () => {
     expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
   });
 
+  it('shows the trace summary under the heading on the trace page too', () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} placement="trace-page" />);
+
+    expect(screen.getByLabelText('Trace status')).toBeTruthy();
+    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
+  });
+
   it('opens as a wide drawer by default and honours a caller-provided size', () => {
     render(<TraceDataPanelView {...baseProps} />);
     expect(screen.getByRole('dialog', { name: 'Trace trace-1' }).className).toContain('w-4/5');
@@ -432,17 +439,6 @@ describe('TraceDataPanelView — the body', () => {
     render(<TraceDataPanelView {...baseProps} spans={undefined} />);
 
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
-  });
-
-  it('shows the trace summary in the side panel but not on the trace page', () => {
-    const sidePanel = render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
-    expect(sidePanel.container).toBeTruthy();
-
-    cleanup();
-
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" />);
-    expect(screen.queryByLabelText(/^Started at /)).toBeNull();
   });
 });
 

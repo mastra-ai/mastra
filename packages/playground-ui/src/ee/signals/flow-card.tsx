@@ -52,7 +52,7 @@ export function FlowCard({
     >
       <span
         aria-hidden="true"
-        className="bg-background text-muted-foreground text-meta absolute top-0 left-5 -translate-y-1/2 px-2 font-mono tracking-[0.18em]"
+        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2 font-mono text-meta tracking-[0.18em] text-muted-foreground"
       >
         SIGNALS
       </span>
@@ -64,12 +64,12 @@ export function FlowCard({
         />
         <div
           aria-label="Themes"
-          className="text-muted-foreground text-meta flex items-center gap-2 py-1 font-mono tracking-[0.18em]"
+          className="flex items-center gap-2 py-1 font-mono text-meta tracking-[0.18em] text-muted-foreground"
           role="separator"
         >
-          <span aria-hidden="true" className="bg-border h-px w-5" />
+          <span aria-hidden="true" className="h-px w-5 bg-border" />
           THEMES
-          <span aria-hidden="true" className="bg-border h-px flex-1" />
+          <span aria-hidden="true" className="h-px flex-1 bg-border" />
         </div>
         <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
           <Sankey

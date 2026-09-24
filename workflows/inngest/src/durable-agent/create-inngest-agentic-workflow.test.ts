@@ -7,7 +7,7 @@ import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
@@ -309,5 +309,18 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
     });
 
     expect(result.output).toEqual({ text: 'final answer', usage, steps: accumulatedSteps });
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow bookkeeping (#24731)', () => {
+  it('configures both workflows to skip no-op durable bookkeeping', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-events-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    expect(workflow.options.emitStepEvents).toBe(false);
+    expect(iterationWorkflow.options.emitStepEvents).toBe(false);
+    expect(workflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+    expect(iterationWorkflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
   });
 });

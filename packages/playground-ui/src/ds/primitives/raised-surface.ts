@@ -26,9 +26,18 @@
  * site that genuinely wants another fill still overrides it, since its own
  * classes come after these.
  */
-export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised';
+const fieldsOnSurface =
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)] [--field-rim-focus:var(--field-rim-focus-on-surface)]';
+const fieldsOnDialog =
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)] [--field-rim-focus:var(--surface-rim-focus)]';
+const fieldsOnPage =
+  '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)] [--field-rim-focus:var(--surface-rim-focus)]';
 
-export const overlaySurfaceStyle = 'bg-card shadow-overlay';
+export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised ' + fieldsOnSurface;
+
+export const overlaySurfaceStyle = 'bg-card shadow-overlay ' + fieldsOnSurface;
+
+export const dialogSurfaceStyle = 'bg-dialog shadow-overlay ' + fieldsOnDialog;
 
 /**
  * The app frame and the panels docked beside it. Same elevation as a card, one
@@ -36,7 +45,7 @@ export const overlaySurfaceStyle = 'bg-card shadow-overlay';
  * cards, fields, tables — needs a step to rise above. `Card` is for that
  * content, never for the frame around it.
  */
-export const frameSurfaceStyle = 'bg-background shadow-raised';
+export const frameSurfaceStyle = 'bg-background shadow-raised ' + fieldsOnPage;
 
 /**
  * Interaction states for a surface that already carries an opaque fill. The

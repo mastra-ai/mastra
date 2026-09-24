@@ -871,6 +871,70 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the URL carries an advanced filterGroup', () => {
+    const group = {
+      id: 'g1',
+      logic: 'or',
+      nodes: [
+        { id: 'n1', fieldId: 'status', value: 'error' },
+        { id: 'n2', fieldId: 'spans.model', value: 'gpt-4o' },
+      ],
+    };
+    const entry = `/traces?filterTraceId=trace-a&filterGroup=${encodeURIComponent(JSON.stringify(group))}`;
+    const expectedOr = {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+        { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-4o' } } } },
+      ],
+    };
+
+    it('renders the flat chip and one "Advanced filter" chip', async () => {
+      await renderCapturingQuery(entry);
+
+      expect(getFilterChips()[1]?.textContent).toContain('trace-a');
+      expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+    });
+
+    it('sends the group as an or predicate next to the flat filter', async () => {
+      const onQuery = await renderCapturingQuery(entry);
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(JSON.stringify(expectedOr));
+      expect(body).toContain(JSON.stringify({ op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } }));
+    });
+
+    it('drops filterGroup from the URL when the advanced chip is removed', async () => {
+      await renderCapturingQuery(entry);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove advanced filter' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterGroup'));
+      expect(screen.getByTestId('location').textContent).toContain('filterTraceId=trace-a');
+    });
+
+    it('keeps the agent scope alongside the group on the agent traces page', async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry.replace('/traces', '/agents/agent-a/traces'), {
+        scopedEntityId: 'agent-a',
+        scopedEntityType: EntityType.AGENT,
+      });
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(JSON.stringify(expectedOr));
+      expect(body).toContain('"literal":"agent-a"');
+      expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+    });
+  });
+
   describe('when the URL carries filterSpanDurationMs=1000 with the gt operator', () => {
     it('sends a numeric gt predicate inside spans.some', async () => {
       const onQuery = vi.fn<(body: unknown) => void>();

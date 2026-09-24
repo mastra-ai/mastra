@@ -1,10 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlusIcon, CircleSlashIcon } from 'lucide-react';
+import { BoxesIcon, PlusIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
+import { ActionRow } from '../ActionRow';
+import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
-import { PageHeader } from '../PageHeader';
-import { NoDataPageLayout, PageHeadingContext, PageLayout } from './index';
+import { Input } from '../Input';
+import { PageLayout } from './index';
+import { MainCard } from '@/ds/new/layout/app-shell';
+import { PageHeader } from '@/ds/new/layout/page-header';
 
 const meta: Meta<typeof PageLayout> = {
   title: 'Layout/PageLayout',
@@ -15,80 +20,116 @@ const meta: Meta<typeof PageLayout> = {
 export default meta;
 type Story = StoryObj<typeof PageLayout>;
 
+function StoryFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-152 bg-sidebar p-2">
+      <MainCard>{children}</MainCard>
+    </div>
+  );
+}
+
 const resources = ['Research agent', 'Support workflow', 'Knowledge search tool'];
+
+const crumbs = (
+  <Breadcrumb>
+    <Crumb as="span">Workspace</Crumb>
+    <Crumb as="span" isCurrent>
+      Resources
+    </Crumb>
+  </Breadcrumb>
+);
+
+const headerActions = <Button>Docs</Button>;
+
+const pageHeader = (
+  <PageHeader>
+    <PageHeader.Icon>
+      <BoxesIcon strokeWidth={2.5} />
+    </PageHeader.Icon>
+    <PageHeader.Title>Resources</PageHeader.Title>
+    <PageHeader.Description>Agents, workflows and tools available in this workspace.</PageHeader.Description>
+    <PageHeader.Action>
+      <Button variant="primary">
+        <PlusIcon />
+        Create resource
+      </Button>
+    </PageHeader.Action>
+  </PageHeader>
+);
+
+const resourceList = (
+  <ul className="grid gap-2">
+    {resources.map(resource => (
+      <li key={resource} className="rounded border border-border px-3 py-2">
+        {resource}
+      </li>
+    ))}
+  </ul>
+);
+
+export const Container: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+        <div className="mt-6">{resourceList}</div>
+      </PageLayout>
+    </StoryFrame>
+  ),
+};
+
+export const Narrow: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout variant="narrow" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+        <div className="mt-6">{resourceList}</div>
+      </PageLayout>
+    </StoryFrame>
+  ),
+};
+
+export const Fit: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout variant="fit" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+        <div className="mt-6 flex items-center justify-center border border-border text-placeholder">
+          Full-height panel (graph, table…)
+        </div>
+      </PageLayout>
+    </StoryFrame>
+  ),
+};
 
 export const FullPage: Story = {
   render: () => (
-    <PageHeadingContext value="Resources">
-      <div className="bg-sidebar h-152">
-        <PageLayout width="wide" height="full">
-          <PageLayout.TopArea>
-            <PageLayout.Row align="center" stack="responsive">
-              <PageLayout.Column>
-                <PageHeader>
-                  <PageHeader.Title>Resources</PageHeader.Title>
-                  <PageHeader.Description>
-                    Agents, workflows, and tools available in this workspace.
-                  </PageHeader.Description>
-                </PageHeader>
-              </PageLayout.Column>
-              <Button variant="primary">
-                <PlusIcon />
-                Create resource
-              </Button>
-            </PageLayout.Row>
-          </PageLayout.TopArea>
-          <PageLayout.MainArea>
-            <div className="grid gap-3 md:grid-cols-3">
-              {resources.map(resource => (
-                <div
-                  key={resource}
-                  className="border-border bg-background text-body text-foreground rounded-xl border p-5"
-                >
-                  {resource}
-                </div>
-              ))}
-            </div>
-          </PageLayout.MainArea>
-        </PageLayout>
-      </div>
-    </PageHeadingContext>
-  ),
-};
-
-export const NarrowSettings: Story = {
-  render: () => (
-    <div className="bg-sidebar min-h-136">
-      <PageLayout width="narrow">
-        <PageLayout.TopArea>
-          <PageHeader>
-            <PageHeader.Title>Settings</PageHeader.Title>
-            <PageHeader.Description>Defaults shared by every project in this workspace.</PageHeader.Description>
-          </PageHeader>
-        </PageLayout.TopArea>
-        <PageLayout.MainArea className="grid gap-3">
-          <div className="border-border bg-background text-muted-foreground rounded-xl border p-5">
-            General settings
-          </div>
-          <div className="border-border bg-background text-muted-foreground rounded-xl border p-5">
-            Environment variables
-          </div>
-        </PageLayout.MainArea>
+    <StoryFrame>
+      <PageLayout
+        breadcrumbs={crumbs}
+        headerActions={headerActions}
+        actionRow={
+          <ActionRow>
+            <ActionRow.Start>
+              <Input placeholder="Filter resources" className="max-w-120" />
+            </ActionRow.Start>
+            <ActionRow.End>
+              <Button>Sort</Button>
+            </ActionRow.End>
+          </ActionRow>
+        }
+      >
+        {resourceList}
       </PageLayout>
-    </div>
+    </StoryFrame>
   ),
 };
 
-export const CenteredEmptyState: Story = {
+export const Empty: Story = {
   render: () => (
-    <div className="bg-sidebar h-136">
-      <NoDataPageLayout>
-        <EmptyState
-          iconSlot={<CircleSlashIcon />}
-          titleSlot="No tools yet"
-          descriptionSlot="Add a tool to let agents act on external systems."
-        />
-      </NoDataPageLayout>
-    </div>
+    <StoryFrame>
+      <PageLayout breadcrumbs={crumbs}>
+        <div className="flex h-full items-center justify-center">
+          <EmptyState titleSlot="No resources yet" descriptionSlot="Create a resource to get started." />
+        </div>
+      </PageLayout>
+    </StoryFrame>
   ),
 };

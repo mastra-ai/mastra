@@ -37,13 +37,13 @@ async function fillScorerFields(
   },
 ) {
   if (options.name !== undefined) {
-    const nameInput = page.locator('#scorer-name');
+    const nameInput = page.locator('#input-name');
     await nameInput.clear();
     await nameInput.fill(options.name);
   }
 
   if (options.description !== undefined) {
-    const descInput = page.locator('#scorer-description');
+    const descInput = page.locator('#input-description');
     await descInput.clear();
     await descInput.fill(options.description);
   }
@@ -251,10 +251,10 @@ test.describe('CMS create scorer page', () => {
       await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 
       // Verify name
-      await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
+      await expect(page.locator('#input-name')).toHaveValue(scorerName);
 
       // Verify description
-      await expect(page.locator('#scorer-description')).toHaveValue(description);
+      await expect(page.locator('#input-description')).toHaveValue(description);
 
       // Verify provider/model selections persisted on the edit page.
       await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
@@ -289,11 +289,11 @@ test.describe('CMS create scorer page', () => {
       await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
       // Verify name is set
-      await expect(page.locator('#scorer-name')).toBeVisible({ timeout: 10000 });
-      await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
+      await expect(page.locator('#input-name')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('#input-name')).toHaveValue(scorerName);
 
       // Verify description has the value set by fillRequiredFields
-      await expect(page.locator('#scorer-description')).toHaveValue('Test scorer description');
+      await expect(page.locator('#input-description')).toHaveValue('Test scorer description');
 
       // Verify default score range (0-1)
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');
@@ -329,7 +329,7 @@ test.describe('CMS create scorer page', () => {
       await page.reload();
 
       // Verify name persists after reload
-      await expect(page.locator('#scorer-name')).toHaveValue(scorerName, { timeout: 10000 });
+      await expect(page.locator('#input-name')).toHaveValue(scorerName, { timeout: 10000 });
 
       // Verify instructions persist after reload
       await expect(page.locator('.cm-content')).toContainText(instructions, { timeout: 10000 });
@@ -378,8 +378,8 @@ test.describe('CMS create scorer page', () => {
       await page.goto('/cms/scorers/create');
 
       // Form should be empty
-      await expect(page.locator('#scorer-name')).toHaveValue('');
-      await expect(page.locator('#scorer-description')).toHaveValue('');
+      await expect(page.locator('#input-name')).toHaveValue('');
+      await expect(page.locator('#input-description')).toHaveValue('');
     });
   });
 

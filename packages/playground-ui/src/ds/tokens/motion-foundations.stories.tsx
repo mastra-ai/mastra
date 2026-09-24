@@ -31,7 +31,7 @@ const easings = [{ token: '--ease-out-custom', note: 'Leaves fast, settles slow 
 
 const FadeBox = ({ duration, easing }: { duration: string; easing: string }) => (
   <div
-    className="bg-fill hover:bg-fill-strong h-16 rounded-md"
+    className="h-16 rounded-md bg-fill hover:bg-fill-strong"
     style={{ transitionProperty: 'background-color', transitionDuration: duration, transitionTimingFunction: easing }}
   />
 );

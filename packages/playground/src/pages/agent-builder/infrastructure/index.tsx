@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -48,7 +49,7 @@ const ConfigDetails = ({ entries }: { entries: Array<{ key: string; value: strin
   if (entries.length === 0) return null;
 
   return (
-    <div className="border-border grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
       {entries.map(entry => (
         <Detail key={entry.key} label={`Config: ${entry.key}`} value={titleCase(entry.value)} />
       ))}
@@ -62,14 +63,18 @@ export const AgentBuilderInfrastructure = () => {
   const { data, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
 
   return (
-    <PageLayout width="narrow">
-      <PageLayout.TopArea>
-        <PageHeader>
-          <PageHeader.Title>Infrastructure</PageHeader.Title>
-        </PageHeader>
-      </PageLayout.TopArea>
-
-      <PageLayout.MainArea className="mt-6 flex flex-col gap-5">
+    <PageLayout
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <PageHeader>
+              <PageHeader.Title>Infrastructure</PageHeader.Title>
+            </PageHeader>
+          </ActionRow.Start>
+        </ActionRow>
+      }
+    >
+      <div className="mt-6 flex flex-col gap-5">
         <SectionCard
           title="Agent Builder Infrastructure"
           description="Deployment-level defaults Agent Builder applies when users create or run builder agents."
@@ -99,9 +104,9 @@ export const AgentBuilderInfrastructure = () => {
                 {data.channels.providers.length === 0 ? (
                   <EmptyRow message="No configured channel providers for Agent Builder." />
                 ) : (
-                  <ul className="flex flex-col gap-2">
+                  <ul className="grid content-start gap-2">
                     {data.channels.providers.map(provider => (
-                      <li key={provider.id} className="border-border rounded-md border px-3 py-3">
+                      <li key={provider.id} className="rounded-md border border-border px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex flex-col gap-1">
                             <Txt variant="column">{titleCase(provider.name)}</Txt>
@@ -114,7 +119,7 @@ export const AgentBuilderInfrastructure = () => {
                             label={provider.isConfigured ? 'Configured' : 'Not configured'}
                           />
                         </div>
-                        <div className="border-border mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
+                        <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
                           <Detail label="Registered by" value={`${titleCase(provider.name)} provider`} />
                           <Detail label="Provider routes" value={provider.routeCount} />
                         </div>
@@ -135,7 +140,7 @@ export const AgentBuilderInfrastructure = () => {
                 {!data.browser.provider ? (
                   <EmptyRow message="No browser configured." />
                 ) : (
-                  <div className="border-border rounded-md border px-3 py-3">
+                  <div className="rounded-md border border-border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex flex-col gap-1">
                         <Txt variant="column">{titleCase(data.browser.provider)}</Txt>
@@ -146,7 +151,7 @@ export const AgentBuilderInfrastructure = () => {
                       />
                     </div>
                     {data.browser.env ? (
-                      <div className="border-border mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
+                      <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
                         <Detail label="Environment" value={titleCase(data.browser.env)} />
                       </div>
                     ) : null}
@@ -162,7 +167,7 @@ export const AgentBuilderInfrastructure = () => {
                     External skill registries available to import skills into the workspace.
                   </Txt>
                 </div>
-                <div className="border-border rounded-md border px-3 py-3">
+                <div className="rounded-md border border-border px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-col gap-1">
                       <Txt variant="column">skills.sh</Txt>
@@ -189,7 +194,7 @@ export const AgentBuilderInfrastructure = () => {
                 {!data.workspace.type ? (
                   <EmptyRow message="No workspace configured." />
                 ) : (
-                  <div className="border-border rounded-md border px-3 py-3">
+                  <div className="rounded-md border border-border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <Txt variant="column">
                         {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
@@ -199,7 +204,7 @@ export const AgentBuilderInfrastructure = () => {
                         <InfrastructureStatus ok={data.workspace.hasSandbox} label="Sandbox" />
                       </div>
                     </div>
-                    <div className="border-border mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
+                    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
                       <Detail
                         label="Config type"
                         value={data.workspace.type === 'id' ? 'Registered workspace' : 'Inline config'}
@@ -218,7 +223,7 @@ export const AgentBuilderInfrastructure = () => {
             </div>
           )}
         </SectionCard>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 };

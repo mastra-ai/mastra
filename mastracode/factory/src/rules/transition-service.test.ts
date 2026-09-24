@@ -1308,9 +1308,81 @@ describe('FactoryTransitionService', () => {
     expect(result).toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
-      reason: 'The Review board does not allow moving from review to planning.',
+      reason:
+        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it('names the declared next stages when the requested stage is not a phase', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition(request(item, { stage: 'plan' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason).toMatch(
+      /^The \w+ board does not allow moving from triage to plan\. Next stages declared from triage: .*planning/,
+    );
+  });
+
+  it('says no next stage is declared when the phase has no outgoing transitions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['shipped'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'queued' }));
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The Release board does not allow moving from shipped to queued. No next stage is declared from shipped.',
+    });
+  });
+
+  it('caps a long invalid_transition reason at the rejection limit', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const targets = Array.from({ length: 40 }, (_, index) => `target-phase-number-${index}`);
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: {
+          title: 'Queued',
+          kind: 'resting',
+          outcomes: Object.fromEntries(targets.map(target => [target, target])),
+        },
+        ...Object.fromEntries(targets.map(target => [target, { title: target, kind: 'terminal' as const }])),
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['queued'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+    const replayed = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason.length).toBe(512);
+    expect(replayed).toEqual(result);
   });
 
   it('starts nothing when a person parks a card back in Intake', async () => {

@@ -55,6 +55,9 @@ import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
 
+/** Platforms whose chat-SDK adapters render interactive approval buttons. */
+const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -292,27 +295,40 @@ export class AgentChannels {
             memory,
             // Without approval-button rendering, auto-approve tools to
             // avoid getting stuck waiting for input we can't ask for.
-            autoResumeSuspendedTools,
+            ...(autoResumeSuspendedTools ? { autoResumeSuspendedTools } : {}),
           },
         },
       },
     );
+
+    // `accepted` rejects when the agent throws before a run exists (workspace,
+    // instructions, tools, or model resolution). Nothing was persisted and no
+    // run will render the failure, so let it propagate to the channel error
+    // boundary rather than silently dropping the message.
+    const accepted = await result.accepted;
 
     // When this call wakes a new run, drive it to completion before returning.
     // Without this, serverless runtimes (Vercel, Lambda, etc.) terminate the
     // invocation as soon as the webhook handler returns and kill the run
     // mid-flight. `consumeStream()` is idempotent and safe to call alongside
     // the existing per-thread subscription consumer.
-    try {
-      const accepted = await result.accepted;
-      // Only the `wake` action means this process started and owns the run.
-      // Any other action (deliver/persist/discard) handed the signal off, so
-      // there is nothing to drive to completion here.
-      if (accepted.action === 'wake') {
+    //
+    // Only the `wake` action means this process started and owns the run.
+    // Any other action (deliver/persist/discard) handed the signal off, so
+    // there is nothing to drive to completion here.
+    if (accepted.action === 'wake') {
+      try {
         await accepted.output.consumeStream();
+      } catch (err) {
+        // The run already started; the output processor reports its failure.
+        this.log('debug', 'accepted consume failed', err);
       }
-    } catch (err) {
-      this.log('debug', 'accepted consume failed', err);
+    } else {
+      this.log(
+        accepted.action === 'deliver' ? 'debug' : 'warn',
+        `[dispatchInboundMessage] inbound message did not start a run (action: ${accepted.action}); the thread may be suspended awaiting tool approval`,
+        { threadId: memory.thread, resourceId: memory.resource },
+      );
     }
   }
 
@@ -1297,7 +1313,10 @@ export class AgentChannels {
       toolDisplay === 'cards' ||
       toolDisplay === 'timeline' ||
       toolDisplay === 'grouped' ||
-      toolDisplay === 'hidden';
+      // `'hidden'` still posts approval cards, but only adapters with
+      // interactive buttons can act on them. Button-less surfaces (SMS,
+      // iMessage, custom gateways) must auto-resume or the thread gets stuck.
+      (toolDisplay === 'hidden' && (adapterConfig?.approvalButtons ?? APPROVAL_BUTTON_PLATFORMS.has(platform)));
 
     this.log('info', '[processChatMessage] tool approval config', {
       platform,
@@ -1457,6 +1476,19 @@ export class AgentChannels {
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };
+  }
+
+  /**
+   * Whether a `tool-call-approval` chunk for `toolName` should render
+   * Approve/Deny controls in the chat. The base class always renders them;
+   * subclasses that resolve approval policy themselves (e.g. an agent
+   * controller auto-approving `allow` tools) return `false` when no human
+   * decision is actually pending.
+   *
+   * @internal
+   */
+  async shouldRenderToolApproval(_requestContext: RequestContext | undefined, _toolName: string): Promise<boolean> {
+    return true;
   }
 
   /**

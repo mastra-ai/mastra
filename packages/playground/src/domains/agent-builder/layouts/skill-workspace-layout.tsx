@@ -43,7 +43,7 @@ export const SkillWorkspaceLayout = ({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="bg-sidebar flex min-w-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2">
+      <div className="flex min-w-0 items-center gap-2 bg-sidebar px-3 py-2 md:px-4 md:py-2">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -55,7 +55,7 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="text-body text-foreground min-w-0 truncate">{title}</div>
+          <div className="min-w-0 truncate text-body text-foreground">{title}</div>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -71,7 +71,7 @@ export const SkillWorkspaceLayout = ({
             aria-label="Workspace view"
             className={cn(
               raisedSurfaceStyle,
-              'h-control-lg relative mx-auto flex w-full max-w-sm items-center rounded-full p-0.5',
+              'relative mx-auto flex h-control-lg w-full max-w-sm items-center rounded-full p-0.5',
             )}
           >
             <span
@@ -126,7 +126,7 @@ export const SkillWorkspaceLayout = ({
       >
         <div
           className={cn(
-            'min-w-0 min-h-0 overflow-hidden bg-sidebar',
+            'min-h-0 min-w-0 overflow-hidden bg-sidebar',
             showForm && activeTab !== 'chat' ? 'hidden' : 'block',
             'md:block',
             'md:transition-[grid-column] md:duration-300 md:ease-out',
@@ -139,7 +139,7 @@ export const SkillWorkspaceLayout = ({
         {showForm && (
           <div
             className={cn(
-              'min-w-0 min-h-0 overflow-hidden bg-sidebar',
+              'min-h-0 min-w-0 overflow-hidden bg-sidebar',
               activeTab === 'configure' ? 'block' : 'hidden',
               'md:block',
               // Mobile uses the same page-layout padding as the rest of the
@@ -148,7 +148,7 @@ export const SkillWorkspaceLayout = ({
               // slides in from the right. The slide is driven by a CSS
               // keyframe animation triggered the first time this element
               // mounts (which matches the moment showForm flips to true).
-              'px-4 pb-4 md:p-4 md:bg-transparent',
+              'px-4 pb-4 md:bg-transparent md:p-4',
             )}
             data-testid="skill-edit-configure-panel"
           >
@@ -160,7 +160,7 @@ export const SkillWorkspaceLayout = ({
             >
               <div className="min-h-0 flex-1 overflow-hidden">{form}</div>
               {deleteAction && (
-                <div className="border-border border-t px-4 pt-4 pb-4 md:px-4" data-testid="skill-edit-delete-action">
+                <div className="border-t border-border px-4 pt-4 pb-4 md:px-4" data-testid="skill-edit-delete-action">
                   {deleteAction}
                 </div>
               )}

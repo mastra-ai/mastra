@@ -70,7 +70,7 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   return (
     <>
       <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
-        <Share2 className="text-muted-foreground size-5" />
+        <Share2 className="size-5 text-muted-foreground" />
       </Button>
 
       <NetworkChoiceMetadata

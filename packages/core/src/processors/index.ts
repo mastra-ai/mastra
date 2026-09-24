@@ -10,7 +10,13 @@ import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap, TracingContext } from '../observability';
+import type {
+  ObservabilityContext,
+  ProcessorSpanPhase as ObservabilityProcessorSpanPhase,
+  ProcessorSpanType,
+  SpanTypeMap,
+  TracingContext,
+} from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
@@ -187,6 +193,13 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /**
+   * When true, this processor will also have processLLMRequest called after
+   * processInputStep. Processors that implement both methods can skip
+   * pre-conversion trimming here and defer it to the prompt stage, where it
+   * accounts for earlier prompt processors (e.g. ToolCallFilter).
+   */
+  llmRequestStage?: boolean;
 
   /**
    * Current model for this step.
@@ -222,6 +235,12 @@ export type RunProcessInputStepArgs = Omit<
   memory?: MastraMemory;
   resourceId?: string;
   threadId?: string;
+  /**
+   * IDs of processors whose processLLMRequest will run for this step.
+   * The runner sets llmRequestStage for these processors, including when they
+   * run inside a processor workflow.
+   */
+  llmRequestProcessorIds?: ReadonlySet<string>;
 };
 
 /**
@@ -598,16 +617,11 @@ export interface ProcessorViolation<TDetail = unknown> {
  * Pipeline phase a processor span is created for. One value per site where the
  * processor runner creates a span, so a processor that runs in more than one
  * phase can name and describe each of them differently.
+ *
+ * Defined in the observability types because `ProcessorPipelineAttributes`
+ * records it on the span; re-exported here as the name processors use.
  */
-export type ProcessorSpanPhase =
-  | 'input'
-  | 'inputStep'
-  | 'llmRequest'
-  | 'llmResponse'
-  | 'output'
-  | 'outputStep'
-  | 'toolResult'
-  | 'requestError';
+export type ProcessorSpanPhase = ObservabilityProcessorSpanPhase;
 
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
@@ -628,9 +642,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * declared span type labels the span with the subsystem it came from, so the
    * trace shows where it originated instead of an anonymous processor entry.
    *
-   * The runner keeps setting `entityType` (which phase the processor ran in)
-   * and the `ProcessorPipelineAttributes` fields either way, so retyping never
-   * loses the processor's position in the chain or its mutation log.
+   * The runner keeps setting `entityType` and the `ProcessorPipelineAttributes`
+   * fields either way — including `processorPhase`, which is what a reader
+   * narrows the span's payloads on — so retyping never loses the processor's
+   * position in the chain, its mutation log, or the readable view of its
+   * input and output.
    */
   readonly spanType?: ProcessorSpanType;
   /**

@@ -483,7 +483,8 @@ const PROVIDER_ALIASES: Record<string, string> = {
 const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au)\./;
 
 /** Underlying vendor segment carried by fully-qualified Bedrock model ids. */
-const BEDROCK_VENDOR_SEGMENT = /^(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek)\.(.+)$/;
+const BEDROCK_VENDOR_SEGMENT =
+  /^(?!openai\.gpt-oss-)(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek|openai)\.(.+)$/;
 
 /** Fallback vendor lookup for short Bedrock ids (`claude-sonnet-5`) that omit the vendor. */
 const BEDROCK_VENDOR_BY_PREFIX: Array<[RegExp, string]> = [

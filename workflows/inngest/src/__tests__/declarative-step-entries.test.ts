@@ -96,11 +96,31 @@ describe('inngest declarative step entries', () => {
     // getFunctions must include the parent + both nested workflow functions.
     expect(parent.getFunctions()).toHaveLength(3);
 
+    // Ordinary workflows emit watch events by default. Internal callers can disable
+    // them for a parent and every nested workflow without changing the public config.
+    expect(parent.__getEmitWorkflowEvents()).toBe(true);
+    expect(loopBody.__getEmitWorkflowEvents()).toBe(true);
+    expect(foreachBody.__getEmitWorkflowEvents()).toBe(true);
+    parent.__setEmitWorkflowEvents(false);
+    expect(parent.__getEmitWorkflowEvents()).toBe(false);
+    expect(loopBody.__getEmitWorkflowEvents()).toBe(false);
+    expect(foreachBody.__getEmitWorkflowEvents()).toBe(false);
+
     // The pubsub factory must propagate into loop/foreach bodies too.
     const factory = (p: any) => p;
     parent.__setPubsubFactory(factory);
     expect(loopBody.__getPubsubFactory()).toBe(factory);
     expect(foreachBody.__getPubsubFactory()).toBe(factory);
+
+    const lateBody = createWorkflow({
+      id: 'late-nested-foreach-body',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    }).commit() as unknown as InngestWorkflow;
+
+    (parent as any).foreach(lateBody as any).commit();
+    expect(lateBody.__getPubsubFactory()).toBe(factory);
+    expect(lateBody.__getEmitWorkflowEvents()).toBe(false);
   });
 });
 

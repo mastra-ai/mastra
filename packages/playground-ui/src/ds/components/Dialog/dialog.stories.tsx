@@ -36,10 +36,10 @@ export const Default: Story = {
           <DialogDescription>This is a description of the dialog content.</DialogDescription>
         </DialogHeader>
         <div className="py-4">
-          <p className="text-foreground text-body">Dialog body content goes here.</p>
+          <p className="text-body text-foreground">Dialog body content goes here.</p>
         </div>
         <DialogFooter>
-          <Button variant="outline">Cancel</Button>
+          <Button>Cancel</Button>
           <Button>Save</Button>
         </DialogFooter>
       </DialogContent>
@@ -93,25 +93,25 @@ export const LongContent: Story = {
         </DialogHeader>
         <DialogBody className="max-h-[80vh]">
           <div className="space-y-4 py-4">
-            <p className="text-foreground text-body">
+            <p className="text-body text-foreground">
               Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
               dolore magna aliqua.
             </p>
-            <p className="text-foreground text-body">
+            <p className="text-body text-foreground">
               Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
               consequat.
             </p>
-            <p className="text-foreground text-body">
+            <p className="text-body text-foreground">
               Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
             </p>
-            <p className="text-foreground text-body">
+            <p className="text-body text-foreground">
               Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
               laborum.
             </p>
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline">Decline</Button>
+          <Button>Decline</Button>
           <Button>Accept</Button>
         </DialogFooter>
       </DialogContent>
@@ -129,7 +129,7 @@ export const MinimalDialog: Story = {
         <DialogHeader>
           <DialogTitle>Information</DialogTitle>
         </DialogHeader>
-        <p className="text-foreground text-body">This is a simple informational dialog.</p>
+        <p className="text-body text-foreground">This is a simple informational dialog.</p>
       </DialogContent>
     </Dialog>
   ),

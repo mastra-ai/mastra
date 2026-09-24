@@ -30,7 +30,17 @@ import { validateCron } from '../scheduler/cron';
 export const WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION =
   'An object whose top-level keys become the mapping output fields. Each value must use exactly one canonical source form: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": true, "path": "<workflow-input-field.path>" }, or { "requestContextPath": "<field.path>" }. IMPORTANT: initData is the boolean true, never a field name string; put the workflow input field name in path. Template placeholders use JavaScript-style ${initData.<field>}, ${inputData.<field>}, ${stepResults.<stepId>.<field>}, ${state.<field>}, or ${requestContext.<field>} — never Handlebars {{...}} and never separate sources/data bindings. May also be provided as a JSON-encoded string of the same object.';
 
-const jsonSchema = z.record(z.string(), z.unknown());
+const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.boolean(),
+    z.string(),
+    z.number().finite(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const jsonSchema = z.record(z.string(), jsonValueSchema);
 
 const STEP_OPTIONS_DESCRIPTION =
   'JSON-safe subset of step options that round-trips through storage. `onFinish` callbacks and function-valued scorers are NOT supported.';
@@ -129,6 +139,47 @@ export const workflowBuilderToolEntryInputSchema = workflowBuilderToolEntrySchem
   })
   .describe(TOOL_ENTRY_DESCRIPTION);
 
+const CLASSIFIER_ENTRY_DESCRIPTION =
+  'Classifier step. Evaluates its complete input with a registered configured classifier and returns { answers, usage }. Route with a following conditional entry using inputData.answers.<question>.choice, inputData.answers.<question>.score, or inputData.answers.<question>.probability. Use a mapping entry before the classifier to reshape its input.';
+
+const classifierOptionsSchema = z
+  .object({
+    maxRetries: z.number().int().nonnegative().optional().describe('Retry count for the classifier model call.'),
+    providerOptions: jsonSchema.optional().describe('JSON-safe provider-specific classifier model options.'),
+    retries: z.number().int().nonnegative().optional().describe('Workflow step retry count, separate from maxRetries.'),
+    metadata: jsonSchema.optional().describe('Arbitrary JSON-safe metadata attached to the step.'),
+  })
+  .optional();
+
+const classifierOptionsInputSchema = z
+  .object({
+    maxRetries: z.number().int().nonnegative().nullish().describe('Retry count for the classifier model call.'),
+    providerOptions: jsonSchema.nullish().describe('JSON-safe provider-specific classifier model options.'),
+    retries: z.number().int().nonnegative().nullish().describe('Workflow step retry count, separate from maxRetries.'),
+    metadata: jsonSchema.nullish().describe('Arbitrary JSON-safe metadata attached to the step.'),
+  })
+  .nullish();
+
+export const workflowBuilderClassifierEntrySchema = z
+  .strictObject({
+    type: z.literal('classifier'),
+    id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
+    classifierId: z
+      .string()
+      .min(1)
+      .describe('Id of a configured classifier registered on this Mastra instance (from resource discovery).'),
+    description: z.string().optional(),
+    options: classifierOptionsSchema,
+  })
+  .describe(CLASSIFIER_ENTRY_DESCRIPTION);
+
+export const workflowBuilderClassifierEntryInputSchema = workflowBuilderClassifierEntrySchema
+  .extend({
+    description: z.string().nullish(),
+    options: classifierOptionsInputSchema,
+  })
+  .describe(CLASSIFIER_ENTRY_DESCRIPTION);
+
 export const workflowBuilderMappingDescriptorSchema = z
   .union([
     z.object({ value: z.unknown() }).strict().describe('Constant source: { "value": <JSON value> }.'),
@@ -209,12 +260,14 @@ export const workflowBuilderNestedWorkflowEntryInputSchema = workflowBuilderNest
 const executableInnerStepSchema = z.union([
   workflowBuilderAgentEntrySchema,
   workflowBuilderToolEntrySchema,
+  workflowBuilderClassifierEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
 ]);
 
 const executableInnerStepInputSchema = z.union([
   workflowBuilderAgentEntryInputSchema,
   workflowBuilderToolEntryInputSchema,
+  workflowBuilderClassifierEntryInputSchema,
   workflowBuilderNestedWorkflowEntryInputSchema,
 ]);
 
@@ -249,7 +302,7 @@ export const workflowBuilderPredicateSchema: z.ZodType<Predicate> = z.lazy(() =>
 );
 
 const PARALLEL_DESCRIPTION =
-  'Parallel container. Each child receives the same preceding input and children must be agent/tool/nested workflow — no nested containers or mappings. The result is an object keyed by each child step id containing that child complete output; downstream steps pluck fields via stepResults.<childId>.<field>.';
+  'Parallel container. Each child receives the same preceding input and children must be agent/tool/classifier/nested workflow — no nested containers or mappings. The result is an object keyed by each child step id containing that child complete output; downstream steps pluck fields via stepResults.<childId>.<field>.';
 const FOREACH_DESCRIPTION =
   'Foreach container. The preceding output MUST be a raw array (not an object with an array field). Each item is passed directly to the child step — no child inputMapping — and the output is an array of child outputs, order preserved. Give the inner step its own unique id.';
 const CONDITIONAL_DESCRIPTION =
@@ -373,6 +426,7 @@ export const workflowBuilderLoopEntryInputSchema = z
 export const workflowBuilderGraphEntrySchema = z.discriminatedUnion('type', [
   workflowBuilderAgentEntrySchema,
   workflowBuilderToolEntrySchema,
+  workflowBuilderClassifierEntrySchema,
   workflowBuilderMappingEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
   workflowBuilderParallelEntrySchema,
@@ -386,6 +440,7 @@ export const workflowBuilderGraphEntrySchema = z.discriminatedUnion('type', [
 export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type', [
   workflowBuilderAgentEntryInputSchema,
   workflowBuilderToolEntryInputSchema,
+  workflowBuilderClassifierEntryInputSchema,
   workflowBuilderMappingEntryInputSchema,
   workflowBuilderNestedWorkflowEntryInputSchema,
   workflowBuilderParallelEntryInputSchema,
@@ -397,7 +452,7 @@ export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type',
 ]);
 
 const GRAPH_DESCRIPTION =
-  'The complete ordered top-level graph covering all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
+  'The complete ordered top-level graph covering all eleven persisted graph families: agent, tool, classifier, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
 
 const SCHEDULE_DESCRIPTION =
   'Optional declarative cron schedule(s) for the workflow. A single config or an array (array entries must each provide a unique stable id). Persisted with the definition and re-registered on every boot.';

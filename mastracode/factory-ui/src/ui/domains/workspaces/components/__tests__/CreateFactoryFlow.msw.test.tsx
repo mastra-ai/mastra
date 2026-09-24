@@ -79,14 +79,14 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Name your new Factory' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Factory name')).toHaveFocus();
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name your new Factory')).toHaveFocus();
     expect(screen.getByRole('option', { name: /Type a name to create your Factory/ })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
 
-    await userEvent.setup().type(screen.getByLabelText('Factory name'), 'Mastra');
+    await userEvent.setup().type(screen.getByLabelText('Name your new Factory'), 'Mastra');
     expect(screen.getByRole('option', { name: /Create “Mastra”/ })).toHaveAttribute('aria-disabled', 'false');
   });
 
@@ -105,15 +105,15 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    const field = await screen.findByLabelText('Factory name');
-    expect(screen.getByRole('combobox', { name: 'Factory name' })).toBe(field);
+    const field = await screen.findByLabelText('Name your new Factory');
+    expect(screen.getByRole('combobox', { name: 'Name your new Factory' })).toBe(field);
     await user.type(field, 'Mastra');
     await user.click(screen.getByRole('option', { name: /Create “Mastra”/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Search repositories' })).toBe(field);
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Choose your codebase' })).toBe(field);
     // The same field carries over, focused and empty — steps swap rows, not the palette.
-    expect(screen.getByLabelText('Search repositories')).toBe(field);
+    expect(screen.getByLabelText('Choose your codebase')).toBe(field);
     expect(field).toHaveFocus();
     expect(field).toHaveValue('');
     // Nothing exists server-side yet: quitting here leaves no empty Factory behind.
@@ -137,13 +137,13 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    await screen.findByRole('heading', { name: 'Name your new Factory' });
+    await screen.findByLabelText('Name your new Factory');
     await waitFor(() => expect(repoRequests).toBe(1));
 
-    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
 
     // Already cached: the repository step opens on rows, not on a skeleton.
-    expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /octo\/hello/ })).toBeInTheDocument();
     expect(screen.queryByLabelText('Loading repositories')).not.toBeInTheDocument();
   });
@@ -162,11 +162,11 @@ describe('Create Factory wizard', () => {
 
     const { client } = renderFlow();
 
-    await screen.findByRole('heading', { name: 'Name your new Factory' });
+    await screen.findByLabelText('Name your new Factory');
     await waitForMutationsIdle(client);
     expect(queries).toEqual(['']);
-    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
-    const search = await screen.findByLabelText('Search repositories');
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
+    const search = await screen.findByLabelText('Choose your codebase');
     await waitForMutationsIdle(client);
     expect(queries.length).toBeGreaterThanOrEqual(2);
     queries.splice(0);
@@ -190,9 +190,9 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
 
-    expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
   });
 
   it('keeps the picked repository in the draft instead of linking it right away', async () => {
@@ -213,7 +213,7 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
     expect(calls).toEqual([]);
     expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
     expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({ fullName: 'octo/hello' });
@@ -234,7 +234,7 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Skip' }));
 
-    expect(await screen.findByRole('heading', { name: 'Choose your Factory model' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
     // Still nothing server-side one step before the end.
     expect(calls).toEqual([]);
@@ -327,15 +327,18 @@ describe('Create Factory wizard', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
-    // The Factory exists: no walking back to rename it or swap the repository it will link.
-    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
   });
 
   it('cannot be left while the Factory is being created', async () => {
     const calls: string[] = [];
     seedDraft('model-provider');
     stubModelStepEndpoints(calls);
-    server.use(http.post(`${TEST_BASE_URL}/web/factory/projects`, () => new Promise<never>(() => {})));
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
+        calls.push('create-pending');
+        return new Promise<never>(() => {});
+      }),
+    );
     const user = userEvent.setup();
 
     renderFlow();
@@ -343,7 +346,8 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument());
+    await waitFor(() => expect(calls).toContain('create-pending'));
+    expect(screen.queryByRole('button', { name: 'Codebase' })).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
 
     expect(screen.getByTestId('pathname')).toHaveTextContent(WIZARD_PATH);
@@ -430,7 +434,7 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('option', { name: /acme\/app/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({
       provider: 'gitlab',
       id: 'gitlab-project:encoded',
@@ -454,7 +458,7 @@ describe('Create Factory wizard', () => {
     expect(screen.queryByRole('option', { name: /Connect Linear/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('option', { name: /Skip for now/ }));
-    expect(await screen.findByRole('heading', { name: 'Choose your Factory model' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
   });
 
   it('offers to reconnect Linear when its authorization expired', async () => {
@@ -488,7 +492,7 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: /Mobile App/ })).toBeInTheDocument();
     // Skip leads, and doubles as chrome so a long project list never hides it.
     expect(screen.getAllByRole('option')[0]).toHaveTextContent('Skip for now');
@@ -631,11 +635,11 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Name your new Factory' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
 
     // Restarting drops what an earlier attempt half-created, so the run ahead is a clean one.
     await user.click(screen.getByRole('option', { name: /Create “Mastra”/ }));
-    await screen.findByRole('heading', { name: 'Choose your codebase' });
+    await screen.findByLabelText('Choose your codebase');
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });
 
@@ -655,29 +659,7 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to create Factory (500)');
-    expect(screen.getByRole('heading', { name: 'Choose your Factory model' })).toBeInTheDocument();
-  });
-
-  it('Back steps through the wizard, and leaves it from the first step', async () => {
-    sessionStorage.setItem(STEP_KEY, 'vcs');
-    sessionStorage.setItem(NAME_KEY, 'Mastra');
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
-      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
-      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-    );
-    const user = userEvent.setup();
-
-    renderFlow(['/factories/fp-host/overview', WIZARD_PATH]);
-
-    await user.click(await screen.findByRole('button', { name: 'Back' }));
-
-    // Back to the name step, with what was already typed.
-    expect(await screen.findByRole('heading', { name: 'Name your new Factory' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Factory name')).toHaveValue('Mastra');
-
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-host/overview'));
+    expect(screen.getByLabelText('Choose your Factory model')).toBeInTheDocument();
   });
 
   it('Escape falls back to the Factory in view when there is no in-app history (deep link)', async () => {

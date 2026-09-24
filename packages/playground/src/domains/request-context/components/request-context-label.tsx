@@ -33,7 +33,7 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
                 className={cn(
                   quietTextHover,
                   controlStateColorTransition,
-                  'focus-visible:ring-border-strong rounded-sm focus-visible:ring-2 focus-visible:outline-none',
+                  'rounded-sm focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:outline-none',
                 )}
               >
                 <Icon size="xs">

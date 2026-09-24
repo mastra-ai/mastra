@@ -91,12 +91,12 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'folder':
       return <Folder className="h-4 w-4 text-amber-400" />;
     case 'hard-drive':
-      return <HardDrive className="text-muted-foreground h-4 w-4" />;
+      return <HardDrive className="h-4 w-4 text-muted-foreground" />;
     case 'cloud':
       return <Cloud className="h-4 w-4 text-sky-400" />;
     default:
       // Default to cloud icon for unknown providers
-      return <Cloud className="text-muted-foreground h-4 w-4" />;
+      return <Cloud className="h-4 w-4 text-muted-foreground" />;
   }
 }
 
@@ -122,7 +122,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
       return <FileJson className="h-4 w-4 text-yellow-400" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-muted-foreground h-4 w-4" />;
+      return <FileText className="h-4 w-4 text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
@@ -131,7 +131,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'webp':
       return <Image className="h-4 w-4 text-purple-400" />;
     default:
-      return <File className="text-muted-foreground h-4 w-4" />;
+      return <File className="h-4 w-4 text-muted-foreground" />;
   }
 }
 
@@ -200,10 +200,10 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
   const parts = isRoot ? [] : path.split('/').filter(Boolean);
 
   return (
-    <div className="text-body flex items-center gap-1 overflow-x-auto">
+    <div className="flex items-center gap-1 overflow-x-auto text-body">
       <button
         onClick={() => onNavigate('.')}
-        className="hover:bg-fill-subtle text-foreground rounded p-1"
+        className="rounded p-1 text-foreground hover:bg-fill-subtle"
         aria-label="Workspace root"
       >
         <FolderOpen className="h-4 w-4" />
@@ -212,10 +212,10 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
         const partPath = parts.slice(0, index + 1).join('/');
         return (
           <div key={partPath} className="flex items-center">
-            <ChevronRight className="text-muted-foreground h-4 w-4" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
             <button
               onClick={() => onNavigate(partPath)}
-              className="hover:bg-fill-subtle text-foreground max-w-[150px] truncate rounded px-2 py-1"
+              className="max-w-[150px] truncate rounded px-2 py-1 text-foreground hover:bg-fill-subtle"
               title={part}
             >
               {part}
@@ -271,9 +271,9 @@ export function FileBrowser({
   };
 
   return (
-    <div className="border-border overflow-hidden rounded-lg border">
+    <div className="overflow-hidden rounded-lg border border-border">
       {/* Header */}
-      <div className="bg-card border-border flex items-center justify-between border-b px-4 py-2">
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
         <Breadcrumb path={currentPath} onNavigate={onNavigate} />
         <div className="flex items-center gap-1">
           {onRefresh && (
@@ -310,18 +310,18 @@ export function FileBrowser({
       <div className="max-h-[400px] overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-center">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
               <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
-            <p className="text-foreground text-subheading mb-1">Failed to load directory</p>
-            <p className="text-muted-foreground text-caption mx-auto max-w-sm">{getErrorMessage(error)}</p>
+            <p className="mb-1 text-subheading text-foreground">Failed to load directory</p>
+            <p className="mx-auto max-w-sm text-caption text-muted-foreground">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
-          <div className="text-muted-foreground text-body py-8 text-center">
+          <div className="py-8 text-center text-body text-muted-foreground">
             {isRoot ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
@@ -335,10 +335,10 @@ export function FileBrowser({
                       const parentPath = currentPath.split('/').slice(0, -1).join('/') || '.';
                       onNavigate(parentPath);
                     }}
-                    className="hover:bg-fill-subtle flex w-full items-center gap-3 px-4 py-2 text-left"
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-fill-subtle"
                   >
                     <FolderOpen className="h-4 w-4 text-amber-400" />
-                    <span className="text-foreground text-body">..</span>
+                    <span className="text-body text-foreground">..</span>
                   </button>
                 </li>
               )}
@@ -348,13 +348,13 @@ export function FileBrowser({
 
                 return (
                   <li key={entry.name} className="group">
-                    <div className="hover:bg-fill-subtle flex items-center">
+                    <div className="flex items-center hover:bg-fill-subtle">
                       <button
                         onClick={() => handleEntryClick(entry)}
                         className="flex flex-1 items-center gap-3 px-4 py-2 text-left"
                       >
                         {getFileIcon(entry)}
-                        <span className="text-foreground text-body flex-1 truncate">{entry.name}</span>
+                        <span className="flex-1 truncate text-body text-foreground">{entry.name}</span>
                         {/* Mount error indicator */}
                         {entry.mount && isError && (
                           <Tooltip>
@@ -376,7 +376,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`text-caption rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-muted-foreground bg-muted'}`}
+                                  className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-red-400/10 text-red-400' : 'bg-muted text-muted-foreground'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -385,13 +385,13 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`text-caption rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-muted-foreground bg-muted'}`}
+                              className={`rounded px-1.5 py-0.5 text-caption ${isError ? 'bg-red-400/10 text-red-400' : 'bg-muted text-muted-foreground'}`}
                             >
                               {mountLabel}
                             </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
-                          <span className="text-muted-foreground text-caption tabular-nums">
+                          <span className="text-caption text-muted-foreground tabular-nums">
                             {formatBytes(entry.size)}
                           </span>
                         )}
@@ -400,7 +400,7 @@ export function FileBrowser({
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
-                          className="text-muted-foreground p-2 opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
+                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -538,12 +538,12 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
   const language = getLanguageFromExtension(ext);
 
   return (
-    <div className="border-border overflow-hidden rounded-lg border">
+    <div className="overflow-hidden rounded-lg border border-border">
       {/* Header */}
-      <div className="bg-card border-border flex items-center justify-between border-b px-4 py-2">
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
         <div className="flex items-center gap-2">
           {getFileIcon({ name: fileName, type: 'file' })}
-          <span className="text-foreground text-subheading">{fileName}</span>
+          <span className="text-subheading text-foreground">{fileName}</span>
         </div>
         <div className="flex items-center gap-2">
           <CopyButton content={content} copyMessage="Copied file content" />
@@ -556,10 +556,10 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       </div>
 
       {/* Content */}
-      <div className="bg-background h-full max-h-[500px] overflow-auto">
+      <div className="h-full max-h-[500px] overflow-auto bg-background">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : isImage ? (
           <div className="flex items-center justify-center p-4">
@@ -587,7 +587,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
         ) : language ? (
           <HighlightedCode content={content} language={language} />
         ) : (
-          <pre className="text-foreground text-body overflow-x-auto p-4 font-mono whitespace-pre-wrap">{content}</pre>
+          <pre className="overflow-x-auto p-4 font-mono text-body whitespace-pre-wrap text-foreground">{content}</pre>
         )}
       </div>
     </div>

@@ -11,7 +11,7 @@ import TabItem from "@theme/TabItem";
 # Step class
 
 The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
-It can take either a tool or an agent as a parameter to automatically create a step from them.
+It can take a tool, agent, or configured classifier as a parameter to automatically create a step from it.
 
 ## Usage example
 
@@ -171,6 +171,47 @@ const agentStep = createStep(testAgent, {
   },
 ]}
 />
+
+## Creating steps from classifiers
+
+Pass a [`Classifier`](/reference/classifier/classifier) with constructor-configured questions to `createStep()`. By default, the classifier evaluates the complete `inputData`. Use `state` to select a JSON value from the step context.
+
+```typescript title="src/mastra/workflows/ticket-triage.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { createStep } from '@mastra/core/workflows'
+
+const router = new Classifier({
+  id: 'ticket-router',
+  model,
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: {
+        billing: 'Billing, invoices, and payments',
+        support: 'Account access and product help',
+        other: 'Anything else',
+      },
+    },
+    urgent: { type: 'boolean' },
+  },
+})
+
+const classifyTicket = createStep(router, {
+  maxRetries: 2,
+  retries: 1,
+})
+```
+
+The typed step output is JSON-safe:
+
+- `answers.route.choice` is the selected choice literal.
+- `answers.urgent.probability` is the probability that the boolean answer is `true`, not a thresholded boolean.
+- Choice and score answers may include distributions.
+- `usage` contains normalized token usage.
+
+`maxRetries` controls classifier model-call retries. `retries` controls workflow step retries. Classifier warnings, response metadata, and raw provider data aren't included in workflow output.
+
+A classifier without constructor-configured questions can't be used as a workflow step. The step evaluates its complete input. Add a preceding `.map()` call when the workflow needs to select or reshape that input.
 
 ## Constructor parameters
 
