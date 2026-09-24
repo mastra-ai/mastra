@@ -642,5 +642,38 @@ describe('handleBrowserCommand', () => {
       expect(output).toContain('Browser: enabled');
       expect(output).toContain('Profile: /tmp/profile');
     });
+
+    it('reports scope and preserveUserDataDir changes as pending since they change the launched browser', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser = {
+        ...settings.browser,
+        enabled: true,
+        profile: undefined,
+        scope: 'shared',
+        stagehand: { env: 'LOCAL', preserveUserDataDir: false },
+      };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      settings.browser.scope = 'thread';
+      settings.browser.stagehand = { env: 'LOCAL', preserveUserDataDir: true };
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain(
+        'Pending changes (not yet applied):',
+      );
+    });
+
+    it('ignores a scope change when a profile forces shared scope anyway', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser = { ...settings.browser, enabled: true, profile: '/tmp/profile', scope: 'shared' };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      settings.browser.scope = 'thread';
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).not.toContain('Pending changes');
+    });
   });
 });

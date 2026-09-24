@@ -318,6 +318,13 @@ function getBrowserConfigKey(settings: BrowserSettings): string {
     parts.push(`model:${settings.stagehand.model}`);
   }
   parts.push(settings.headless ? 'headless' : 'headed');
+  // Mirror createBrowserFromSettings: a profile or CDP connection forces 'shared' scope,
+  // and preserveUserDataDir only affects Stagehand launches (not CDP attaches).
+  const effectiveScope = settings.profile || settings.cdpUrl ? 'shared' : settings.scope;
+  if (effectiveScope) parts.push(`scope:${effectiveScope}`);
+  if (settings.provider === 'stagehand' && !settings.cdpUrl && settings.stagehand?.preserveUserDataDir !== undefined) {
+    parts.push(`preserve:${settings.stagehand.preserveUserDataDir}`);
+  }
   if (settings.viewport) parts.push(`viewport:${formatViewport(settings.viewport)}`);
   if (settings.profile) parts.push(`profile:${settings.profile}`);
   if (settings.executablePath) parts.push(`exec:${settings.executablePath}`);
