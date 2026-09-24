@@ -8507,6 +8507,8 @@ export class Agent<
     yieldOwnership?: () => boolean;
     /** Called after this claim has been transferred or released for the requester. */
     onOwnershipYielded?: () => void;
+    /** Called when lease renewal proves that another live owner has taken this claim. */
+    onOwnershipLost?: () => void;
   }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
     return agentThreadStreamRuntime.claimThreadOwnership(
       this.#getThreadRuntimeAgent(),

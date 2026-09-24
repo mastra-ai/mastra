@@ -1,3 +1,5 @@
+import { open, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { Agent } from '@mastra/core/agent';
@@ -348,6 +350,40 @@ async function runStaleLeaseTakeover() {
   await waitForCommand('close');
 }
 
+/** Repeatedly releases and reacquires one lease while another process does the same. */
+async function runLeaseMutationHammer() {
+  const leaseProvider = pubsub.getLeaseProvider();
+  const leaseKey = 'mutation-lock-hammer';
+  const criticalPath = join('/tmp/mc', resourceId, 'mutation-lock-hammer.critical');
+  const owner = `${role}:${process.pid}`;
+  let acquisitions = 0;
+  let overlaps = 0;
+  await waitUntil(Number(startAtArg));
+
+  while (acquisitions < 100) {
+    const lease = await leaseProvider.acquireLease(leaseKey, owner, 15_000);
+    if (!lease.acquired) {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      continue;
+    }
+
+    let criticalFile;
+    try {
+      criticalFile = await open(criticalPath, 'wx');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      overlaps++;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1));
+    await criticalFile?.close();
+    if (criticalFile) await unlink(criticalPath).catch(() => {});
+    await leaseProvider.releaseLease(leaseKey, owner);
+    acquisitions++;
+  }
+
+  emit('hammer-result', { acquisitions, overlaps });
+}
+
 /** Drives the real session advertisement closure across two processes. */
 async function runSessionAdvertisementYield() {
   const controller = new AgentController({
@@ -444,6 +480,7 @@ async function main() {
   else if (scenario === 'yield-on-demand') await runYieldOnDemand();
   else if (scenario === 'session-advertisement-yield') await runSessionAdvertisementYield();
   else if (scenario === 'stale-lease-takeover') await runStaleLeaseTakeover();
+  else if (scenario === 'lease-mutation-hammer') await runLeaseMutationHammer();
   else if (scenario === 'claim-only') await runClaimOnly();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
   else if (scenario === 'ownership-contention') await runOwnershipContention();

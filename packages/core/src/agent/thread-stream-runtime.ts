@@ -288,7 +288,6 @@ type ClaimedThreadOwner<OUTPUT = unknown> = {
   threadId: string;
   streamOptions?: ClaimedThreadOwnerStreamOptions;
   peer?: AdvertisedThreadPeer;
-  claimLeaseRenewalTimer?: ReturnType<typeof setInterval>;
   unsubscribe: () => void;
 };
 
@@ -988,6 +987,7 @@ export class AgentThreadStreamRuntime {
       peer?: false | AgentClaimThreadPeerOptions;
       yieldOwnership?: () => boolean;
       onOwnershipYielded?: () => void;
+      onOwnershipLost?: () => void;
     },
     pubsub?: PubSub,
   ): Promise<{ claimed: boolean; unsubscribe: () => void }> {
@@ -1195,7 +1195,8 @@ export class AgentThreadStreamRuntime {
       // Lease-backed transports hand the claim over atomically before this
       // owner unsubscribes. Lease-less transports preserve the legacy silent
       // release, allowing the requester's discovery to settle without an owner.
-      if (data.intent === 'claim' && options.yieldOwnership?.()) {
+      const requesterStillWaiting = data.expiresAt === undefined || Date.now() < data.expiresAt;
+      if (data.intent === 'claim' && requesterStillWaiting && options.yieldOwnership?.()) {
         if (!isLeaseFallback) {
           const transferred = await leaseProvider.transferLease(
             claimLeaseKey,
@@ -1264,12 +1265,16 @@ export class AgentThreadStreamRuntime {
       throw error;
     }
 
+    let claimLeaseRenewalTimer: ReturnType<typeof setInterval> | undefined;
     const unsubscribe = () => {
       active = false;
+      if (claimLeaseRenewalTimer) {
+        clearInterval(claimLeaseRenewalTimer);
+        claimLeaseRenewalTimer = undefined;
+      }
       const currentOwner = state.claimedThreadOwners.get(key);
       if (currentOwner?.unsubscribe === unsubscribe) {
         state.claimedThreadOwners.delete(key);
-        if (currentOwner.claimLeaseRenewalTimer) clearInterval(currentOwner.claimLeaseRenewalTimer);
         if (!isLeaseFallback) void leaseProvider.releaseLease(claimLeaseKey, sourceId).catch(() => {});
       }
       if (peer && state.advertisedThreadPeers.get(peer.id)?.unsubscribe === unsubscribe) {
@@ -1289,24 +1294,34 @@ export class AgentThreadStreamRuntime {
       state.advertisedThreadPeers.set(peer.id, peer);
     }
 
-    const claimLeaseRenewalTimer = isLeaseFallback
-      ? undefined
-      : setInterval(() => {
-          void leaseProvider
-            .renewLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS)
-            .then(renewed => {
-              if (!renewed) unsubscribe();
-            })
-            .catch(() => {});
-        }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
-    claimLeaseRenewalTimer?.unref?.();
+    let claimLeaseRenewalInFlight = false;
+    if (!isLeaseFallback) {
+      claimLeaseRenewalTimer = setInterval(() => {
+        if (claimLeaseRenewalInFlight) return;
+        claimLeaseRenewalInFlight = true;
+        void leaseProvider
+          .renewLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS)
+          .then(async renewed => {
+            if (renewed || !active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
+            const reacquired = await leaseProvider.acquireLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS);
+            if (reacquired.acquired || !active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe)
+              return;
+            unsubscribe();
+            options.onOwnershipLost?.();
+          })
+          .catch(() => {})
+          .finally(() => {
+            claimLeaseRenewalInFlight = false;
+          });
+      }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+      claimLeaseRenewalTimer.unref?.();
+    }
     state.claimedThreadOwners.set(key, {
       agent,
       resourceId: options.resourceId,
       threadId: options.threadId,
       streamOptions: options.streamOptions,
       peer,
-      claimLeaseRenewalTimer,
       unsubscribe,
     });
     active = true;

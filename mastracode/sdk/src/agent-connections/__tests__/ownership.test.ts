@@ -174,6 +174,32 @@ describe('createThreadOwnershipManager', () => {
     expect(currentUnsubscribe).not.toHaveBeenCalled();
   });
 
+  it('retries a thread after core reports that its claim was lost', async () => {
+    vi.useFakeTimers();
+    try {
+      const ownershipLosses: Array<() => void> = [];
+      const unsubscribes: Array<ReturnType<typeof vi.fn>> = [];
+      const claimThread = vi.fn(async (_threadId: string, { onLost }: { onLost: () => void }) => {
+        ownershipLosses.push(onLost);
+        const unsubscribe = vi.fn();
+        unsubscribes.push(unsubscribe);
+        return { claimed: true, unsubscribe };
+      });
+      const manager = createThreadOwnershipManager(claimThread);
+
+      await expect(manager.claim('thread-1')).resolves.toBe(true);
+      ownershipLosses[0]?.();
+      await vi.advanceTimersByTimeAsync(250);
+
+      expect(claimThread).toHaveBeenCalledTimes(2);
+      expect(unsubscribes[0]).not.toHaveBeenCalled();
+      manager.close();
+      expect(unsubscribes[1]).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('forgets a thread it yielded to another process without unsubscribing twice', async () => {
     const unsubscribe = vi.fn();
     let yieldOwnership: (() => void) | undefined;

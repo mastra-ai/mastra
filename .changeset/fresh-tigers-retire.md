@@ -4,9 +4,9 @@
 
 **Added atomic cross-process thread ownership handoff**
 
-`agent.claimThreadOwnership()` now accepts `yieldOwnership` and `onOwnershipYielded` callbacks. When another process requests a thread and `yieldOwnership` returns `true`, lease-capable PubSub providers transfer the claim during the current request before acknowledging it. Plain owner lookups used for signal delivery never trigger a yield.
+`agent.claimThreadOwnership()` now accepts `yieldOwnership`, `onOwnershipYielded`, and `onOwnershipLost` callbacks. When another process asks for a thread and `yieldOwnership` returns `true`, the thread passes to that process in the same request. `onOwnershipYielded` runs after the handoff. Owner lookups for message delivery never call `yieldOwnership`. If another process takes an expired claim first, `onOwnershipLost` runs so the caller can retry.
 
-`UnixSocketPubSub` now provides filesystem-backed leases shared by processes using the same socket directory. Lease ownership is fenced by an owner token, PID, and process-incarnation nonce so live owners survive event-loop stalls while dead owners can be reclaimed immediately.
+`UnixSocketPubSub` now coordinates thread ownership between processes that share a socket directory. A running owner restores an expired claim when no other process has taken it. When an owner hands off a thread or exits, another process can take over immediately.
 
 **Before**
 
@@ -28,5 +28,6 @@ const claim = await agent.claimThreadOwnership({
   onOwnershipYielded: () => {
     claimActive = false
   },
+  onOwnershipLost: () => scheduleClaimRetry(threadId),
 })
 ```

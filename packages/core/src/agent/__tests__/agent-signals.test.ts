@@ -9717,28 +9717,16 @@ describe('Agent signals', () => {
           { resourceId: 'late-subscriber-resource', threadId: 'late-subscriber-thread' },
           followerPubSub,
         );
-        const topic = `agent.thread-stream.${encodeURIComponent(threadKey)}`;
-        const rawFollowerEvent = vi.fn();
-        await followerPubSub.subscribe(topic, rawFollowerEvent);
-        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+        const followerPart = followerSubscription.stream[Symbol.asyncIterator]().next();
 
         continueRun();
-        await waitForCondition(
-          () =>
-            followerSubscription.activeRunId() === runId &&
-            rawFollowerEvent.mock.calls.some(
-              ([event]) => event.data?.type === 'stream-part' && event.data.part?.payload?.text === 'after subscriber',
-            ),
-          2_000,
-        );
-        finishLateRun();
-
-        await expect(withTimeout(followerRun, 'Timed out waiting for late subscriber', 2_000)).resolves.toMatchObject({
-          value: { runId, text: 'after subscriber' },
+        await expect(withTimeout(followerPart, 'Timed out waiting for late subscriber', 2_000)).resolves.toMatchObject({
+          value: { runId, type: 'text-delta', payload: { text: 'after subscriber' } },
           done: false,
         });
+        expect(followerSubscription.activeRunId()).toBe(runId);
+        finishLateRun();
         followerSubscription.unsubscribe();
-        await followerPubSub.unsubscribe(topic, rawFollowerEvent);
         await ownerPubSub.releaseLease(threadKey, runId);
       } finally {
         finishLateRun();

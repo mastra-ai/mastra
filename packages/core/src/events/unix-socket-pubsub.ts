@@ -74,9 +74,13 @@ type FileLeaseRecord = {
   processNonce: string;
 };
 
-type FileLeaseMutationLock = {
+type FileLeaseProcessMarker = {
   pid: number;
   processNonce: string;
+};
+
+type FileLeaseMutationLock = FileLeaseProcessMarker & {
+  token?: string;
 };
 
 function leaseFileName(key: string): string {
@@ -306,6 +310,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
    * UnixSocketPubSub instance in this socket directory.
    */
   async acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    this.#throwIfClosed();
     this.#validateLeaseTtl(ttlMs);
     return this.#trackLeaseOperation(
       this.#withLeaseMutation(key, async leasePath => {
@@ -321,6 +326,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   /** Reads the current lease owner, reclaiming an expired or dead-process record. */
   async getLeaseOwner(key: string): Promise<string | undefined> {
+    this.#throwIfClosed();
     return this.#trackLeaseOperation(
       this.#withLeaseMutation(key, async leasePath => {
         const existing = await this.#readLease(leasePath);
@@ -336,6 +342,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   /** Releases the lease only when `owner` still matches the stored owner. */
   async releaseLease(key: string, owner: string): Promise<void> {
+    this.#throwIfClosed();
     await this.#trackLeaseOperation(
       this.#withLeaseMutation(key, async leasePath => {
         const existing = await this.#readLease(leasePath);
@@ -348,6 +355,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   /** Renews the lease only when it remains live and owned by `owner`. */
   async renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    this.#throwIfClosed();
     this.#validateLeaseTtl(ttlMs);
     return this.#trackLeaseOperation(
       this.#withLeaseMutation(key, async leasePath => {
@@ -364,6 +372,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
    * replacement are serialized by the same per-key filesystem mutation lock.
    */
   async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+    this.#throwIfClosed();
     this.#validateLeaseTtl(ttlMs);
     return this.#trackLeaseOperation(
       this.#withLeaseMutation(key, async leasePath => {
@@ -527,7 +536,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     const fileName = leaseFileName(key);
     const leasePath = join(this.#leaseDirectory, `${fileName}.json`);
     const lockPath = join(this.#leaseMutationDirectory, `${fileName}.lock`);
-    const lockRecord: FileLeaseMutationLock = { pid: process.pid, processNonce: PROCESS_NONCE };
+    const lockRecord: FileLeaseMutationLock = {
+      pid: process.pid,
+      processNonce: PROCESS_NONCE,
+      token: randomUUID(),
+    };
 
     while (true) {
       const candidatePath = `${lockPath}.${process.pid}.${randomUUID()}.tmp`;
@@ -537,8 +550,13 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
         break;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        if (await this.#isLeaseMutationLockStale(lockPath)) {
-          await unlink(lockPath).catch(() => {});
+        const existingLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
+        if (!existingLock) {
+          await delay(LEASE_LOCK_RETRY_MS);
+          continue;
+        }
+        if (await this.#isLeaseMutationLockStale(existingLock)) {
+          await this.#removeLeaseMutationLock(lockPath, existingLock);
         } else {
           await delay(LEASE_LOCK_RETRY_MS);
         }
@@ -550,14 +568,54 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     try {
       return await mutate(leasePath);
     } finally {
-      await unlink(lockPath).catch(() => {});
+      await this.#removeLeaseMutationLock(lockPath, lockRecord);
     }
   }
 
+  /** Moves and removes a mutation lock only when its process identity and unique token still match. */
+  async #removeLeaseMutationLock(lockPath: string, expected: FileLeaseMutationLock): Promise<boolean> {
+    const isolatedPath = `${lockPath}.${process.pid}.${randomUUID()}.reap`;
+    try {
+      await rename(lockPath, isolatedPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+
+    const isolatedLock = await this.#readJson<FileLeaseMutationLock>(isolatedPath);
+    if (this.#sameLeaseMutationLock(isolatedLock, expected)) {
+      await unlink(isolatedPath).catch(() => {});
+      return true;
+    }
+
+    while (true) {
+      try {
+        await link(isolatedPath, lockPath);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        await delay(LEASE_LOCK_RETRY_MS);
+      }
+    }
+    await unlink(isolatedPath).catch(() => {});
+    return false;
+  }
+
+  /** Compares mutation-lock identities without relying on a reusable pathname. */
+  #sameLeaseMutationLock(first: FileLeaseMutationLock | undefined, second: FileLeaseMutationLock | undefined): boolean {
+    return (
+      first !== undefined &&
+      second !== undefined &&
+      first.pid === second.pid &&
+      first.processNonce === second.processNonce &&
+      first.token === second.token
+    );
+  }
+
   /** Detects abandoned mutation locks using both PID liveness and process incarnation. */
-  async #isLeaseMutationLockStale(lockPath: string): Promise<boolean> {
-    const lock = await this.#readJson<FileLeaseMutationLock>(lockPath);
-    if (!lock || !Number.isInteger(lock.pid) || typeof lock.processNonce !== 'string') return true;
+  async #isLeaseMutationLockStale(lock: FileLeaseMutationLock): Promise<boolean> {
+    if (!Number.isInteger(lock.pid) || typeof lock.processNonce !== 'string' || typeof lock.token !== 'string')
+      return true;
     try {
       process.kill(lock.pid, 0);
     } catch (error) {
@@ -565,7 +623,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       if (code === 'ESRCH') return true;
       if (code !== 'EPERM') throw error;
     }
-    const marker = await this.#readJson<FileLeaseMutationLock>(join(this.#leaseProcessDirectory, `${lock.pid}.json`));
+    const marker = await this.#readJson<FileLeaseProcessMarker>(join(this.#leaseProcessDirectory, `${lock.pid}.json`));
     return marker?.processNonce !== lock.processNonce;
   }
 
@@ -594,7 +652,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       if (code === 'ESRCH') return false;
       if (code !== 'EPERM') throw error;
     }
-    const marker = await this.#readJson<FileLeaseMutationLock>(join(this.#leaseProcessDirectory, `${record.pid}.json`));
+    const marker = await this.#readJson<FileLeaseProcessMarker>(
+      join(this.#leaseProcessDirectory, `${record.pid}.json`),
+    );
     return marker?.processNonce === record.processNonce;
   }
 

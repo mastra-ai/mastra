@@ -508,6 +508,24 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(secondCode).toBe(0);
   }, 30_000);
 
+  it('serializes repeated cross-process lease release and reacquisition', async () => {
+    const startAt = String(Date.now() + 2_000);
+    const first = startChild('owner', resourceId, 'lease-mutation-hammer', [startAt]);
+    const second = startChild('sender', resourceId, 'lease-mutation-hammer', [startAt]);
+    const [firstResult, secondResult] = await Promise.all([
+      first.waitFor('hammer-result', 30_000),
+      second.waitFor('hammer-result', 30_000),
+    ]);
+    const [firstCode, secondCode] = await Promise.all([first.result, second.result]);
+
+    expect(firstResult).toMatchObject({ acquisitions: 100, overlaps: 0 });
+    expect(secondResult).toMatchObject({ acquisitions: 100, overlaps: 0 });
+    expect(first.stderr).toBe('');
+    expect(second.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+  }, 40_000);
+
   it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
     const startAt = String(Date.now() + 3_000);
     const firstOwner = startChild('owner', resourceId, 'simultaneous-owner-wake', [startAt]);

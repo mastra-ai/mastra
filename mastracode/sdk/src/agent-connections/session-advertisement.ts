@@ -31,7 +31,7 @@ export function createSessionThreadAdvertisement<TState>(options: {
   // of losing the rename.
   const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
 
-  const threadOwnership = createThreadOwnershipManager(async (threadId, { onYield }) => {
+  const threadOwnership = createThreadOwnershipManager(async (threadId, { onYield, onLost }) => {
     const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
     const thread = await session.thread.getById({ threadId });
     const agent = controller.getCurrentAgent(session);
@@ -50,6 +50,7 @@ export function createSessionThreadAdvertisement<TState>(options: {
       // path moved the session (including silent switches) is reflected here.
       yieldOwnership: () => session.thread.getId() !== threadId,
       onOwnershipYielded: onYield,
+      onOwnershipLost: onLost,
     });
     const observedTitle = latestObservedTitles.get(threadId);
     if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {

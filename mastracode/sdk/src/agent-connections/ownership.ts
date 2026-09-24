@@ -10,6 +10,8 @@ export interface ThreadClaimContext {
    * still owns the thread.
    */
   onYield(): void;
+  /** Call when lease renewal proves another live owner took the claim, so the manager retries it. */
+  onLost(): void;
 }
 
 const OWNERSHIP_RETRY_INITIAL_DELAY_MS = 250;
@@ -73,9 +75,21 @@ export function createThreadOwnershipManager(
     states.delete(threadId);
   };
 
+  const loseClaim = (threadId: string, claimGeneration: number) => {
+    const state = states.get(threadId);
+    if (!state || state.generation !== claimGeneration) return;
+    // Core already stopped the stale claim. Keep the thread tracked and retry:
+    // another process may move away or exit while this session is still alive.
+    state.claim = undefined;
+    scheduleRetry(threadId, claimGeneration);
+  };
+
   const attemptClaim = async (threadId: string, claimGeneration: number, propagateError: boolean): Promise<boolean> => {
     try {
-      const nextClaim = await claimThread(threadId, { onYield: () => yieldClaim(threadId, claimGeneration) });
+      const nextClaim = await claimThread(threadId, {
+        onYield: () => yieldClaim(threadId, claimGeneration),
+        onLost: () => loseClaim(threadId, claimGeneration),
+      });
       const state = states.get(threadId);
       // The session closed, or a newer attempt superseded this one while the
       // ownership request was in flight — the late claim must not be retained.
