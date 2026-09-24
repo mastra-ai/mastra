@@ -322,7 +322,7 @@ const result = await runEvals({
 
 ## Using the same check more than once
 
-Every check accepts optional `id` and `name` overrides in its `options`. `runEvals` keys results by scorer id, so two checks with the same default id (for example two `checks.includes()` calls) collapse into a single result and a failing gate can't be attributed to either one. Give each instance its own id when you use a check more than once:
+Every check accepts optional `id` and `name` overrides in its `options`. `runEvals` keys results by scorer id, so two checks with the same default id (for example two `checks.includes()` calls) are combined into a single result and a failing gate can't be attributed to either one. Give each instance its own id when you use a check more than once:
 
 ```typescript title="src/evals/weather-checks.ts"
 gates: [

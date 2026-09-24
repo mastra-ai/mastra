@@ -998,7 +998,7 @@ function validateEvalsInputs(
 const runEvalsLogger = new ConsoleLogger({ name: 'runEvals', level: LogLevel.WARN });
 
 /**
- * Results are keyed by scorer id, so entries sharing an id collapse into one
+ * Results are keyed by scorer id, so entries sharing an id are combined into one
  * result (a later scorer overwrites the earlier one's score for an item;
  * gates pool their scores). Prebuilt factories accept `{ id }` to disambiguate.
  */
@@ -1011,7 +1011,7 @@ function warnDuplicateScorerIds(scorers: MastraScorer<any, any, any, any>[], fie
   }
   for (const id of duplicates) {
     runEvalsLogger.warn(
-      `Duplicate scorer id "${id}" in \`${field}\`. Results are keyed by id, so these entries collapse into a single result and a failure can't be attributed to one of them. ` +
+      `Duplicate scorer id "${id}" in \`${field}\`. Results are keyed by id, so these entries are combined into a single result and a failure can't be attributed to one of them. ` +
         `Pass a unique id to the factory, e.g. createTrajectoryAccuracyScorerCode({ id: 'fetch-weather-ran', ... }).`,
     );
   }
