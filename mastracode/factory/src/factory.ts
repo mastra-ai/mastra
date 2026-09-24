@@ -60,6 +60,7 @@ import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integr
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
+import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -918,6 +919,13 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // A wake (notification or peer signal) has no signed-in request, so
+        // tenant credential resolution would fail closed. Run it as the Factory
+        // session's owner in its org; Factory sessions are keyed by resourceId.
+        prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
+          if (!storage.isDomainReady('source-control')) return;
+          await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
+        },
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,

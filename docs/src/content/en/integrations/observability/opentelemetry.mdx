@@ -779,6 +779,7 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 If traces aren't displaying or connecting as expected:
 
 - Verify OTEL SDK is initialized before Mastra (use the `--import` flag or import at the top of the entry point)
+- If you see `[OtelBridge] No OpenTelemetry tracer provider is registered globally`, the bridge can't find a tracer provider. Some frameworks create a provider without registering it globally. Pass that provider directly with `new OtelBridge({ tracerProvider })`. See [setup requirements](/reference/observability/tracing/bridges/otel#setup-requirements)
 - Ensure the `OtelBridge` is added to your observability config
 - Check that your OTEL backend is running and accessible
 

@@ -1,5 +1,68 @@
 # @internal/playground
 
+## 1.31.3-alpha.1
+
+### Patch Changes
+
+- Improved Studio metric cards: they show compact values such as `12.3K` and `$1.2K`, with the full value on hover. Values use an uppercase `K` suffix, and a model cost without a known currency no longer shows as dollars. ([#24979](https://github.com/mastra-ai/mastra/pull/24979))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`118e50e`](https://github.com/mastra-ai/mastra/commit/118e50e225c95c0fa70ef9194d5dc5bd1dc89166), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`f6a240b`](https://github.com/mastra-ai/mastra/commit/f6a240b3dfb1f51b0456fd838b691c6abe9a21d8), [`9961867`](https://github.com/mastra-ai/mastra/commit/9961867edaf5a09a0341709d7f1ddad017833a46), [`f40a1f0`](https://github.com/mastra-ai/mastra/commit/f40a1f0a9dfe56c5b96bcc5769e3f379ed8bfdfe), [`01d1ff6`](https://github.com/mastra-ai/mastra/commit/01d1ff636b255cec2a09db1b7c8a1aed584e614f), [`c66ed43`](https://github.com/mastra-ai/mastra/commit/c66ed438f268e0b5fab5b6a42d10f3de93a73397), [`0d90187`](https://github.com/mastra-ai/mastra/commit/0d90187e34a0192075ed366bb8ced83df80f3533), [`5189b31`](https://github.com/mastra-ai/mastra/commit/5189b31016e415d673af10beacdc4a9c8e348373), [`ed4b5df`](https://github.com/mastra-ai/mastra/commit/ed4b5df8d29f115d524531ff6591d5deecf501ad), [`67a1033`](https://github.com/mastra-ai/mastra/commit/67a10330650774207ed9eadac45b2acd532678e7), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`c62eeee`](https://github.com/mastra-ai/mastra/commit/c62eeee569aa4d7903c4ce2b2ce6806b7eb86a86)]:
+  - @mastra/core@1.71.0-alpha.1
+  - @mastra/client-js@1.50.0-alpha.1
+  - @mastra/playground-ui@59.0.0-alpha.1
+  - @mastra/ai-sdk@1.10.5-alpha.0
+  - @mastra/react@1.6.3-alpha.1
+
+## 1.31.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`95dac4a`](https://github.com/mastra-ai/mastra/commit/95dac4a9d81297033ff758c921727fbaf4c506b3), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5), [`351226d`](https://github.com/mastra-ai/mastra/commit/351226d1a2faa6229da71d3eff744d83fe0d658e)]:
+  - @mastra/core@1.71.0-alpha.0
+  - @mastra/playground-ui@58.1.0-alpha.0
+  - @mastra/client-js@1.49.1-alpha.0
+  - @mastra/react@1.6.3-alpha.0
+
+## 1.31.2
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`a3ae70e`](https://github.com/mastra-ai/mastra/commit/a3ae70ee8bcecf762282197be919d301b5892614), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`2a83740`](https://github.com/mastra-ai/mastra/commit/2a83740a53a9dcd10abbbf6b662e5513beaf1700), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`6e2ec16`](https://github.com/mastra-ai/mastra/commit/6e2ec16cc1dce8a21c5629158f0543a692b4c0c2), [`0e1d680`](https://github.com/mastra-ai/mastra/commit/0e1d680fbb5fe80f8935d5c51ebe3d96a89bd4da), [`1988950`](https://github.com/mastra-ai/mastra/commit/1988950858e36c0e894a03661112fb7b55ffa6a9), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`105ce8b`](https://github.com/mastra-ai/mastra/commit/105ce8b44cc7b864689dc31ab50658c7dc1de4cf), [`d99bad5`](https://github.com/mastra-ai/mastra/commit/d99bad5ebd4fee6c1a317590c9dc97939782f37c), [`a3ae70e`](https://github.com/mastra-ai/mastra/commit/a3ae70ee8bcecf762282197be919d301b5892614), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`f8dded6`](https://github.com/mastra-ai/mastra/commit/f8dded66da0c1548a5d714ed085ecd1ae8a494f5), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`a3ae70e`](https://github.com/mastra-ai/mastra/commit/a3ae70ee8bcecf762282197be919d301b5892614), [`6dba2e6`](https://github.com/mastra-ai/mastra/commit/6dba2e6e0b4fb27f88269fa936455ab268348c04), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`0609439`](https://github.com/mastra-ai/mastra/commit/0609439286f9013bbe41f6999234a7984564ca8c), [`b4958d9`](https://github.com/mastra-ai/mastra/commit/b4958d920784093c618decca67fe7a097f5d6166), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`3a7e886`](https://github.com/mastra-ai/mastra/commit/3a7e886ca01b89b306b1d87c4bf2e6ad84a90aff), [`b2efb69`](https://github.com/mastra-ai/mastra/commit/b2efb699a8b116237c79b2513a38f798e88c674c), [`0767776`](https://github.com/mastra-ai/mastra/commit/0767776f6076c9537b15c1ef36a3d80b496513e2), [`47401f1`](https://github.com/mastra-ai/mastra/commit/47401f134c84c8bc32f1770289786af5dc2cd753), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`4d8c407`](https://github.com/mastra-ai/mastra/commit/4d8c407f98e5998660639b311c17874216e0eee5), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`0e1d680`](https://github.com/mastra-ai/mastra/commit/0e1d680fbb5fe80f8935d5c51ebe3d96a89bd4da), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`58bb075`](https://github.com/mastra-ai/mastra/commit/58bb075c456e73ccb3981836a6cb054251e0a1d7), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`1b8edcc`](https://github.com/mastra-ai/mastra/commit/1b8edccd09ec4718c4824f36d7c0f758f771b221), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`0e1d680`](https://github.com/mastra-ai/mastra/commit/0e1d680fbb5fe80f8935d5c51ebe3d96a89bd4da), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+  - @mastra/playground-ui@58.0.0
+  - @mastra/client-js@1.49.0
+  - @mastra/react@1.6.2
+
+## 1.31.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`0e1d680`](https://github.com/mastra-ai/mastra/commit/0e1d680fbb5fe80f8935d5c51ebe3d96a89bd4da), [`0e1d680`](https://github.com/mastra-ai/mastra/commit/0e1d680fbb5fe80f8935d5c51ebe3d96a89bd4da), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`58bb075`](https://github.com/mastra-ai/mastra/commit/58bb075c456e73ccb3981836a6cb054251e0a1d7), [`0e1d680`](https://github.com/mastra-ai/mastra/commit/0e1d680fbb5fe80f8935d5c51ebe3d96a89bd4da)]:
+  - @mastra/playground-ui@58.0.0-alpha.4
+  - @mastra/core@1.70.0-alpha.4
+  - @mastra/client-js@1.49.0-alpha.4
+  - @mastra/react@1.6.2-alpha.4
+
+## 1.31.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e)]:
+  - @mastra/core@1.70.0-alpha.3
+  - @mastra/client-js@1.49.0-alpha.3
+  - @mastra/react@1.6.2-alpha.3
+  - @mastra/playground-ui@58.0.0-alpha.3
+
+## 1.31.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+  - @mastra/client-js@1.49.0-alpha.2
+  - @mastra/react@1.6.2-alpha.2
+  - @mastra/playground-ui@58.0.0-alpha.2
+
 ## 1.31.2-alpha.1
 
 ### Patch Changes

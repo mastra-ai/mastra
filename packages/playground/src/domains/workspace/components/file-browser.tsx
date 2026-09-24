@@ -587,7 +587,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
         ) : language ? (
           <HighlightedCode content={content} language={language} />
         ) : (
-          <pre className="overflow-x-auto p-4 font-mono text-body whitespace-pre-wrap text-foreground">{content}</pre>
+          <pre className="overflow-x-auto p-4 text-body whitespace-pre-wrap text-foreground">{content}</pre>
         )}
       </div>
     </div>

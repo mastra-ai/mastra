@@ -15,19 +15,35 @@ const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 const DUCKDB_OBSERVABILITY_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'trace-query',
+  'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
   'trace-query-tenant-scope',
+  'feedback',
 ] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'delta-polling',
   'trace-query',
+  'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
   'trace-query-tenant-scope',
+  'feedback',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {

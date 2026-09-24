@@ -65,10 +65,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       abortController.abort();
 
+      // The tool is handed a signal derived from the caller's, not the caller's own
+      // object: eager execution has to be able to cancel one call on its own without
+      // aborting the run. What the tool depends on is that aborting the caller aborts
+      // the signal it was given, so assert that rather than object identity.
+      const toolAbortSignal = toolExecuteMock.mock.calls[0]?.[1]?.abortSignal as AbortSignal;
+      expect(toolAbortSignal).toBeInstanceOf(AbortSignal);
+      expect(toolAbortSignal.aborted).toBe(true);
+
       expect(toolExecuteMock).toHaveBeenCalledWith(
         { value: 'value' },
         expect.objectContaining({
-          abortSignal: abortController.signal,
           toolCallId: 'call-1',
           messages: expect.any(Array),
           outputWriter: expect.any(Function),
