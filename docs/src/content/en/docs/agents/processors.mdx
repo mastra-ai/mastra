@@ -953,7 +953,7 @@ The retry mechanism:
 
 ### Error processor retry limits
 
-`processAPIError()` has a separate retry budget. When `errorProcessors` resolve to a non-empty list and `maxProcessorRetries` is omitted, the runtime allows up to `10` error-processor retries. Error processors are enabled by default on every agent (see [Error processors are enabled by default](#error-processors-are-enabled-by-default)), but `maxProcessorRetries` itself stays unset, so `processInputStep()` and `processOutputStep()` retries still need an explicit limit.
+`processAPIError()` has a separate retry budget. When `errorProcessors` resolve to a non-empty list and `maxProcessorRetries` is omitted, the runtime allows up to `3` error-processor retries. Error processors are enabled by default on every agent (see [Error processors are enabled by default](#error-processors-are-enabled-by-default)), but `maxProcessorRetries` itself stays unset, so `processInputStep()` and `processOutputStep()` retries still need an explicit limit.
 
 For `StreamErrorRetryProcessor`, its own `maxRetries` (default `1`) bounds retries independently of the agent cap. Keep model retries at `0` when the processor is the only retry mechanism for a request.
 

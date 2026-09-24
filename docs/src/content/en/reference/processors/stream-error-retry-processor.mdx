@@ -44,7 +44,7 @@ When `delayMs` is set, the processor waits before signaling a retry. This is use
 
 ### Retry limits
 
-`maxRetries` defaults to `1` and limits this processor's retry requests. The agent also limits processor retries with `maxProcessorRetries`. When error processors are configured without an agent limit, the runtime cap is `10`.
+`maxRetries` defaults to `1` and limits this processor's retry requests. The agent also limits processor retries with `maxProcessorRetries`. When error processors are configured without an agent limit, the runtime cap is `3`.
 
 Set both values explicitly to the same bounded value when you need a single retry budget. Keep model `maxRetries` at `0` for that call to avoid multiplying provider attempts.
 
