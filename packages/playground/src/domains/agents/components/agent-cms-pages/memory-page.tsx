@@ -335,8 +335,8 @@ function ObservationalMemoryFields() {
                 Scope
               </Label>
               <span className="text-caption text-placeholder">
-                Whether observations are scoped per thread or shared across all threads for a resource. Resource
-                scope is deprecated and will be removed in a future release.
+                Whether observations are scoped per thread or shared across all threads for a resource. Resource scope
+                is deprecated and will be removed in a future release.
               </span>
               <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
                 <SelectTrigger id="memory-om-scope" className="bg-card">
