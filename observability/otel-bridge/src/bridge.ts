@@ -30,6 +30,8 @@ import type { Span as OtelSpan, Context as OtelContext, TracerProvider, Tracer }
 import { logs as otelLogs } from '@opentelemetry/api-logs';
 import type { Logger as OtelLogger, LoggerProvider } from '@opentelemetry/api-logs';
 
+const SETUP_DOCS_URL = 'https://mastra.ai/reference/observability/tracing/bridges/otel#setup-requirements';
+
 export type OtelBridgeConfig = BaseExporterConfig & {
   tracerProvider?: TracerProvider;
   loggerProvider?: LoggerProvider;
@@ -67,9 +69,12 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   private otelLogger: OtelLogger;
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
   private spanConverter?: SpanConverter;
+  private hasCustomTracerProvider: boolean;
+  private warnedNoTracerProvider = false;
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
+    this.hasCustomTracerProvider = config.tracerProvider !== undefined;
     this.tracerProvider = config.tracerProvider ?? otelTrace.getTracerProvider();
     this.otelTracer = this.tracerProvider.getTracer('@mastra/otel-bridge', '1.0.0');
     this.loggerProvider = config.loggerProvider ?? otelLogs.getLoggerProvider();
@@ -226,11 +231,20 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       // Get OTEL span identifiers
       const otelSpanContext = otelSpan.spanContext();
 
-      // If no OTEL SDK is registered, the global tracer returns a non-recording
-      // span with an invalid span context (all-zero span/trace IDs). Returning
-      // those IDs would collide across every Mastra span and break downstream
-      // exporters. Bail out so DefaultSpan falls through to its own ID generator.
-      if (!isSpanContextValid(otelSpanContext)) {
+      // If no OTEL SDK is registered, the global tracer is a no-op. With no
+      // parent it returns a span with an invalid (all-zero) span context; with
+      // a parent in the context (e.g. an outer span from another, unregistered
+      // provider) it returns a span wrapping the parent's span context. Either
+      // way, returning those IDs would collide across every Mastra span and
+      // break downstream exporters. Bail out so DefaultSpan falls through to
+      // its own ID generator. A real tracer always mints a fresh span ID, even
+      // for spans its sampler drops.
+      const parentOtelSpanContext = otelTrace.getSpanContext(parentOtelContext);
+      if (
+        !isSpanContextValid(otelSpanContext) ||
+        (parentOtelSpanContext !== undefined && otelSpanContext.spanId === parentOtelSpanContext.spanId)
+      ) {
+        this.warnNoTracerProvider();
         // End the span we just started so its lifecycle stays clean on
         // providers that do track non-recording spans.
         otelSpan.end();
@@ -275,6 +289,28 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   }
 
   /**
+   * Warn once per bridge that no tracer provider is producing spans. Checked
+   * lazily on span creation rather than at startup, because the OTEL SDK is
+   * often registered after the bridge is constructed.
+   */
+  private warnNoTracerProvider(): void {
+    if (this.warnedNoTracerProvider) return;
+    this.warnedNoTracerProvider = true;
+
+    const cause = this.hasCustomTracerProvider
+      ? 'The tracerProvider passed to OtelBridge returned a no-op span'
+      : 'No OpenTelemetry tracer provider is registered globally';
+
+    this.logger.warn(
+      `[OtelBridge] ${cause}, so Mastra spans will not be exported through OpenTelemetry. ` +
+        'Register a tracer provider before running agents or workflows (for example, call `sdk.start()` on ' +
+        '`NodeSDK` from `@opentelemetry/sdk-node`, or `trace.setGlobalTracerProvider(provider)`), ' +
+        'or pass it directly with `new OtelBridge({ tracerProvider })`. ' +
+        `See ${SETUP_DOCS_URL}`,
+    );
+  }
+
+  /**
    * Handle SPAN_ENDED event
    *
    * Retrieves the OTEL span created at SPAN_STARTED, sets all final attributes,
@@ -286,7 +322,9 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       const entry = this.otelSpanMap.get(mastraSpan.id);
 
       if (!entry) {
-        this.logger.warn(`[OtelBridge] No OTEL span found for Mastra span [id=${mastraSpan.id}].`);
+        // Expected when no tracer provider is registered; warnNoTracerProvider()
+        // already reported that once, so don't repeat it for every span.
+        this.logger.debug(`[OtelBridge] No OTEL span found for Mastra span [id=${mastraSpan.id}].`);
         return;
       }
 

@@ -5271,6 +5271,7 @@ describe('custom-board deferred targets', () => {
     const dispatcher = dispatcherFor(storage, boards);
     await dispatcher.runOnce();
     expect(queued).toHaveBeenCalledTimes(1);
+    expect(queued).toHaveBeenCalledWith(expect.objectContaining({ cause: 'linked_item_materialized' }));
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({ status: 'succeeded' });
     await dispatcher.runOnce();
     await dispatcher.runOnce();

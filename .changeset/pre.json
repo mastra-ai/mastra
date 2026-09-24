@@ -189,5 +189,18 @@
     "@mastra/s3": "0.6.3",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "five-moons-battle",
+    "goofy-loops-sip",
+    "legal-berries-enter",
+    "light-plums-greet",
+    "long-parts-cheer",
+    "major-aliens-shout",
+    "open-rats-brake",
+    "pageheader-meta-text-role",
+    "sunny-dodos-kick",
+    "tangy-foxes-greet",
+    "task-list-graph-lane",
+    "witty-numbers-cheer"
+  ]
 }

@@ -1,5 +1,14 @@
 # @mastra/otel-bridge
 
+## 1.5.11-alpha.0
+
+### Patch Changes
+
+- Fixed `OtelBridge` silently exporting nothing when no OpenTelemetry tracer provider is available. The bridge now logs one clear warning that explains how to register a tracer provider or pass one with `new OtelBridge({ tracerProvider })`, and links to the setup docs. It no longer logs a warning for every span. Mastra spans also no longer reuse an outer span's ID when that outer span comes from a tracer provider that isn't registered. Fixes [#24950](https://github.com/mastra-ai/mastra/issues/24950). ([#24986](https://github.com/mastra-ai/mastra/pull/24986))
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+
 ## 1.5.10
 
 ### Patch Changes

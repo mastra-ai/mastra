@@ -58,7 +58,6 @@ import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
-import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
@@ -300,7 +299,6 @@ export const routes: RouteObject[] = [
           ]),
 
       { path: '/logs', element: <Logs /> },
-      { path: '/evaluation', element: <Evaluation /> },
       { path: '/scorers', element: <Scorers /> },
       {
         path: '/scorers/:scorerId',
