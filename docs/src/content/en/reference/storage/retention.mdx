@@ -28,7 +28,7 @@ Storage adapters use the shared core retention contract for `prune()`, or a data
 | Adapter | Mechanism | Retention support |
 | - | - | - |
 | libSQL | `prune()` | All supported growth domains |
-| PostgreSQL | `prune()` | All supported growth domains. V-next observability drops expired partitions or chunks |
+| PostgreSQL | `prune()` | All supported growth domains. vNext observability drops expired partitions or chunks |
 | MongoDB | `prune()` or native TTL | All supported growth domains. Native TTL indexes are also available |
 | DuckDB | `prune()` | Observability spans, metrics, logs, scores, and feedback |
 | MySQL | `prune()` | Observability spans |
@@ -151,10 +151,10 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 | `memory` | `resources` | `createdAt` | Resource age |
 | `threadState` | `threadState` | `updatedAt` | Inactivity: state for still-active threads survives |
 | `observability` | `spans` | `startedAt` | Span age |
-| `observability` | `metrics` | `timestamp` | Metric event age (v-next only) |
-| `observability` | `logs` | `timestamp` | Log event age (v-next only) |
-| `observability` | `scores` | `timestamp` | Score event age (v-next only) |
-| `observability` | `feedback` | `timestamp` | Feedback event age (v-next only) |
+| `observability` | `metrics` | `timestamp` | Metric event age (vNext only) |
+| `observability` | `logs` | `timestamp` | Log event age (vNext only) |
+| `observability` | `scores` | `timestamp` | Score event age (vNext only) |
+| `observability` | `feedback` | `timestamp` | Feedback event age (vNext only) |
 | `scores` | `scorers` | `createdAt` | Score record age |
 | `workflows` | `workflowSnapshot` | `updatedAt` | Inactivity, suspended or long-running workflows survive |
 | `backgroundTasks` | `backgroundTasks` | `completedAt` | Time since completion, in-flight tasks (`NULL`) are never pruned |
@@ -171,7 +171,7 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 - On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
 - DuckDB observability stores append-only events for all five signals. Its `spans` policy uses the event `timestamp` column rather than `startedAt`.
 - LibSQL and PostgreSQL support all domains above except `harness`, which PostgreSQL doesn't implement. MongoDB supports all except `threadState` and `harness`. DuckDB, MySQL, Microsoft SQL Server, Oracle Database, Amazon Aurora DSQL, and Google Cloud Spanner currently support retention only in their `observability` domains, with the signal coverage shown in the support matrix.
-- The v-next PostgreSQL observability domain stores signal events in day-partitioned tables (`spans`, `metrics`, `logs`, `scores`, `feedback`). For it, `prune()` drops whole day partitions (or TimescaleDB chunks) that are entirely older than the cutoff instead of deleting rows: effective level of detail is one day, and a partition is only dropped once its entire day is past `maxAge`. `PruneResult.deleted` reports the number of rows in the dropped partitions.
+- The vNext PostgreSQL observability domain stores signal events in day-partitioned tables (`spans`, `metrics`, `logs`, `scores`, `feedback`). For it, `prune()` drops whole day partitions (or TimescaleDB chunks) that are entirely older than the cutoff instead of deleting rows: effective level of detail is one day, and a partition is only dropped once its entire day is past `maxAge`. `PruneResult.deleted` reports the number of rows in the dropped partitions.
 
 :::
 
@@ -288,7 +288,9 @@ You can also cancel a long-running prune with an `AbortSignal`: the loop stops b
 
 ClickHouse observability storage uses native table TTLs instead of `prune()`. Configure retention as days per signal. `init()` applies the TTLs to new and existing tables and skips `ALTER TABLE` statements when the configured TTL is already present.
 
-For deployments that need to update TTL configuration without running the full initialization path, call `applyRetention()` on the v-next observability store:
+Omitted signals, and signals set to zero or less, get no TTL. When you remove a signal from `retention`, the next `init()` or `applyRetention()` removes that table's TTL. If Mastra can't read the current TTLs from `system.tables`, it applies the configured TTLs and leaves the others unchanged.
+
+For deployments that need to update TTL configuration without running the full initialization path, call `applyRetention()` on the vNext observability store:
 
 ```typescript
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'

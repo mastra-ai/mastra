@@ -1,0 +1,39 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
+
+/*
+ * Local copy of isSystemReminderMessage from packages/core/src/memory/system-reminders.ts.
+ * Memory's peer range permits older core versions that do not export it, and importing it
+ * can crash published memory builds during ESM instantiation. Keep both sides in sync.
+ */
+
+const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function isSystemReminderMessage(message: MastraDBMessage): boolean {
+  if (!isRecord(message.content)) {
+    return false;
+  }
+
+  const metadata = message.content.metadata;
+  if (message.role === 'signal') {
+    return (
+      isRecord(metadata) &&
+      isRecord(metadata.signal) &&
+      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+    );
+  }
+
+  if (message.role !== 'user') {
+    return false;
+  }
+
+  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
+    return true;
+  }
+
+  const firstTextPart = message.content.parts.find(part => part.type === 'text');
+  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
+}

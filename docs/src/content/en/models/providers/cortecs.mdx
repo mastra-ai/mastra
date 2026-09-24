@@ -7,7 +7,7 @@ description: "Browse Cortecs model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 
-Access 106 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
+Access 109 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
 
 Learn more in the [Cortecs documentation](https://cortecs.ai).
 
@@ -104,6 +104,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 5.5,
     "outputCost": 27.498
+  },
+  {
+    "model": "cortecs/claude-opus-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4.399,
+    "outputCost": 21.998
   },
   {
     "model": "cortecs/claude-opus4-5",
@@ -642,8 +654,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 5.5,
-    "outputCost": 32.998
+    "inputCost": 4.399,
+    "outputCost": 21.998
   },
   {
     "model": "cortecs/gpt-5.6-terra",
@@ -656,6 +668,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2.2,
     "outputCost": 13.199
+  },
+  {
+    "model": "cortecs/gpt-6-luna",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 0.12,
+    "outputCost": 0.6
+  },
+  {
+    "model": "cortecs/gpt-6-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2.4,
+    "outputCost": 11.999
   },
   {
     "model": "cortecs/gpt-oss-120b",

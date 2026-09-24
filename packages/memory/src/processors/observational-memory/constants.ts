@@ -62,6 +62,21 @@ Any messages following this reminder are newer and should take priority.`;
 export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
 /**
+ * Preamble used when observations are thread-scoped: they describe earlier parts
+ * of the current conversation, not other conversations.
+ */
+export const OBSERVATION_CONTEXT_PROMPT_THREAD = `The following observations block contains your memory of earlier parts of this current conversation. Everything recorded here (including IDs, artifacts, and tool results) came from this conversation and is available for you to reuse.`;
+
+/**
+ * Returns the observations preamble matching the memory scope.
+ * - `'thread'`: observations are earlier parts of the current conversation.
+ * - `'resource'`: observations span past conversations with this user.
+ */
+export function getObservationContextPrompt(scope: 'thread' | 'resource' = 'thread'): string {
+  return scope === 'resource' ? OBSERVATION_CONTEXT_PROMPT : OBSERVATION_CONTEXT_PROMPT_THREAD;
+}
+
+/**
  * Instructions that tell the model how to interpret and use observations.
  * Place AFTER the `<observations>` block so the model sees the data before the rules.
  */

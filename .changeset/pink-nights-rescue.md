@@ -1,0 +1,28 @@
+---
+'@mastra/code-sdk': patch
+'mastracode': patch
+---
+
+Fixed `agent_signal_send` so senders put content where the peer can see it. The `payload` parameter was removed because peers never received it, and the `summary` parameter was renamed to `message` to make clear it is the full message delivered to the peer.
+
+**Before:**
+
+```ts
+agent_signal_send({
+  targetId: 'peer-id',
+  summary: 'Review this',
+  expectsReply: false,
+});
+```
+
+**After:**
+
+```ts
+agent_signal_send({
+  targetId: 'peer-id',
+  message: 'Review this',
+  expectsReply: false,
+});
+```
+
+The tool result now reports only the routing outcome instead of echoing the whole message back to the sender. Mastra Code still shows the target, routing options, full message, and outcome in the standard tool display, with a truncated message preview in quiet mode.

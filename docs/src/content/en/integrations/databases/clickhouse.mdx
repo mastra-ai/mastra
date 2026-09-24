@@ -73,9 +73,13 @@ export const mastra = new Mastra({
 
 Trace deletion cascades to spans, trace roots and branches, metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved. Mastra records the deletion predicate, then waits for ClickHouse lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves.
 
-Lightweight deletion is a hide-only operation that marks rows with ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs. `ObservabilityStorageClickhouseVNext` applies retention only when you provide a `RetentionConfig`; Mastra OSS doesn't configure a default retention TTL.
+Lightweight deletion is a hide-only operation that marks rows with ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs. `ObservabilityStorageClickhouseVNext` applies retention only when you pass the `retention` option. Mastra doesn't configure a default retention TTL.
 
 When all five observability signals have finite retention, Mastra also applies a TTL to deletion requests so they outlive the signal rows they protect. If any signal is unbounded, deletion requests remain unbounded. See [storage retention](/reference/storage/retention#clickhouse-native-ttl) for how the deletion-request TTL is calculated.
+
+Feedback review-status updates require `ALTER UPDATE` permission on `mastra_feedback_events` and, when delta polling is enabled, `INSERT` permission on `mastra_feedback_events_delta`. These updates wait for the ClickHouse mutation to finish on the server that receives the write, so latency depends on that server's mutation queue. Other replicas apply the mutation through the replication log, so a reader on a lagging replica can briefly see the previous status, and an inactive replica doesn't block the update. They modify the existing feedback row and preserve deletion masks: a concurrent review update cannot recreate deleted feedback. Successful updates remain available through delta polling. If a newer version of the same feedback event is ingested while a review update is in flight, the update is re-applied to that newer version; after repeated conflicts it fails with a conflict error (HTTP 409) and the caller retries.
+
+The status mutation and the delta insert are separate operations. If the delta insert fails, the API returns an error even though the status may have changed, and continued delta polling doesn't recover that notification: later polls from the same cursor never return it, and starting delta mode without a cursor subscribes at the current head. To recover, retry the review update after resolving the error, or reread the feedback with a regular list query.
 
 ### Observability with the legacy domain
 
@@ -285,7 +289,7 @@ Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `Shar
 
 ### Observability domain options
 
-`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`).
+`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`). `ObservabilityStorageClickhouseVNext` also accepts `retention`, the per-signal TTL in days described in [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl), and `traceQuery`, the execution limits for [advanced trace queries](/reference/observability/tracing/trace-query).
 
 ## Hosting options
 
@@ -380,7 +384,16 @@ const observability = new ObservabilityStorageClickhouseVNext({
 await observability.init()
 ```
 
-In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials can then be limited to read and insert.
+In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials still need more than read and insert:
+
+- `SELECT` and `INSERT` on the Mastra tables.
+- `ALTER DELETE` on the observability tables you delete from. On ClickHouse 26.6 and earlier, lightweight deletes also require `ALTER UPDATE` on those tables; ClickHouse 26.7 removed that requirement.
+- For feedback review updates, `ALTER UPDATE(reviewStatus)` on `mastra_feedback_events` and `INSERT` on `mastra_feedback_events_delta`.
+
+```sql
+GRANT ALTER UPDATE(reviewStatus) ON <database>.mastra_feedback_events TO <runtime_user>;
+GRANT INSERT ON <database>.mastra_feedback_events_delta TO <runtime_user>;
+```
 
 ## Observability
 
