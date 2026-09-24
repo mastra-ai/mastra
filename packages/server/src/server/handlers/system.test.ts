@@ -681,7 +681,10 @@ describe('System Handlers', () => {
         });
       });
 
-      it('detects feedback on undeclared stores that implement every feedback method', async () => {
+      it('does not report feedback for stores that implement it without declaring it', async () => {
+        // Feedback is declaration-only: Studio hides the feedback UI behind
+        // this flag, so store versions that predate the declaration don't
+        // advertise it until upgraded.
         class UndeclaredFeedbackStore extends BaseObservabilityStore {
           override async listFeedback() {
             return { feedback: [] };
@@ -709,10 +712,7 @@ describe('System Handlers', () => {
           }
         }
 
-        expect(await capabilitiesFor(new UndeclaredFeedbackStore())).toEqual({
-          ...NO_OBSERVABILITY_CAPABILITIES,
-          feedback: true,
-        });
+        expect(await capabilitiesFor(new UndeclaredFeedbackStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
       });
 
       it('reports feedback for stores that declare it', async () => {

@@ -240,7 +240,9 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
  * store implements the underlying method, so those packages report accurately
  * without being upgraded. Delta polling and the trace/thread query APIs depend
  * on runtime behavior a method check can't see, so they are only reported for
- * stores that declare them.
+ * stores that declare them. Feedback is also declaration-only: Studio hides
+ * the feedback UI behind this flag, and store versions that implement feedback
+ * without declaring it simply don't advertise it until upgraded.
  */
 export function getObservabilityStorageCapabilities(
   observabilityStore: ObservabilityStorage,
@@ -300,16 +302,7 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
     threadQuery,
-    feedback: supports(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE, [
-      'listFeedback',
-      'createFeedback',
-      'deleteFeedback',
-      'updateFeedbackReviewStatus',
-      'getFeedbackAggregate',
-      'getFeedbackBreakdown',
-      'getFeedbackTimeSeries',
-      'getFeedbackPercentiles',
-    ]),
+    feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
 
