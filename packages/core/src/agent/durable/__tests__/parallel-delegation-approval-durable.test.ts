@@ -439,10 +439,24 @@ describe('durable parallel delegation approvals', () => {
     const memory = { thread: 'solo-public-thread', resource: 'solo-public-resource' };
 
     const result = await mastra.getAgent('agent').stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
-    const drained = await drainUntil(result.fullStream, () => false, 20000);
+    try {
+      const drained = await drainUntil(result.fullStream, () => false, 20000);
 
-    expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
-    expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
+      expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
+      expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
+
+      const workflows = (await storage.getStore('workflows'))!;
+      await vi.waitFor(async () => {
+        const persisted = await workflows.getWorkflowRunById({
+          runId: result.runId,
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+        });
+        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+        expect(snapshot?.status).toBe('suspended');
+      });
+    } finally {
+      (result as { cleanup?: () => void }).cleanup?.();
+    }
   }, 60000);
 
   it('keeps the caller stream open on suspension by default', async () => {
