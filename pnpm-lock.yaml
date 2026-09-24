@@ -98,8 +98,8 @@ overrides:
   undici@<6.0.0: 6.28.1
   undici@>=6.0.0 <6.28.1: 6.28.1
   undici@>=7.0.0 <7.29.1: 7.29.1
-  undici@>=8.0.0 <8.11.0: 8.11.0
-  e2b>undici8: npm:undici@8.11.0
+  undici@>=8.0.0 <8.11.2: 8.11.2
+  e2b>undici8: npm:undici@8.11.2
   multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
@@ -26960,10 +26960,6 @@ packages:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
-  js-yaml@5.4.2:
-    resolution: {integrity: sha512-m+aqu+LwO1O6sIopafj8HUVl5aawITwZQe/yHpMCKjaWBaA/d07B/QdMb3529REftiU+RMMHL3Vlsw3hON7vWg==}
-    hasBin: true
-
   jsbn@0.1.1:
     resolution: {integrity: sha512-UVU9dibq2JcFWxQPA6KCqj5O42VOmAY3zQUfEKxU0KpTGXwNoCjkX1e13eHNvw/xPynt6pU0rZ1htjWTNTSXsg==}
 
@@ -30769,7 +30765,7 @@ packages:
 
   serialize-error-cjs@0.1.4:
     resolution: {integrity: sha512-6a6dNqipzbCPlTFgztfNP2oG+IGcflMe/01zSzGrQcxGMKbIjOemBBD85pH92klWaJavAUWxAh9Z0aU28zxW6A==}
-    deprecated: Rolling release, please update to 0.3.0
+    deprecated: Rolling release, please update to 0.2.0
 
   serialize-error@12.0.0:
     resolution: {integrity: sha512-ZYkZLAvKTKQXWuh5XpBw7CdbSzagarX39WyZ2H07CDLC5/KfsRGlIXV8d4+tfqX1M7916mRqR1QfNHSij+c9Pw==}
@@ -31928,8 +31924,8 @@ packages:
     resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.11.0:
-    resolution: {integrity: sha512-AdzuGcAkzhbha3GgCSoUBx2P0quwym6qdFNCQz/fDGZc8w9XJ741wHUbt2kTmfPz+ZIOMkySFkiY7RXmiDDC8w==}
+  undici@8.11.2:
+    resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -38679,7 +38675,7 @@ snapshots:
       '@docusaurus/utils-common': 3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.1)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       fs-extra: 11.3.5
       joi: 17.13.8
-      js-yaml: 5.4.2
+      js-yaml: 4.3.2
       lodash: 4.18.1
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -38713,7 +38709,7 @@ snapshots:
       github-slugger: 1.5.0
       globby: 11.1.0
       jiti: 1.21.7
-      js-yaml: 5.4.2
+      js-yaml: 4.3.2
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -50511,7 +50507,7 @@ snapshots:
       tar: 7.5.21
       undici: 7.29.1
     optionalDependencies:
-      undici8: undici@8.11.0
+      undici8: undici@8.11.2
 
   eastasianwidth@0.2.0: {}
 
@@ -52086,7 +52082,7 @@ snapshots:
 
   gray-matter@4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8):
     dependencies:
-      js-yaml: 5.4.2
+      js-yaml: 3.15.2
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -53064,10 +53060,6 @@ snapshots:
       esprima: 4.0.1
 
   js-yaml@4.3.2:
-    dependencies:
-      argparse: 2.0.1
-
-  js-yaml@5.4.2:
     dependencies:
       argparse: 2.0.1
 
@@ -59472,7 +59464,7 @@ snapshots:
 
   undici@7.29.1: {}
 
-  undici@8.11.0:
+  undici@8.11.2:
     optional: true
 
   unenv@2.0.0-rc.24:
