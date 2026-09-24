@@ -3207,7 +3207,11 @@ export class Workflow<
       run.workflowRunStatus === 'canceled' ||
       run.workflowRunStatus === 'tripwire' ||
       run.workflowRunStatus === 'bailed';
-    if (!isResume && existingNestedRunIsTerminal) {
+    // Restart reuses terminal child snapshots via the _restart() terminal guard
+    // (issue #20225): a parent's activeStepsPath can lag behind a child's
+    // durable completion after a crash, and resetting the row here would turn
+    // the child's restart into "was not active" and fail the parent.
+    if (!isResume && !restart && existingNestedRunIsTerminal) {
       // Loop and foreach iterations intentionally invoke a nested workflow
       // repeatedly under the parent run id. Replace the previous terminal row
       // with a fresh pending lineage before starting the next logical
