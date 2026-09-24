@@ -1483,6 +1483,10 @@ export class DurableAgent<
     return this.#wrappedAgent.getConfiguredProcessorIds(requestContext);
   }
 
+  override async getConfiguredErrorProcessorIds(requestContext?: any) {
+    return this.#wrappedAgent.getConfiguredErrorProcessorIds(requestContext);
+  }
+
   // --- Sub-agents ---
   override listAgents(options?: any) {
     return this.#wrappedAgent.listAgents(options);

@@ -1160,8 +1160,11 @@ export class Agent<
    * each processor's `processLLMRequest` method.
    * @internal — used by `DurableAgent` preparation to populate the registry.
    */
-  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<LLMRequestProcessorOrWorkflow[]> {
-    return this.listResolvedLLMRequestProcessors(requestContext);
+  async __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<LLMRequestProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext, undefined, errorProcessorOverrides);
   }
 
   /**
@@ -2165,10 +2168,12 @@ export class Agent<
   private async listResolvedLLMRequestProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
   ): Promise<LLMRequestProcessorOrWorkflow[]> {
     const inputProcessors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
     const errorProcessors = await this.#resolveErrorProcessors({
       requestContext: requestContext ?? new RequestContext(),
+      overrides: errorProcessorOverrides,
     });
 
     const inputProcessorIds = new Set(
@@ -2305,6 +2310,18 @@ export class Agent<
         : this.#outputProcessors;
 
     return configuredProcessors;
+  }
+
+  /**
+   * Returns the IDs of the raw configured error processors, without combining
+   * them into workflows and without the framework defaults. Unlike
+   * `getConfiguredProcessorIds` this resolves only the error lane, so a
+   * rejecting input or output processor resolver cannot block the caller.
+   */
+  public async getConfiguredErrorProcessorIds(requestContext?: RequestContext): Promise<string[]> {
+    const ctx = requestContext || new RequestContext();
+    const errorProcessors = await this.#resolveErrorProcessors({ requestContext: ctx, includeDefaults: false });
+    return errorProcessors.map(p => p.id).filter(Boolean);
   }
 
   /**
@@ -7811,10 +7828,12 @@ export class Agent<
       llmRequestInputProcessors: async ({
         requestContext,
         overrides,
+        errorOverrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
+        errorOverrides?: ErrorProcessorOrWorkflow[];
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides, errorOverrides),
       outputProcessors: async ({
         requestContext,
         overrides,

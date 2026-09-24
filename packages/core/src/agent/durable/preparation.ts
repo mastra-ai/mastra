@@ -159,14 +159,15 @@ interface DurablePreparationAgent {
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
-  getConfiguredProcessorIds(
-    requestContext?: RequestContext,
-  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }>;
+  getConfiguredErrorProcessorIds(requestContext?: RequestContext): Promise<string[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
-  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<LLMRequestProcessorOrWorkflow[]>;
+  __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<LLMRequestProcessorOrWorkflow[]>;
 }
 
 /**
@@ -416,7 +417,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     inputProcessors = await typedAgent.listInputProcessors(requestContext);
     // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
     // processors are skipped by ProcessorRunner.runProcessLLMRequest.
-    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
+    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(
+      requestContext,
+      execOptions?.errorProcessors,
+    );
     // Call-time outputProcessors replace constructor-level ones (parity with
     // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
     outputProcessors = execOptions?.outputProcessors
@@ -432,7 +436,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // retry-cap warning, since the defaults self-limit and must not warn.
     hasConfiguredErrorProcessors = execOptions?.errorProcessors
       ? execOptions.errorProcessors.length > 0
-      : (await typedAgent.getConfiguredProcessorIds(requestContext)).errorProcessorIds.length > 0;
+      : (await typedAgent.getConfiguredErrorProcessorIds(requestContext)).length > 0;
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }

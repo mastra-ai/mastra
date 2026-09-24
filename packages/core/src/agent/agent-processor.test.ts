@@ -4096,4 +4096,58 @@ describe('LLM request lane — error-phase processors', () => {
     expect(inputIds).not.toContain('provider-history-compat');
     expect(laneIds).toEqual([...new Set(laneIds)]);
   });
+
+  it('applies a call-time errorProcessors override to the request lane', async () => {
+    const { processor, calls } = makePromptRewritingErrorProcessor();
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const agent = new Agent({
+      id: 'llm-request-lane-override-agent',
+      name: 'LLM Request Lane Override Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          capturedPrompts.push(prompt);
+          return {
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    await agent.generate('hello', { errorProcessors: [processor] });
+
+    // The call-time processor runs its prompt hook even though the agent
+    // configured no error processors.
+    expect(calls.processLLMRequest).toBeGreaterThan(0);
+    expect(promptTexts(capturedPrompts[0]!)).toContain('REWRITTEN_BY_ERROR_PROCESSOR');
+  });
+
+  it('drops the default error processors from the request lane when the call-time list is empty', async () => {
+    const phcSpy = vi.spyOn(ProviderHistoryCompat.prototype, 'processLLMRequest');
+    const agent = new Agent({
+      id: 'llm-request-lane-empty-override-agent',
+      name: 'LLM Request Lane Empty Override Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+    });
+
+    await agent.generate('hello', { errorProcessors: [] });
+
+    // `errorProcessors: []` replaces the resolved list — defaults included — so
+    // the default ProviderHistoryCompat must not rewrite the outbound prompt.
+    expect(phcSpy).not.toHaveBeenCalled();
+    phcSpy.mockRestore();
+  });
 });
