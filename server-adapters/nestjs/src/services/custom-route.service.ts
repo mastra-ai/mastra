@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -147,15 +148,26 @@ export class CustomRouteService {
       else if (Array.isArray(value)) value.forEach(v => headers.append(key, v));
     }
 
-    const init: RequestInit = { method: req.method, headers };
-    const body = req.body;
-    if (!['GET', 'HEAD'].includes(req.method) && body !== undefined) {
-      if (typeof body === 'string' || body instanceof Uint8Array) {
-        init.body = body as RequestInit['body'];
-      } else if (typeof body === 'object' && body !== null && Object.keys(body).length > 0) {
+    const init: RequestInit & { duplex?: 'half' } = { method: req.method, headers };
+    if (['GET', 'HEAD'].includes(req.method)) return new globalThis.Request(url, init);
+
+    const body: unknown = req.body;
+    const bodyParsed = (req as Request & { _body?: boolean })._body === true;
+    if (!bodyParsed && body === undefined && req.readable) {
+      // Body not consumed by a parser (multipart, text, binary, ...): stream the raw bytes through.
+      init.body = Readable.toWeb(req) as ReadableStream<Uint8Array>;
+      init.duplex = 'half';
+    } else if (typeof body === 'string' || body instanceof Uint8Array) {
+      init.body = body as RequestInit['body'];
+    } else if (typeof body === 'object' && body !== null) {
+      const contentType = headers.get('content-type') ?? '';
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        init.body = new URLSearchParams(body as Record<string, string>).toString();
+      } else {
         init.body = JSON.stringify(body);
-        if (!headers.has('content-type')) headers.set('content-type', 'application/json');
+        if (!contentType) headers.set('content-type', 'application/json');
       }
+      headers.delete('content-length');
     }
     return new globalThis.Request(url, init);
   }

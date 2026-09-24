@@ -96,6 +96,52 @@ describe('NestJS Adapter - auth parity with other adapters', () => {
     expect(privateAuthed.body).toEqual({ resourceId: 'resource-bearer-user' });
   });
 
+  it('forwards non-JSON request bodies to registerApiRoute handlers', async () => {
+    await start({
+      apiRoutes: [
+        registerApiRoute('/echo-text', {
+          method: 'POST',
+          requiresAuth: false,
+          handler: async c => c.json({ text: await c.req.text() }),
+        }),
+        registerApiRoute('/echo-form', {
+          method: 'POST',
+          requiresAuth: false,
+          handler: async c => {
+            const form = await c.req.formData();
+            return c.json({ name: form.get('name'), file: await (form.get('file') as File).text() });
+          },
+        }),
+        registerApiRoute('/echo-urlencoded', {
+          method: 'POST',
+          requiresAuth: false,
+          handler: async c => c.json(await c.req.parseBody()),
+        }),
+      ],
+    });
+    await app.listen(0);
+    const base = await app.getUrl();
+
+    const text = await fetch(`${base}/echo-text`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'plain body',
+    });
+    expect(await text.json()).toEqual({ text: 'plain body' });
+
+    const formData = new FormData();
+    formData.set('name', 'mastra');
+    formData.set('file', new Blob(['file contents']), 'a.txt');
+    const form = await fetch(`${base}/echo-form`, { method: 'POST', body: formData });
+    expect(await form.json()).toEqual({ name: 'mastra', file: 'file contents' });
+
+    const urlencoded = await fetch(`${base}/echo-urlencoded`, {
+      method: 'POST',
+      body: new URLSearchParams({ a: '1' }),
+    });
+    expect(await urlencoded.json()).toEqual({ a: '1' });
+  });
+
   it('still returns 404 for unknown non-Mastra paths', async () => {
     await start({ auth: cookieAuth, apiRoutes: [] });
     const response = await executeExpressRequest(expressApp, { method: 'GET', path: '/nope' });
