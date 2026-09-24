@@ -1174,12 +1174,15 @@ export async function queryTraces(
   }
 
   const query = compilePostgresTraceQuery(schema, plan);
-  const { rows, traces } = await runWithPostgresTraceQueryTimeout(client, timeoutMs, async transaction => {
+  const keysetTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+  const keysetDeadline = performance.now() + keysetTimeoutMs;
+  const { rows, traces } = await runWithPostgresTraceQueryTimeout(client, keysetTimeoutMs, async transaction => {
     const rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
     const visible = rows.slice(0, plan.limit);
     return {
       rows,
-      traces: plan.result === 'groups' ? [] : await mapTraceRows(transaction, schema, plan, visible),
+      // The side queries share the request budget instead of each getting a fresh timeout.
+      traces: plan.result === 'groups' ? [] : await mapTraceRows(transaction, schema, plan, visible, keysetDeadline),
     };
   });
   const visibleRows = rows.slice(0, plan.limit);

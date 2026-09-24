@@ -1044,8 +1044,8 @@ export const TRACE_QUERY_TABLE_SUMMARY_TIME_RANGE = tableSummaryRange;
  * Traces-table projection fixture. `summary-a` exercises every field: a replaced model
  * span, LLM and tool errors, tags, bounded feedback, more scores than the per-trace
  * limit, a rewritten score, and cache-token metrics including rows the projection must
- * ignore. `summary-b` is a failed root with no related records. `summary-c` has a model
- * span without a first-token timestamp and rewritten feedback.
+ * ignore. `summary-b` is a failed root with no related records. `summary-c` has an earliest
+ * model span without model or first-token data, a later complete one, and rewritten feedback.
  */
 export const TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -1110,12 +1110,25 @@ export const TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA: TraceQueryFixtureData = {
       tags: ['staging'],
       output: 'plain text answer',
     }),
+    // Earliest model span: a non-streaming call with no model attribute and no first-token
+    // time. Stores must report null for both rather than borrowing the later span's values.
     span(10, 'summary-c', 'model-c-1', {
       parentSpanId: 'root-c',
       spanType: 'model_generation',
       startedAt: tableSummaryStartedAt(20_100),
       endedAt: tableSummaryStartedAt(21_000),
-      attributes: { model: 'claude-fable-5-1', provider: 'anthropic' },
+      attributes: { provider: 'anthropic' },
+    }),
+    span(11, 'summary-c', 'model-c-2', {
+      parentSpanId: 'root-c',
+      spanType: 'model_generation',
+      startedAt: tableSummaryStartedAt(22_000),
+      endedAt: tableSummaryStartedAt(23_000),
+      attributes: {
+        model: 'claude-fable-5-1',
+        provider: 'anthropic',
+        completionStartTime: tableSummaryStartedAt(22_300),
+      },
     }),
   ],
   scores: [

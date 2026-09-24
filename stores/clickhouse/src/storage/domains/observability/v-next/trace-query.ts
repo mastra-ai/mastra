@@ -825,16 +825,23 @@ export function compileClickHouseTableSummaryQueries(
     LIMIT 1 BY dedupeKey
   ),
   model_spans AS (
-    SELECT
-      traceId,
-      argMin(if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL), (startedAt, spanId)) AS model,
-      argMin(
-        ${durationMsSql('startedAt', "parseDateTime64BestEffortOrNull(JSONExtractString(attributes, 'completionStartTime'), 3)")},
-        (startedAt, spanId)
-      ) AS timeToFirstTokenMs
-    FROM current_spans
-    WHERE spanType IN (${list(coreStorage.TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES)})
-    GROUP BY traceId
+    SELECT traceId, tupleElement(earliest, 1) AS model, tupleElement(earliest, 2) AS timeToFirstTokenMs
+    FROM (
+      SELECT
+        traceId,
+        -- One tuple argMin: a bare argMin over a Nullable column skips NULL rows and would
+        -- pick a later span's value, diverging from PostgreSQL and DuckDB.
+        argMin(
+          (
+            if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL),
+            ${durationMsSql('startedAt', "parseDateTime64BestEffortOrNull(JSONExtractString(attributes, 'completionStartTime'), 3)")}
+          ),
+          (startedAt, spanId)
+        ) AS earliest
+      FROM current_spans
+      WHERE spanType IN (${list(coreStorage.TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES)})
+      GROUP BY traceId
+    )
   ),
   metric_sums AS (
     SELECT
