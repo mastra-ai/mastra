@@ -233,10 +233,9 @@ describe('durable parallel delegation approvals', () => {
     storage: InMemoryStore,
   ) => {
     // Two parallel delegations each emit their own SUSPENDED as they park, so
-    // surfacing BOTH approvals on one reader needs the stream kept open across
-    // suspension — the `closeOnSuspend: false` opt-out. (The default closes on
-    // the first leg's suspension; that path is covered by its own test below.)
-    const result = await durableAgent.stream('Do alpha and beta', { memory, maxSteps: 5, closeOnSuspend: false });
+    // surfacing BOTH approvals on one reader relies on the default of keeping
+    // the stream open across suspension.
+    const result = await durableAgent.stream('Do alpha and beta', { memory, maxSteps: 5 });
     const leg1 = await drainUntil(
       result.fullStream,
       ({ types }) => types.filter(t => t === 'tool-call-approval').length >= 2,
@@ -367,7 +366,7 @@ describe('durable parallel delegation approvals', () => {
   }, 60000);
 
   // A single agent whose one tool requires approval suspends exactly once —
-  // the scenario from issue #24389. This isolates the `closeOnSuspend` default
+  // the scenario from issue #24389. This isolates the `closeOnSuspend` option
   // from the multi-leg parallel case above.
   const setupSingle = () => {
     const storage = new InMemoryStore();
@@ -395,14 +394,13 @@ describe('durable parallel delegation approvals', () => {
     return { storage, durableAgent };
   };
 
-  it('closes the caller stream on suspension by default (issue #24389)', async () => {
+  it('closes the caller stream on suspension with closeOnSuspend: true (issue #24389)', async () => {
     const { storage, durableAgent } = setupSingle();
-    const memory = { thread: 'solo-close-default-thread', resource: 'solo-close-default-resource' };
+    const memory = { thread: 'solo-close-optin-thread', resource: 'solo-close-optin-resource' };
 
-    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5 });
-    // No stopWhen: drain to the natural end. With the default (`closeOnSuspend:
-    // true`) the stream must end at the suspension boundary instead of hanging,
-    // so this resolves without timing out.
+    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
+    // No stopWhen: drain to the natural end. With `closeOnSuspend: true` the
+    // stream must end at the suspension boundary instead of hanging.
     const drained = await drainUntil(result.fullStream, () => false, 20000);
 
     expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
@@ -419,16 +417,16 @@ describe('durable parallel delegation approvals', () => {
     });
   }, 60000);
 
-  it('keeps the caller stream open on suspension with closeOnSuspend: false', async () => {
+  it('keeps the caller stream open on suspension by default', async () => {
     const { durableAgent } = setupSingle();
-    const memory = { thread: 'solo-open-optout-thread', resource: 'solo-open-optout-resource' };
+    const memory = { thread: 'solo-open-default-thread', resource: 'solo-open-default-resource' };
 
-    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: false });
-    // With the opt-out the stream stays open after suspension, so draining to
+    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5 });
+    // By default the stream stays open after suspension, so draining to
     // the (never-reached) end times out. Short budget keeps the test fast.
     const drained = await drainUntil(result.fullStream, () => false, 2000);
 
-    expect(drained.timedOut, `stream should stay open with closeOnSuspend: false`).toBe(true);
+    expect(drained.timedOut, `stream should stay open by default`).toBe(true);
     expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
     result.cleanup?.();
   }, 60000);

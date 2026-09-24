@@ -260,13 +260,12 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   untilIdle?: boolean | { maxIdleMs?: number };
   /**
    * Whether this caller's stream closes when the run suspends (e.g. for tool
-   * approval). Defaults to `true`, matching non-durable `Agent.stream()`,
-   * `Workflow.stream()`, and core `DurableAgent`: `fullStream` / `getFullOutput()`
-   * resolve at the suspension boundary instead of hanging.
+   * approval). Defaults to `false`: the stream stays open across suspension for
+   * a same-reader resume.
    *
-   * Set to `false` to keep the stream open across suspension for a same-reader
-   * resume. `resumeStream()` / `resume()` always return a fresh stream
-   * regardless of this option.
+   * Set to `true` so `fullStream` / `getFullOutput()` resolve at the suspension
+   * boundary instead of hanging. `resumeStream()` / `resume()` always return a
+   * fresh stream.
    */
   closeOnSuspend?: boolean;
   /** @internal */
@@ -926,7 +925,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               await (streamOptions.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
             }
           : undefined,
-        closeOnSuspend: streamOptions?.closeOnSuspend ?? true,
+        closeOnSuspend: streamOptions?.closeOnSuspend ?? false,
       });
 
       // 3. Wait for subscription to be established, then trigger workflow
@@ -1114,7 +1113,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeResumeRegistry();
           }
         },
-        closeOnSuspend: (resumeOptions as InngestAgentStreamOptions)?.closeOnSuspend ?? true,
+        closeOnSuspend: (resumeOptions as InngestAgentStreamOptions)?.closeOnSuspend ?? false,
       });
 
       // Load the workflow snapshot to build proper resume data

@@ -281,15 +281,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   abortSignal?: AbortSignal;
   /**
    * Whether this caller's stream closes when the run suspends (e.g. for tool
-   * approval). Defaults to `true`, matching non-durable `Agent.stream()` and
-   * `Workflow.stream()`: `fullStream`, `text`, and `getFullOutput()` resolve at
-   * the suspension boundary so callers (AG-UI, A2A, etc.) can react instead of
-   * hanging.
+   * approval). Defaults to `false`: the stream stays open across suspension so
+   * a later resume can continue streaming on this same reader.
    *
-   * Set to `false` to keep the stream open across suspension so a later resume
-   * can continue streaming on this same reader. Resume the run with
-   * `resumeStream()`/`resume()` — those always return a fresh stream regardless
-   * of this option.
+   * Set to `true` so `fullStream`, `text`, and `getFullOutput()` resolve at the
+   * suspension boundary (matching non-durable `Agent.stream()`), letting callers
+   * such as AG-UI or A2A react instead of hanging. Resume the run with
+   * `resumeStream()`/`resume()` — those always return a fresh stream.
    */
   closeOnSuspend?: boolean;
 }
@@ -2073,7 +2071,7 @@ export class DurableAgent<
     // Whether this caller's stream closes at the suspension boundary. Defaults
     // to true (parity with non-durable Agent and Workflow). The same value
     // gates the `across-suspension` continuation so the two cannot drift.
-    const closeOnSuspend = options?.closeOnSuspend ?? true;
+    const closeOnSuspend = options?.closeOnSuspend ?? false;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
@@ -2477,7 +2475,7 @@ export class DurableAgent<
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
     // Same default-true semantics as the initial stream() path.
-    const closeOnSuspend = (resolvedOptions as DurableAgentStreamOptions<TOutput>).closeOnSuspend ?? true;
+    const closeOnSuspend = (resolvedOptions as DurableAgentStreamOptions<TOutput>).closeOnSuspend ?? false;
 
     const {
       output,

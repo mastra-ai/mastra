@@ -113,8 +113,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * If true, close the underlying ReadableStream when a SUSPENDED event is
    * received so `getFullOutput()`/`fullStream` resolve on suspend instead of
    * hanging. The durable agent derives this from the public `closeOnSuspend`
-   * stream option (default `true`); pass `false` to keep the stream open for a
-   * later same-reader resume.
+   * stream option (default `false`, keeping the stream open for a later
+   * same-reader resume).
    */
   closeOnSuspend?: boolean;
   /**

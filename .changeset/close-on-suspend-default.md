@@ -1,19 +1,19 @@
 ---
-'@mastra/core': major
-'@mastra/inngest': major
+'@mastra/core': minor
+'@mastra/inngest': minor
 ---
 
-DurableAgent `stream()` now closes the caller stream at the suspension boundary by default
+Added a `closeOnSuspend` option to durable agent `stream()` and `resume()`, so callers can end the stream when a tool suspends.
 
-Previously, when a durable agent (`@mastra/core` `DurableAgent` or `@mastra/inngest` `createInngestAgent`) suspended for a tool that requires approval or human input, the stream returned by `stream()` stayed open indefinitely. Callers awaiting `fullStream`, `text`, or `getFullOutput()` would hang, which blocked AG-UI's `RUN_FINISHED` signal and left A2A tasks unable to complete. The internal `CLOSE_ON_SUSPEND` symbol that controlled this could not be set by `stream()` callers.
+Previously, the stream returned by `DurableAgent.stream()` (and `createInngestAgent().stream()`) stayed open after a tool suspended for approval or user input, and there was no public way to change that. Loops over `fullStream` hung, so integrations like AG-UI could not emit `RUN_FINISHED`.
 
-`stream()` and `resume()`/`resumeStream()` now expose a public `closeOnSuspend?: boolean` option that **defaults to `true`**. With the default, the stream resolves at the suspension boundary — matching non-durable `Agent.stream()` and `Workflow.stream()`.
-
-**Breaking change / migration.** If you rely on reading a single stream across a suspension and a later resume (for example, collecting multiple approvals from parallel tool delegations on one reader), pass `closeOnSuspend: false` to keep the old behavior:
+Pass `closeOnSuspend: true` to close the stream at the suspension boundary, matching non-durable `Agent.stream()`:
 
 ```ts
-// Old default behavior — stream stays open across suspension
-const result = await agent.stream('...', { closeOnSuspend: false });
+const result = await durableAgent.stream('hi', { closeOnSuspend: true });
+for await (const chunk of result.fullStream) {
+  // loop ends after the tool-call-suspended chunk
+}
 ```
 
-`resumeStream()`/`resume()` always return a fresh stream regardless of this option, so resuming a suspended run is unchanged. Internal `generate()`/`resumeGenerate()` already closed on suspend and are unaffected.
+The default is unchanged (`false`): the stream stays open across suspension.
