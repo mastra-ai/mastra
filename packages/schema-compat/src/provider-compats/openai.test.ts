@@ -467,6 +467,32 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(value).not.toHaveProperty('minLength');
     });
 
+    it('keeps format only in the typed branch for optional number and integer properties', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          pageSize: { type: 'integer', format: 'int32', minimum: 1, description: 'The maximum number of files.' },
+          ratio: { type: 'number', format: 'double' },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      for (const [key, format, type] of [
+        ['pageSize', 'int32', 'integer'],
+        ['ratio', 'double', 'number'],
+      ] as const) {
+        const prop = result.properties[key];
+        expect(prop).not.toHaveProperty('format');
+        expect(prop).not.toHaveProperty('minimum');
+        expect(prop.anyOf).toEqual([expect.objectContaining({ type, format }), { type: 'null' }]);
+      }
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ pageSize: null, ratio: null })).toBe(true);
+      expect(validate({ pageSize: 10, ratio: 0.5 })).toBe(true);
+      expect(validate({ pageSize: 'ten', ratio: null })).toBe(false);
+    });
+
     it('preserves parent date metadata when traversing a multi-type property', async () => {
       const dateSchema = {
         '~standard': {
