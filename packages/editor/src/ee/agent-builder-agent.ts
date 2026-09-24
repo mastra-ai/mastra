@@ -69,6 +69,27 @@ export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
 export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
   const memory = new Memory();
 
+  // Merge the builder's stability processors with any caller-supplied list:
+  // the peer range allows cores that predate the framework defaults, so
+  // relying on the resolver to add them would silently drop this stack on
+  // older cores. Defaults a caller replaces by id are filtered out so the
+  // caller's instance takes that slot instead of duplicating it; caller
+  // processors run after the remaining defaults so they can observe or
+  // extend retries the defaults trigger. An explicitly empty array opts out.
+  // A function-typed override (DynamicArgument) is passed through unchanged —
+  // callers using the dynamic form manage the full list.
+  const callerErrorProcessors = args?.errorProcessors;
+  const errorProcessors = Array.isArray(callerErrorProcessors)
+    ? callerErrorProcessors.length
+      ? [
+          ...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(
+            processor => !callerErrorProcessors.some(caller => caller.id === processor.id),
+          ),
+          ...callerErrorProcessors,
+        ]
+      : callerErrorProcessors
+    : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
+
   const config: AgentConfig<'builder-agent'> = {
     instructions: `You are the Agent Builder.
 
@@ -200,15 +221,13 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     model: 'openai/gpt-5.5',
     memory,
     workspace,
-    // The builder always passes its own error processors: the peer range
-    // allows cores that predate the framework defaults, so relying on them
-    // would silently drop this stack on older cores. Newer cores warn once
-    // per agent because this list has no explicit retry budget; that warning
-    // is accurate, and setting `maxProcessorRetries` just to silence it would
-    // also convert input/output processor `abort({ retry: true })` from abort
-    // into retry, so the warning stays.
-    errorProcessors: DEFAULT_BUILDER_ERROR_PROCESSORS,
+    // Newer cores warn once per agent because this list has no explicit
+    // retry budget; that warning is accurate, and setting
+    // `maxProcessorRetries` just to silence it would also convert
+    // input/output processor `abort({ retry: true })` from abort into retry,
+    // so the warning stays.
     ...(args || {}),
+    errorProcessors,
     id: 'builder-agent',
     name: 'Agent Builder Agent',
     description: 'An agent that can build agents',
