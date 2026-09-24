@@ -914,7 +914,9 @@ export class ObservationalMemory {
     const tiered = this.resolveTieredModel(model, inputTokens);
     const resolved = {
       ...tiered,
-      model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as ResolvedInvocationModel | 'auto',
+      model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
+        | ResolvedInvocationModel
+        | 'auto',
     };
     if (resolved.model !== 'auto') {
       return resolved as InvocationModelResolution<ResolvedInvocationModel>;
@@ -947,7 +949,9 @@ export class ObservationalMemory {
     }
     const modelId = pick!;
     return this.resolveAutoModelHook
-      ? ((await this.resolveAutoModelHook(modelId, { requestContext: options?.requestContext })) as ResolvedInvocationModel)
+      ? ((await this.resolveAutoModelHook(modelId, {
+          requestContext: options?.requestContext,
+        })) as ResolvedInvocationModel)
       : modelId;
   }
 
@@ -1029,7 +1033,10 @@ export class ObservationalMemory {
     if (modelConfig === 'auto') {
       return undefined;
     }
-    const concreteModel = await this.resolveModelFunction(this.getConcreteModel(modelConfig, inputTokens), requestContext);
+    const concreteModel = await this.resolveModelFunction(
+      this.getConcreteModel(modelConfig, inputTokens),
+      requestContext,
+    );
     if (concreteModel === 'auto') {
       return undefined;
     }
@@ -1055,7 +1062,8 @@ export class ObservationalMemory {
       const modelId =
         reflectionModel === 'auto'
           ? (resolveAutoModelId(undefined, { autoModels: this.autoModels }) ?? '')
-          : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ?? '');
+          : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ??
+            '');
 
       // gemini-2.5-flash is conservative about compression - start at level 2
       if (modelId.includes('gemini-2.5-flash')) {

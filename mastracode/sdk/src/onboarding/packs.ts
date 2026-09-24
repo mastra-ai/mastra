@@ -346,7 +346,8 @@ export function toMemoryModelId(modelId: string): string {
 
 /** Preview the concrete model Memory's `'auto'` resolves to for a main-session model ID. */
 export function resolveAutoOMModelId(currentModelId?: string): string {
-  if (!currentModelId) return resolveAutoModelId(undefined, { autoModels: MASTRACODE_AUTO_OM_MODELS }) ?? DEFAULT_OM_MODEL_ID;
+  if (!currentModelId)
+    return resolveAutoModelId(undefined, { autoModels: MASTRACODE_AUTO_OM_MODELS }) ?? DEFAULT_OM_MODEL_ID;
   const memoryModelId = toMemoryModelId(currentModelId);
   const picked = resolveAutoModelId(memoryModelId, { autoModels: MASTRACODE_AUTO_OM_MODELS });
   return !picked || picked === memoryModelId ? currentModelId : picked;

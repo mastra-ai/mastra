@@ -199,7 +199,13 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     this.config = parsedConfig;
     // Only expose the ID when it alone can resolve the same route again: custom endpoints,
     // credentials, headers, and gateways are not carried by the ID.
-    if (!this.hasCustomGateways && !parsedConfig.url && !parsedConfig.apiKey && !parsedConfig.headers && !parsedConfig.api) {
+    if (
+      !this.hasCustomGateways &&
+      !parsedConfig.url &&
+      !parsedConfig.apiKey &&
+      !parsedConfig.headers &&
+      !parsedConfig.api
+    ) {
       this.id = parsedConfig.routerId;
     }
 

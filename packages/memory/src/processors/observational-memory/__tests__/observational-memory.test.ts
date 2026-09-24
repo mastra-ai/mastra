@@ -3795,9 +3795,12 @@ describe('Observer Agent Helpers', () => {
 
     it('keeps the gateway route of a labeled main model', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = Object.assign(new MockLanguageModelV2({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }), {
-        id: 'mastra/openai/gpt-5.5',
-      });
+      const actorModel = Object.assign(
+        new MockLanguageModelV2({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }),
+        {
+          id: 'mastra/openai/gpt-5.5',
+        },
+      );
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
 
       await expect(

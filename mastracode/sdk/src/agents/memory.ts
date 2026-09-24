@@ -81,7 +81,10 @@ function resolveOmRoleModelForRequest(
     return 'auto' as const;
   };
 
-  if (isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory)) {
+  if (
+    isFactoryMemorySettingsUnavailable(factorySettingsContext) ||
+    (factorySettingsContext === undefined && isFactory)
+  ) {
     return useAuto();
   }
   if (factorySettingsContext !== undefined) {
@@ -131,7 +134,8 @@ function resolveOmRoleModelForRequest(
     return useModel(selection.modelId);
   }
 
-  const roleOverride = role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
+  const roleOverride =
+    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
   if (roleOverride) return useModel(roleOverride);
   const legacyModelId = state?.[`${role}ModelId`];
   if (typeof legacyModelId === 'string' && legacyModelId) return useModel(legacyModelId);
