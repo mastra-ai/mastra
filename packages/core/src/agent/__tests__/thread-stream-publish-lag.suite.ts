@@ -154,7 +154,7 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
 }
 
 /** Subscribe with history and collect chunk types until `until` settles. */
-async function join(agent: Agent<any, any, any, any>, until: Promise<unknown> = nextTicks(20)) {
+async function join(agent: Agent<any, any, any, any>, until: Promise<unknown> = nextTicks(20), lastType?: string) {
   const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
   const chunks: any[] = [];
   const consumed = (async () => {
@@ -162,6 +162,7 @@ async function join(agent: Agent<any, any, any, any>, until: Promise<unknown> = 
   })();
   await until;
   await nextTicks(20);
+  if (lastType) await vi.waitFor(() => expect(chunks.at(-1)?.type).toBe(lastType));
   subscription.unsubscribe();
   await consumed;
   return chunks;
@@ -224,17 +225,41 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
       const chunks = join(
         agent,
         resumed.then(() => undefined),
+        'finish',
       );
       await nextTicks(20);
       toolGate.resolve();
       const types = (await chunks).map(c => c.type);
 
       expect(types[0]).toBe('thread-history');
+      // The resumed half opens with its own `start`, ahead of its parts.
+      expect(types.filter(t => t === 'start')).toHaveLength(1);
+      expect(types.indexOf('start')).toBeLessThan(types.indexOf('tool-result'));
       expect(types).not.toContain('tool-call-approval');
       expect(types).not.toContain('tool-call');
       expect(types.filter(t => t === 'text-delta')).toHaveLength(1);
       expect(types).toContain('tool-result');
       expect(types.at(-1)).toBe('finish');
+    });
+
+    it('a subscriber listening across an approval sees the resumed half start again', async () => {
+      const agent = setup({ durable, delayMs, tool: 'lookup' });
+      const subscription = await agent.subscribeToThread({ threadId, resourceId });
+      const types: string[] = [];
+      const consumed = (async () => {
+        for await (const chunk of subscription.stream) types.push(chunk.type);
+      })();
+      const first = await agent.stream('go', { memory: memoryOption });
+      await drain(first);
+      await vi.waitFor(() => expect(types).toContain('tool-call-approval'));
+      await drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
+      await vi.waitFor(() => expect(types.at(-1)).toBe('finish'));
+      subscription.unsubscribe();
+      await consumed;
+
+      const afterApproval = types.slice(types.indexOf('tool-call-approval') + 1);
+      expect(afterApproval[0]).toBe('start');
+      expect(afterApproval).toContain('tool-result');
     });
 
     it('joining during step 2 of a run saved at each step sends only step 2', async () => {

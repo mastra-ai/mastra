@@ -1637,6 +1637,7 @@ export class AgentThreadStreamRuntime {
     pubsub: PubSub | undefined,
     key: string,
     streamId: string,
+    resumed = false,
   ) {
     const runtime = this;
 
@@ -1670,7 +1671,22 @@ export class AgentThreadStreamRuntime {
       for (const waiter of pending) waiter();
     };
 
-    const emitPart = async (rawPart: unknown) => {
+    let needsStart = resumed;
+    const emitPart = async (rawPart: unknown): Promise<void> => {
+      if (needsStart) {
+        needsStart = false;
+        // A resumed half of a run doesn't emit its own `start`, and the first
+        // half's is dropped once saved. Open the resumed half so subscribers
+        // (and joiners) see the run running again.
+        if ((rawPart as { type?: string } | null | undefined)?.type !== 'start') {
+          await emitPart({
+            type: 'start',
+            runId: output.runId,
+            from: ChunkFrom.AGENT,
+            payload: { messageId: output.messageId },
+          });
+        }
+      }
       if (rawPart && typeof rawPart === 'object' && 'type' in rawPart) {
         const typedPart = rawPart as { type?: string; payload?: { toolCallId?: string; toolName?: string } };
         if (typedPart.type === 'tool-call-approval' || typedPart.type === 'tool-call-suspended') {
@@ -2505,7 +2521,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast,
       canContinueBroadcast,
       broadcastFinished,
-    } = this.#withBroadcastStream(output, pubsub, key, streamId);
+    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
     if (resumedToolCallId) {
       this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
@@ -2619,7 +2635,7 @@ export class AgentThreadStreamRuntime {
       cancelBroadcast,
       canContinueBroadcast,
       broadcastFinished,
-    } = this.#withBroadcastStream(output, pubsub, key, streamId);
+    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
