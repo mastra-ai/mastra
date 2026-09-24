@@ -956,9 +956,6 @@ describe('session start (onSessionStart)', () => {
   function makeStartDeps({
     defaultModelId = 'anthropic/claude-opus-5' as string | null,
     session = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' } as Record<string, string> | null,
-    memoryRecord = null as Record<string, unknown> | null,
-    personalMemoryRecord = null as Record<string, unknown> | null,
-    personalMemoryLookupError = null as Error | null,
     activePack = null as { build?: string; plan?: string; fast?: string } | null,
     packLookupError = null as Error | null,
   } = {}) {
@@ -968,15 +965,6 @@ describe('session start (onSessionStart)', () => {
         sessions: { getBySessionId: vi.fn(async () => session) },
         projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
         connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
-      } as any,
-      memorySettings: {
-        // Two rows share this table: the project's (a `factory-project:` sentinel
-        // key) and the sender's own (their user id).
-        get: vi.fn(async ({ userId }: { userId: string }) => {
-          if (userId.startsWith('factory-project:')) return memoryRecord;
-          if (personalMemoryLookupError) throw personalMemoryLookupError;
-          return personalMemoryRecord;
-        }),
       } as any,
       modelPacks: {
         getActive: vi.fn(async () => {

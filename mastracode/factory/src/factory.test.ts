@@ -347,6 +347,38 @@ describe('MastraFactory.prepare', () => {
     warn.mockRestore();
   });
 
+  it("layers a channel sender's saved memory settings over the project's", async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const config = await prepareFactory({ storage, auth: null });
+    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    await memorySettings.patch({
+      orgId: 'org-1',
+      userId: 'factory-project:fp-1',
+      patch: { observerModelId: 'anthropic/project-observer', reflectorModelId: 'anthropic/project-reflector' },
+    });
+    await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { reflectorModelId: 'openai/mine' } });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const run = async (channel: boolean) => {
+      const requestContext = new RequestContext();
+      requestContext.set('controller', {
+        getState: () => ({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' }),
+        emitEvent: vi.fn(),
+      });
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
+      if (channel) requestContext.set('channel', { platform: 'slack' });
+      await inputProcessors({ requestContext });
+      return requestContext.get('mastra__factoryMemorySettings');
+    };
+
+    await expect(run(true)).resolves.toMatchObject({
+      observerModelId: 'anthropic/project-observer',
+      reflectorModelId: 'openai/mine',
+    });
+    // Web runs of a project session share the project's row as-is.
+    await expect(run(false)).resolves.toMatchObject({ reflectorModelId: 'anthropic/project-reflector' });
+  });
+
   it('uses the platform bot co-author identity', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
