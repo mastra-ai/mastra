@@ -161,7 +161,7 @@ export const TypographyFoundations: Story = {
 
       <FoundationSection
         label="Monospace"
-        description={`Mono is a face, not a role: font="mono" on Txt swaps the family and keeps the role's size, line height and weight. Use it for identifiers a machine wrote: model and resource ids, hashes, and log lines. Numbers such as durations and token counts stay in the body face with tabular-nums. Code goes in InlineCode or a highlighted CodeBlock. Labels, headings, status and prose stay proportional, even beside a mono value.`}
+        description={`Mono is a face, not a role: font="mono" on Txt swaps the family and keeps the role's size, line height and weight. Use it for identifiers a machine wrote (model and resource ids, hashes, log lines), timestamps, and durations. Other numbers, such as token counts, stay in the body face with tabular-nums. Code goes in InlineCode or a highlighted CodeBlock. Labels, headings, status and prose stay proportional, even beside a mono value.`}
       >
         <div className="min-w-0">
           {monoRoles.map(role => (

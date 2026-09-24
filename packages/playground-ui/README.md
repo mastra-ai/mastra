@@ -76,19 +76,19 @@ Monospace is a typeface, not another role. `font="mono"` swaps the family to `--
 </Txt>
 ```
 
-| Use mono for                                  | Keep in the body face                     |
-| --------------------------------------------- | ----------------------------------------- |
-| Model and resource IDs, versions, and hashes  | Labels, field names, and column headers   |
-| Timestamps: dates and times of day            | Numbers: durations, counts, and costs     |
-| Log lines                                     | Headings and page titles                  |
-| Values a user copies or compares by character | Status text and badges that name a state  |
-|                                               | Prose, descriptions, and empty-state copy |
+| Use mono for                                       | Keep in the body face                     |
+| -------------------------------------------------- | ----------------------------------------- |
+| Model and resource IDs, versions, and hashes       | Labels, field names, and column headers   |
+| Timestamps and durations: `Sep 23, 12:42`, `412ms` | Counts, costs, scores, and percentages    |
+| Log lines                                          | Headings and page titles                  |
+| Values a user copies or compares by character      | Status text and badges that name a state  |
+|                                                    | Prose, descriptions, and empty-state copy |
 
-Numbers stay in the body face. Add `tabular-nums` where digits should line up, such as table columns and live timers. A timestamp is the exception: a date or time of day marks a moment, so it is mono like other machine values, while a duration such as `412ms` is a number and stays in the body face.
+Time is mono: a timestamp marks a moment and a duration measures one, and both are machine values a user compares digit by digit. Other numbers (counts, costs, scores, percentages) stay in the body face; add `tabular-nums` where their digits should line up, such as table columns.
 
 Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables and fields, `caption` for secondary identifiers, and `meta` for compact values such as versions. Heading roles stay proportional.
 
-Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers and timestamps, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
+Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
 
 `--font-mono` defaults to the system monospace stack. Override it in an unlayered rule in your own CSS to use a product face, and every mono value follows.
 
