@@ -127,6 +127,7 @@ export const agentConnectionsToolFlowScenario = {
 
     terminal.submit('Send a high-priority confirmation signal to the reconnected peer.');
     await runtime.waitForScreenText(/agent_signal_send .*✓/i, terminal, 20_000);
+    await runtime.waitForScreenText(/Reconnected peer confirmation\./i, terminal, 20_000);
     await runtime.waitForScreenText(/Agent connection tool flow completed after disconnect/i, terminal, 20_000);
     await expect(
       terminal.getByText(
