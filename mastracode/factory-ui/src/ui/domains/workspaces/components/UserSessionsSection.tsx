@@ -38,8 +38,8 @@ export function UserSessionsSection() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  // Null until the viewer changes a control, so the defaults follow the viewer once auth resolves.
-  const [filterChanges, setFilterChanges] = useState<UserSessionFiltersState | null>(null);
+  // Only the controls the viewer changed, so untouched ones follow the defaults once auth resolves.
+  const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
@@ -48,7 +48,7 @@ export function UserSessionsSection() {
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
-  const filters = filterChanges ?? defaultFilters;
+  const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   // Pinned rows stay on top; within each pin group the viewer's own sessions
   // sort before sessions started by other org members.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
@@ -135,8 +135,8 @@ export function UserSessionsSection() {
               filters={filters}
               owners={owners}
               viewerUserId={viewerUserId}
-              onChange={setFilterChanges}
-              onReset={() => setFilterChanges(null)}
+              onChange={changes => setFilterChanges(current => ({ ...current, ...changes }))}
+              onReset={() => setFilterChanges({})}
             />
             <Button
               variant="ghost"

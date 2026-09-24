@@ -30,7 +30,7 @@ export function UserSessionFilters({
   filters: UserSessionFiltersState;
   owners: readonly UserSessionOwnerOption[];
   viewerUserId?: string;
-  onChange: (filters: UserSessionFiltersState) => void;
+  onChange: (changes: Partial<UserSessionFiltersState>) => void;
   onReset: () => void;
 }) {
   const activeCount = activeUserSessionFilterCount(filters, defaultUserSessionFilters(viewerUserId));
@@ -50,12 +50,12 @@ export function UserSessionFilters({
             label="Search sessions"
             placeholder="Search sessions…"
             value={filters.search}
-            onSearch={search => onChange({ ...filters, search })}
+            onSearch={search => onChange({ search })}
             shortcutDisabled
             size="sm"
           />
 
-          <FilterSelect label="Owner" value={filters.owner} onValueChange={owner => onChange({ ...filters, owner })}>
+          <FilterSelect label="Owner" value={filters.owner} onValueChange={owner => onChange({ owner })}>
             <SelectItem value={ALL_SESSION_OWNERS}>All owners</SelectItem>
             {viewerUserId ? <SelectItem value={MY_SESSIONS}>Mine</SelectItem> : null}
             {owners.map(owner => (
@@ -65,22 +65,14 @@ export function UserSessionFilters({
             ))}
           </FilterSelect>
 
-          <FilterSelect
-            label="Status"
-            value={filters.status}
-            onValueChange={status => onChange({ ...filters, status })}
-          >
+          <FilterSelect label="Status" value={filters.status} onValueChange={status => onChange({ status })}>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="working">Working</SelectItem>
             <SelectItem value="initializing">Initializing</SelectItem>
             <SelectItem value="idle">Idle</SelectItem>
           </FilterSelect>
 
-          <FilterSelect
-            label="Updated"
-            value={filters.updated}
-            onValueChange={updated => onChange({ ...filters, updated })}
-          >
+          <FilterSelect label="Updated" value={filters.updated} onValueChange={updated => onChange({ updated })}>
             <SelectItem value="all">Any time</SelectItem>
             <SelectItem value="24h">Last 24 hours</SelectItem>
             <SelectItem value="7d">Last 7 days</SelectItem>

@@ -114,7 +114,7 @@ afterEach(() => {
   delete window.__MASTRACODE_CONFIG__;
 });
 
-async function renderSection() {
+async function renderSection({ waitForIdle = true } = {}) {
   const { client } = renderWithProviders(
     <MemoryRouter initialEntries={['/factories/factory-1']}>
       <Routes>
@@ -122,7 +122,7 @@ async function renderSection() {
       </Routes>
     </MemoryRouter>,
   );
-  await waitForMutationsIdle(client);
+  if (waitForIdle) await waitForMutationsIdle(client);
 }
 
 async function openFilters() {
@@ -183,6 +183,38 @@ describe('User session filters', () => {
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
     expect(screen.queryByText('No sessions of your own.')).not.toBeInTheDocument();
+  });
+
+  it('keeps the Mine default when a control changes before the viewer is known', async () => {
+    let releaseAuth!: () => void;
+    const authGate = new Promise<void>(resolve => {
+      releaseAuth = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, async () => {
+        await authGate;
+        return HttpResponse.json({
+          authEnabled: true,
+          authenticated: true,
+          user: { userId: 'user-me', name: 'Romain', email: 'romain@example.com' },
+        });
+      }),
+    );
+    // /auth/me is held open, so the queries never go idle until it is released.
+    await renderSection({ waitForIdle: false });
+
+    expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
+    await openFilters();
+    await selectFilter('Status', 'Working');
+    await closeFilters();
+
+    releaseAuth();
+
+    // Mine now applies on top of the status change: the viewer has no working session.
+    expect(await screen.findByText('No sessions match these filters')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Filter sessions, 1 active' }));
+    expect(await screen.findByRole('combobox', { name: 'Owner' })).toHaveTextContent('Mine');
   });
 
   it('keeps controls in a popover and searches across session details', async () => {
