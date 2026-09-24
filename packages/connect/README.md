@@ -35,9 +35,9 @@ const tools = connect({
 });
 ```
 
-Use the object form (shown above) whenever you need `allowTools`, `autoApproveTools`, `connectionId`, or `disabled` for any provider.
+Use the object form (shown above) whenever you need `allowTools`, `disallowTools`, `autoApproveTools`, `connectionId`, or `disabled` for any provider. `allowTools` and `disallowTools` are mutually exclusive on the same provider.
 
-The resolver discovers active project connections. Where multiple connections match, select one with `MASTRA_RESEND_CONNECTION_ID`, `MASTRA_INCIDENT_IO_CONNECTION_ID`, or the integration's `connectionId` option. The `integrations` entries configure individual providers; they do not disable other attached providers. Set `disabled: true` on providers you want to exclude.
+The resolver discovers active project connections. Where multiple connections match, you can either pin one — via `MASTRA_RESEND_CONNECTION_ID`, `MASTRA_INCIDENT_IO_CONNECTION_ID`, or the integration's `connectionId` option — or leave it unpinned and let the agent route each call. When unpinned, the provider's `<integrationId>__list_connections` tool is added to the toolset, every other tool takes a required `connection_name`, and the agent uses the display name returned by `list_connections` to pick a connection per call. The `integrations` entries configure individual providers; they do not disable other attached providers. Set `disabled: true` on providers you want to exclude.
 
 | Provider    | Tool source          | Scope                                                                                                                                                     |
 | ----------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |

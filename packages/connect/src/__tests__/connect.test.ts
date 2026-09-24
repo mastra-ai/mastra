@@ -299,7 +299,7 @@ describe('connect', () => {
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
     // Public tools include both the wrapped provider tool and the discovery tool.
-    expect(Object.keys(tools).sort()).toEqual(['linear_get_issue', 'linear_list_connections']);
+    expect(Object.keys(tools).sort()).toEqual(['linear__list_connections', 'linear_get_issue']);
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
@@ -358,7 +358,7 @@ describe('connect', () => {
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    const list = tools.linear_list_connections as unknown as {
+    const list = tools.linear__list_connections as unknown as {
       execute: (
         input: unknown,
         ctx?: unknown,
@@ -429,7 +429,7 @@ describe('connect', () => {
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    const list = tools.linear_list_connections as unknown as {
+    const list = tools.linear__list_connections as unknown as {
       execute: (
         input: unknown,
         ctx?: unknown,
@@ -445,6 +445,84 @@ describe('connect', () => {
     };
     const routed = await wrapped.execute({ id: 'LIN-1', connection_name: 'c1' }, {});
     expect(routed.resolvedConnectionId).toBe('c1');
+  });
+
+  it("does not let one connection's accountLabel shadow a different connection's raw id", async () => {
+    installProvider({
+      createTools: vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+        linear_get_issue: createTool({
+          id: 'linear_get_issue',
+          description: 'Get a Linear issue.',
+          inputSchema: z.object({ id: z.string() }),
+          outputSchema: z.object({ resolvedConnectionId: z.string() }),
+          execute: async () => ({ resolvedConnectionId: connectionId }),
+        }),
+      })),
+    });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          // The account label on the second connection is exactly the raw id of the first.
+          // Without disambiguation, `connection_name: "c1"` would route to c2 (label match wins).
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'c1' }),
+        ],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    const list = tools.linear__list_connections as unknown as {
+      execute: (
+        input: unknown,
+        ctx?: unknown,
+      ) => Promise<{
+        connections: Array<{ name: string; accountLabel: string | null }>;
+      }>;
+    };
+    const listed = await list.execute({}, {});
+    // The colliding label is suffixed so it can never masquerade as a raw id.
+    expect(listed.connections.map(c => c.name)).toEqual(['Acme', 'c1 (c2)']);
+    const wrapped = tools.linear_get_issue as unknown as {
+      execute: (input: unknown, ctx?: unknown) => Promise<{ resolvedConnectionId: string }>;
+    };
+    // Raw id "c1" now unambiguously routes to c1.
+    const byId = await wrapped.execute({ id: 'LIN-1', connection_name: 'c1' }, {});
+    expect(byId.resolvedConnectionId).toBe('c1');
+    // The disambiguated display name routes to c2.
+    const byLabel = await wrapped.execute({ id: 'LIN-1', connection_name: 'c1 (c2)' }, {});
+    expect(byLabel.resolvedConnectionId).toBe('c2');
+  });
+
+  it('throws invalid_options when a provider tool already uses the reserved list_connections helper key', async () => {
+    installProvider({
+      createTools: vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
+        // Simulate a provider (e.g. WorkOS could ship this under a colliding key) whose
+        // own toolset already defines the double-underscore reserved helper name.
+        linear__list_connections: createTool({
+          id: 'linear__list_connections',
+          description: 'Real provider tool.',
+          execute: async () => ({ connectionId }),
+        }),
+      })),
+    });
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
+      }),
+    );
+    await expect(
+      connect({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      })(),
+    ).resolves.toEqual({});
+    // The collision is warned about (invalid_options is downgraded to warn-and-skip by connect).
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("already defines 'linear__list_connections'"));
   });
 
   it('does not wrap tools when only one active connection exists (single-connection path unchanged)', async () => {
@@ -506,7 +584,7 @@ describe('connect', () => {
       integrations: { linear: { disallowTools: ['linear_delete_issue'] } },
     })();
     // The wrapped toolset exposes the non-disallowed provider tool plus the list-connections helper.
-    expect(Object.keys(tools).sort()).toEqual(['linear_get_issue', 'linear_list_connections']);
+    expect(Object.keys(tools).sort()).toEqual(['linear__list_connections', 'linear_get_issue']);
     // Every inner createTools call received the same disallowTools list (with the list_connections key stripped).
     for (const call of createTools.mock.calls) {
       expect(call[0].disallowTools).toEqual(['linear_delete_issue']);
@@ -514,7 +592,7 @@ describe('connect', () => {
     }
   });
 
-  it('strips linear_list_connections from disallowTools before reaching the inner provider', async () => {
+  it('strips linear__list_connections from disallowTools before reaching the inner provider', async () => {
     const createTools = vi.fn().mockImplementation(({ connectionId }: { connectionId: string }) => ({
       linear_get_issue: createTool({
         id: 'linear_get_issue',
@@ -537,7 +615,7 @@ describe('connect', () => {
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
       // Referencing the wrapper-only key must not blow up the inner provider.
-      integrations: { linear: { disallowTools: ['linear_list_connections'] } },
+      integrations: { linear: { disallowTools: ['linear__list_connections'] } },
     })();
     for (const call of createTools.mock.calls) {
       expect(call[0].disallowTools).toEqual([]);

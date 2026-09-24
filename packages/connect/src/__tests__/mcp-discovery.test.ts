@@ -357,7 +357,7 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     }
     // The list_connections helper is auto-generated and must never gate the
     // agent behind an approval prompt.
-    expect(discovered['catalog-mcp_list_connections']!.requireApproval).toBeFalsy();
+    expect(discovered['catalog-mcp__list_connections']!.requireApproval).toBeFalsy();
   });
 
   it('does not require approval for a tool the caller placed in autoApproveTools, even through the wrapper', async () => {

@@ -29,17 +29,31 @@ export interface NamedConnection {
  */
 export function toNamedConnections(candidates: ProjectConnection[]): NamedConnection[] {
   const active = candidates.filter(candidate => candidate.status === 'active');
-  const seenNames = new Map<string, number>();
+  // Reserve every active raw id so a display name can't shadow a different
+  // connection's id in the resolver. Without this, an accountLabel like
+  // "conn_abc" on one connection would silently route requests that pass
+  // "conn_abc" as connection_name (a valid raw id) to the labeled account.
+  const reservedIds = new Set(active.map(candidate => candidate.id));
+  const usedNames = new Set<string>();
   const named: NamedConnection[] = [];
   for (const connection of active) {
     const rawLabel = connection.accountLabel?.trim();
     const base = rawLabel && rawLabel.length > 0 ? rawLabel : connection.id;
-    // Disambiguate duplicate labels by suffixing with the connection id so the
-    // agent still has a unique handle. The list_connections tool returns the
-    // suffixed names, so the agent can see the disambiguation.
-    const prior = seenNames.get(base) ?? 0;
-    seenNames.set(base, prior + 1);
-    const name = prior === 0 ? base : `${base} (${connection.id})`;
+    // Disambiguate duplicate labels AND labels that collide with a different
+    // connection's raw id, so both suffixed display names and every raw id
+    // remain safe selectors. The list_connections tool returns the final
+    // (suffixed) names, so the agent still sees the disambiguation.
+    const collidesWithOtherId = reservedIds.has(base) && base !== connection.id;
+    let name = base;
+    if (usedNames.has(name) || collidesWithOtherId) {
+      name = `${base} (${connection.id})`;
+      let suffix = 2;
+      while (usedNames.has(name) || (reservedIds.has(name) && name !== connection.id)) {
+        name = `${base} (${connection.id}, ${suffix})`;
+        suffix += 1;
+      }
+    }
+    usedNames.add(name);
     named.push({ id: connection.id, name, accountLabel: connection.accountLabel ?? null });
   }
   return named;
@@ -156,7 +170,7 @@ function wrapToolForConnection(input: {
     description:
       template.description !== undefined
         ? `${template.description}\n\nThis provider has multiple connections; pass connection_name to pick one.`
-        : `Requires connection_name; call ${integrationId}_list_connections to discover valid names.`,
+        : `Requires connection_name; call ${listConnectionsToolKey(integrationId)} to discover valid names.`,
     inputSchema: wrappedInputSchema as never,
     ...(template.outputSchema ? { outputSchema: template.outputSchema as never } : {}),
     // `requireApproval: true` triggers the agent's approval check; when a
@@ -239,11 +253,21 @@ function extendInputSchemaWithConnectionName(source: unknown): unknown {
 }
 
 /**
- * Builds the `<provider>_list_connections` tool that reports the display names
+ * Returns the wrapper-only list_connections tool key for a provider. Uses a
+ * double underscore so it cannot collide with a real provider tool key of the
+ * form `<integrationId>_<toolName>` (e.g. WorkOS ships a real
+ * `workos_list_connections` tool that lists SSO connections).
+ */
+export function listConnectionsToolKey(integrationId: string): string {
+  return `${integrationId}__list_connections`;
+}
+
+/**
+ * Builds the `<provider>__list_connections` tool that reports the display names
  * of the active connections. Deterministic, no I/O — reads a captured snapshot.
  */
 function buildListConnectionsTool(integrationId: string, connections: NamedConnection[]) {
-  const listToolKey = `${integrationId}_list_connections`;
+  const listToolKey = listConnectionsToolKey(integrationId);
   return createTool({
     id: listToolKey,
     description: `List the available connections for the ${integrationId} provider. Use the returned 'name' values as connection_name on other ${integrationId} tools.`,
@@ -266,9 +290,30 @@ function buildListConnectionsTool(integrationId: string, connections: NamedConne
 }
 
 /**
+ * Fails loudly if a real inner tool key collides with the reserved
+ * list_connections helper key. Provider tool keys use single underscores, so
+ * this is defense in depth against a future provider or MCP server naming a
+ * tool with a leading underscore.
+ */
+function assertNoListConnectionsCollision(
+  integrationId: string,
+  innerToolsByConnectionId: Map<string, ToolsInput>,
+): void {
+  const listToolKey = listConnectionsToolKey(integrationId);
+  for (const inner of innerToolsByConnectionId.values()) {
+    if (listToolKey in inner) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Provider '${integrationId}' already defines '${listToolKey}'; multi-connection wrapping cannot add its list_connections helper.`,
+      );
+    }
+  }
+}
+
+/**
  * Composes a full multi-connection toolset for a proxy provider: one inner
  * toolset per connection, wrapped tools that dispatch by `connection_name`,
- * and the `<provider>_list_connections` tool. `allowTools` and `disallowTools`
+ * and the `<provider>__list_connections` tool. `allowTools` and `disallowTools`
  * are honored on the underlying tools (mutually exclusive; connect() validates
  * that up front). The list tool is always included.
  */
@@ -280,10 +325,10 @@ export function buildProxyMultiConnectionTools(input: {
   client?: ConnectClientOptions;
 }): ToolsInput {
   const { registration, connections, allowTools, disallowTools, client } = input;
-  // The `<provider>_list_connections` key exists only on the wrapper, not on
+  // The `<provider>__list_connections` key exists only on the wrapper, not on
   // the underlying provider toolset. Strip it before passing either filter to
   // the inner builder so referencing it never surfaces as an "unknown tool".
-  const listToolKey = `${registration.integrationId}_list_connections`;
+  const listToolKey = listConnectionsToolKey(registration.integrationId);
   const innerAllowTools = allowTools?.filter(name => name !== listToolKey);
   const innerDisallowTools = disallowTools?.filter(name => name !== listToolKey);
   const innerToolsByConnectionId = new Map<string, ToolsInput>();
@@ -300,10 +345,14 @@ export function buildProxyMultiConnectionTools(input: {
     } as Parameters<typeof registration.createTools>[0]);
     innerToolsByConnectionId.set(connection.id, inner);
   }
-  const [firstConnection] = connections;
-  if (!firstConnection) return {};
-  const firstInner = innerToolsByConnectionId.get(firstConnection.id)!;
-  const publicToolKeys = Object.keys(firstInner);
+  if (connections.length === 0) return {};
+  assertNoListConnectionsCollision(registration.integrationId, innerToolsByConnectionId);
+  // Publish the union of tool keys across every inner connection. Different
+  // connections should agree in practice, but wrapping every key an inner
+  // toolset exposes means a tool present on only one connection (e.g. after a
+  // provider config divergence) still surfaces to the agent; the wrapper's
+  // per-call resolver picks the connection at runtime.
+  const publicToolKeys = [...new Set([...innerToolsByConnectionId.values()].flatMap(inner => Object.keys(inner)))];
   const wrapped: ToolsInput = {};
   for (const toolKey of publicToolKeys) {
     wrapped[toolKey] = wrapToolForConnection({
@@ -313,17 +362,14 @@ export function buildProxyMultiConnectionTools(input: {
       innerToolsByConnectionId,
     }) as never;
   }
-  wrapped[`${registration.integrationId}_list_connections`] = buildListConnectionsTool(
-    registration.integrationId,
-    connections,
-  ) as never;
+  wrapped[listToolKey] = buildListConnectionsTool(registration.integrationId, connections) as never;
   return wrapped;
 }
 
 /**
  * Composes a full multi-connection toolset for an MCP-backed provider: one
  * MCPClient per connection, wrapped tools that dispatch by `connection_name`,
- * and the `<provider>_list_connections` tool. The caller passes in the MCP
+ * and the `<provider>__list_connections` tool. The caller passes in the MCP
  * client cache so stale clients can be reaped elsewhere.
  */
 export async function buildMcpMultiConnectionTools(input: {
@@ -339,10 +385,10 @@ export async function buildMcpMultiConnectionTools(input: {
   const { registration, connections, allowTools, disallowTools, autoApproveTools, client, mcpClients, resolverId } =
     input;
   const autoApproved = new Set(autoApproveTools ?? []);
-  // The `<provider>_list_connections` key exists only on the wrapper; strip
+  // The `<provider>__list_connections` key exists only on the wrapper; strip
   // it from either filter that reaches MCP discovery so a caller that
   // references it never trips the unknown-tool guard.
-  const listToolKey = `${registration.integrationId}_list_connections`;
+  const listToolKey = listConnectionsToolKey(registration.integrationId);
   const innerAllowTools = allowTools?.filter(name => name !== listToolKey);
   const innerDisallowTools = disallowTools?.filter(name => name !== listToolKey);
   const innerToolsByConnectionId = new Map<string, ToolsInput>();
@@ -387,10 +433,13 @@ export async function buildMcpMultiConnectionTools(input: {
     });
     innerToolsByConnectionId.set(connection.id, filtered);
   }
-  const [firstConnection] = connections;
-  if (!firstConnection) return {};
-  const firstInner = innerToolsByConnectionId.get(firstConnection.id)!;
-  const publicToolKeys = Object.keys(firstInner);
+  if (connections.length === 0) return {};
+  assertNoListConnectionsCollision(registration.integrationId, innerToolsByConnectionId);
+  // Publish the union of tool keys across every inner MCP client. A tool
+  // returned by only one connection is still surfaced; `wrapToolForConnection`
+  // scans all inner toolsets for its schema template and, at call time,
+  // resolves the target connection by `connection_name` before dispatch.
+  const publicToolKeys = [...new Set([...innerToolsByConnectionId.values()].flatMap(inner => Object.keys(inner)))];
   const wrapped: ToolsInput = {};
   for (const toolKey of publicToolKeys) {
     wrapped[toolKey] = wrapToolForConnection({
@@ -400,9 +449,6 @@ export async function buildMcpMultiConnectionTools(input: {
       innerToolsByConnectionId,
     }) as never;
   }
-  wrapped[`${registration.integrationId}_list_connections`] = buildListConnectionsTool(
-    registration.integrationId,
-    connections,
-  ) as never;
+  wrapped[listToolKey] = buildListConnectionsTool(registration.integrationId, connections) as never;
   return wrapped;
 }
