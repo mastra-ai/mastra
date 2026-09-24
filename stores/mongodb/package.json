@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.18.10-alpha.0",
+  "version": "1.18.10",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -46,6 +46,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",

@@ -161,14 +161,6 @@ function completeIssue(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function onArrival<Effect>(rule: (context: FactoryStageRuleContext) => Effect) {
-  return (context: FactoryStageRuleContext): Effect | undefined => {
-    if (context.cause !== 'linked_item_materialized') return;
-    if (context.item.metadata?.autoStartCandidate !== true) return;
-    return rule(context);
-  };
-}
-
 export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
 
 const allOtherPhases = {
@@ -192,10 +184,6 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       title: 'Intake',
       kind: 'resting',
       outcomes: allOtherPhases,
-      onEnter: {
-        issue: onArrival(triageIssueEntry),
-        gitlabIssue: onArrival(investigateTriagedGitLabIssue),
-      },
     },
     triage: {
       title: 'Triage',
