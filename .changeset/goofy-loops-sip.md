@@ -4,7 +4,7 @@
 
 Keep integration arrivals in Intake until someone starts them.
 
-Before: trusted issue and pull request arrivals could create triage or review proposals, and unbound Linear, Jira, and incident.io cards landed in Triage. After: all arrivals wait in Intake without starting a run. To restore automatic triage, configure a custom board's initial-phase handler:
+Before: trusted issue and pull request arrivals could create triage or review proposals, and unbound Linear, Jira, and incident.io cards landed in Triage. After: integrations stay in the routed board's initial phase without starting or suggesting a run (except explicit trusted review requests, which land directly in Reviewing). To restore automatic arrival triage, configure a custom board's initial-phase handler:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
