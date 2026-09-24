@@ -321,6 +321,63 @@ describe('runEvals', () => {
     });
   });
   describe('Error handling', () => {
+    it('should warn once per duplicate gate id', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [],
+          target: mockAgent,
+          gates: [
+            createMockScorer('check-called-tool', 1),
+            createMockScorer('check-called-tool', 1),
+            createMockScorer('check-called-tool', 1),
+          ],
+        });
+
+        const duplicateWarnings = warnSpy.mock.calls.filter(([msg]) =>
+          String(msg).includes('Duplicate scorer id "check-called-tool" in `gates`'),
+        );
+        expect(duplicateWarnings).toHaveLength(1);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should warn on duplicate scorer ids', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [createMockScorer('toxicity', 0.9), { scorer: createMockScorer('toxicity', 0.9), threshold: 0.5 }],
+          target: mockAgent,
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate scorer id "toxicity" in `scorers`'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should not warn when scorer ids are unique', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [createMockScorer('toxicity', 0.9)],
+          target: mockAgent,
+          gates: [createMockScorer('gate-a', 1), createMockScorer('gate-b', 1)],
+        });
+
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Duplicate scorer id'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('should handle agent generate errors', async () => {
       mockAgent.generateLegacy = vi.fn().mockRejectedValue(new Error('Agent error'));
 

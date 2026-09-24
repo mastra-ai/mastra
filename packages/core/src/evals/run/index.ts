@@ -355,7 +355,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   const storage = mastra?.getStorage();
 
   if (!mastra) {
-    new ConsoleLogger({ name: 'runEvals', level: LogLevel.WARN }).warn(
+    runEvalsLogger.warn(
       `Target "${target.id}" is not registered with a Mastra instance. ` +
         'Registry lookups (mastra.getAgent(), mastra.getWorkflow(), .agent("id")), score persistence, and trace-based trajectories are unavailable. ' +
         'Pass mastra.getAgent("id") or mastra.getWorkflow("id") as the target instead of importing it directly.',
@@ -978,6 +978,30 @@ function validateEvalsInputs(
       category: 'USER',
       text: 'Agent scorers must be an array of scorers or an AgentScorerConfig',
     });
+  }
+
+  if (Array.isArray(scorers)) warnDuplicateScorerIds(scorers, 'scorers');
+  if (gates) warnDuplicateScorerIds(gates, 'gates');
+}
+
+const runEvalsLogger = new ConsoleLogger({ name: 'runEvals', level: LogLevel.WARN });
+
+/**
+ * Results are keyed by scorer id, so entries sharing an id are merged into a
+ * single averaged row. Prebuilt factories accept `{ id }` to disambiguate.
+ */
+function warnDuplicateScorerIds(scorers: MastraScorer<any, any, any, any>[], field: 'scorers' | 'gates'): void {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const scorer of scorers) {
+    if (seen.has(scorer.id)) duplicates.add(scorer.id);
+    seen.add(scorer.id);
+  }
+  for (const id of duplicates) {
+    runEvalsLogger.warn(
+      `Duplicate scorer id "${id}" in \`${field}\`. Results are keyed by id, so these entries will be reported as a single averaged row and a failure can't be attributed to one of them. ` +
+        `Pass a unique id to the factory, e.g. createTrajectoryAccuracyScorerCode({ id: 'fetch-weather-ran', ... }).`,
+    );
   }
 }
 

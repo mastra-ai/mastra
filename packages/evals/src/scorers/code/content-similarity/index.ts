@@ -1,18 +1,19 @@
 import { createScorer } from '@mastra/core/evals';
 import stringSimilarity from 'string-similarity';
+import type { ScorerIdentityOptions } from '../../utils';
 import { getTextContentFromMastraDBMessage } from '../../utils';
 
-interface ContentSimilarityOptions {
+interface ContentSimilarityOptions extends ScorerIdentityOptions {
   ignoreCase?: boolean;
   ignoreWhitespace?: boolean;
 }
 
 export function createContentSimilarityScorer(
-  { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
+  { ignoreCase, ignoreWhitespace, id, name }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
 ) {
   return createScorer({
-    id: 'content-similarity-scorer',
-    name: 'Content Similarity Scorer',
+    id: id ?? 'content-similarity-scorer',
+    name: name ?? 'Content Similarity Scorer',
     description: 'Calculates content similarity between input and output messages using string comparison algorithms.',
     type: 'agent',
   })

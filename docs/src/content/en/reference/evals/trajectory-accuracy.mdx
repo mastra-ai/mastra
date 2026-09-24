@@ -238,6 +238,21 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
     isOptional: true,
   },
   {
+    name: 'id',
+    type: 'string',
+    description:
+      'Overrides the scorer id. Results are keyed by id, so give each instance a unique id when using the scorer more than once in a single runEvals call.',
+    isOptional: true,
+    defaultValue: "'code-trajectory-accuracy-scorer'",
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Overrides the scorer display name.',
+    isOptional: true,
+    defaultValue: "'Trajectory Accuracy Scorer'",
+  },
+  {
     name: 'comparisonOptions',
     type: 'TrajectoryComparisonOptions',
     description: 'Controls how the comparison is performed.',
@@ -434,6 +449,44 @@ const result = await runEvals({
 console.log(result.scores.trajectory['code-trajectory-accuracy-scorer'])
 ```
 
+### Multiple trajectory gates on one workflow
+
+To assert several independent facts about a run, create one scorer per expectation and give each a unique `id`. Without an override every instance shares the default id, so `runEvals` merges them into a single averaged row and a failing gate can't be attributed to one expectation.
+
+```typescript title="src/example-trajectory-gates.ts"
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'
+import { runEvals } from '@mastra/core/evals'
+
+const result = await runEvals({
+  target: mastra.getWorkflow('weatherWorkflow'),
+  data: [{ input: { city: 'London' } }],
+  gates: [
+    createTrajectoryAccuracyScorerCode({
+      id: 'fetch-weather-ran',
+      expectedTrajectory: [{ stepType: 'workflow_step', name: 'fetch-weather', status: 'success' }],
+    }),
+    createTrajectoryAccuracyScorerCode({
+      id: 'plan-activities-ran',
+      expectedTrajectory: [
+        { stepType: 'workflow_step', name: 'plan-activities', status: 'success' },
+      ],
+    }),
+    createTrajectoryAccuracyScorerCode({
+      id: 'plan-activities-called-weather-tool',
+      expectedTrajectory: [
+        {
+          stepType: 'workflow_step',
+          name: 'plan-activities',
+          children: { steps: [{ stepType: 'tool_call', name: 'weatherTool' }] },
+        },
+      ],
+    }),
+  ],
+})
+
+console.log(result.gateResults) // [{ id: 'fetch-weather-ran', passed: true, score: 1 }, ...]
+```
+
 ### Comparing step data
 
 Validates the step names and step-specific data. For tool calls, this compares `toolArgs` and `toolResult`. For workflow steps, this compares `output`.
@@ -556,6 +609,21 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
 
 <PropertiesTable
   content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Overrides the scorer id. Give each instance a unique id when using the scorer more than once in a single runEvals call.',
+    isOptional: true,
+    defaultValue: "'code-trajectory-scorer'",
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Overrides the scorer display name.',
+    isOptional: true,
+    defaultValue: "'Trajectory Scorer'",
+  },
   {
     name: 'defaults',
     type: 'TrajectoryExpectation',
