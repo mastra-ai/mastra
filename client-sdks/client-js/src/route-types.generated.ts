@@ -18904,9 +18904,37 @@ export type GetSystemPackages_Response = {
   observabilityStorageType?: string | undefined;
   observabilityStorageCapabilities?:
     | {
+        /** Metrics endpoints (/observability/metrics and /observability/metrics/*) */
         metrics: boolean;
+        /** Logs endpoint (GET /observability/logs) */
         logs: boolean;
+        /** Filter discovery endpoints. Unsupported discovery routes return empty results. */
+        discovery: {
+          /** GET /observability/discovery/entity-types */
+          entityTypes: boolean;
+          /** GET /observability/discovery/entity-names */
+          entityNames: boolean;
+          /** GET /observability/discovery/service-names */
+          serviceNames: boolean;
+          /** GET /observability/discovery/environments */
+          environments: boolean;
+          /** GET /observability/discovery/tags */
+          tags: boolean;
+          /** GET /observability/discovery/metric-names, metric-label-keys and metric-label-values */
+          metrics: boolean;
+        };
+        /** Cursor-based `mode: 'delta'` polling on observability list endpoints */
+        deltaPolling: boolean;
+        /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
+        traceQuery: boolean;
+        /** `durationMs` predicates in trace and thread queries */
+        traceQueryRootDuration: boolean;
+        /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
         traceQueryDiscovery: boolean;
+        /** Trusted tenant scoping of trace and thread queries */
+        traceQueryTenantScope: boolean;
+        /** Advanced thread queries (POST /observability/threads/query) */
+        threadQuery: boolean;
       }
     | undefined;
   observabilityRuntimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;

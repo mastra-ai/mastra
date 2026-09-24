@@ -101,6 +101,7 @@ import {
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryRootDuration,
   supportsTraceQueryDiscoveryCore,
+  withDiscoveryFallback,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -935,7 +936,7 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
   handler: async ({ mastra, ...params }) => {
     const args = getMetricNamesArgsSchema.parse(pickParams(getMetricNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricNames(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricNames(args), { names: [] });
   },
 });
 
@@ -945,7 +946,7 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelKeysArgsSchema.parse(pickParams(getMetricLabelKeysArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricLabelKeys(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricLabelKeys(args), { keys: [] });
   },
 });
 
@@ -955,7 +956,7 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelValuesArgsSchema.parse(pickParams(getMetricLabelValuesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getMetricLabelValues(args);
+    return await withDiscoveryFallback(() => observabilityStore.getMetricLabelValues(args), { values: [] });
   },
 });
 
@@ -963,7 +964,7 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
   responseSchema: getEntityTypesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEntityTypes({});
+    return await withDiscoveryFallback(() => observabilityStore.getEntityTypes({}), { entityTypes: [] });
   },
 });
 
@@ -973,7 +974,7 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
   handler: async ({ mastra, ...params }) => {
     const args = getEntityNamesArgsSchema.parse(pickParams(getEntityNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEntityNames(args);
+    return await withDiscoveryFallback(() => observabilityStore.getEntityNames(args), { names: [] });
   },
 });
 
@@ -981,7 +982,7 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
   responseSchema: getServiceNamesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getServiceNames({});
+    return await withDiscoveryFallback(() => observabilityStore.getServiceNames({}), { serviceNames: [] });
   },
 });
 
@@ -989,7 +990,7 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
   responseSchema: getEnvironmentsResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getEnvironments({});
+    return await withDiscoveryFallback(() => observabilityStore.getEnvironments({}), { environments: [] });
   },
 });
 
@@ -999,15 +1000,7 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    try {
-      return await observabilityStore.getTags(args);
-    } catch (error) {
-      // Some storage providers (e.g. LibSQL) don't support tag discovery
-      if (error instanceof Error && error.message.includes('does not support tag discovery')) {
-        return { tags: [] };
-      }
-      throw error;
-    }
+    return await withDiscoveryFallback(() => observabilityStore.getTags(args), { tags: [] });
   },
 });
 

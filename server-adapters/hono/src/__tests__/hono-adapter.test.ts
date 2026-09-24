@@ -9,7 +9,7 @@ import {
   planTraceQuery,
 } from '@mastra/core/storage';
 import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
-import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
+import { HTTPException as MastraHTTPException, MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
@@ -1628,5 +1628,59 @@ describe('Hono Server Adapter', () => {
       const response = await app.request(request);
       return { status: response.status };
     },
+  });
+});
+
+describe('Handler error logging', () => {
+  let context: AdapterTestContext;
+
+  beforeEach(async () => {
+    context = await createDefaultTestContext();
+  });
+
+  const requestFailingRoute = async (error: Error) => {
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+    vi.spyOn(context.mastra, 'getLogger').mockReturnValue(logger as any);
+
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra: context.mastra });
+    const failingRoute: ServerRoute<any, any, any> = {
+      method: 'GET',
+      path: '/test/failing',
+      responseType: 'json',
+      handler: async () => {
+        throw error;
+      },
+    };
+
+    app.use('*', adapter.createContextMiddleware());
+    await adapter.registerRoute(app, failingRoute, { prefix: '' });
+
+    const response = await app.request(new Request('http://localhost/test/failing'));
+    return { response, logger };
+  };
+
+  it('logs 501 Not Implemented at warn level', async () => {
+    const { response, logger } = await requestFailingRoute(
+      new MastraHTTPException(501, { message: 'Not supported by the configured observability store' }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+  });
+
+  it('still logs server errors at error level', async () => {
+    const { response, logger } = await requestFailingRoute(new Error('boom'));
+
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
   });
 });

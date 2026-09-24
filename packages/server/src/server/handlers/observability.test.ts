@@ -3409,4 +3409,35 @@ describe('Observability Handlers', () => {
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
     });
   });
+
+  describe('discovery routes on stores without discovery support', () => {
+    const createLegacyMastra = async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyObservabilityStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyObservabilityStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      return createMockMastra(storage);
+    };
+
+    it.each([
+      ['GET_ENTITY_TYPES', {}, { entityTypes: [] }],
+      ['GET_ENTITY_NAMES', {}, { names: [] }],
+      ['GET_SERVICE_NAMES', {}, { serviceNames: [] }],
+      ['GET_ENVIRONMENTS', {}, { environments: [] }],
+      ['GET_TAGS', {}, { tags: [] }],
+      ['GET_METRIC_NAMES', {}, { names: [] }],
+      ['GET_METRIC_LABEL_KEYS', { metricName: 'mastra_agent_duration_ms' }, { keys: [] }],
+      ['GET_METRIC_LABEL_VALUES', { metricName: 'mastra_agent_duration_ms', labelKey: 'agent' }, { values: [] }],
+    ] as const)('%s returns an empty result instead of an error', async (routeKey, params, expected) => {
+      const mastra = await createLegacyMastra();
+      const route = NEW_ROUTES[routeKey] as { handler: (args: unknown) => Promise<unknown> };
+
+      const result = await route.handler({ ...createTestServerContext({ mastra }), ...params });
+
+      expect(result).toEqual(expected);
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+  });
 });
