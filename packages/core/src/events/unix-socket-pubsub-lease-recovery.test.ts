@@ -145,6 +145,39 @@ describe('UnixSocketPubSub lease recovery', () => {
     await expect(second.getLeaseOwner(key)).resolves.toBe(winner);
   });
 
+  it('creates a recovery marker for a stale lock left by a crashed holder', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'mastra-uds-lease-recovery-start-'));
+    const key = 'stale-lock-without-recovery-marker';
+    const fileName = createHash('sha256').update(key).digest('hex');
+    const mutationDirectory = join(tempDir, 'leases', 'mutations');
+    const lockPath = join(mutationDirectory, `${fileName}.lock`);
+    await mkdir(mutationDirectory, { recursive: true });
+    await writeFile(
+      lockPath,
+      JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-process', token: 'dead-token' }),
+    );
+
+    const first = new UnixSocketPubSub(join(tempDir, 'first.sock'));
+    const second = new UnixSocketPubSub(join(tempDir, 'second.sock'));
+    pubsubs.push(first, second);
+
+    const acquisitions = Promise.all([
+      first.acquireLease(key, 'first-owner', 10_000),
+      second.acquireLease(key, 'second-owner', 10_000),
+    ]);
+    const results = await Promise.race([
+      acquisitions,
+      new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 250)),
+    ]);
+
+    expect(results).not.toBe('timed-out');
+    if (results === 'timed-out') return;
+    expect(results.filter(result => result.acquired)).toHaveLength(1);
+    const winner = results.find(result => result.acquired)!.owner;
+    await expect(first.getLeaseOwner(key)).resolves.toBe(winner);
+    await expect(second.getLeaseOwner(key)).resolves.toBe(winner);
+  });
+
   it('elects the next recovery owner generation without filesystem timestamps', async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-uds-lease-recovery-generation-'));
     const key = 'recovery-generation-key';

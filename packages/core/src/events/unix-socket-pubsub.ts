@@ -725,12 +725,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  /** Starts recovery only after this provider wins the generation's immutable owner election. */
+  /** Creates the immutable recovery marker before electing the generation's recovery owner. */
   async #startLeaseMutationRecovery(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
     const recoveryDirectory = `${lockPath}.recoveries`;
     const recoveryPath = join(recoveryDirectory, `${this.#leaseMutationLockGeneration(expected)}.marker`);
     await mkdir(recoveryDirectory, { recursive: true });
-    if (!(await this.#ownsLeaseMutationRecovery(recoveryPath))) return;
 
     const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
     if (!this.#sameLeaseMutationLock(current, expected)) return;
@@ -738,7 +737,8 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       await link(lockPath, recoveryPath);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'EEXIST' && code !== 'ENOENT') throw error;
+      if (code === 'ENOENT') return;
+      if (code !== 'EEXIST') throw error;
     }
     await this.#completeLeaseMutationRecovery(lockPath, recoveryPath);
   }
