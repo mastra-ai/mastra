@@ -12,7 +12,7 @@ export function PageHeaderMeta({ beside = false, className, ...props }: PageHead
       data-slot="page-header-meta"
       data-placement={beside ? 'beside' : 'below'}
       className={cn(
-        'flex min-w-0 flex-wrap items-center gap-2 text-meta',
+        'flex min-w-0 flex-wrap items-center gap-2',
         beside ? 'col-start-[meta] row-start-1 self-center justify-self-start' : 'col-[title/end]',
         className,
       )}

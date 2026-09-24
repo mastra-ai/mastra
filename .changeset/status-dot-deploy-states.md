@@ -27,5 +27,3 @@
 // After
 <Status presentation={presentation} />
 ```
-
-**`PageHeader.Meta` sets the meta text role.** Plain text and a `Status` placed beside or below the page title now render at meta size, matching the rest of the header metadata.
