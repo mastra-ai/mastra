@@ -37,6 +37,16 @@ describe('formatFullNumber', () => {
     expect(formatFullNumber(0.0277, { currency: 'USD' })).toBe('$0.03');
     expect(formatFullNumber(0.0012, { currency: 'USD' })).toBe('<$0.01');
   });
+
+  it('marks a negative amount under the smallest unit', () => {
+    expect(formatFullNumber(-0.0012, { currency: 'USD' })).toBe('-<$0.01');
+  });
+
+  it('uses the precision of the currency', () => {
+    expect(formatFullNumber(1234.5, { currency: 'JPY' })).toBe('¥1,235');
+    expect(formatFullNumber(0.4, { currency: 'JPY' })).toBe('<¥1');
+    expect(formatFullNumber(1.2345, { currency: 'KWD' })).toBe('KWD\u00a01.235');
+  });
 });
 
 describe('CompactNumber', () => {

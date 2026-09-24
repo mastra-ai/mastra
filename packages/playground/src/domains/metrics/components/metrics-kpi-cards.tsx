@@ -22,7 +22,7 @@ export function AgentRunsKpiCard() {
 
 export function ModelCostKpiCard() {
   const { data, isLoading, isError } = useModelCostKpiMetrics();
-  const currency = data?.costUnit ?? 'USD';
+  const currency = data?.costUnit ?? undefined;
   return (
     <KpiCardView
       label="Total Model Cost"

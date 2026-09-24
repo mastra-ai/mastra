@@ -19,6 +19,10 @@ export function formatCompactNumber(value: number, { currency }: CompactNumberFo
 
 export function formatFullNumber(value: number, { currency }: CompactNumberFormatOptions = {}): string {
   if (!currency) return fullNumber.format(value);
-  if (value > 0 && value < 0.01) return `<${money(currency, {}).format(0.01)}`;
-  return money(currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  const formatter = money(currency, {});
+  const smallestUnit = 10 ** -(formatter.resolvedOptions().maximumFractionDigits ?? 2);
+  if (value !== 0 && Math.abs(value) < smallestUnit) {
+    return `${value < 0 ? '-' : ''}<${formatter.format(smallestUnit)}`;
+  }
+  return formatter.format(value);
 }
