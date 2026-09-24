@@ -1212,6 +1212,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   inputProcessors,
   llmRequestInputProcessors,
   errorProcessors,
+  hasConfiguredErrorProcessors,
   logger,
   agentId,
   downloadRetries,
@@ -1451,6 +1452,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const maxErrorProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries,
         hasErrorProcessors: Boolean(errorProcessors?.length),
+        hasConfiguredErrorProcessors: Boolean(hasConfiguredErrorProcessors),
         agentId,
         logger,
       });
