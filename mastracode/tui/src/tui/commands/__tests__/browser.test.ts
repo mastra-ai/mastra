@@ -425,6 +425,23 @@ describe('handleBrowserCommand', () => {
       expect(pending).toContain('Model: anthropic/claude-sonnet-4-5');
     });
 
+    it('uses the launch-time model in the no-drift status too, ignoring later credential changes', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      const controllerState = ctx.state.session.state.get() as Record<string, unknown>;
+      controllerState.activeBrowserSettings = structuredClone(settings.browser);
+      controllerState.activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' };
+      // Simulates signing out of Codex after launch: a fresh resolve would say "Stagehand default".
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: undefined, source: 'stagehand-default' });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const out = statusOutput(ctx);
+      expect(out).not.toContain('Pending changes');
+      expect(out).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+    });
+
     it('accepts info as an alias for status', async () => {
       const { ctx, settings } = createContext();
       settings.browser.enabled = true;

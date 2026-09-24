@@ -550,7 +550,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       const lines = [`Browser: enabled`, `  Provider: ${providerLabel}`];
       if (browser.provider === 'stagehand') {
         if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
-        lines.push(describeStagehandModel(browser));
+        lines.push(describeStagehandModel(browser, activeModel));
       }
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
