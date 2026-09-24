@@ -1686,6 +1686,8 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       ui,
     );
     expect(fromHome.getCompactToolGroupKey()).toBe(`$ ${dirname(homedir())}`);
+    fromHome.updateArgs({ command: 'cd ../.. && ls', cwd: '~/a' });
+    expect(fromHome.getCompactToolGroupKey()).toBe(`$ ${dirname(homedir())}`);
   });
 
   it('keeps the error visible when a quiet shell command fails', () => {
