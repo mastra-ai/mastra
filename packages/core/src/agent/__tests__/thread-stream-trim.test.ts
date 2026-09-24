@@ -88,14 +88,22 @@ describe('thread topic trim', () => {
     expect(entriesFor('trim-run-1')).toEqual([]);
   });
 
-  it('does not trim a run that did not persist', async () => {
+  it('keeps a failed run for live readers, then deletes it', async () => {
     const { trim, register, entriesFor } = setup();
     const run = register('trim-run-failed', 'failed');
     await run.registered;
-    run.complete();
-    await settle();
-    expect(trim).not.toHaveBeenCalled();
-    expect(entriesFor('trim-run-failed').length).toBeGreaterThan(0);
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      run.complete();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(trim).not.toHaveBeenCalled();
+      expect(entriesFor('trim-run-failed').length).toBeGreaterThan(0);
+      await vi.advanceTimersByTimeAsync(30_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => trim.mock.calls.length === 1);
+    expect(entriesFor('trim-run-failed')).toEqual([]);
   });
 
   it('does not trim when the agent has no storage', async () => {

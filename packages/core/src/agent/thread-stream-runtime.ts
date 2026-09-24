@@ -53,6 +53,9 @@ const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /** Safety margin when trimming up to a retained run, covering clock skew between us and the pubsub backend. */
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
+// Long enough for live subscribers (including cross-process readers polling the
+// topic) to read a failed run's outcome before its entries are deleted.
+const FAILED_RUN_TRIM_DELAY_MS = 30_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
 
@@ -1453,6 +1456,7 @@ export class AgentThreadStreamRuntime {
           runId,
           error: message,
         });
+        this.#trimFailedRun(pubsub, key, { agent: owner.agent, streamOptions: streamOptions ?? {}, runId });
         if (!(await this.#drainPendingIdleSignals(state, pubsub, key, runId))) {
           this.#releaseThreadLease(pubsub, key, runId);
         }
@@ -2780,7 +2784,6 @@ export class AgentThreadStreamRuntime {
         // Suspended runs save their messages too, so their parts are backed by
         // storage; only a successful run leaves nothing actionable to trim.
         const persisted = record.output.status === 'success' || record.output.status === 'suspended';
-        const trimmable = record.output.status === 'success';
         void this.#publishAndWait(pubsub, key, {
           type: 'run-completed',
           runId: record.runId,
@@ -2791,7 +2794,13 @@ export class AgentThreadStreamRuntime {
           persisted,
           status: record.output.status,
         })
-          .then(() => (trimmable ? this.#trimSavedRun(pubsub, key, record) : undefined))
+          .then(() =>
+            record.output.status === 'success'
+              ? this.#trimSavedRun(pubsub, key, record)
+              : record.output.status !== 'suspended'
+                ? this.#trimFailedRun(pubsub, key, record)
+                : undefined,
+          )
           .catch(() => {});
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
@@ -2817,6 +2826,23 @@ export class AgentThreadStreamRuntime {
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
     if (!memory) return;
     await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId: record.runId });
+  }
+
+  /**
+   * A run that failed, was canceled, or was aborted saved nothing that its
+   * topic entries could be replayed against, so reconnecting subscribers ignore
+   * them. They only matter to subscribers already reading the run live, so
+   * delete them once those have had time to read the outcome.
+   */
+  #trimFailedRun(
+    pubsub: PubSub | undefined,
+    key: string,
+    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId'>,
+  ) {
+    const timer = setTimeout(() => {
+      this.#trimSavedRun(pubsub, key, record).catch(() => {});
+    }, FAILED_RUN_TRIM_DELAY_MS);
+    timer.unref?.();
   }
 
   async #drainPendingSignals(
@@ -2945,6 +2971,9 @@ export class AgentThreadStreamRuntime {
         error: `failed to start follow-up run for queued message: ${getErrorFromUnknown(err).message}${draining?.cancelled ? '; the message was cancelled' : '; the message was requeued and will deliver on the next turn'}`,
       });
       if (previousRun.runId !== failedRunId) {
+        this.#trimFailedRun(pubsub, key, { ...previousRun, runId: failedRunId });
+      }
+      if (previousRun.runId !== failedRunId) {
         // A synchronous throw from the lease transfer leaves the lease still
         // owned by the finished previous run with its renewal timer alive,
         // which would hold the key forever. Release it unconditionally before
@@ -3059,6 +3088,7 @@ export class AgentThreadStreamRuntime {
           runId: pending.runId,
           error: getErrorFromUnknown(err).message,
         });
+        this.#trimFailedRun(pubsub, key, { ...pending, streamOptions: pending.streamOptions ?? {} });
         // Hand the lease to remaining queued work (transfer keeps the key from
         // going empty); only release once nothing is left to drain.
         void this.#drainPendingContinuations(state, pubsub, key, pending.runId).then(async started => {
@@ -3147,6 +3177,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: getErrorFromUnknown(err).message,
       });
+      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
       if (!(await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId))) {
         this.#releaseThreadLease(pubsub, key, fromRunId ?? pendingIdle.runId);
       }
@@ -3228,6 +3259,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: getErrorFromUnknown(err).message,
       });
+      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
       // No completion watcher exists for a failed startup. Preserve pending-before-idle recovery here too.
       await this.#drainPendingSignals(state, pubsub, key, {
         agent: pendingIdle.agent,
@@ -4770,6 +4802,11 @@ export class AgentThreadStreamRuntime {
           type: 'run-failed',
           runId: reservedRunId,
           error: getErrorFromUnknown(error).message,
+        });
+        this.#trimFailedRun(pubsub, reservedKey, {
+          agent,
+          streamOptions: target.ifIdle?.streamOptions ?? {},
+          runId: reservedRunId,
         });
         void this.#drainPendingIdleSignals(state, pubsub, reservedKey);
         throw error;
