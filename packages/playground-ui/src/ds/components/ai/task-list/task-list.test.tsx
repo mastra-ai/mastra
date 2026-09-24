@@ -19,10 +19,14 @@ const longTasks: TaskListItem[] = Array.from({ length: 6 }, (_, index) => ({
   status: index < 5 ? 'completed' : 'in_progress',
 }));
 
-const toggle = () => fireEvent.click(screen.getByRole('button', { name: 'Show all tasks' }));
+const collapse = () => fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+const expand = () => fireEvent.click(screen.getByRole('button', { name: 'Show all tasks' }));
 const visibleRows = () => within(screen.getByRole('list')).getAllByRole('listitem');
 
+const originalScrollTo = Element.prototype.scrollTo;
+
 afterEach(() => {
+  Element.prototype.scrollTo = originalScrollTo;
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -43,7 +47,7 @@ describe('TaskList', () => {
 
       expect(visibleRows()).toHaveLength(3);
       expect(screen.queryByRole('progressbar')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Show all tasks' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Collapse tasks' }).getAttribute('aria-expanded')).toBe('true');
     });
 
     it('reads out the active form instead of the task content', () => {
@@ -88,7 +92,7 @@ describe('TaskList', () => {
   describe('when collapsed', () => {
     it('shows only the active task, with the progress bars', () => {
       render(<TaskList tasks={mixedTasks} />);
-      toggle();
+      collapse();
 
       expect(visibleRows()).toHaveLength(1);
       expect(visibleRows()[0]?.textContent).toContain('Adding tests');
@@ -104,7 +108,7 @@ describe('TaskList', () => {
 
     it('slides the active task into the one-row window when collapsing', () => {
       render(<TaskList tasks={longTasks} />);
-      toggle();
+      collapse();
 
       expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 140 });
     });
@@ -140,9 +144,10 @@ describe('TaskList', () => {
 
     it('shows every task again when expanded', () => {
       render(<TaskList tasks={mixedTasks} defaultOpen={false} />);
-      toggle();
+      expand();
 
       expect(visibleRows()).toHaveLength(3);
+      expect(screen.getByRole('button', { name: 'Collapse tasks' }).getAttribute('aria-expanded')).toBe('true');
     });
   });
 

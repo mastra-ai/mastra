@@ -264,7 +264,7 @@ export const TaskList = ({
         </div>
         <button
           type="button"
-          aria-label="Show all tasks"
+          aria-label={open ? 'Collapse tasks' : 'Show all tasks'}
           aria-expanded={open}
           aria-controls={listId}
           onClick={event => {
