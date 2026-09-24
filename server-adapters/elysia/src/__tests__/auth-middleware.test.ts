@@ -22,8 +22,6 @@ function createMastraWithAuth() {
 }
 
 const REFRESHED_COOKIE = 'session=valid; HttpOnly; Path=/';
-// Elysia re-serializes cookies from its jar, which normalizes attribute order.
-const SERIALIZED_REFRESHED_COOKIE = 'session=valid; Path=/; HttpOnly';
 
 function createMastraWithSessionRefresh() {
   const mastra = new Mastra({ logger: false });
@@ -106,7 +104,7 @@ describe('Elysia auth middleware helper', () => {
       new Request('http://localhost/custom/protected', { headers: { Cookie: 'session=expired' } }),
     );
     expect(allowed.status).toBe(200);
-    expect(allowed.headers.get('set-cookie')).toBe(SERIALIZED_REFRESHED_COOKIE);
+    expect(allowed.headers.get('set-cookie')).toBe(REFRESHED_COOKIE);
 
     const denied = await app.fetch(
       new Request('http://localhost/custom/forbidden', { headers: { Cookie: 'session=expired' } }),
@@ -135,7 +133,7 @@ describe('Elysia auth middleware helper', () => {
     app.get('/custom/raw', () => ({ ok: true }), {
       beforeHandle: [
         (ctx: any) => {
-          ctx.set.headers['set-cookie'] = 'raw=1; Path=/';
+          ctx.set.headers['set-cookie'] = ['raw=1; Path=/x', 'raw=2; Path=/y'];
         },
         middleware,
       ],
@@ -154,14 +152,14 @@ describe('Elysia auth middleware helper', () => {
 
     const jar = await request('/custom/jar');
     expect(jar.status).toBe(200);
-    expect(jar.headers.getSetCookie().sort()).toEqual(['other=1; Path=/', SERIALIZED_REFRESHED_COOKIE].sort());
+    expect(jar.headers.getSetCookie().sort()).toEqual(['other=1; Path=/', REFRESHED_COOKIE].sort());
 
     const raw = await request('/custom/raw');
     expect(raw.status).toBe(200);
-    expect(raw.headers.getSetCookie().sort()).toEqual(['raw=1; Path=/', SERIALIZED_REFRESHED_COOKIE].sort());
+    expect(raw.headers.getSetCookie().sort()).toEqual(['raw=1; Path=/x', 'raw=2; Path=/y', REFRESHED_COOKIE].sort());
 
     const late = await request('/custom/late');
     expect(late.status).toBe(200);
-    expect(late.headers.getSetCookie()).toContain(SERIALIZED_REFRESHED_COOKIE);
+    expect(late.headers.getSetCookie()).toContain(REFRESHED_COOKIE);
   });
 });
