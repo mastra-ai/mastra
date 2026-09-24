@@ -98,6 +98,14 @@ describe('ToolTracker', () => {
     expect(tracker.has('t1')).toBe(true);
   });
 
+  it('enrichApproval summarizes JSON-string args for a delegated tool', () => {
+    const tracker = new ToolTracker();
+    tracker.trackStart({ toolCallId: 't1', toolName: 'agent-worker', args: { prompt: 'Clean up old docs' } });
+    const e = tracker.enrichApproval({ toolCallId: 't1', toolName: 'delete', args: '{"path":"docs/old.md"}' });
+
+    expect(e.argsSummary).toBe('docs/old.md');
+  });
+
   it('parallel same-tool calls do not clobber each other', () => {
     const tracker = new ToolTracker();
     tracker.trackStart({ toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } });

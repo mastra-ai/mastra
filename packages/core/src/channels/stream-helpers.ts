@@ -163,8 +163,7 @@ export class ToolTracker {
     // call's toolCallId; only reuse tracked details when they describe the same tool.
     const same = tracked?.toolName === call.toolName ? tracked : undefined;
     const displayName = same?.displayName ?? stripToolPrefix(call.toolName);
-    const argsSummary =
-      same?.argsSummary ?? formatArgsSummary(typeof call.args === 'object' && call.args != null ? call.args : {});
+    const argsSummary = same?.argsSummary ?? formatArgsSummary(call.args);
     const args = same ? same.args : call.args;
     const startedAt = tracked?.startedAt ?? Date.now();
     return {
