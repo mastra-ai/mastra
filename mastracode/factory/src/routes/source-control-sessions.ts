@@ -10,6 +10,7 @@ import type { Context } from 'hono';
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type {
@@ -367,6 +368,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
+          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
+          await waitForPendingFilesystemCapture(session.sessionId);
           await options.controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {

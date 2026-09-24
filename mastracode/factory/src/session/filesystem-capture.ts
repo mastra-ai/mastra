@@ -48,10 +48,13 @@ export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
 export async function captureSessionFilesystem(
   session: FilesystemCaptureSession,
   { filesystem, sourceControl }: FilesystemCaptureDependencies,
+  ids?: { resourceId: string; threadId: string },
 ): Promise<void> {
   try {
-    const resourceId = session.identity.getResourceId();
-    const threadId = session.thread.requireId();
+    // Scheduled captures pass ids read at schedule time: a session deleted
+    // before the queued capture runs has already cleared its thread.
+    const resourceId = ids?.resourceId ?? session.identity.getResourceId();
+    const threadId = ids?.threadId ?? session.thread.requireId();
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
     // Chat-only sessions run without a workspace; there is nothing to capture.
     const sandbox = session.getWorkspace()?.sandbox;
@@ -216,8 +219,15 @@ export function observeSessionFilesystem(
     // Extend the resource-level chain rather than a per-session one: sessions
     // are deduplicated by (resourceId, scope), so multiple scoped sessions can
     // observe the same resource, and their captures must not interleave.
+    let threadId: string;
+    try {
+      threadId = session.thread.requireId();
+    } catch {
+      return;
+    }
+    const ids = { resourceId, threadId };
     const chain = (pendingCaptures.get(resourceId) ?? Promise.resolve()).then(() =>
-      captureSessionFilesystem(session, dependencies),
+      captureSessionFilesystem(session, dependencies, ids),
     );
     pendingCaptures.set(resourceId, chain);
     void chain.finally(() => {

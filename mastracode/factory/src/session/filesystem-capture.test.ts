@@ -305,6 +305,31 @@ describe('observeSessionFilesystem', () => {
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
   });
 
+  it('persists a queued capture after the session thread is cleared by deleteSession', async () => {
+    // Regression for #24893: deleteSession clears the thread before the
+    // queued capture runs; the capture must use the thread read at schedule time.
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-deleted-thread');
+    let threadId: string | null = 'thread-1';
+    session.thread.requireId = () => {
+      if (!threadId) throw new Error('No active thread on this session');
+      return threadId;
+    };
+    const dependencies = createDependencies();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    observeSessionFilesystem(session, dependencies);
+
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    threadId = null;
+    await waitForPendingFilesystemCapture('resource-deleted-thread');
+
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: 'resource-deleted-thread', threadId: 'thread-1' }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('does not gate the agent-end listener on slow capture execs', async () => {
     // The sandbox exec never resolves: the listener must still settle
     // immediately, because agent_end must not wait on the capture I/O.
