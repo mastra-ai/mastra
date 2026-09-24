@@ -37,12 +37,17 @@ export const quietShellDescriptionScenario: McE2eScenario = {
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    const serialized = JSON.stringify(requests);
-    // The execute_command schema sent to the model carries the description guidance.
-    for (const needle of ['call_quiet_shell_description', 'Drilling into the first of 15 failures']) {
-      if (!serialized.includes(needle)) {
-        throw new Error(`Expected AIMock request flow to include ${needle}`);
-      }
+    const tool = requests
+      .flatMap(request => ((request as any)?.body?.tools ?? []) as any[])
+      .find(candidate => candidate?.function?.name === 'execute_command');
+    const schema = tool?.function?.parameters;
+    if (!schema) throw new Error('Expected AIMock request to include the execute_command tool schema');
+    // Mastra Code turns on requireDescription, so the model sees description first and required.
+    const firstArg = Object.keys(schema.properties ?? {})[0];
+    if (firstArg !== 'description') {
+      throw new Error(`Expected description to be the first execute_command arg, received ${firstArg}`);
     }
+    expect(schema.required).toContain('description');
+    expect(schema.properties.description.description).toContain('Drilling into the first of 15 failures');
   },
 };

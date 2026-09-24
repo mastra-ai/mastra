@@ -19,12 +19,6 @@ export const executeCommandInputSchema = z.object({
   command: z
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
-  description: z
-    .string()
-    .nullish()
-    .describe(
-      'Short plain-language description of what this command does, shown to the user in place of the raw command (5-10 words, e.g. "Running the auth unit tests"). Write it as the next step in an ongoing narrative: it can build on your previous commands implicitly, e.g. after "Searching open PRs for failing CI" the next command can be "Drilling into the first of 15 failures".',
-    ),
   timeout: z
     .preprocess(coerceNumericString, z.number())
     .nullish()
@@ -46,6 +40,28 @@ export const executeCommandWithBackgroundSchema = executeCommandInputSchema.exte
     .describe(
       'Run the command in the background. Returns a PID immediately instead of waiting for completion. Use get_process_output to check on it later.',
     ),
+});
+
+// Listed first so models write the summary before the command itself.
+const descriptionShape = {
+  description: z
+    .string()
+    .min(1)
+    .describe(
+      'Short plain-language description of what this command does, shown to the user in place of the raw command (5-10 words, e.g. "Running the auth unit tests"). Write it as the next step in an ongoing narrative: it can build on your previous commands implicitly, e.g. after "Searching open PRs for failing CI" the next command can be "Drilling into the first of 15 failures".',
+    ),
+};
+
+/** Base schema with a required leading `description` (used when `requireDescription` is set). */
+export const executeCommandWithDescriptionSchema = z.object({
+  ...descriptionShape,
+  ...executeCommandInputSchema.shape,
+});
+
+/** Background schema with a required leading `description`. */
+export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
+  ...descriptionShape,
+  ...executeCommandWithBackgroundSchema.shape,
 });
 
 /**
@@ -355,13 +371,35 @@ export const executeCommandTool = createTool({
   toModelOutput: sandboxToModelOutput,
 });
 
+const backgroundDescription = `${baseDescription}
+
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`;
+
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-  description: `${baseDescription}
-
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
+  description: backgroundDescription,
   inputSchema: executeCommandWithBackgroundSchema,
+  outputSchema: z.string(),
+  execute: executeCommand,
+  toModelOutput: sandboxToModelOutput,
+});
+
+/** Foreground-only tool that requires a leading `description` arg. */
+export const executeCommandWithDescriptionTool = createTool({
+  id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+  description: baseDescription,
+  inputSchema: executeCommandWithDescriptionSchema,
+  outputSchema: z.string(),
+  execute: executeCommand,
+  toModelOutput: sandboxToModelOutput,
+});
+
+/** Background-capable tool that requires a leading `description` arg. */
+export const executeCommandWithDescriptionAndBackgroundTool = createTool({
+  id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+  description: backgroundDescription,
+  inputSchema: executeCommandWithDescriptionAndBackgroundSchema,
   outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,

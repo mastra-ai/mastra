@@ -2,11 +2,13 @@
 '@mastra/core': minor
 ---
 
-Added an optional `description` input to the workspace `execute_command` tool. Agents can pass a short plain-language summary of what a command does, so UIs can show it instead of the raw command. The command runs the same way whether or not a description is set.
+Added a `requireDescription` option to the workspace `execute_command` tool. When enabled, the tool asks the model for a short plain-language `description` of each command, listed before `command` in the tool schema, so UIs can show it instead of the raw command. The option is off by default and the tool schema is unchanged when it is off.
 
-```json
-{
-  "command": "gh run view 12347890 --log-failed | grep -E 'FAIL|Error'",
-  "description": "Drilling into the failed CI job"
-}
+```ts
+const workspace = new Workspace({
+  sandbox,
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireDescription: true },
+  },
+});
 ```
