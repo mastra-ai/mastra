@@ -26,6 +26,7 @@ import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
+import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
 import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
@@ -170,8 +171,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
   // Each delegates to today's step files unchanged. These are the hoisting
   // targets for the shared-core migration.
 
-  protected llmExecutionStep(toolCallForeachOptions: ToolCallForeachOptions): LoopStep {
-    return createLLMExecutionStep<Tools, OUTPUT>({ ...this.params, toolCallForeachOptions });
+  protected llmExecutionStep(
+    toolCallForeachOptions: ToolCallForeachOptions,
+    eager?: { coordinator: EagerToolExecutionCoordinator; toolCallStep: LoopStep },
+  ): LoopStep {
+    return createLLMExecutionStep<Tools, OUTPUT>({
+      ...this.params,
+      toolCallForeachOptions,
+      eagerCoordinator: eager?.coordinator,
+      eagerToolCallStep: eager?.toolCallStep,
+    });
   }
 
   protected toolCallStep(): LoopStep {
@@ -269,8 +278,30 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }),
     };
 
-    const llmExecutionStep = this.llmExecutionStep(toolCallForeachOptions);
+    // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
+    // excluded because its limit depends on the full set of tools the model ends up
+    // calling, which is unknowable while the model is still streaming.
+    //
+    // `Agent.stream()` is where the default lives: it resolves the option to a boolean
+    // before the options reach here, so an eligible call — a plain server-side call with
+    // complete arguments — runs early unless the caller passed `eagerToolExecution: false`.
+    //
+    // The check is `=== true` rather than "not false" on purpose. The durable subclass
+    // overrides `llmExecutionStep()` without the coordinator, and durable preparation
+    // rejects an explicit `true` outright; requiring the flag to be present makes that
+    // exclusion a stated condition rather than a consequence of the option not being
+    // threaded through. The same goes for any other caller reaching the loop directly.
     const toolCallStep = this.toolCallStep();
+    const eagerCoordinator =
+      rest.eagerToolExecution === true && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
+        ? // Read the limit late: map-tool-calls recomputes it per step, and the eager
+          // path must honour the same recomputed value rather than a construction-time copy.
+          new EagerToolExecutionCoordinator(() => toolCallForeachOptions.concurrency)
+        : undefined;
+    const llmExecutionStep = this.llmExecutionStep(
+      toolCallForeachOptions,
+      eagerCoordinator ? { coordinator: eagerCoordinator, toolCallStep } : undefined,
+    );
     const llmMappingStep = this.llmMappingStep(llmExecutionStep);
     const backgroundTaskCheckStep = this.backgroundTaskCheckStep();
     const signalDrainStep = this.signalDrainStep();

@@ -12,14 +12,14 @@ function jiraIssueObserved(context: FactoryJiraRuleContext) {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise Work auto-triages the new issue.
+    // otherwise the issue waits in Work Intake.
     board: context.intake?.board ?? 'work',
     source: 'jira-issue',
     sourceKey: context.issue.id,
     claimKey: jiraClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'triage',
+    stage: context.intake?.initialPhase ?? 'intake',
     metadata: {
       identifier: context.issue.identifier,
       issueRef: context.issue.id,

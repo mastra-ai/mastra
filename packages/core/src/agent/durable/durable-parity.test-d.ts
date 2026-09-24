@@ -90,6 +90,8 @@ type ConsumedDuringPreparation =
   // Serverless waitUntil is call-site only for non-durable generate/stream.
   // Durable execution manages its own finish lifecycle, so this is intentionally unused.
   | 'serverless'
+  // Explicitly rejected during durable preparation before any side effects.
+  | 'eagerToolExecution'
   // Observability context keys from Partial<ObservabilityContext>
   | 'tracing'
   | 'loggerVNext'

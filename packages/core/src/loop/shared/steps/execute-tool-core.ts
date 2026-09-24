@@ -57,6 +57,15 @@ export async function executeToolCall(deps: {
   abortSignal?: AbortSignal;
   /** Engine wrapper around live execution (e.g. durable's `markRunActive`); returns a release fn. */
   acquireExecution?: () => () => void;
+  /**
+   * Engine hook (main loop only): eager tool dispatch may need to hand the
+   * call back to the ordinary foreach after the tool body has run (e.g. the
+   * tool requested suspension and swallowed the bailout). Called once after
+   * `execute` returns (`error` undefined) and once at the top of the failure
+   * path with the thrown error; throwing from it propagates out of
+   * `executeToolCall` instead of being classified as a tool outcome.
+   */
+  assertNotBailedOut?: (error?: unknown) => void;
   logger?: IMastraLogger;
 }): Promise<ExecuteToolOutcome> {
   const { tool, toolCallId, toolName, abortSignal, logger } = deps;
@@ -69,6 +78,7 @@ export async function executeToolCall(deps: {
     } finally {
       release?.();
     }
+    deps.assertNotBailedOut?.();
     const result = ensureSerializable(rawResult);
 
     if ('onOutput' in tool && typeof tool.onOutput === 'function') {
@@ -87,6 +97,7 @@ export async function executeToolCall(deps: {
     if (error instanceof Error && error.name === 'FGADeniedError') {
       throw error;
     }
+    deps.assertNotBailedOut?.(error);
     if (abortSignal?.aborted) {
       // Log the discarded error for observability (control flow unchanged).
       logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {

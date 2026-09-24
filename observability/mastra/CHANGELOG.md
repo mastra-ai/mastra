@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.18.1-alpha.0
+
+### Patch Changes
+
+- Fixed event spans (such as `model_chunk` spans for `tool-result` and `tool-call-approval` chunks) being stored and exported with `endedAt: null` in completed runs, which made them look like they were still running. Event spans are point-in-time, so they now end at the instant they start: `endTime` equals `startTime` and their duration is zero. Event spans no longer emit duration metrics. Fixes [#24233](https://github.com/mastra-ai/mastra/issues/24233). ([#24970](https://github.com/mastra-ai/mastra/pull/24970))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
 ## 1.18.0
 
 ### Minor Changes

@@ -5,6 +5,7 @@ import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/Fi
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import {
@@ -28,7 +29,9 @@ import {
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
+import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
+  buildTraceListFilters,
   createTraceFilterBarFields,
   filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
@@ -48,7 +51,6 @@ import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useTracesListSource } from './hooks/use-traces-list-source';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -136,10 +138,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // another trace (row click, prev/next) falls back to the trace panel without an effect.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
+  // Servers without the trace-query API list through `listTracesLight` and don't expose feedback.
+  // Older servers without the capabilities endpoint fall back to the trace-query API.
+  const traceQuery = useTraceQueryAvailable();
+  const withQueryTrace = traceQuery.enabled;
+  const withFeedback = useFeedbackAvailable().enabled;
+
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
-  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam });
-  const { data: spanFeedbackData } = useSpanFeedback({ traceId: url.traceIdParam, spanId: url.spanIdParam });
+  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam, enabled: withFeedback });
+  const { data: spanFeedbackData } = useSpanFeedback({
+    traceId: url.traceIdParam,
+    spanId: url.spanIdParam,
+    enabled: withFeedback,
+  });
 
   const {
     spans: traceSpans,
@@ -191,6 +203,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
+    enabled: withQueryTrace,
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
@@ -207,10 +220,18 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
-        valueSuggestions,
+        valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
+        withQueryTrace,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
+    [
+      rootEntityNameSuggestions,
+      discoveredEnvironments,
+      hiddenFieldIds,
+      metadataFields,
+      valueSuggestions,
+      withQueryTrace,
+    ],
   );
   // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
   const availableMetadataKeys = useMemo(() => {
@@ -246,6 +267,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     },
     [allFilterBarItems, scopedFieldIds, url],
   );
+  // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs in flat mode, which never offers
+  // "Advanced filter".
+  const flatFilterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
+  const handleFlatFilterBarChange = useCallback(
+    (items: FilterBarItem[]) => handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items }),
+    [handleFilterBarChange],
+  );
   const handleFilterByField = useCallback(
     (fieldId: string, value: string) => {
       const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
@@ -278,6 +306,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
+    withQueryTrace,
+    enabled: !traceQuery.isLoading,
+    legacyFilters: buildTraceListFilters({
+      rootEntityType: url.selectedEntityOption?.entityType,
+      status: url.selectedStatus,
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      tokens: url.filterTokens,
+    }),
   });
   const traceColumns = useTraceColumnPreferences();
   const observabilityCapabilities = useObservabilityStorageCapabilities();
@@ -337,8 +374,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         <FilterBar
           fields={filterBarFields}
           operators={TRACE_FILTER_BAR_OPERATORS}
-          value={filterBarValue}
-          onValueChange={handleFilterBarChange}
+          {...(withQueryTrace
+            ? { value: filterBarValue, onValueChange: handleFilterBarChange }
+            : { value: flatFilterBarValue, onValueChange: handleFlatFilterBarChange })}
           // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
           // draft that id so the chip survives the round trip without remounting.
           createItemId={fieldId => fieldId}
@@ -372,6 +410,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           preferences={traceColumns.preferences}
           availableMetadataKeys={availableMetadataKeys}
           usageDisabledReason={usageDisabledReason}
+          withQueryTrace={withQueryTrace}
           onToggleColumn={traceColumns.toggleColumn}
           onAddCustomColumn={traceColumns.addCustomColumn}
           onRemoveCustomColumn={traceColumns.removeCustomColumn}
@@ -395,7 +434,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
   // FilterBar never appears without the metadata fields it will offer. Only `isLoading` (never
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
-  if (isDiscoveryLoading) {
+  if (traceQuery.isLoading || isDiscoveryLoading) {
     return (
       <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Traces</h1>
@@ -476,6 +515,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           url.handleTraceClose();
         }}
         isFullThreadOpen={isFullThreadOpen}
+        withQueryTrace={withQueryTrace}
+        withFeedback={withFeedback}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
         onSpanSelect={id => url.handleSpanChange(id ?? null)}
         onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
@@ -486,8 +527,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         showPartialThread
         featuredSpanIds={url.highlightSpanIdsParam}
         onHighlightSpans={url.handleHighlightSpans}
-        feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
-        feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+        feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
+        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} /> : null
@@ -496,9 +537,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onSpanViewChange={url.handleSpanViewChange}
         spanActiveTab={url.spanTabParam ?? 'details'}
         onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-        spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
-        spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
-          tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+        spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
+        spanFeedbackTabSlot={
+          withFeedback
+            ? ({ traceId: tid, spanId: sid }) =>
+                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+            : undefined
         }
       />
       <ScoreDataPanel depth={2} score={featuredScore} onClose={() => url.handleScoreChange(null)} />

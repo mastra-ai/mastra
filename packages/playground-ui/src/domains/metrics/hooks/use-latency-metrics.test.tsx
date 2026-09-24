@@ -87,7 +87,7 @@ describe('useLatencyMetrics', () => {
       formatMetricsBucketLabel(new Date('2026-06-01T00:00:00.000Z'), '1d'),
       formatMetricsBucketLabel(new Date('2026-06-02T00:00:00.000Z'), '1d'),
     ]);
-    expect(result.current.data?.agentData[1]?.time).toMatch(/^[A-Z][a-z]{2} \d{2}$/);
+    expect(result.current.data?.agentData[1]?.time).toMatch(/^[A-Z][a-z]{2} \d{1,2}(, \d{4})?$/);
   });
 
   it('uses hourly buckets for a short custom range', async () => {

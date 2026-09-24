@@ -961,6 +961,25 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   __stateSignalProcessors?: Processor[];
   /** @internal Whether a framework-generated workflow needs per-chunk execution. Unknown workflows always execute. */
   __processOutputStream?: boolean;
+  /**
+   * @internal Whether any wrapped processor runs after the model stream ends
+   * (`processOutputStep` / `processLLMResponse`). Processors are wrapped into a
+   * workflow before they reach the loop, so the wrapper is the only place that
+   * still knows this. Unknown workflows leave it undefined and are treated as
+   * post-stream, because callers use this to decide what is safe to start early.
+   *
+   * Only meaningful on output chains. The same wrapper builds input chains, which
+   * carry the flag without it meaning anything there.
+   */
+  __processOutputStep?: boolean;
+  /**
+   * @internal Whether any wrapped processor implements `processToolResult`. That hook
+   * runs *inside* the model stream and can abort the turn before the post-stream pass,
+   * so it is a separate question from `__processOutputStep`. Recorded here for the same
+   * reason: the wrapper is the only place that still knows. Unknown workflows leave it
+   * undefined and are treated as implementing it.
+   */
+  __processToolResult?: boolean;
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
 };

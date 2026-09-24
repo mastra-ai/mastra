@@ -3,8 +3,10 @@ import { Checkbox } from '../../../ds/components/Checkbox';
 import { CodeDiff } from '../../../ds/components/CodeDiff';
 import { EmptyState } from '../../../ds/components/EmptyState';
 import { Skeleton } from '../../../ds/components/Skeleton';
+import { Txt } from '../../../ds/components/Txt';
 import { cn } from '../../../lib/utils';
 import type { OMHistoryRecord } from '../types';
+import { formatDate } from '@/utils/date-format';
 
 type ParsedItem = {
   text: string;
@@ -24,10 +26,7 @@ function formatObservationTime(time: string | null) {
   const match = time.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return time;
   const [, hours, minutes] = match;
-  const hour = Number(hours);
-  const suffix = hour >= 12 ? 'PM' : 'AM';
-  const normalizedHour = hour % 12 || 12;
-  return `${normalizedHour}:${minutes} ${suffix}`;
+  return formatDate(new Date(2000, 0, 1, Number(hours), Number(minutes)), 'time') ?? time;
 }
 
 function getPriorityFromEmoji(emoji?: string): ParsedItem['priority'] {
@@ -192,7 +191,9 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
             <div className="flex items-start gap-3">
               <div className="w-12 shrink-0 pt-2 text-right">
                 {item.time && (
-                  <span className={`font-mono text-meta ${styles.time}`}>{formatObservationTime(item.time)}</span>
+                  <Txt as="span" variant="meta" font="mono" className={styles.time}>
+                    {formatObservationTime(item.time)}
+                  </Txt>
                 )}
               </div>
               <div className={cn('min-w-0 flex-1 rounded-md border px-3 py-2', styles.card)}>

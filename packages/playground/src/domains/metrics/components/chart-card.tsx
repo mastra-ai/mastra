@@ -25,7 +25,7 @@ export function ChartCard({
         </div>
         {summary && (
           <div className="text-right">
-            <span className="font-mono text-subheading text-foreground">{summary}</span>
+            <span className="text-subheading text-foreground tabular-nums">{summary}</span>
             {summaryLabel && <p className="text-caption text-placeholder">{summaryLabel}</p>}
           </div>
         )}
@@ -54,7 +54,7 @@ export function CustomTooltip({
         <p key={entry.name} className="text-placeholder">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}:{' '}
-          <span className="font-mono">
+          <span className="tabular-nums">
             {entry.value}
             {suffix}
           </span>

@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.10.5-alpha.0
+
+### Patch Changes
+
+- Fixed v7 helpers (`handleChatStream`, `chatRoute`, `toAISdkStream`, `toAISdkMessages` with `version: 'v7'`) rejecting `UIMessage` values from `ai@7.0.103` and later. These versions type `providerMetadata` with readonly JSON values, which the bundled v7 types did not accept. You no longer need to stay on `ai@7.0.102` or cast messages. ([#24931](https://github.com/mastra-ai/mastra/pull/24931))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
 ## 1.10.4
 
 ### Patch Changes

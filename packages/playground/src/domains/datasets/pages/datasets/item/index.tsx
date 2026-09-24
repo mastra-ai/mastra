@@ -4,7 +4,7 @@ import type { DatasetItem } from '@mastra/client-js';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { HashIcon, FileInputIcon, FileOutputIcon, ListChecksIcon, TagIcon, RouteIcon } from 'lucide-react';
 
 export interface DatasetItemPageProps {
@@ -46,7 +46,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
           data={[
             {
               label: 'Created',
-              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
+              value: formatDate(item.createdAt, 'date-time') ?? '',
               key: 'createdAt',
             },
             ...(item.datasetVersion != null
