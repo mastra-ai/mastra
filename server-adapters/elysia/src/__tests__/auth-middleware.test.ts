@@ -146,6 +146,9 @@ describe('Elysia auth middleware helper', () => {
       },
       { beforeHandle: middleware },
     );
+    app.get('/custom/response', () => new Response('ok', { headers: { 'set-cookie': 'handler=1; Path=/' } }), {
+      beforeHandle: middleware,
+    });
 
     const request = (path: string) =>
       app.fetch(new Request(`http://localhost${path}`, { headers: { Cookie: 'session=expired' } }));
@@ -161,5 +164,9 @@ describe('Elysia auth middleware helper', () => {
     const late = await request('/custom/late');
     expect(late.status).toBe(200);
     expect(late.headers.getSetCookie()).toContain(REFRESHED_COOKIE);
+
+    const response = await request('/custom/response');
+    expect(response.status).toBe(200);
+    expect(response.headers.getSetCookie().sort()).toEqual(['handler=1; Path=/', REFRESHED_COOKIE].sort());
   });
 });

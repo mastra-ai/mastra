@@ -62,13 +62,16 @@ export function createAuthMiddleware({
           // Elysia assigns set.headers['set-cookie'] when it serializes ctx.cookie (after hooks run),
           // which would drop a plain write. An accessor keeps the refreshed cookie appended to
           // whatever gets assigned, leaving earlier and later cookies untouched.
+          // A lone cookie stays a string: Elysia turns an array into Headers, whose cookies it
+          // drops when the handler returns a Response that sets its own cookies.
           let assigned: unknown = ctx.set.headers['set-cookie'];
           Object.defineProperty(ctx.set.headers, 'set-cookie', {
             configurable: true,
             enumerable: true,
             get: () => {
               const cookies = [assigned ?? []].flat() as string[];
-              return cookies.includes(value) ? cookies : [...cookies, value];
+              const merged = cookies.includes(value) ? cookies : [...cookies, value];
+              return merged.length === 1 ? merged[0] : merged;
             },
             set: next => {
               assigned = next;
