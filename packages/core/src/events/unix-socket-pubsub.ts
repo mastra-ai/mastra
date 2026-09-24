@@ -280,7 +280,6 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #membershipAckTimeoutMs: number;
   #leaseDirectoriesReady?: Promise<void>;
   #pendingLeaseOperations = new Set<Promise<unknown>>();
-  #leaseRecoveryOwnershipPaths = new Set<string>();
 
   constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
@@ -581,9 +580,18 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       }
 
       if (!installed) continue;
-      await this.#completeLeaseMutationRecoveries(lockPath);
-      this.#throwIfClosed();
-      const currentLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
+      let currentLock: FileLeaseMutationLock | undefined;
+      try {
+        await this.#completeLeaseMutationRecoveries(lockPath);
+        this.#throwIfClosed();
+        currentLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
+      } catch (error) {
+        const heldLock = await this.#readJson<FileLeaseMutationLock>(lockPath).catch(() => undefined);
+        if (this.#sameLeaseMutationLock(heldLock, lockRecord)) {
+          await unlink(lockPath).catch(() => {});
+        }
+        throw error;
+      }
       if (this.#sameLeaseMutationLock(currentLock, lockRecord)) break;
     }
 
@@ -648,44 +656,48 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     return marker?.processNonce === owner.processNonce;
   }
 
-  /** Elects one live provider to finish a recovery without replacing the original owner's record. */
-  async #ownsLeaseMutationRecovery(recoveryPath: string): Promise<boolean> {
-    const ownerPath = `${recoveryPath}.owner`;
-    const self = this.#leaseMutationRecoveryOwner();
+  async #publishLeaseRecoveryOwner(ownerPath: string, owner: FileLeaseRecoveryOwner): Promise<boolean> {
+    const candidatePath = `${ownerPath}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(candidatePath, JSON.stringify(owner), { flag: 'wx' });
     try {
-      await writeFile(ownerPath, JSON.stringify(self), { flag: 'wx' });
-      this.#leaseRecoveryOwnershipPaths.add(ownerPath);
+      await link(candidatePath, ownerPath);
       return true;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw error;
+    } finally {
+      await unlink(candidatePath).catch(() => {});
     }
+  }
 
-    const owner = await this.#readJson<FileLeaseRecoveryOwner>(ownerPath);
-    if (owner && (await this.#isLeaseRecoveryOwnerLive(owner))) {
-      return owner.token === self.token && owner.processNonce === self.processNonce && owner.pid === self.pid;
+  /** Elects one immutable owner generation to finish a stale-lock recovery. */
+  async #ownsLeaseMutationRecovery(recoveryPath: string): Promise<boolean> {
+    const ownerDirectory = `${recoveryPath}.owners`;
+    const self = this.#leaseMutationRecoveryOwner();
+    await mkdir(ownerDirectory, { recursive: true });
+
+    while (true) {
+      this.#throwIfClosed();
+      const ownerNames = (await readdir(ownerDirectory).catch(() => [] as string[]))
+        .filter(name => /^\d+\.json$/.test(name))
+        .sort((first, second) => Number(first.slice(0, -5)) - Number(second.slice(0, -5)));
+      const latestName = ownerNames.at(-1);
+      if (latestName) {
+        const latestOwner = await this.#readJson<FileLeaseRecoveryOwner>(join(ownerDirectory, latestName));
+        if (latestOwner && (await this.#isLeaseRecoveryOwnerLive(latestOwner))) {
+          return (
+            latestOwner.token === self.token &&
+            latestOwner.processNonce === self.processNonce &&
+            latestOwner.pid === self.pid
+          );
+        }
+      }
+
+      const nextGeneration = latestName ? Number(latestName.slice(0, -5)) + 1 : 0;
+      if (await this.#publishLeaseRecoveryOwner(join(ownerDirectory, `${nextGeneration}.json`), self)) {
+        return true;
+      }
     }
-
-    const claimantDirectory = `${recoveryPath}.claimants`;
-    const claimantPath = join(claimantDirectory, `${self.token}.json`);
-    await mkdir(claimantDirectory, { recursive: true });
-    await writeFile(claimantPath, JSON.stringify(self), { flag: 'wx' }).catch(error => {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    });
-    this.#leaseRecoveryOwnershipPaths.add(claimantPath);
-    await delay(LEASE_LOCK_RETRY_MS);
-
-    const claimants = await readdir(claimantDirectory).catch(() => [] as string[]);
-    const liveClaimants: Array<{ path: string; owner: FileLeaseRecoveryOwner; createdAt: number }> = [];
-    for (const name of claimants) {
-      const path = join(claimantDirectory, name);
-      const candidate = await this.#readJson<FileLeaseRecoveryOwner>(path);
-      if (!candidate || !(await this.#isLeaseRecoveryOwnerLive(candidate))) continue;
-      const metadata = await stat(path).catch(() => undefined);
-      if (metadata) liveClaimants.push({ path, owner: candidate, createdAt: metadata.birthtimeMs });
-    }
-    liveClaimants.sort((first, second) => first.createdAt - second.createdAt || first.path.localeCompare(second.path));
-    const elected = liveClaimants[0]?.owner;
-    return elected?.token === self.token && elected.processNonce === self.processNonce && elected.pid === self.pid;
   }
 
   /** Starts recovery only after this provider wins the generation's immutable owner election. */
@@ -745,8 +757,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   async #removeLeaseMutationRecovery(recoveryPath: string): Promise<void> {
     await unlink(recoveryPath).catch(() => {});
-    await unlink(`${recoveryPath}.owner`).catch(() => {});
-    await rm(`${recoveryPath}.claimants`, { recursive: true, force: true });
+    await rm(`${recoveryPath}.owners`, { recursive: true, force: true });
   }
 
   /** Releases this holder's immutable lock generation after any earlier recovery has completed. */
@@ -889,8 +900,6 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
 
     await Promise.allSettled([...this.#pendingLeaseOperations]);
-    await Promise.allSettled([...this.#leaseRecoveryOwnershipPaths].map(path => unlink(path)));
-    this.#leaseRecoveryOwnershipPaths.clear();
     LIVE_LEASE_RECOVERY_OWNERS.delete(this.#leaseRecoveryOwnerToken);
 
     if (this.#isBroker) {
