@@ -50,8 +50,12 @@ import tsBlankSpace from 'ts-blank-space';
 /** Default interpreter heap limit, in MiB. */
 const DEFAULT_MEMORY_LIMIT_MB = 128;
 
-/** Default interpreter stack limit, in bytes. Guards runaway recursion. */
-const DEFAULT_MAX_STACK_SIZE_BYTES = 1024 * 1024;
+/**
+ * Default interpreter stack limit, in bytes. Guards runaway recursion. Kept low
+ * enough that QuickJS's own guard trips before the host's native stack (smallest
+ * on arm64), so deep recursion is a catchable guest error, not a host crash.
+ */
+const DEFAULT_MAX_STACK_SIZE_BYTES = 256 * 1024;
 
 /** How long the guest's leftover job queue may run while being drained. */
 const DRAIN_BUDGET_MS = 50;
@@ -68,7 +72,8 @@ export interface QuickJsCodeModeTransportOptions {
 
   /**
    * QuickJS stack limit in bytes. Exceeding it terminates the program.
-   * Default: 1 MiB.
+   * Default: 256 KiB. Raising it can let deep recursion overflow the host's
+   * native stack and crash the process, notably on arm64.
    */
   maxStackSizeBytes?: number;
 
@@ -254,6 +259,10 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     const cleanup = (): void => {
       if (finished) return;
       finished = true;
+      // Teardown can itself need to allocate. If the runtime is still pinned at
+      // its heap limit (the OOM case), those allocations fail, objects survive,
+      // and JS_FreeRuntime aborts the whole WASM module instead of throwing.
+      runtime.setMemoryLimit(-1);
       for (const deferred of pendingDeferreds) deferred.dispose();
       pendingDeferreds.clear();
       abandonedGuestResult?.value?.dispose();
