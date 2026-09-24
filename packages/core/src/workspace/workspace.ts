@@ -8,9 +8,9 @@
  *
  * @example
  * ```typescript
- * import { LocalFilesystem, Workspace } from '@mastra/core';
- * import { AgentFSFilesystem } from '@mastra/agentfs';
+ * import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
  * import { E2BSandbox } from '@mastra/e2b';
+ * import { S3Filesystem } from '@mastra/s3';
  *
  * // Local filesystems use paths relative to their base directory.
  * const localWorkspace = new Workspace({
@@ -23,7 +23,7 @@
  * // Mounted cloud filesystems use their absolute mount paths.
  * const cloudWorkspace = new Workspace({
  *   mounts: {
- *     '/code': new AgentFSFilesystem({ agentId: 'my-agent' }),
+ *     '/code': new S3Filesystem({ bucket: 'my-code', region: 'us-east-1' }),
  *   },
  *   sandbox: new E2BSandbox(),
  * });
