@@ -798,7 +798,6 @@ export interface ObservationalMemoryReflectionConfig {
  *
  * // Custom configuration
  * observationalMemory: {
- *   scope: 'resource',
  *   model: 'google/gemini-2.5-flash',
  *   observation: {
  *     messageTokens: 20_000,
