@@ -33,7 +33,7 @@
     "list-providers": "tsx scripts/list-providers.ts",
     "remove-provider": "tsx scripts/remove-provider.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
-    "test": "vitest run"
+    "test": "vitest run && tsc --noEmit"
   },
   "keywords": [
     "mastra",

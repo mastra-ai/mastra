@@ -1,6 +1,6 @@
 import type { ChannelProvider } from '@mastra/core/channels';
 
-import type { ChannelsOptions, ChannelsResolver } from './channels.js';
+import type { ChannelsOptions, ChannelsResolver } from '../src/channels.js';
 
 // The value awaited from `channels()` must be structurally assignable to the
 // shape `Mastra({ channels })` accepts: `Record<string, ChannelProvider>`.

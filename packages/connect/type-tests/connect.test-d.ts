@@ -1,5 +1,5 @@
-import type { ConnectTools } from './connect.js';
-import type { ToolsResolver } from './tools.js';
+import type { ConnectTools } from '../src/connect.js';
+import type { ToolsResolver } from '../src/tools.js';
 
 type ForeignToolsInput = Record<string, { id: string }>;
 type ForeignDynamicTools = (context: {
