@@ -60,9 +60,9 @@
             "entityType": "input_processor",
             "entityId": "validator",
             "attributes": {
+              "processorPhase": "input",
               "processorExecutor": "workflow",
-              "processorIndex": 0,
-              "processorPhase": "input"
+              "processorIndex": 0
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -253,6 +253,7 @@
                             "entityType": "input_processor",
                             "entityId": "provider-history-compat",
                             "attributes": {
+                              "processorPhase": "llmRequest",
                               "processorExecutor": "legacy",
                               "processorIndex": 0
                             },
@@ -495,6 +496,7 @@
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
+                      "processorPhase": "llmRequest",
                       "processorExecutor": "legacy",
                       "processorIndex": 1
                     },
@@ -617,9 +619,9 @@
             "entityType": "output_processor",
             "entityId": "summarizer",
             "attributes": {
+              "processorPhase": "outputResult",
               "processorExecutor": "workflow",
-              "processorIndex": 0,
-              "processorPhase": "outputResult"
+              "processorIndex": 0
             },
             "metadata": {
               "runId": "<runId-1>",
@@ -814,6 +816,7 @@
                             "entityType": "input_processor",
                             "entityId": "provider-history-compat",
                             "attributes": {
+                              "processorPhase": "llmRequest",
                               "processorExecutor": "legacy",
                               "processorIndex": 0
                             },
