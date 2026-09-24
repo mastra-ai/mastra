@@ -36,6 +36,9 @@ import {
   TRACE_QUERY_MAX_TIMEOUT_MS,
   TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE,
   TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT,
+  TRACE_QUERY_MODEL_COST_METRICS,
+  traceQueryModelCost,
+  traceQueryUsesModelCost,
   queryThreadsInputSchema,
   queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
@@ -1934,6 +1937,7 @@ describe('table summary projection', () => {
       scores: [],
       promptCacheReadTokens: 1200,
       promptCacheCreationTokens: null,
+      modelCost: 0.0421,
     });
 
     expect(summary).toEqual({
@@ -1944,6 +1948,7 @@ describe('table summary projection', () => {
       errorCounts: { total: 2, llm: 1, tool: 1 },
       promptCacheReadTokens: 1200,
       promptCacheCreationTokens: null,
+      modelCost: 0.0421,
       feedback: overflow.slice(0, TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT),
       feedbackTruncated: true,
       scores: [],
@@ -1958,8 +1963,16 @@ describe('table summary projection', () => {
         scores: [],
         promptCacheReadTokens: 0,
         promptCacheCreationTokens: null,
+        modelCost: null,
       }),
-    ).toMatchObject({ outputPreview: null, tags: [], model: null, timeToFirstTokenMs: null, promptCacheReadTokens: 0 });
+    ).toMatchObject({
+      outputPreview: null,
+      tags: [],
+      model: null,
+      timeToFirstTokenMs: null,
+      promptCacheReadTokens: 0,
+      modelCost: null,
+    });
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [], page: { next: null } }).success).toBe(true);
   });
 
@@ -1970,5 +1983,196 @@ describe('table summary projection', () => {
       { id: 'c', timestamp: '2026-08-11T00:00:00.000Z' },
     ];
     expect(records.sort(compareTraceQuerySummaryRecords).map(record => record.id)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('model cost', () => {
+  const usd = (
+    spanId: string,
+    estimatedCost: number | null,
+    extra: Partial<Parameters<typeof traceQueryModelCost>[0][number]> = {},
+  ) => ({
+    spanId,
+    estimatedCost,
+    costUnit: estimatedCost === null ? null : 'USD',
+    costMetadata: null,
+    ...extra,
+  });
+
+  it('names the total-token metrics that carry one call cost each', () => {
+    expect(TRACE_QUERY_MODEL_COST_METRICS).toEqual([
+      'mastra_model_total_input_tokens',
+      'mastra_model_total_output_tokens',
+    ]);
+  });
+
+  it('sums priced calls and never returns a partial or zero stand-in for unavailable cost', () => {
+    expect(traceQueryModelCost([usd('a', 0.5), usd('a', 0.25), usd('b', 0.125), usd('b', 0.0625)])).toBe(0.9375);
+    // Gateway-reported: one carrier row priced, the sibling total row bare.
+    expect(traceQueryModelCost([usd('a', 2, { costMetadata: { allocation: 'query_total' } }), usd('a', null)])).toBe(2);
+    expect(traceQueryModelCost([usd('a', 0), usd('a', 0)])).toBe(0);
+    expect(traceQueryModelCost([usd('a', 0.5, { costUnit: 'usd' })])).toBe(0.5);
+    expect(traceQueryModelCost([])).toBeNull();
+    expect(traceQueryModelCost([usd('a', null, { costMetadata: { error: 'no_matching_model' } })])).toBeNull();
+    expect(
+      traceQueryModelCost([usd('a', 0.5), usd('b', 0.25, { costMetadata: { error: 'partial_cost' } })]),
+    ).toBeNull();
+    expect(traceQueryModelCost([usd('a', 0.5), usd('b', 0.5, { costUnit: 'EUR' })])).toBeNull();
+    expect(traceQueryModelCost([usd('a', 0.5, { costUnit: null })])).toBeNull();
+    expect(traceQueryModelCost([usd('a', -0.25)])).toBeNull();
+    expect(traceQueryModelCost([usd('a', Number.NaN)])).toBeNull();
+    expect(traceQueryModelCost([usd('a', Number.POSITIVE_INFINITY)])).toBeNull();
+    // One priced call plus one call with neither cost nor error is incomplete.
+    expect(traceQueryModelCost([usd('a', 0.5), usd('b', null), usd('b', null)])).toBeNull();
+  });
+
+  it('plans numeric modelCost predicates and rejects invalid literals', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'gt', left: { path: 'modelCost' }, right: { literal: 1 } },
+            { op: 'in', value: { path: 'modelCost' }, set: [0, 2] },
+            { op: 'notExists', path: 'modelCost' },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'modelCost', operator: 'gt', value: 1 },
+        { type: 'membership', field: 'modelCost', operator: 'in', values: [0, 2] },
+        { type: 'presence', field: 'modelCost', operator: 'notExists' },
+      ],
+    });
+    expect(getTraceQueryCanonicalFieldDescriptors('trace')).toContainEqual({
+      path: 'modelCost',
+      valueKind: 'number',
+      operators: expect.arrayContaining(['gt', 'exists']),
+      valueSuggestions: false,
+    });
+    for (const literal of ['1', true]) {
+      const error = validationError(() =>
+        planTraceQuery(
+          parsed({ ...baseRequest, where: { op: 'gt', left: { path: 'modelCost' }, right: { literal } } }),
+        ),
+      );
+      expect(error.issues).toContainEqual(
+        expect.objectContaining({ code: 'invalid_literal', path: ['where', 'right', 'literal'] }),
+      );
+    }
+    expect(
+      traceQueryRequestSchema.safeParse({
+        ...baseRequest,
+        where: { op: 'gt', left: { path: 'modelCost' }, right: { literal: Number.NaN } },
+      }).success,
+    ).toBe(false);
+    for (const scope of ['spans', 'scores', 'feedback'] as const) {
+      const error = validationError(() =>
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { [scope]: { some: { op: 'gt', left: { path: 'modelCost' }, right: { literal: 1 } } } },
+          }),
+        ),
+      );
+      expect(error.issues[0]).toMatchObject({ code: 'field_not_allowed' });
+    }
+  });
+
+  it('reports when a plan needs the cost rollup', () => {
+    const costPredicate = { op: 'gt', left: { path: 'modelCost' }, right: { literal: 1 } } as const;
+    expect(traceQueryUsesModelCost(planTraceQuery(parsed()))).toBe(false);
+    expect(
+      traceQueryUsesModelCost(
+        planTraceQuery(parsed({ ...baseRequest, where: { op: 'not', arg: { op: 'or', args: [costPredicate] } } })),
+      ),
+    ).toBe(true);
+    expect(
+      traceQueryUsesModelCost(
+        planTraceQuery(parsed({ ...baseRequest, orderBy: [{ field: 'modelCost', direction: 'asc' }] })),
+      ),
+    ).toBe(true);
+    expect(
+      traceQueryUsesModelCost(
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 1 } } } },
+          }),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      traceQueryUsesModelCost(
+        planThreadQuery(parseQueryThreadsInput({ traces: { ...baseRequest, where: costPredicate } })),
+      ),
+    ).toBe(true);
+    expect(
+      traceQueryUsesModelCost(
+        planThreadQuery(parseQueryThreadsInput({ traces: baseRequest, where: { traces: { none: costPredicate } } })),
+      ),
+    ).toBe(true);
+    expect(traceQueryUsesModelCost(planThreadQuery(parseQueryThreadsInput(baseThreadRequest)))).toBe(false);
+  });
+
+  it('binds cost ordering into cursors and carries numeric or unavailable sort values', () => {
+    const byCost = planTraceQuery(parsed({ ...baseRequest, orderBy: [{ field: 'modelCost', direction: 'desc' }] }));
+    const byStart = planTraceQuery(parsed());
+    if (byCost.result !== 'traces' || byCost.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    if (byStart.result !== 'traces' || byStart.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    expect(byCost.orderBy).toEqual({ field: 'modelCost', direction: 'desc' });
+    expect(byCost.binding).not.toBe(byStart.binding);
+
+    const costRequest = { ...baseRequest, orderBy: [{ field: 'modelCost', direction: 'desc' }] } as const;
+    for (const sortValue of [0.9375, 0, null]) {
+      const cursor = encodeTraceQueryCursor(byCost, { result: 'traces', sortValue, traceId: 'trace-1' });
+      expect(planTraceQuery(parsed({ ...costRequest, page: { after: cursor } })).cursor).toEqual({
+        sortValue,
+        traceId: 'trace-1',
+      });
+    }
+    const timeCursor = encodeTraceQueryCursor(byStart, {
+      result: 'traces',
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    expect(() => planTraceQuery(parsed({ ...costRequest, page: { after: timeCursor } }))).toThrow(
+      expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+    );
+
+    // A forged cursor that keeps the binding but swaps the sort value kind is malformed.
+    const forge = (values: Record<string, unknown>, binding: string) =>
+      Buffer.from(JSON.stringify({ version: 1, binding, values }), 'utf8').toString('base64url');
+    expect(() =>
+      planTraceQuery(
+        parsed({
+          ...costRequest,
+          page: {
+            after: forge({ result: 'traces', sortValue: '2026-08-01T00:00:00.000Z', traceId: 't' }, byCost.binding),
+          },
+        }),
+      ),
+    ).toThrow(expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
+    expect(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          page: { after: forge({ result: 'traces', sortValue: 1, traceId: 't' }, byStart.binding) },
+        }),
+      ),
+    ).toThrow(expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
+    expect(() =>
+      planTraceQuery(
+        parsed({
+          ...costRequest,
+          page: { after: forge({ result: 'traces', sortValue: 'not-a-number', traceId: 't' }, byCost.binding) },
+        }),
+      ),
+    ).toThrow(expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
   });
 });

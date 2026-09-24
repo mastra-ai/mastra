@@ -19,6 +19,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-root-duration',
   'trace-query-discovery',
   'trace-query-table-summary',
+  'trace-query-model-cost',
   'thread-query',
   'trace-query-tenant-scope',
 ] as const;
@@ -30,6 +31,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-root-duration',
   'trace-query-discovery',
   'trace-query-table-summary',
+  'trace-query-model-cost',
   'thread-query',
   'trace-query-tenant-scope',
 ] as const;

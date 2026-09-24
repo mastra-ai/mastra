@@ -25,6 +25,7 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_TABLE_SUMMARY_STORAGE_FEATURE = 'trace-query-table-summary';
+const OBSERVABILITY_TRACE_QUERY_MODEL_COST_STORAGE_FEATURE = 'trace-query-model-cost';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -139,6 +140,18 @@ export function assertObservabilityTraceQueryTableSummarySupported(
 
   throw new HTTPException(501, {
     message: 'Table summaries are not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilityTraceQueryModelCostSupported(
+  observabilityStore: ObservabilityStorage,
+  plan: coreStorage.TrustedTraceQueryPlan | coreStorage.TrustedThreadQueryPlan,
+) {
+  if (typeof coreStorage.traceQueryUsesModelCost !== 'function' || !coreStorage.traceQueryUsesModelCost(plan)) return;
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_MODEL_COST_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Model cost predicates and ordering are not supported by the configured observability store',
   });
 }
 

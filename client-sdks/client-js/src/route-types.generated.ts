@@ -3523,6 +3523,7 @@ type Shared_Type_64 = {
   };
   promptCacheReadTokens: number | null;
   promptCacheCreationTokens: number | null;
+  modelCost: number | null;
   feedback: Shared_Type_62[];
   feedbackTruncated: boolean;
   scores: Shared_Type_63[];
@@ -10164,7 +10165,7 @@ export type PostObservabilityTracesQuery_Body = {
     | undefined;
   orderBy?:
     | {
-        field: 'startedAt' | 'endedAt';
+        field: 'startedAt' | 'endedAt' | 'modelCost';
         direction: 'asc' | 'desc';
       }[]
     | undefined;

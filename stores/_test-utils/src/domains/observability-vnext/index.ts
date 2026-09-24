@@ -40,9 +40,13 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
   TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA,
   TRACE_QUERY_TABLE_SUMMARY_TIME_RANGE,
+  TRACE_QUERY_MODEL_COST_CASES,
+  TRACE_QUERY_MODEL_COST_EXPECTED,
+  TRACE_QUERY_MODEL_COST_FIXTURE_DATA,
+  TRACE_QUERY_MODEL_COST_TIME_RANGE,
   evaluateTraceQuery,
 } from './trace-query';
-import type { TraceQueryFixtureData } from './trace-query';
+import type { RawTraceQueryMetric, TraceQueryFixtureData } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -228,9 +232,17 @@ async function writeTraceQueryFixture(
     });
   }
 
-  if (data.metrics?.length) {
+  // Repeated metric IDs model a retried export, so they land in a second batch like a real retry.
+  const seenMetricIds = new Set<string>();
+  const metricBatches: [RawTraceQueryMetric[], RawTraceQueryMetric[]] = [[], []];
+  for (const metric of data.metrics ?? []) {
+    metricBatches[seenMetricIds.has(metric.metricId) ? 1 : 0].push(metric);
+    seenMetricIds.add(metric.metricId);
+  }
+  for (const batch of metricBatches) {
+    if (!batch.length) continue;
     await storage.batchCreateMetrics({
-      metrics: data.metrics.map(metric => ({
+      metrics: batch.map(metric => ({
         metricId: metric.metricId,
         traceId: metric.traceId,
         spanId: metric.spanId,
@@ -238,6 +250,9 @@ async function writeTraceQueryFixture(
         value: metric.value,
         timestamp: new Date(metric.timestamp),
         labels: {},
+        estimatedCost: metric.estimatedCost ?? null,
+        costUnit: metric.costUnit ?? null,
+        costMetadata: metric.costMetadata ?? null,
       })),
     });
   }
@@ -760,6 +775,103 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } finally {
           if (!wasEnabled) coreFeatures.delete(feature);
         }
+      });
+
+      describe('model cost conformance', () => {
+        it('filters and orders by complete model cost with unavailable costs last', async () => {
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_MODEL_COST_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+          for (const testCase of TRACE_QUERY_MODEL_COST_CASES) {
+            const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+            const response = await storage.queryTraces(plan);
+            expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+            expect(normalizeTraceQueryResponse(response), `${testCase.name} (reference)`).toEqual(
+              normalizeTraceQueryResponse(evaluateTraceQuery(TRACE_QUERY_MODEL_COST_FIXTURE_DATA, plan)),
+            );
+          }
+        });
+
+        it('pages cost ordering deterministically across ties and unavailable costs', async () => {
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_MODEL_COST_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const timeRange = TRACE_QUERY_MODEL_COST_TIME_RANGE;
+          for (const direction of ['desc', 'asc'] as const) {
+            const orderBy = [{ field: 'modelCost', direction }] as const;
+            const expected = evaluateTraceQuery(
+              TRACE_QUERY_MODEL_COST_FIXTURE_DATA,
+              planTraceQuery(parseTraceQueryRequest({ timeRange, orderBy: [...orderBy], page: { limit: 100 } })),
+            );
+            if (!('traces' in expected)) throw new Error('Expected trace results');
+            const expectedIds = expected.traces.map(trace => trace.traceId);
+
+            const keyset: string[] = [];
+            let after: string | undefined;
+            do {
+              const plan = planTraceQuery(
+                parseTraceQueryRequest({
+                  timeRange,
+                  orderBy: [...orderBy],
+                  page: { limit: 2, ...(after ? { after } : {}) },
+                }),
+              );
+              const response = await storage.queryTraces(plan);
+              if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
+              const reference = evaluateTraceQuery(TRACE_QUERY_MODEL_COST_FIXTURE_DATA, plan);
+              if (!('traces' in reference) || !('page' in reference)) throw new Error('Expected keyset trace results');
+              expect(
+                response.traces.map(trace => trace.traceId),
+                direction,
+              ).toEqual(reference.traces.map(trace => trace.traceId));
+              expect(response.page.next === null, direction).toBe(reference.page.next === null);
+              keyset.push(...response.traces.map(trace => trace.traceId));
+              after = response.page.next ?? undefined;
+            } while (after);
+            expect(keyset, direction).toEqual(expectedIds);
+
+            const paged: string[] = [];
+            for (let page = 0; page * 4 < expectedIds.length; page += 1) {
+              const response = await storage.queryTraces(
+                planTraceQuery(
+                  parseTraceQueryRequest({ timeRange, orderBy: [...orderBy], pagination: { page, perPage: 4 } }),
+                ),
+              );
+              if (!('pagination' in response)) throw new Error('Expected paginated trace results');
+              expect(response.pagination.total, direction).toBe(expectedIds.length);
+              paged.push(...response.traces.map(trace => trace.traceId));
+            }
+            expect(paged, direction).toEqual(expectedIds);
+          }
+        });
+
+        it('returns the complete model cost in the table summary', async () => {
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_MODEL_COST_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: TRACE_QUERY_MODEL_COST_TIME_RANGE,
+              orderBy: [{ field: 'modelCost', direction: 'desc' }],
+              include: { tableSummary: true },
+              page: { limit: 100 },
+            }),
+          );
+          const response = await storage.queryTraces(plan);
+          if (!('traces' in response)) throw new Error('Expected trace results');
+          expect(
+            Object.fromEntries(response.traces.map(trace => [trace.traceId, trace.tableSummary?.modelCost])),
+          ).toEqual(TRACE_QUERY_MODEL_COST_EXPECTED);
+          const reference = evaluateTraceQuery(TRACE_QUERY_MODEL_COST_FIXTURE_DATA, plan);
+          if (!('traces' in reference)) throw new Error('Expected trace results');
+          expect(response.traces).toEqual(reference.traces);
+        });
       });
 
       describe('score replacement conformance', () => {
