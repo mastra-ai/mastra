@@ -3,6 +3,7 @@ import type { QueryTracesKeysetInput, TraceQueryKeysetTraceResponse } from '@mas
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import type { buildTraceListFilters } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
 
 export const TRACE_QUERY_PER_PAGE = 25;
@@ -10,6 +11,7 @@ export const TRACE_QUERY_PER_PAGE = 25;
 type TraceQueryTrace = TraceQueryKeysetTraceResponse['traces'][number];
 
 type ListTracesArgs = NonNullable<Parameters<MastraClient['listTracesLight']>[0]>;
+type LegacyTraceListFilters = ReturnType<typeof buildTraceListFilters>;
 type ListTracesLightResponse = Awaited<ReturnType<MastraClient['listTracesLight']>>;
 type LightSpanRecord = ListTracesLightResponse['spans'][number];
 
@@ -23,8 +25,8 @@ export interface UseTraceQueryArgs {
   refetchOnWindowFocus?: boolean;
   /** When false, lists traces through the legacy `listTracesLight` endpoint instead of the trace-query API. */
   withQueryTrace?: boolean;
-  /** Filters for the legacy endpoint. Only read when `withQueryTrace` is false. */
-  legacyFilters?: ListTracesArgs['filters'];
+  /** Filters for the legacy endpoint, as built by `buildTraceListFilters`. Only read when `withQueryTrace` is false. */
+  legacyFilters?: LegacyTraceListFilters;
 }
 
 export interface UseTraceQueryReturn {
@@ -144,7 +146,8 @@ export function useTraceQuery({
     queryKey: ['trace-query-legacy', legacyFilters, limit, orderBy] as const,
     queryFn: ({ pageParam }) =>
       client.listTracesLight({
-        filters: legacyFilters,
+        // Core's date-range filter types `start`/`end` loosely; the client param type is stricter.
+        filters: legacyFilters as ListTracesArgs['filters'],
         pagination: { page: pageParam, perPage: limit },
         orderBy: { field: 'startedAt', direction: legacyDirection },
       }),
