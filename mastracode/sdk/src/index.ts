@@ -360,13 +360,15 @@ export interface MastraCodeConfig {
    */
   crossAgentSignals?: boolean;
   /**
-   * Prepare the request context a notification wake runs under. A wake has no
-   * inbound request, so hosts that resolve credentials per tenant use this to
-   * attach the owning session's identity before the run starts.
+   * Prepare the request context of a wake: a run on a thread with no inbound
+   * request, such as a notification or cross-agent signal delivered to an idle
+   * thread. Hosts that resolve credentials per tenant use this to attach the
+   * identity that owns `resourceId` before the run starts. Called only when a
+   * session owns `resourceId`, whenever Mastra Code builds a wake's stream
+   * options.
    */
-  prepareNotificationRequestContext?: (args: {
+  prepareWakeRequestContext?: (args: {
     requestContext: RequestContext;
-    session: { ownerId: string | undefined; state: Partial<MastraCodeState> };
     resourceId: string;
     threadId: string;
   }) => void | Promise<void>;
@@ -752,11 +754,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
+  // Builds the stream options of every wake (a run with no inbound request).
   // Shared by GithubSignals (immediate sends) and the code agent's
-  // notification config (deferred sends re-dispatched by the core notification
-  // dispatch workflow) — both need the target session's request context, or a
-  // woken idle thread has no model to run with ("No model selected").
-  const getNotificationStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
+  // notification delivery policy (notifications and cross-agent signals,
+  // including deferred sends re-dispatched by the core notification dispatch
+  // workflow) — all need the target session's request context, or a woken idle
+  // thread has no model to run with ("No model selected"). New wake paths must
+  // build their options here so `prepareWakeRequestContext` runs for them.
+  const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
     // Run the woken notification as the session that owns the target
     // resource so it uses that session's model/mode/state. Fall back to
     // the current session only when no session owns the resource yet.
@@ -864,12 +869,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // Tenant identity/credentials must come from the session that owns the
     // resource; the active-session fallback is only safe for model selection.
     if (owningSession) {
-      await config?.prepareNotificationRequestContext?.({
-        requestContext,
-        session: { ownerId: owningSession.identity.getOwnerId(), state: getNotificationState() },
-        resourceId,
-        threadId,
-      });
+      await config?.prepareWakeRequestContext?.({ requestContext, resourceId, threadId });
     }
 
     return {
@@ -892,7 +892,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             process.env.GITCRAWL_BIN ??
             process.env.MASTRACODE_GITCRAWL_COMMAND ??
             process.env.GITCRAWL_COMMAND,
-          getNotificationStreamOptions,
+          getNotificationStreamOptions: getWakeStreamOptions,
         })
       : undefined;
   // Mastra Code's own processors are constructed once, here, rather than inside
@@ -1016,7 +1016,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
-          const streamOptions = await getNotificationStreamOptions({
+          const streamOptions = await getWakeStreamOptions({
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
           });

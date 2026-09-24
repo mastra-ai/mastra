@@ -60,6 +60,7 @@ import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integr
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
+import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -68,7 +69,6 @@ import { TelemetryRoutes } from './routes/telemetry.js';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
-  primeTenantCredentialsForRequestContext,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
 import { resolveFactorySessionAddress } from './rules/binding-context.js';
@@ -92,7 +92,6 @@ import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
-import { hasResolvedOrg } from './session/org-seed.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -920,14 +919,12 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
-        // A notification wake has no signed-in request, so tenant credential
-        // resolution would fail closed. Run it as the session's owner in the
-        // session's org, the same identity subscription deliveries use.
-        prepareNotificationRequestContext: async ({ requestContext, session }) => {
-          const orgId = session.state.factoryOrgId;
-          if (!session.ownerId || !hasResolvedOrg(orgId) || requestContext.get('user')) return;
-          requestContext.set('user', { workosId: session.ownerId, organizationId: orgId });
-          await primeTenantCredentialsForRequestContext(requestContext);
+        // A wake (notification or peer signal) has no signed-in request, so
+        // tenant credential resolution would fail closed. Run it as the Factory
+        // session's owner in its org; Factory sessions are keyed by resourceId.
+        prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
+          if (!storage.isDomainReady('source-control')) return;
+          await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
         },
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.

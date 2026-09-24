@@ -1712,13 +1712,12 @@ describe('createMastraCode', () => {
     expect(controllerEmitMock).not.toHaveBeenCalled();
   });
 
-  it('lets the host prepare the request context of a notification wake', async () => {
-    controllerStateMock = { factoryOrgId: 'org-1' };
-    const prepareNotificationRequestContext = vi.fn(({ requestContext, session }) => {
-      requestContext.set('user', { workosId: session.ownerId, organizationId: session.state.factoryOrgId });
+  it('lets the host prepare the request context of a wake', async () => {
+    const prepareWakeRequestContext = vi.fn(({ requestContext, resourceId }) => {
+      requestContext.set('user', { workosId: `owner-of-${resourceId}`, organizationId: 'org-1' });
     });
     const { createMastraCode } = await import('../index.js');
-    await createMastraCode({ prepareNotificationRequestContext });
+    await createMastraCode({ prepareWakeRequestContext });
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
@@ -1729,20 +1728,22 @@ describe('createMastraCode', () => {
       now: new Date('2026-09-15T00:00:00.000Z'),
     });
 
-    expect(prepareNotificationRequestContext).toHaveBeenCalledWith(
-      expect.objectContaining({ resourceId: 'project-resource', threadId: 'notification-thread' }),
-    );
+    expect(prepareWakeRequestContext).toHaveBeenCalledTimes(1);
+    const [args] = prepareWakeRequestContext.mock.calls[0]!;
+    expect(Object.keys(args).sort()).toEqual(['requestContext', 'resourceId', 'threadId']);
+    expect(args).toMatchObject({ resourceId: 'project-resource', threadId: 'notification-thread' });
+    expect(args.requestContext).toBe(decision.streamOptions.requestContext);
     expect(decision.streamOptions.requestContext.get('user')).toEqual({
-      workosId: 'owner-1',
+      workosId: 'owner-of-project-resource',
       organizationId: 'org-1',
     });
+    expect(decision.streamOptions.requestContext.get('controller')).toBeDefined();
   });
 
-  it('does not prepare a notification wake request context when no session owns the resource', async () => {
-    controllerStateMock = { factoryOrgId: 'org-1' };
-    const prepareNotificationRequestContext = vi.fn();
+  it('does not prepare a wake request context when no session owns the resource', async () => {
+    const prepareWakeRequestContext = vi.fn();
     const { createMastraCode } = await import('../index.js');
-    await createMastraCode({ prepareNotificationRequestContext });
+    await createMastraCode({ prepareWakeRequestContext });
     controllerGetSessionByResourceMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
@@ -1754,7 +1755,7 @@ describe('createMastraCode', () => {
       now: new Date('2026-09-15T00:00:00.000Z'),
     });
 
-    expect(prepareNotificationRequestContext).not.toHaveBeenCalled();
+    expect(prepareWakeRequestContext).not.toHaveBeenCalled();
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
