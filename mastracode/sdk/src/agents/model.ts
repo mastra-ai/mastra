@@ -1,11 +1,12 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
+import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
+import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -300,7 +301,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel | ModelWithRetries[] {
+): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
     | {
@@ -333,7 +334,9 @@ export function getDynamicModel(
 
   const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
-  const primary = resolveModel(modelId, resolveOptions);
+  // Label each resolved model with its full ID: the resolved gateway model only
+  // knows its bare provider model, and Memory's `'auto'` reads this label.
+  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
   const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
   const pendingEntryId =
     pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
@@ -366,11 +369,15 @@ export function getDynamicModel(
     appearances.set(routeEntry.id, occurrence);
     entries.push({
       id: occurrence === 1 ? routeEntry.id : `${routeEntry.id}#${occurrence}`,
-      model: entryModel,
+      model: identifyModel(routeEntry.modelId, entryModel),
     });
   }
 
   return entries.length < 2 ? primary : entries;
+}
+
+function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
+  return { model, id: toMemoryModelId(modelId) };
 }
 
 /**

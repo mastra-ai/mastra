@@ -7,7 +7,8 @@ const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
 const loadSettingsMock = vi.fn();
 
-vi.mock('@mastra/memory', () => ({
+vi.mock('@mastra/memory', async () => ({
+  resolveAutoModelId: (await vi.importActual<typeof import('@mastra/memory')>('@mastra/memory')).resolveAutoModelId,
   Memory: class {
     config: unknown;
 
@@ -57,6 +58,8 @@ type MemoryConfig = {
       scope: 'thread' | 'resource';
       activateAfterIdle: unknown;
       activateOnProviderChange: boolean;
+      autoModels: Record<string, string>;
+      resolveModel: (modelId: string, context: { requestContext?: RequestContextStub }) => unknown;
       observation: {
         bufferTokens: unknown;
         bufferActivation: unknown;
@@ -152,6 +155,8 @@ describe('getDynamicMemory', () => {
     delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
     delete process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY;
     delete process.env.MASTRACODE_DISABLE_TITLE_GENERATION;
+    vi.unstubAllEnvs();
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
   });
 
   it('wires Mastra Code observational memory activation defaults into core memory', async () => {
@@ -192,12 +197,33 @@ describe('getDynamicMemory', () => {
     expect(om.observation.instruction).toContain('Do NOT observe or extract information from these messages');
     expect(om.reflection.instruction).toBeUndefined();
 
-    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'google/gemini-3.5-flash' });
+    expect(om.autoModels).toEqual({ google: 'google/gemini-3.5-flash' });
+    expect(om.observation.model({ requestContext })).toBe('auto');
+    expect(om.reflection.model({ requestContext })).toBe('auto');
     expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(resolveModelMock).toHaveBeenLastCalledWith('google/gemini-3.5-flash', {
       remapForCodexOAuth: true,
       requestContext,
       anthropicPromptCacheScope: 'system',
+    });
+
+    // Memory routes its auto pick through Mastra Code's credential-aware resolver.
+    expect(om.resolveModel('openai/gpt-5.4-mini', { requestContext })).toEqual({ modelId: 'openai/gpt-5.4-mini' });
+    expect(resolveModelMock).toHaveBeenLastCalledWith('openai/gpt-5.4-mini', {
+      remapForCodexOAuth: true,
+      requestContext,
+    });
+  });
+
+  it('resolves title generation for an auto observer from the active main model', async () => {
+    const { config, requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      observerModelSelection: 'auto',
+      currentModelId: 'mastra/openai/gpt-5.6-sol',
+    });
+
+    expect(config.options.generateTitle.model({ requestContext })).toEqual({
+      modelId: 'mastra/openai/gpt-5.4-mini',
     });
   });
 
@@ -220,7 +246,7 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory).not.toBe(false);
   });
 
-  it('fails closed when a Factory run has no authoritative settings result', async () => {
+  it('falls back to auto when a Factory run has no authoritative settings result', async () => {
     vi.resetModules();
     memoryConstructorMock.mockClear();
     getOmScopeMock.mockReturnValue('thread');
@@ -246,10 +272,14 @@ describe('getDynamicMemory', () => {
     const unscopedMemory = resolve({ requestContext: unscopedContext as never }) as unknown as { config: MemoryConfig };
 
     expect(memory.config.storage).toEqual({ storage: true });
-    expect(memory.config.options.generateTitle).toBe(false);
-    expect(memory.config.options.observationalMemory).toBe(false);
-    expect(unscopedMemory.config.options.generateTitle).toBe(false);
-    expect(unscopedMemory.config.options.observationalMemory).toBe(false);
+    expect(memory.config.options.generateTitle).not.toBe(false);
+    const om = memory.config.options.observationalMemory;
+    expect(om.observation.model({ requestContext })).toBe('auto');
+    expect(om.reflection.model({ requestContext })).toBe('auto');
+    expect(om.observation.messageTokens).toBe(30_000);
+    const unscopedOm = unscopedMemory.config.options.observationalMemory;
+    expect(unscopedOm.observation.model({ requestContext: unscopedContext })).toBe('auto');
+    expect(unscopedOm.reflection.model({ requestContext: unscopedContext })).toBe('auto');
     expect(resolveModelMock).not.toHaveBeenCalled();
   });
 
@@ -486,9 +516,7 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
       modelId: 'openai/factory-observer',
     });
-    expect(config.options.observationalMemory.reflection.model({ requestContext })).toEqual({
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
+    expect(config.options.observationalMemory.reflection.model({ requestContext })).toBe('auto');
     expect(state).toEqual({
       observerModelSelection: 'openai/session-observer',
       reflectorModelSelection: 'openai/session-reflector',
@@ -564,7 +592,7 @@ describe('getDynamicMemory', () => {
     expect(observation.observeAttachments).toBe('auto');
   });
 
-  it('resolves auto roles from the active main model on every invocation', async () => {
+  it('hands auto roles to Memory and reports the effective model on every invocation', async () => {
     const state: Record<string, unknown> = {
       observerModelSelection: 'auto',
       reflectorModelSelection: 'auto',
@@ -591,16 +619,19 @@ describe('getDynamicMemory', () => {
     const { config } = await createMemoryConfig(state);
     const om = config.options.observationalMemory;
 
-    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(om.observation.model({ requestContext })).toBe('auto');
+    expect(om.reflection.model({ requestContext })).toBe('auto');
     expect(requestContext.get('om.observer.selectionMode')).toBe('auto');
     expect(requestContext.get('om.observer.effectiveModelId')).toBe('anthropic/claude-haiku-4-5');
     expect(requestContext.get('om.reflector.selectionMode')).toBe('auto');
     expect(requestContext.get('om.reflector.effectiveModelId')).toBe('anthropic/claude-haiku-4-5');
 
     modelId = 'openai/gpt-5.6-sol';
-    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'openai/gpt-5.4-mini' });
-    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'openai/gpt-5.4-mini' });
+    expect(om.observation.model({ requestContext })).toBe('auto');
+    expect(requestContext.get('om.observer.effectiveModelId')).toBe('openai/gpt-5.4-mini');
+    expect(om.reflection.model({ requestContext })).toBe('auto');
+    expect(requestContext.get('om.reflector.effectiveModelId')).toBe('openai/gpt-5.4-mini');
+    expect(resolveModelMock).not.toHaveBeenCalled();
   });
 
   it('keeps an explicit role pinned while the auto role follows the main model', async () => {
@@ -632,14 +663,15 @@ describe('getDynamicMemory', () => {
     const om = config.options.observationalMemory;
 
     expect(om.observation.model({ requestContext })).toEqual({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(om.reflection.model({ requestContext })).toBe('auto');
     expect(requestContext.get('om.observer.selectionMode')).toBe('model');
     expect(requestContext.get('om.observer.effectiveModelId')).toBe('deepseek/deepseek-v4-flash');
     expect(requestContext.get('om.reflector.selectionMode')).toBe('auto');
 
     modelId = 'custom-provider/custom-model';
     expect(om.observation.model({ requestContext })).toEqual({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'custom-provider/custom-model' });
+    expect(om.reflection.model({ requestContext })).toBe('auto');
+    expect(requestContext.get('om.reflector.effectiveModelId')).toBe('custom-provider/custom-model');
   });
 
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
@@ -696,6 +728,8 @@ describe('model-route OM models', () => {
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue({ models: {} });
     delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+    vi.unstubAllEnvs();
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
   });
 
   it('reads role overrides from the configured settings file', async () => {

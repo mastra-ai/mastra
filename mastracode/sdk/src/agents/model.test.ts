@@ -239,7 +239,16 @@ describe('getDynamicModel model route', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
+  });
+
+  it('labels a custom-provider model with its provider/model ID', () => {
+    seedSettings({});
+
+    const model = getDynamicModel(requestWithSession('mastracode/anthropic/claude-fable-5'));
+
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
   });
 
   it('returns a bare model when the route does not start with the selected model', () => {
@@ -254,7 +263,12 @@ describe('getDynamicModel model route', () => {
     const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
-    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => entry.model.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => (entry.model as unknown as { id: string }).id)).toEqual([
+      'anthropic/claude-fable-5',
+      'openai/gpt-5.6-sol',
+      'github-copilot/gpt-4.1',
+    ]);
   });
 
   it('starts at a same-thread pending route hop', () => {
@@ -275,7 +289,7 @@ describe('getDynamicModel model route', () => {
     const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
-    expect(entries.map(entry => entry.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => entry.model.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
   });
 
   it('ignores pending fallback state captured for another thread', () => {

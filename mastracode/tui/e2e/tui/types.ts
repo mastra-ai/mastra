@@ -148,6 +148,7 @@ export type ScenarioName =
   | 'model-selection-cancel-env'
   | 'mode-switch-applies-pack-model'
   | 'models-pack-activation-persistence'
+  | 'models-pack-memory-auto'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'

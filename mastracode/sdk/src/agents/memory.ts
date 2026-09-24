@@ -8,7 +8,7 @@ import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
-import { resolveAutoOMModelId } from '../onboarding/packs.js';
+import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
@@ -84,81 +84,86 @@ function isFactoryMemorySettingsUnavailable(
   return settings !== null && typeof settings === 'object' && 'status' in settings && settings.status === 'unavailable';
 }
 
+function getMainModelId(requestContext: RequestContext): string | undefined {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  return controller?.session.modelId || (controller?.getState()?.currentModelId as string | undefined);
+}
+
 /**
- * Resolve one OM role's model for this invocation. Explicit per-role choices
- * win. Automatic roles follow the active model route's memory models when
- * present, then the low-cost model for the active main-model provider.
+ * Resolve one OM role's model for this invocation. Returns `'auto'` for Memory's
+ * auto policy, or a concrete model. Factory's DB row is authoritative for
+ * Factory sessions (an unreadable row falls back to auto). Otherwise the active
+ * model route's memory models win, then the per-role selection, then legacy
+ * concrete settings.
  */
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-): GatewayLanguageModel | MemoryModelRouteEntry[] {
+): 'auto' | GatewayLanguageModel | MemoryModelRouteEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
   const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
-  const factorySettingsUnavailable =
-    isFactoryMemorySettingsUnavailable(factorySettingsContext) ||
-    (factorySettingsContext === undefined && typeof state?.factoryProjectId === 'string');
-  if (factorySettingsUnavailable) {
-    throw new Error('Factory memory settings are unavailable for this invocation');
+  const isFactory = typeof state?.factoryProjectId === 'string';
+
+  const useModel = (modelId: string) => {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, modelId);
+    return resolveModel(modelId, resolveOptions);
+  };
+  const useAuto = () => {
+    requestContext.set(`om.${role}.selectionMode`, 'auto');
+    // These two keys are declared in the span-context allowlist
+    // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
+    // the effective concrete model without either being mistaken for a model ID.
+    requestContext.set(`om.${role}.effectiveModelId`, resolveAutoOMModelId(getMainModelId(requestContext)));
+    return 'auto' as const;
+  };
+
+  if (isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory)) {
+    return useAuto();
   }
-  const factorySettings = factorySettingsContext;
+  if (factorySettingsContext !== undefined) {
+    const factoryModelId = factorySettingsContext?.[`${role}ModelId`];
+    return factoryModelId ? useModel(factoryModelId) : useAuto();
+  }
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same override resolution for
-  // observational memory as it does for the main model. Factory settings remain
-  // DB-authoritative, and hosts that disable the settings seed never read it.
-  const settings =
-    factorySettings === undefined && !options?.disableSettingsOmSeed ? loadSettings(settingsPath) : undefined;
+  // observational memory as it does for the main model. Hosts that disable the
+  // settings seed never read it.
+  const settings = options?.disableSettingsOmSeed ? undefined : loadSettings(settingsPath);
+  const routeMemory = resolveRouteMemoryModels(state, controller?.threadId, modelId =>
+    resolveModel(modelId, resolveOptions),
+  );
+  if (routeMemory === 'auto') return useAuto();
+  if (routeMemory) {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
+    return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
+  }
+
+  const selection: unknown = state?.[`${role}ModelSelection`];
+  if (selection === 'auto') return useAuto();
+  if (typeof selection === 'string' && selection) return useModel(selection);
+  if (
+    selection &&
+    typeof selection === 'object' &&
+    'modelId' in selection &&
+    typeof selection.modelId === 'string' &&
+    selection.modelId
+  ) {
+    return useModel(selection.modelId);
+  }
+
   const roleOverride =
     role === 'observer' ? settings?.models?.observerModelOverride : settings?.models?.reflectorModelOverride;
-  const factoryModelId = factorySettings?.[`${role}ModelId`];
-  const selection: unknown =
-    factorySettings !== undefined ? (factoryModelId ?? 'auto') : state?.[`${role}ModelSelection`];
-  const legacyModelId = factorySettings === undefined ? state?.[`${role}ModelId`] : undefined;
-  const selectedModelId =
-    (typeof selection === 'string' && selection !== 'auto'
-      ? selection
-      : selection && typeof selection === 'object' && 'mode' in selection && selection.mode === 'model'
-        ? 'modelId' in selection && typeof selection.modelId === 'string'
-          ? selection.modelId
-          : undefined
-        : undefined) ?? (!selection ? roleOverride : undefined);
-
-  if (selectedModelId) {
-    requestContext.set(`om.${role}.selectionMode`, 'model');
-    requestContext.set(`om.${role}.effectiveModelId`, selectedModelId);
-    return resolveModel(selectedModelId, resolveOptions);
-  }
-
-  if (factorySettings === undefined) {
-    const routeMemory = resolveRouteMemoryModels(state, controller?.threadId, modelId =>
-      resolveModel(modelId, resolveOptions),
-    );
-    if (routeMemory && routeMemory !== 'auto') {
-      requestContext.set(`om.${role}.selectionMode`, 'auto');
-      requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
-      return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
-    }
-  }
-
-  if (!selection && legacyModelId) {
-    requestContext.set(`om.${role}.selectionMode`, 'model');
-    requestContext.set(`om.${role}.effectiveModelId`, legacyModelId);
-    return resolveModel(legacyModelId, resolveOptions);
-  }
-
-  const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);
-  const effectiveModelId = resolveAutoOMModelId(currentModelId);
-  requestContext.set(`om.${role}.selectionMode`, 'auto');
-  // These two keys are declared in the span-context allowlist
-  // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
-  // the effective concrete model without either being mistaken for a model ID.
-  requestContext.set(`om.${role}.effectiveModelId`, effectiveModelId);
-  return resolveModel(effectiveModelId, resolveOptions);
+  if (roleOverride) return useModel(roleOverride);
+  const legacyModelId = state?.[`${role}ModelId`];
+  if (typeof legacyModelId === 'string' && legacyModelId) return useModel(legacyModelId);
+  return useAuto();
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =
@@ -263,6 +268,10 @@ export function getDynamicMemory(
     resolveOmRoleModelForRequest('observer', requestContext, settingsPath, options);
   const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
     resolveOmRoleModelForRequest('reflector', requestContext, settingsPath, options);
+  // Routes the concrete model Memory's `'auto'` picks through Mastra Code's
+  // credential-aware resolver, like every other Mastra Code model.
+  const resolveMemoryModel = (modelId: string, { requestContext }: { requestContext?: RequestContext }) =>
+    resolveModel(modelId, { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' });
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -318,7 +327,7 @@ export function getDynamicMemory(
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries Factory presence and settings availability to keep those configs
     // from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${factorySettingsUnavailable ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -342,19 +351,24 @@ export function getDynamicMemory(
         // generation takes the primary OM model only — its model field does not
         // accept fallback arrays.
         generateTitle:
-          factorySettingsUnavailable || process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
+          process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
             ? false
             : {
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
+                  if (resolved === 'auto') {
+                    return resolveMemoryModel(resolveAutoOMModelId(getMainModelId(requestContext)), { requestContext });
+                  }
                   return Array.isArray(resolved) ? resolved[0]!.model : resolved;
                 },
               },
         observationalMemory:
-          factorySettingsUnavailable || process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
+          process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
             ? false
             : {
                 enabled: true,
+                autoModels: MASTRACODE_AUTO_OM_MODELS,
+                resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
                 retrieval: vector ? { vector: true } : true,
                 experimental_subconscious: subconsciousAvailable

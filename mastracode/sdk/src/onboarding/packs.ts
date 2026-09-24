@@ -4,6 +4,7 @@
  * Each pack assigns a default model to the build, plan, and fast modes,
  * plus an OM (observational memory) model.
  */
+import { resolveAutoModelId } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID } from '../constants.js';
 
 // ---------------------------------------------------------------------------
@@ -19,9 +20,9 @@ export interface ModePack {
     plan: string;
     fast: string;
     /**
-     * Optional observational-memory model. When set, OM observer/reflector
-     * resolve from the pack (and its fallback chain) instead of the standalone
-     * OM settings, unless an explicit OM role override exists.
+     * Optional observational-memory model for both roles while the pack is
+     * active: a concrete model ID (with the pack fallback chain), `'auto'`, or
+     * unset to follow the per-role `/om` settings.
      */
     memory?: string;
   };
@@ -330,14 +331,25 @@ export function resolveProviderOMDefault(providerId: string, fallbackModelId = D
   };
 }
 
-/** Resolve the effective concrete OM model from a main-session model ID. */
+/**
+ * Mastra Code's overrides for `@mastra/memory`'s auto model table. Memory owns
+ * the auto policy; Mastra Code only keeps its newer Gemini Flash default.
+ */
+export const MASTRACODE_AUTO_OM_MODELS: Readonly<Record<string, string>> = { google: DEFAULT_OM_MODEL_ID };
+
+const CUSTOM_PROVIDER_PREFIX = 'mastracode/';
+
+/** The model ID Memory reports for a main-session model ID (without Mastra Code's custom-provider prefix). */
+export function toMemoryModelId(modelId: string): string {
+  return modelId.startsWith(CUSTOM_PROVIDER_PREFIX) ? modelId.slice(CUSTOM_PROVIDER_PREFIX.length) : modelId;
+}
+
+/** Preview the concrete model Memory's `'auto'` resolves to for a main-session model ID. */
 export function resolveAutoOMModelId(currentModelId?: string): string {
-  if (!currentModelId) return DEFAULT_OM_MODEL_ID;
-  const gatewayPrefix = ['mastracode/', 'mastra/'].find(prefix => currentModelId.startsWith(prefix));
-  const normalizedModelId = gatewayPrefix ? currentModelId.slice(gatewayPrefix.length) : currentModelId;
-  const providerId = normalizedModelId.split('/', 1)[0];
-  if (!providerId) return DEFAULT_OM_MODEL_ID;
-  return resolveProviderOMDefault(providerId, normalizedModelId).modelId;
+  if (!currentModelId) return resolveAutoModelId(undefined, { autoModels: MASTRACODE_AUTO_OM_MODELS }) ?? DEFAULT_OM_MODEL_ID;
+  const memoryModelId = toMemoryModelId(currentModelId);
+  const picked = resolveAutoModelId(memoryModelId, { autoModels: MASTRACODE_AUTO_OM_MODELS });
+  return !picked || picked === memoryModelId ? currentModelId : picked;
 }
 
 export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {

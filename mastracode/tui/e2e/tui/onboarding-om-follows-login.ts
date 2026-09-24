@@ -6,8 +6,9 @@ import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 
 /**
- * Gemini is reachable from an API key before the wizard starts, but the main
- * Anthropic model selected during login must drive both automatic OM roles.
+ * No OM model is chosen during setup: the main Anthropic model selected during
+ * login drives both automatic OM roles. (A Google API key would make Memory's
+ * auto policy prefer Gemini Flash, so this scenario leaves it unset.)
  */
 export const onboardingOmFollowsLoginScenario = {
   name: 'onboarding-om-follows-login',
@@ -42,7 +43,7 @@ export const onboardingOmFollowsLoginScenario = {
       ANTHROPIC_API_KEY: '',
       OPENAI_API_KEY: '',
       MASTRA_GATEWAY_API_KEY: '',
-      GOOGLE_GENERATIVE_AI_API_KEY: 'mc-e2e-google-key',
+      GOOGLE_GENERATIVE_AI_API_KEY: '',
       GOOGLE_API_KEY: '',
       DEEPSEEK_API_KEY: '',
       CEREBRAS_API_KEY: '',
