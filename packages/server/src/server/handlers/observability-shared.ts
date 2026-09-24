@@ -212,21 +212,30 @@ export type ObservabilityStorageCapabilities = {
 /**
  * Resolves which optional observability APIs the configured store can serve.
  *
- * Feature declarations (`getFeatures()`) are optional. Metrics, logs and
- * filter discovery fall back to detecting whether the store implements the
- * underlying method, so store packages that predate a declaration still report
- * accurately without being upgraded. Delta polling and the trace/thread query
- * APIs depend on runtime behavior a method check can't see, so they are only
- * reported for stores that declare them.
+ * Feature declarations (`getFeatures()`) are optional. When a store declares
+ * a feature list, that list is final. Stores without `getFeatures()` predate
+ * declarations: metrics, logs and filter discovery are detected by whether the
+ * store implements the underlying method, so those packages report accurately
+ * without being upgraded. Delta polling and the trace/thread query APIs depend
+ * on runtime behavior a method check can't see, so they are only reported for
+ * stores that declare them.
  */
 export function getObservabilityStorageCapabilities(
   observabilityStore: ObservabilityStorage,
 ): ObservabilityStorageCapabilities {
-  const features = getFeatures(observabilityStore) ?? [];
+  const declaredFeatures = getFeatures(observabilityStore);
+  const features = declaredFeatures ?? [];
   const newApiCore = coreFeatures.has('observability:v1.13.2');
   const declares = (feature: string) => features.includes(feature);
-  const supports = (feature: string, method: string) =>
-    newApiCore && (declares(feature) || implementsObservabilityStorageMethod(observabilityStore, method));
+  const supports = (feature: string, method: string) => {
+    if (!newApiCore) return false;
+    if (!declaredFeatures) return implementsObservabilityStorageMethod(observabilityStore, method);
+    return declares(feature);
+  };
+  // Stores released before the per-endpoint discovery features existed declare
+  // `trace-query` and implement every discovery method, so treat it as implying discovery.
+  const supportsDiscovery = (feature: string, method: string) =>
+    supports(feature, method) || (newApiCore && declares(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE));
   const traceQuery =
     newApiCore &&
     typeof coreStorage.planTraceQuery === 'function' &&
@@ -240,12 +249,12 @@ export function getObservabilityStorageCapabilities(
     metrics: supports('metrics', 'getMetricAggregate'),
     logs: supports('logs', 'listLogs'),
     discovery: {
-      entityTypes: supports('entity-type-discovery', 'getEntityTypes'),
-      entityNames: supports('entity-name-discovery', 'getEntityNames'),
-      serviceNames: supports('service-name-discovery', 'getServiceNames'),
-      environments: supports('environment-discovery', 'getEnvironments'),
-      tags: supports('tag-discovery', 'getTags'),
-      metrics: supports('metric-discovery', 'getMetricNames'),
+      entityTypes: supportsDiscovery('entity-type-discovery', 'getEntityTypes'),
+      entityNames: supportsDiscovery('entity-name-discovery', 'getEntityNames'),
+      serviceNames: supportsDiscovery('service-name-discovery', 'getServiceNames'),
+      environments: supportsDiscovery('environment-discovery', 'getEnvironments'),
+      tags: supportsDiscovery('tag-discovery', 'getTags'),
+      metrics: supportsDiscovery('metric-discovery', 'getMetricNames'),
     },
     deltaPolling:
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),

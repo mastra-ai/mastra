@@ -571,10 +571,9 @@ describe('System Handlers', () => {
               'tag-discovery',
               'metric-discovery',
               'delta-polling',
-              'trace-query',
+              'thread-query',
               'trace-query-root-duration',
               'trace-query-tenant-scope',
-              'thread-query',
             ] as const;
           }
         }
@@ -583,10 +582,49 @@ describe('System Handlers', () => {
           ...NO_OBSERVABILITY_CAPABILITIES,
           discovery: { ...NO_OBSERVABILITY_CAPABILITIES.discovery, tags: true, metrics: true },
           deltaPolling: true,
-          traceQuery: true,
           traceQueryRootDuration: true,
           traceQueryTenantScope: true,
           threadQuery: true,
+        });
+      });
+
+      it('treats a declared feature list as final even when methods are overridden', async () => {
+        // e.g. Spanner with metrics disabled: the methods exist but throw.
+        class OptOutStore extends BaseObservabilityStore {
+          getFeatures() {
+            return [] as const;
+          }
+          override async getMetricAggregate() {
+            throw new Error('metrics are disabled');
+          }
+          override async getEntityNames() {
+            throw new Error('disabled');
+          }
+        }
+
+        expect(await capabilitiesFor(new OptOutStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('treats trace-query as implying discovery for stores released before per-endpoint discovery features', async () => {
+        class TraceQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['metrics', 'logs', 'trace-query'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new TraceQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          metrics: true,
+          logs: true,
+          discovery: {
+            entityTypes: true,
+            entityNames: true,
+            serviceNames: true,
+            environments: true,
+            tags: true,
+            metrics: true,
+          },
+          traceQuery: true,
         });
       });
 
