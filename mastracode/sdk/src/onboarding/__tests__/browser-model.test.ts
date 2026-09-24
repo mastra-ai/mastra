@@ -29,7 +29,7 @@ describe('createBrowserFromSettings — model precedence against Codex OAuth', (
 
     const browser = await createBrowserFromSettings(stagehandSettings({ env: 'LOCAL' }));
 
-    expect(configuredModel(browser)).toMatchObject({ modelName: 'openai/gpt-5.4-mini' });
+    expect(configuredModel(browser)).toMatchObject({ modelName: 'openai/gpt-5.5' });
   });
 
   it('prefers the user-configured model over the Codex default', async () => {

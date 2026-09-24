@@ -1497,8 +1497,11 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     //     since AI SDK takes `apiKey` as a static string.
     //   - middleware: createCodexMiddleware() sets `store: false`, which Codex
     //     requires on every request.
-    // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
-    // pick suited to Stagehand's vision + structured-output workload.
+    // Model is `gpt-5.5`: the Codex ChatGPT-account endpoint only accepts a
+    // small whitelist (currently `gpt-5.5` and `gpt-5.6-sol`; every `-mini`
+    // and `-codex` variant is rejected with 400 "not supported when using
+    // Codex with a ChatGPT account"), and `gpt-5.5` handles Stagehand's
+    // vision + strict-JSON-schema workload.
     //
     // An explicitly configured model wins: Codex is a fallback for users who
     // have no model of their own, not an override of one they chose. Stagehand
@@ -1511,7 +1514,7 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     } else if (cred?.type === 'oauth') {
       const accountId = (cred as any).accountId as string | undefined;
       stagehandOpts.model = {
-        modelName: 'openai/gpt-5.4-mini',
+        modelName: 'openai/gpt-5.5',
         apiKey: 'codex-oauth',
         baseURL: 'https://chatgpt.com/backend-api/codex',
         headers: {
