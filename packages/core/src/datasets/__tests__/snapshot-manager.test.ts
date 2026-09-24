@@ -235,6 +235,23 @@ describe('public dataset snapshot transfer', () => {
     expect((await mastra.datasets.list()).datasets).toEqual([]);
   });
 
+  it('compiles artifact schema property names as data, never as code', async () => {
+    const key = '"),globalThis.__snapshotSchemaInjection=1,("';
+    const branch = (value: string) => ({
+      type: 'object',
+      properties: { [key]: { const: value } },
+      required: [key],
+    });
+    const { digest: _digest, ...content } = fixture();
+    content.configuration.inputSchema = { anyOf: [branch('a'), branch('b')] };
+    content.items[0]!.payload.input = { [key]: 'b' };
+    const request = { snapshot: JSON.stringify(createDatasetSnapshot(content)), idempotencyKey: 'injection', ...mappings };
+    const { mastra } = destination();
+    expect(await mastra.datasets.preflightSnapshot(request)).toMatchObject({ canImport: true });
+    await mastra.datasets.importSnapshot(request);
+    expect((globalThis as Record<string, unknown>).__snapshotSchemaInjection).toBeUndefined();
+  });
+
   it('captures request options before asynchronous preflight so caller mutation cannot bypass reference checks', async () => {
     const { mastra } = destination();
     const request = {

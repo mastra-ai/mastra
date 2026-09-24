@@ -36,6 +36,21 @@ describe('jsonSchemaToZod', () => {
       expect(result).toContain('dog');
     });
 
+    it('should emit the discriminator as a string literal, not executable code', () => {
+      const key = '"),globalThis.__jsonToZodDiscriminator=1,("';
+      const branch = (value: string): JsonSchema => ({
+        type: 'object',
+        properties: { [key]: { const: value } },
+        required: [key],
+      });
+      const result = jsonSchemaToZod({ anyOf: [branch('a'), branch('b')] });
+      expect(result).toContain(`z.discriminatedUnion(${JSON.stringify(key)}, [`);
+
+      const schema = Function('z', `"use strict";return (${result});`)(z);
+      expect((globalThis as Record<string, unknown>).__jsonToZodDiscriminator).toBeUndefined();
+      expect(schema.parse({ [key]: 'b' })).toEqual({ [key]: 'b' });
+    });
+
     it('should detect discriminatedUnion with three anyOf entries sharing const property', () => {
       const schema: JsonSchema = {
         anyOf: [
