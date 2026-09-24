@@ -284,6 +284,34 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     expect(retryPrompt.split('"call-a"').length - 1).toBe(2);
   });
 
+  it('lets an in-flight call finish on retry so the replacement never runs it again', async () => {
+    // The tool is still running when the first attempt errors and is retried. Cancelling
+    // it would let the replacement attempt call it a second time.
+    const executions: string[] = [];
+    let attempts = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        attempts += 1;
+        if (attempts > 1) return textOnly();
+        return toolCallThen(async controller => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+          controller.close();
+        });
+      },
+    });
+
+    const stream = await createAgent(model, executions, { delayMs: 80, retry: true }).stream('go', {
+      maxSteps: 3,
+      eagerToolExecution: true,
+    });
+    await drain(stream);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    expect(executions).toEqual(['a']);
+    expect(recordedResults(stream)).toContain('answered-a');
+  });
+
   it('never repeats pre-suspend work when a suspended eager attempt is retried', async () => {
     // A tool that suspends at runtime without a suspendSchema: its eager attempt has already
     // done the pre-suspend work. Retrying the model must not start that body again.

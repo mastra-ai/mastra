@@ -1256,9 +1256,9 @@ describe('eager tool dispatch — discarded model attempt', () => {
     expect(nextPrompt).toContain('answered-finished');
   });
 
-  it('cancels eager work when an error chunk is answered with a retry', async () => {
-    // The error-chunk retry reaches a different early return than the thrown case, which is
-    // how it once shipped uncancelled.
+  it('lets eager work finish when an error chunk is answered with a retry', async () => {
+    // The error-chunk retry reaches a different early return than the thrown case. Running
+    // work is waited out, not cancelled: a cancelled call is one the replacement may repeat.
     const run = async (eagerToolExecution: boolean) => {
       const { events, record } = createRecorder();
       const prompts: any[][] = [];
@@ -1277,12 +1277,12 @@ describe('eager tool dispatch — discarded model attempt', () => {
       return events;
     };
 
-    // The discarded attempt's call never runs without eager dispatch; with it, it is cancelled.
+    // The discarded attempt's call never runs without eager dispatch; with it, it runs to completion.
     expect(await run(false)).toEqual([]);
-    expect(await run(true)).toEqual(['execute-discarded', 'aborted-discarded']);
+    expect(await run(true)).toEqual(['execute-discarded']);
   });
 
-  it('cancels eager work belonging to an attempt the pipeline discarded', async () => {
+  it('lets eager work finish when the pipeline discards its attempt', async () => {
     const run = async (eagerToolExecution: boolean) => {
       const { events, record } = createRecorder();
       const agent = new Agent({
@@ -1292,7 +1292,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
         model: [
           { model: scriptedModel('failing-model', [callThenThrow('call-discarded', 'discarded', 20)]), maxRetries: 0 },
           {
-            // Deliberately reuses the discarded toolCallId: nothing may adopt the cancelled promise.
+            // Deliberately reuses the discarded toolCallId with new args: nothing may adopt the old promise.
             model: scriptedModel('recovering-model', [
               controller => {
                 emitCall(controller, 'call-discarded', 'retried');
@@ -1319,11 +1319,10 @@ describe('eager tool dispatch — discarded model attempt', () => {
 
     // The normal pipeline only runs the surviving call, which reuses the same toolCallId.
     expect(await run(false)).toEqual(['execute-retried']);
-    // Eager had already started the discarded one, so the guarantee is cancellation — and the
-    // surviving call still runs for real instead of adopting the cancelled promise.
+    // Eager had already started the discarded one, so it runs to completion rather than being
+    // cancelled — and the surviving call still runs for real instead of adopting that promise.
     const withEager = await run(true);
-    expect(withEager).toEqual(['execute-discarded', 'aborted-discarded', 'execute-retried']);
-    expect(withEager).not.toContain('aborted-retried');
+    expect(withEager).toEqual(['execute-discarded', 'execute-retried']);
   });
 });
 

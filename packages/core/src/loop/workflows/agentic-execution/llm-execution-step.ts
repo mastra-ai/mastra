@@ -1260,6 +1260,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   rotateResponseMessageId: rotateLoopResponseMessageId,
   eagerCoordinator,
   eagerToolCallStep,
+  runAbortSignal,
 }: OuterLLMRun<TOOLS, OUTPUT> & {
   toolCallForeachOptions?: ToolCallForeachOptions;
   eagerCoordinator?: EagerToolExecutionCoordinator;
@@ -1298,10 +1299,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       /**
        * This attempt is being thrown away: the error handling either retries the request
        * or falls through to the next model, and the tool calls this attempt emitted are
-       * discarded with it. The normal pipeline never runs them, so eager work must not
-       * run either, and work already running is cancelled rather than left to complete a
-       * side effect nothing will record. `beginTurn` then reopens dispatch so the retry
-       * or fallback model is treated like any other turn.
+       * discarded with it.
+       *
+       * Eager work that already started is waited out rather than cancelled. A running
+       * tool may already have done its side effect, and a cancelled call is one the
+       * replacement attempt is free to make again. Once every started call has settled,
+       * each outcome — result or thrown error — is written into the conversation, so the
+       * replacement sees those calls as done. Work that never started is simply dropped.
+       * `beginTurn` then reopens dispatch so the retry or fallback model is treated like
+       * any other turn.
        *
        * Every path that discards an attempt has to call this. There are three: an error
        * thrown out of the stream (which also covers falling over to the next model), an
@@ -1309,6 +1315,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * rejecting the step's output with a retrying tripwire.
        */
       const discardAttemptEagerWork = async () => {
+        eagerCoordinator?.stop();
+        await eagerCoordinator?.settleRunning();
         const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
         // Written the moment the attempt dies, not when a replacement starts: a retry that
@@ -1348,10 +1356,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         for (const work of completed) {
           for (const chunk of [
             { type: 'tool-call', payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args } },
-            {
-              type: 'tool-result',
-              payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args, result: work.result },
-            },
+            'error' in work
+              ? {
+                  type: 'tool-error',
+                  payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args, error: work.error },
+                }
+              : {
+                  type: 'tool-result',
+                  payload: {
+                    toolCallId: work.toolCallId,
+                    toolName: work.toolName,
+                    args: work.args,
+                    result: work.result,
+                  },
+                },
           ]) {
             chunks.push(
               (await addToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT>, transformOptions)) as CollectedChunk,
@@ -1385,12 +1403,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.error('Failed to commit settled eager tool work on abort', { error }),
           );
         };
-        if (!eagerAbortListenerRegistered && options?.abortSignal) {
+        if (!eagerAbortListenerRegistered && runAbortSignal) {
           eagerAbortListenerRegistered = true;
-          // `options.abortSignal` is owned by this run (see `workflows/stream.ts`), which
-          // unlinks it from the caller's signal when the run ends, so this listener cannot
-          // outlive the run even when the caller reuses one signal across many runs.
-          options.abortSignal.addEventListener('abort', () => commitSettledEagerWorkOnAbort?.(), { once: true });
+          // `runAbortSignal` is owned by this run (see `workflows/stream.ts`), which unlinks
+          // it from the caller's signal when the run ends, so this listener cannot outlive
+          // the run even when the caller reuses one signal across many runs.
+          runAbortSignal.addEventListener('abort', () => commitSettledEagerWorkOnAbort?.(), { once: true });
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.
@@ -2390,6 +2408,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
+          // Settled before deciding, so a call that suspends while still running is seen
+          // by the retry gates below rather than after the attempt was already retried.
+          // After the abort branch: an abort cancels running work instead of waiting.
+          await eagerCoordinator?.settleRunning();
+
           const isUpstreamError = APICallError.isInstance(error);
 
           if (isUpstreamError) {
@@ -2589,6 +2612,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let apiErrorRetryResult: { retry: boolean } | undefined = processAPIErrorRetry;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
+        // Settled first so the suspension gate below sees calls still running.
+        await eagerCoordinator?.settleRunning();
         const currentRetryCount = inputData.processorRetryCount || 0;
         // Never retry an attempt holding a call that already ran up to a runtime suspend().
         const canRetryError =

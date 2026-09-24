@@ -95,8 +95,10 @@ export type CompletedEagerWork = {
   toolCallId: string;
   toolName: string;
   args: unknown;
-  /** The tool's own output, unwrapped from the step's envelope. */
-  result: unknown;
+  /** The tool's own output, unwrapped from the step's envelope. Absent when it threw. */
+  result?: unknown;
+  /** What the tool threw. A failed call is still a call that ran. */
+  error?: unknown;
   /**
    * The order the model emitted this call in. Executions settle in whatever order they
    * finish, and history is written in model-call order everywhere else, so the caller
@@ -137,6 +139,8 @@ export class EagerToolExecutionCoordinator {
    * attempt holding one of these must not be retried.
    */
   readonly #suspended = new Set<string>();
+  /** Executions that have started and not yet settled, so a discard can wait them out. */
+  readonly #inFlight = new Set<Promise<unknown>>();
   #running = 0;
   #dispatchSequence = 0;
   #stopped = false;
@@ -194,7 +198,7 @@ export class EagerToolExecutionCoordinator {
         this.#running++;
         holdsPermit = true;
         this.#controllers.set(toolCallId, { controller, releasePermit });
-        void execute(controller.signal)
+        const inFlight: Promise<unknown> = execute(controller.signal)
           .then(
             result => {
               // Recorded before resolving, so a discard racing the settlement still sees
@@ -208,19 +212,20 @@ export class EagerToolExecutionCoordinator {
               // though it were a result would show the next model a success that never
               // happened. Unwrap here so the caller holds the tool's own output.
               const envelope = result as { result?: unknown; error?: unknown; aborted?: boolean } | undefined;
-              const succeeded =
-                !!envelope &&
-                typeof envelope === 'object' &&
-                'result' in envelope &&
-                !('error' in envelope) &&
-                !envelope.aborted;
+              const ran = !!envelope && typeof envelope === 'object' && !envelope.aborted;
+              const outcome =
+                ran && 'error' in envelope
+                  ? { error: envelope.error }
+                  : ran && 'result' in envelope
+                    ? { result: envelope.result }
+                    : undefined;
 
-              if (call && succeeded && !controller.signal.aborted) {
+              if (call && outcome && !controller.signal.aborted) {
                 this.#completed.set(toolCallId, {
                   toolCallId,
                   toolName: call.toolName,
                   args: call.args,
-                  result: envelope.result,
+                  ...outcome,
                   sequence,
                 });
               }
@@ -240,8 +245,10 @@ export class EagerToolExecutionCoordinator {
             if (this.#controllers.get(toolCallId)?.controller === controller) {
               this.#controllers.delete(toolCallId);
             }
+            this.#inFlight.delete(inFlight);
             releasePermit();
           });
+        this.#inFlight.add(inFlight);
       };
 
       if (this.#running < this.getConcurrency()) {
@@ -323,6 +330,20 @@ export class EagerToolExecutionCoordinator {
     }
 
     return completed;
+  }
+
+  /**
+   * Wait until every execution that has started has settled, however it settles. Called
+   * with dispatch already stopped, so nothing new starts meanwhile.
+   *
+   * A discarded attempt waits here instead of cancelling: a running tool may already have
+   * done its side effect, and cancelling it would leave the replacement attempt free to
+   * call it again. Settled, its outcome is committed and the replacement sees it as done.
+   */
+  async settleRunning() {
+    while (this.#inFlight.size) {
+      await Promise.allSettled([...this.#inFlight]);
+    }
   }
 
   /**
