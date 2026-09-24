@@ -1,21 +1,23 @@
 ---
 title: "Alerts | Mastra platform"
-description: "Configure Mastra platform alerts for failed deploys, service crashes, and out-of-memory events, then send notifications to Slack, email, or a webhook."
+description: "Configure Mastra platform alerts for failed deploys, service outages, and usage thresholds, then send notifications to Slack, email, a webhook, PagerDuty, or incident.io."
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Alerts
 
-Alerts notify your team when a deploy fails or a running service stops. You configure alerts at the organization level, then choose which projects and environments each alert covers.
+Alerts notify your team when a deploy fails, a running service stops or stops responding, or organization usage crosses a plan threshold. You configure alerts at the organization level, then choose which projects and environments each alert covers.
 
 Organization admins can create and manage alerts. Other organization roles have read-only access to the alert settings.
 
 Open the [Mastra platform dashboard](https://projects.mastra.ai), go to your organization settings, then select **Alerts**. The page has three tabs:
 
 - **Alerts** lists each alert with its scope, destinations, status, and enable or pause switch.
-- **Destinations** lists the Slack channels, email groups, and webhook endpoints that can receive notifications.
+- **Destinations** lists the Slack channels, email groups, webhook endpoints, PagerDuty services, and incident.io alert sources that can receive notifications.
 - **Activity** shows incidents and the notification attempts associated with them.
 
 ## Add a destination
@@ -27,6 +29,8 @@ A destination defines where Mastra sends notifications. Add at least one destina
 | **Slack** | Connect a Slack workspace and select one or more channels. Mastra creates a separate destination for each selected channel. |
 | **Email** | Select organization roles, individual members, or up to 10 email addresses. Role-based recipient groups update when organization membership changes. |
 | **Webhook** | Enter an HTTPS endpoint. Mastra signs each request and shows the signing secret once after the destination is created. |
+| **PagerDuty** | Enter the integration key of a PagerDuty Events API v2 integration. See [Send alerts to PagerDuty](#send-alerts-to-pagerduty). |
+| **Incident.io** | Enter the alert source config ID and token of an incident.io HTTP alert source. See [Send alerts to incident.io](#send-alerts-to-incidentio). |
 
 <Steps>
   <StepItem>
@@ -34,7 +38,7 @@ A destination defines where Mastra sends notifications. Add at least one destina
   </StepItem>
 
   <StepItem>
-    Select **Slack**, **Email**, or **Webhook**, then enter a name for the destination.
+    Select **Slack**, **Email**, **Webhook**, **PagerDuty**, or **Incident.io**, then enter a name for the destination.
   </StepItem>
 
   <StepItem>
@@ -43,6 +47,8 @@ A destination defines where Mastra sends notifications. Add at least one destina
     - For Slack, connect or select a workspace and choose the channels that should receive alerts. The Mastra Alerts app joins public channels automatically. Invite `@Mastra Alerts` before selecting a private channel.
     - For email, choose **All organization members**, one or more roles, individual members, or external email addresses.
     - For a webhook, enter an endpoint that starts with `https://`.
+    - For PagerDuty, enter the **Integration key**.
+    - For incident.io, enter the **Alert source config ID** and **Token**.
   </StepItem>
 
   <StepItem>
@@ -50,7 +56,7 @@ A destination defines where Mastra sends notifications. Add at least one destina
   </StepItem>
 </Steps>
 
-The destination form changes based on the selected type. Slack destinations require a workspace and at least one channel. Email destinations require at least one recipient, which can be an organization role, a member, or an external address. Webhook destinations require an HTTPS endpoint. Every destination also requires a name that identifies it in alert configuration and activity history.
+The destination form changes based on the selected type. Slack destinations require a workspace and at least one channel. Email destinations require at least one recipient, which can be an organization role, a member, or an external address. Webhook destinations require an HTTPS endpoint. PagerDuty and incident.io destinations require the credentials from their integration. Every destination also requires a name that identifies it in alert configuration and activity history.
 
 Use the destination's actions menu to send a test notification. You can also edit, pause, or delete a destination. Pausing a destination stops notifications without removing it from existing alerts.
 
@@ -75,6 +81,8 @@ An alert combines triggers, scope, destinations, and repeat-alert pacing.
     - **Deploy failed**: A build or deploy doesn't reach a running state.
     - **Service crashed**: A running service exhausts its restart policy and stops.
     - **Service out of memory**: A service is stopped after running out of memory.
+    - **Service unreachable**: A deployed service fails 3 health checks in a row.
+    - **Usage threshold crossed**: Organization usage crosses a plan threshold or reaches its limit. This trigger is organization-wide, so it requires the **All projects** scope.
   </StepItem>
 
   <StepItem>
@@ -108,6 +116,230 @@ Open an alert's actions menu to:
 
 ## Review alert activity
 
-The **Activity** tab groups each incident with its delivery attempts. An incident stays **Open** while the condition is active and changes to **Resolved** after the service or deploy recovers.
+The **Activity** tab groups each incident with its delivery attempts. An incident stays **Open** while the condition is active and changes to **Resolved** after the service or deploy recovers, except for usage threshold incidents, which don't resolve automatically.
 
 Expand an incident to inspect the notification sent to each destination. Each incident row shows when the event occurred, the event type, its project or environment scope, and its current status. Nested delivery rows show the trigger, destination, and delivery status for each notification attempt. Delivery attempts can be **Scheduled**, **Sent**, **Suppressed**, **Retrying**, **Exhausted**, or **Config error**. Use the activity filter to show all activity, incidents only, or delivery attempts only.
+
+## Send alerts to PagerDuty
+
+A PagerDuty destination sends events to the PagerDuty Events API v2. Each Mastra incident opens one PagerDuty incident, and PagerDuty resolves it when the Mastra incident resolves.
+
+<Steps>
+  <StepItem>
+    In PagerDuty, open the service that should receive alerts. On its **Integrations** tab, add an **Events API V2** integration and copy its **Integration Key**. See [Services and integrations](https://support.pagerduty.com/main/docs/services-and-integrations) in the PagerDuty documentation.
+  </StepItem>
+
+  <StepItem>
+    In Mastra, add a destination, select **PagerDuty**, and paste the key into **Integration key**.
+  </StepItem>
+
+  <StepItem>
+    Send a test notification from the destination's actions menu. The test opens an incident with `info` severity in PagerDuty. Resolve it in PagerDuty.
+  </StepItem>
+</Steps>
+
+Mastra maps its notifications to PagerDuty events as follows:
+
+| PagerDuty field | Value |
+| - | - |
+| `event_action` | `trigger` for a new or repeated notification, `resolve` for a recovery |
+| `dedup_key` | The Mastra incident ID. Repeated notifications for the same incident update one PagerDuty incident |
+| `payload.summary` | A one-line description, for example `Deploy failed on support-agent (production): Build failed` |
+| `payload.severity` | The Mastra severity: `critical`, `error`, `warning`, or `info` |
+| `payload.source` | `mastra:<project>/<environment>` |
+| `payload.custom_details` | The event data described in [Webhook payload](#webhook-payload) |
+
+Changes made in PagerDuty, such as acknowledging or resolving an incident, don't update the Mastra incident. If PagerDuty rejects the integration key, the delivery shows **Config error**.
+
+## Send alerts to incident.io
+
+An incident.io destination sends alert events to an incident.io HTTP alert source. Each Mastra incident creates one alert in incident.io, and the alert resolves when the Mastra incident resolves.
+
+<Steps>
+  <StepItem>
+    In incident.io, create an HTTP alert source with the **Default** source type. Mastra sends events in the incident.io alert event format, so a custom transform isn't needed. See [Create an alert event](https://docs.incident.io/api-reference/alert-events-v2/create) in the incident.io documentation.
+  </StepItem>
+
+  <StepItem>
+    Copy the alert source config ID and the bearer token from the source's authorization header. The ID is the last segment of the alert events URL, `https://api.incident.io/v2/alert_events/http/<alert-source-config-id>`.
+  </StepItem>
+
+  <StepItem>
+    In Mastra, add a destination and select **Incident.io**. Paste the ID, or the full alert events URL, into **Alert source config ID**, and the token into **Token**.
+  </StepItem>
+
+  <StepItem>
+    Send a test notification from the destination's actions menu. The test creates a firing alert in incident.io.
+  </StepItem>
+</Steps>
+
+Mastra sends these fields to incident.io:
+
+| incident.io field | Value |
+| - | - |
+| `status` | `firing` for a new or repeated notification, `resolved` for a recovery |
+| `deduplication_key` | The Mastra incident ID |
+| `title` | A one-line description of the event |
+| `description` | The error message, when the event has one |
+| `metadata` | The event data plus `source`, `event_type`, `severity`, `project_id`, and `environment` |
+
+Use the `metadata` fields in alert attributes and routing rules. Changes made in incident.io don't update the Mastra incident, and if incident.io rejects the token or alert source ID, the delivery shows **Config error**.
+
+## Receive webhook notifications
+
+A webhook destination receives an HTTP `POST` request with a JSON body for each notification. Use a webhook to connect a tool that Mastra doesn't integrate with directly.
+
+### Webhook payload
+
+The following example shows a failed deploy:
+
+```json
+{
+  "id": "deploy.failed:dep_8c2f1a:triggered",
+  "version": "2026-09-01",
+  "type": "deploy.failed",
+  "createdAt": "2026-09-24T14:03:11.000Z",
+  "fingerprint": "deploy.failed|prj_41d9e2|server|production",
+  "severity": "error",
+  "status": "triggered",
+  "summary": "Deploy failed on support-agent (production): Build failed",
+  "source": "mastra",
+  "data": {
+    "deployId": "dep_8c2f1a",
+    "projectName": "support-agent",
+    "gitBranch": "main",
+    "error": "Build failed",
+    "errorCode": "BUILD_FAILED",
+    "errorCategory": "build",
+    "deployUrl": "https://projects.mastra.ai/..."
+  },
+  "links": []
+}
+```
+
+| Field | Description |
+| - | - |
+| `id` | Notification ID. Stays the same when Mastra retries the same notification |
+| `version` | Payload version. The current version is `2026-09-01` |
+| `type` | Event type. See the table below |
+| `createdAt` | ISO 8601 time when the event occurred |
+| `fingerprint` | Identifies the incident the notification belongs to. Notifications for the same failing deploy target or service share a fingerprint |
+| `severity` | `critical`, `error`, `warning`, or `info`. These values match PagerDuty severities |
+| `status` | `triggered` for a new or repeated notification, `resolved` when the incident recovers |
+| `summary` | One-line description of the event |
+| `source` | Always `mastra` |
+| `data` | Event-specific details. Fields vary by event type |
+| `links` | Related links, each with `href` and `text`. Can be empty |
+
+The `type` field has one of these values:
+
+| Type | Trigger | Common `data` fields |
+| - | - | - |
+| `deploy.failed` | **Deploy failed** | `deployId`, `projectName`, `gitBranch`, `error`, `errorCode`, `errorCategory`, `deployUrl` |
+| `service.crashed` | **Service crashed** | Same as `deploy.failed` |
+| `service.oom` | **Service out of memory** | Same as `deploy.failed` |
+| `service.unreachable` | **Service unreachable** | `projectName`, `probeUrl`, `error`, `consecutiveFailures` |
+| `billing.usage_threshold` | **Usage threshold crossed** | `featureId`, `featureLabel`, `thresholdDisplay`, `error` |
+
+Crash, out-of-memory, and unreachable events for the same service share a fingerprint, so one outage produces one incident. Usage threshold incidents don't send a `resolved` notification.
+
+Test notifications use `type: "deploy.failed"`, `severity: "info"`, and include `"test": true` in `data`.
+
+### Request headers
+
+| Header | Value |
+| - | - |
+| `content-type` | `application/json` |
+| `user-agent` | `Mastra-Alerts/1.0` |
+| `x-mastra-signature` | Signature of the request body. See [Verify webhook signatures](#verify-webhook-signatures) |
+| `x-mastra-idempotency-key` | Same value as the payload `id` |
+
+### Verify webhook signatures
+
+Verify the signature before you trust a request. The `x-mastra-signature` header has this format:
+
+```text
+t=1790258591,v1=5f0c9d3e...
+```
+
+`t` is the Unix time in seconds when Mastra signed the request. `v1` is a hex-encoded HMAC-SHA256 of the string `<t>.<raw request body>`, using the destination's signing secret as the key.
+
+To verify a request:
+
+1. Read the raw request body before parsing it as JSON. Parsing and serializing the body again can change it.
+1. Compute the HMAC of `<t>.<raw body>` and compare it with `v1` using a constant-time comparison.
+1. Reject requests where `t` is more than a few minutes old to prevent replayed requests.
+
+<Tabs>
+  <TabItem value="node" label="Node.js">
+    ```typescript title="verify-mastra-signature.ts"
+    import { createHmac, timingSafeEqual } from 'node:crypto'
+
+    const TOLERANCE_SECONDS = 300
+
+    export function verifyMastraSignature(
+      rawBody: string,
+      signatureHeader: string,
+      signingSecret: string,
+    ): boolean {
+      const parts = new Map(signatureHeader.split(',').map(part => part.split('=') as [string, string]))
+      const timestamp = Number(parts.get('t'))
+      const signature = parts.get('v1')
+      if (!Number.isInteger(timestamp) || !signature) return false
+      if (Math.abs(Date.now() / 1000 - timestamp) > TOLERANCE_SECONDS) return false
+
+      const expected = createHmac('sha256', signingSecret)
+        .update(`${timestamp}.${rawBody}`)
+        .digest('hex')
+      const expectedBytes = Buffer.from(expected, 'hex')
+      const signatureBytes = Buffer.from(signature, 'hex')
+      return (
+        expectedBytes.length === signatureBytes.length && timingSafeEqual(expectedBytes, signatureBytes)
+      )
+    }
+    ```
+  </TabItem>
+
+  <TabItem value="python" label="Python">
+    ```python title="verify_mastra_signature.py"
+    import hashlib
+    import hmac
+    import time
+
+    TOLERANCE_SECONDS = 300
+
+
+    def verify_mastra_signature(raw_body: bytes, signature_header: str, signing_secret: str) -> bool:
+        parts = dict(part.partition("=")[::2] for part in signature_header.split(","))
+        try:
+            timestamp = int(parts["t"])
+            signature = parts["v1"]
+        except (KeyError, ValueError):
+            return False
+        if abs(time.time() - timestamp) > TOLERANCE_SECONDS:
+            return False
+
+        expected = hmac.new(
+            signing_secret.encode(),
+            f"{timestamp}.".encode() + raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    ```
+  </TabItem>
+</Tabs>
+
+Return a `401` status for a request that fails verification. After you rotate a destination's secret, requests are signed with the new secret immediately.
+
+### Retries and duplicate notifications
+
+Mastra treats any `2xx` response as delivered. Respond within 10 seconds and process the notification after responding if the work takes longer. Mastra doesn't follow redirects.
+
+When a request fails, Mastra retries based on the response:
+
+- **`4xx` response:** Mastra stops and marks the delivery **Config error**. Fix the endpoint, then use **Test** on the destination to confirm it works.
+- **`5xx` response, timeout, or network error:** Mastra retries twice within a few seconds. If those requests also fail, the delivery shows **Retrying** and Mastra tries again after about 30 seconds, doubling the wait each time up to 15 minutes. After 6 failed attempts, the delivery shows **Exhausted**.
+
+PagerDuty and incident.io destinations follow the same schedule. For those destinations, Mastra also retries `408` and `429` responses.
+
+Retries can deliver the same notification more than once. Store the `x-mastra-idempotency-key` value of each processed request and skip requests with a key you've already seen. Use `fingerprint` to group notifications that belong to the same incident.
