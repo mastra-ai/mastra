@@ -619,8 +619,8 @@ describe('structured trace-query discovery', () => {
 
 describe('structured storage capabilities', () => {
   class TraceOnlyStorage extends ObservabilityStorage {
-    getStructuredTraceQueryFeatures() {
-      return ['trace-query-structured-paths'] as const;
+    getStructuredTraceQueryCapabilities() {
+      return { traces: { roots: ['metadata'] } } as const;
     }
 
     async queryStructuredTraces() {
@@ -629,8 +629,8 @@ describe('structured storage capabilities', () => {
   }
 
   class ThreadStorage extends ObservabilityStorage {
-    getStructuredTraceQueryFeatures() {
-      return ['thread-query-structured-paths'] as const;
+    getStructuredTraceQueryCapabilities() {
+      return { threads: { roots: ['metadata'] } } as const;
     }
 
     async queryStructuredThreads() {
@@ -639,8 +639,8 @@ describe('structured storage capabilities', () => {
   }
 
   class DiscoveryStorage extends ObservabilityStorage {
-    getStructuredTraceQueryFeatures() {
-      return ['trace-query-structured-discovery'] as const;
+    getStructuredTraceQueryCapabilities() {
+      return { discovery: { roots: ['metadata'] } } as const;
     }
 
     async getStructuredTraceQueryObservedFields() {
@@ -653,8 +653,8 @@ describe('structured storage capabilities', () => {
   }
 
   class PartialDiscoveryStorage extends ObservabilityStorage {
-    getStructuredTraceQueryFeatures() {
-      return ['trace-query-structured-discovery'] as const;
+    getStructuredTraceQueryCapabilities() {
+      return { discovery: { roots: ['metadata'] } } as const;
     }
 
     async getStructuredTraceQueryObservedFields() {
@@ -662,15 +662,21 @@ describe('structured storage capabilities', () => {
     }
   }
 
-  class FeatureOnlyStorage extends ObservabilityStorage {
-    getStructuredTraceQueryFeatures() {
-      return ['trace-query-structured-paths'] as const;
+  class CapabilityOnlyStorage extends ObservabilityStorage {
+    getStructuredTraceQueryCapabilities() {
+      return { traces: { roots: ['metadata'] } } as const;
     }
   }
 
   class MethodOnlyStorage extends ObservabilityStorage {
-    getStructuredTraceQueryFeatures() {
-      return ['thread-query-structured-paths'] as const;
+    async queryStructuredTraces() {
+      return { traces: [], page: { next: null } };
+    }
+  }
+
+  class OperationMismatchStorage extends ObservabilityStorage {
+    getStructuredTraceQueryCapabilities() {
+      return { threads: { roots: ['metadata'] } } as const;
     }
 
     async queryStructuredTraces() {
@@ -678,7 +684,17 @@ describe('structured storage capabilities', () => {
     }
   }
 
-  it('narrows only the capability whose exact feature and methods are present', () => {
+  class MalformedCapabilitiesStorage extends ObservabilityStorage {
+    getStructuredTraceQueryCapabilities() {
+      return { traces: {} };
+    }
+
+    async queryStructuredTraces() {
+      return { traces: [], page: { next: null } };
+    }
+  }
+
+  it('narrows only the operation whose capability and methods are present', () => {
     const traceOnly = new TraceOnlyStorage();
     expect(supportsStructuredTraceQueryExecution(traceOnly)).toBe(true);
     expect(supportsStructuredThreadQueryExecution(traceOnly)).toBe(false);
@@ -695,8 +711,22 @@ describe('structured storage capabilities', () => {
     expect(supportsStructuredTraceQueryDiscovery(discovery)).toBe(true);
 
     expect(supportsStructuredTraceQueryDiscovery(new PartialDiscoveryStorage())).toBe(false);
-    expect(supportsStructuredTraceQueryExecution(new FeatureOnlyStorage())).toBe(false);
+    expect(supportsStructuredTraceQueryExecution(new CapabilityOnlyStorage())).toBe(false);
     expect(supportsStructuredTraceQueryExecution(new MethodOnlyStorage())).toBe(false);
+    expect(supportsStructuredTraceQueryExecution(new OperationMismatchStorage())).toBe(false);
+    expect(supportsStructuredTraceQueryExecution(new MalformedCapabilitiesStorage())).toBe(false);
+  });
+
+  it('reports the structured roots supported by each operation', () => {
+    expect(new TraceOnlyStorage().getStructuredTraceQueryCapabilities()).toEqual({
+      traces: { roots: ['metadata'] },
+    });
+    expect(new ThreadStorage().getStructuredTraceQueryCapabilities()).toEqual({
+      threads: { roots: ['metadata'] },
+    });
+    expect(new DiscoveryStorage().getStructuredTraceQueryCapabilities()).toEqual({
+      discovery: { roots: ['metadata'] },
+    });
   });
 
   it('does not require legacy storage subclasses to implement structured methods', () => {

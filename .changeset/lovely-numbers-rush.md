@@ -4,6 +4,8 @@
 
 Added structured trace-query helpers for filtering exact nested metadata paths and preserving string, number, and boolean values during discovery.
 
+Storage integrations can independently advertise structured trace, thread, and discovery support together with the structured roots each operation supports.
+
 ```ts
 import { parseStructuredTraceQueryRequest, planStructuredTraceQuery } from '@mastra/core/storage'
 

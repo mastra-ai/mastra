@@ -12,11 +12,14 @@ import type {
   GetStructuredTraceQueryFieldsResponse,
   GetStructuredTraceQueryValuesResponse,
   StructuredThreadQueryExecutionStorage,
+  StructuredTraceQueryCapabilities,
+  StructuredTraceQueryCapabilityReporter,
   StructuredTraceQueryDiscoveryStorage,
   StructuredTraceQueryExecutionStorage,
-  StructuredTraceQueryFeatureReporter,
+  StructuredTraceQueryOperationCapability,
   StructuredTraceQueryPath,
   StructuredTraceQueryRequest,
+  StructuredTraceQueryRoot,
   TrustedStructuredThreadQueryPlan,
   TrustedStructuredTraceQueryDeltaTracesPlan,
   TrustedStructuredTraceQueryGroupsPlan,
@@ -132,6 +135,20 @@ test('structured paths, grouping, and discovery values retain their distinct typ
   >();
 });
 
+test('structured capabilities advertise operation-specific roots', () => {
+  const traceCapabilities = {
+    traces: { roots: ['metadata'] },
+  } as const satisfies StructuredTraceQueryCapabilities;
+  const operationCapability = { roots: ['metadata'] } as const satisfies StructuredTraceQueryOperationCapability;
+  // @ts-expect-error Input is not a structured root in the current contract.
+  const unsupportedCapability: StructuredTraceQueryOperationCapability = { roots: ['input'] };
+
+  expectTypeOf<StructuredTraceQueryOperationCapability['roots']>().toEqualTypeOf<readonly StructuredTraceQueryRoot[]>();
+  expectTypeOf(traceCapabilities.traces.roots).toEqualTypeOf<readonly ['metadata']>();
+  expectTypeOf(operationCapability.roots).toEqualTypeOf<readonly ['metadata']>();
+  expectTypeOf(unsupportedCapability).toExtend<StructuredTraceQueryOperationCapability>();
+});
+
 test('legacy and structured trusted contracts are not interchangeable', () => {
   expectTypeOf<TrustedStructuredTraceQueryPlan>().not.toExtend<TrustedTraceQueryPlan>();
   expectTypeOf<TrustedTraceQueryPlan>().not.toExtend<TrustedStructuredTraceQueryPlan>();
@@ -155,12 +172,15 @@ test('structured capability guards narrow independently without changing the bas
   type ThreadOnly = ObservabilityStorage & StructuredThreadQueryExecutionStorage;
   type DiscoveryOnly = ObservabilityStorage & StructuredTraceQueryDiscoveryStorage;
   type PartialDiscovery = ObservabilityStorage &
-    StructuredTraceQueryFeatureReporter &
+    StructuredTraceQueryCapabilityReporter &
     Pick<StructuredTraceQueryDiscoveryStorage, 'getStructuredTraceQueryObservedFields'>;
 
   expectTypeOf<TraceGuard>().toEqualTypeOf<ObservabilityStorage>();
   expectTypeOf<ThreadGuard>().toEqualTypeOf<ObservabilityStorage>();
   expectTypeOf<DiscoveryGuard>().toEqualTypeOf<ObservabilityStorage>();
+  expectTypeOf<
+    ReturnType<StructuredTraceQueryCapabilityReporter['getStructuredTraceQueryCapabilities']>
+  >().toEqualTypeOf<StructuredTraceQueryCapabilities>();
   expectTypeOf<TraceOnly>().not.toExtend<StructuredThreadQueryExecutionStorage>();
   expectTypeOf<TraceOnly>().not.toExtend<StructuredTraceQueryDiscoveryStorage>();
   expectTypeOf<ThreadOnly>().not.toExtend<StructuredTraceQueryExecutionStorage>();

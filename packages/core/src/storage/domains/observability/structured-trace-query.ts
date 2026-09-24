@@ -566,24 +566,29 @@ export interface StructuredTraceQueryObservedFieldsResult {
 
 export type StructuredTraceQueryValuesResult = GetStructuredTraceQueryValuesResponse;
 
-export type StructuredTraceQueryStorageFeature =
-  | 'trace-query-structured-paths'
-  | 'thread-query-structured-paths'
-  | 'trace-query-structured-discovery';
+export type StructuredTraceQueryOperationCapability = {
+  roots: readonly StructuredTraceQueryRoot[];
+};
 
-export interface StructuredTraceQueryFeatureReporter {
-  getStructuredTraceQueryFeatures(): readonly StructuredTraceQueryStorageFeature[];
+export type StructuredTraceQueryCapabilities = {
+  traces?: StructuredTraceQueryOperationCapability;
+  threads?: StructuredTraceQueryOperationCapability;
+  discovery?: StructuredTraceQueryOperationCapability;
+};
+
+export interface StructuredTraceQueryCapabilityReporter {
+  getStructuredTraceQueryCapabilities(): StructuredTraceQueryCapabilities;
 }
 
-export interface StructuredTraceQueryExecutionStorage extends StructuredTraceQueryFeatureReporter {
+export interface StructuredTraceQueryExecutionStorage extends StructuredTraceQueryCapabilityReporter {
   queryStructuredTraces(plan: TrustedStructuredTraceQueryPlan): Promise<TraceQueryResponse>;
 }
 
-export interface StructuredThreadQueryExecutionStorage extends StructuredTraceQueryFeatureReporter {
+export interface StructuredThreadQueryExecutionStorage extends StructuredTraceQueryCapabilityReporter {
   queryStructuredThreads(plan: TrustedStructuredThreadQueryPlan): Promise<QueryThreadsResult>;
 }
 
-export interface StructuredTraceQueryDiscoveryStorage extends StructuredTraceQueryFeatureReporter {
+export interface StructuredTraceQueryDiscoveryStorage extends StructuredTraceQueryCapabilityReporter {
   getStructuredTraceQueryObservedFields(
     plan: TrustedStructuredTraceQueryObservedFieldsPlan,
   ): Promise<StructuredTraceQueryObservedFieldsResult>;
@@ -594,13 +599,16 @@ function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function reportsStructuredFeature(
+function reportsStructuredCapability(
   storage: ObservabilityStorage,
-  feature: StructuredTraceQueryStorageFeature,
-): storage is ObservabilityStorage & StructuredTraceQueryFeatureReporter {
-  if (!isRecord(storage) || typeof storage.getStructuredTraceQueryFeatures !== 'function') return false;
-  const features = storage.getStructuredTraceQueryFeatures();
-  return Array.isArray(features) && features.includes(feature);
+  operation: keyof StructuredTraceQueryCapabilities,
+): storage is ObservabilityStorage & StructuredTraceQueryCapabilityReporter {
+  const candidate: unknown = storage;
+  if (!isRecord(candidate) || typeof candidate.getStructuredTraceQueryCapabilities !== 'function') return false;
+  const capabilities: unknown = candidate.getStructuredTraceQueryCapabilities();
+  if (!isRecord(capabilities)) return false;
+  const capability = capabilities[operation];
+  return isRecord(capability) && Array.isArray(capability.roots);
 }
 
 export function supportsStructuredTraceQueryExecution(
@@ -608,7 +616,7 @@ export function supportsStructuredTraceQueryExecution(
 ): storage is ObservabilityStorage & StructuredTraceQueryExecutionStorage {
   const candidate: unknown = storage;
   return (
-    reportsStructuredFeature(storage, 'trace-query-structured-paths') &&
+    reportsStructuredCapability(storage, 'traces') &&
     isRecord(candidate) &&
     typeof candidate.queryStructuredTraces === 'function'
   );
@@ -619,7 +627,7 @@ export function supportsStructuredThreadQueryExecution(
 ): storage is ObservabilityStorage & StructuredThreadQueryExecutionStorage {
   const candidate: unknown = storage;
   return (
-    reportsStructuredFeature(storage, 'thread-query-structured-paths') &&
+    reportsStructuredCapability(storage, 'threads') &&
     isRecord(candidate) &&
     typeof candidate.queryStructuredThreads === 'function'
   );
@@ -630,7 +638,7 @@ export function supportsStructuredTraceQueryDiscovery(
 ): storage is ObservabilityStorage & StructuredTraceQueryDiscoveryStorage {
   const candidate: unknown = storage;
   return (
-    reportsStructuredFeature(storage, 'trace-query-structured-discovery') &&
+    reportsStructuredCapability(storage, 'discovery') &&
     isRecord(candidate) &&
     typeof candidate.getStructuredTraceQueryObservedFields === 'function' &&
     typeof candidate.getStructuredTraceQueryValues === 'function'
