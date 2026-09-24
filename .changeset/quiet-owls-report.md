@@ -8,10 +8,12 @@ Stores that declare their features with `getFeatures()` are reported exactly as 
 
 On legacy stores such as LibSQL or the default `PostgresStore`, `traceQuery` is `false`. Clients should list traces with `GET /observability/traces/light` instead of `POST /observability/traces/query` on those stores ([#24990](https://github.com/mastra-ai/mastra/issues/24990)).
 
-```ts
-const { observabilityStorageCapabilities: caps } = await client.getSystemPackages();
+The same capabilities are also available from the new `GET /observability/capabilities` endpoint, which works on any `@mastra/core` version and reports every flag as `false` when no observability storage is configured.
 
-if (caps?.discovery.entityNames) {
+```ts
+const { capabilities } = await client.getObservabilityCapabilities();
+
+if (capabilities.discovery.entityNames) {
   const { names } = await client.getEntityNames({});
 }
 ```

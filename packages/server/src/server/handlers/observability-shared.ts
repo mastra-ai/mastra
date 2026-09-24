@@ -209,6 +209,25 @@ export type ObservabilityStorageCapabilities = {
   threadQuery: boolean;
 };
 
+export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabilities = {
+  metrics: false,
+  logs: false,
+  discovery: {
+    entityTypes: false,
+    entityNames: false,
+    serviceNames: false,
+    environments: false,
+    tags: false,
+    metrics: false,
+  },
+  deltaPolling: false,
+  traceQuery: false,
+  traceQueryRootDuration: false,
+  traceQueryDiscovery: false,
+  traceQueryTenantScope: false,
+  threadQuery: false,
+};
+
 /**
  * Resolves which optional observability APIs the configured store can serve.
  *
@@ -582,6 +601,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/discovery/tags',
     summary: 'Get tags',
     description: 'Returns distinct tags with optional entity type filtering',
+  },
+
+  GET_CAPABILITIES: {
+    method: 'GET',
+    path: '/observability/capabilities',
+    summary: 'Get observability capabilities',
+    description:
+      'Returns which optional observability APIs the configured observability storage supports. Every flag is false when no observability storage is configured.',
   },
 } as const satisfies Record<string, RouteDetails>;
 

@@ -80,6 +80,7 @@ import {
 } from '../constants';
 import { HTTPException } from '../http-exception';
 import { listFeedbackResponseSchema } from '../schemas/feedback';
+import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { prepareAuthorEnrichment } from './author-enrichment';
@@ -96,8 +97,10 @@ import {
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
+  getObservabilityStorageCapabilities,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
+  NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryRootDuration,
   supportsTraceQueryDiscoveryCore,
@@ -1004,6 +1007,42 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   },
 });
 
+// ============================================================================
+// Capabilities Route
+// ============================================================================
+
+const getObservabilityCapabilitiesResponseSchema = z.object({
+  observabilityStorageType: z
+    .string()
+    .nullable()
+    .describe('Class name of the configured observability storage, or null when none is configured'),
+  capabilities: observabilityStorageCapabilitiesSchema,
+});
+
+// Uses createRoute (not createNewRoute) so clients can ask what is supported
+// even on an @mastra/core too old for the newer observability endpoints.
+export const GET_CAPABILITIES = createRoute({
+  ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
+  responseType: 'json',
+  responseSchema: getObservabilityCapabilitiesResponseSchema,
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    try {
+      const observabilityStore = await mastra.getStorage()?.getStore('observability');
+      if (!observabilityStore) {
+        return { observabilityStorageType: null, capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES };
+      }
+      return {
+        observabilityStorageType: observabilityStore.constructor.name,
+        capabilities: getObservabilityStorageCapabilities(observabilityStore),
+      };
+    } catch (error) {
+      return handleError(error, "Error calling: 'get observability capabilities'");
+    }
+  },
+});
+
 export const NEW_ROUTES = {
   QUERY_TRACES,
   QUERY_THREADS,
@@ -1037,4 +1076,5 @@ export const NEW_ROUTES = {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 };
