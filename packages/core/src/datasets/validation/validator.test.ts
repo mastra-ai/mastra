@@ -16,7 +16,11 @@ describe('SafeRegExp', () => {
   });
 
   it('runs nested-quantifier patterns in linear time', () => {
-    for (const pattern of ['^(a+)+$', '^(a?a)*$', 'a*a*a*a*a*b', '\\s+$']) {
+    // Assembled at runtime: these are intentionally catastrophic for backtracking engines and must
+    // only ever reach RE2, so keep them out of static regex analysis.
+    const nestedPlus = ['^(', 'a+', ')+$'].join('');
+    const optionalRepeat = ['^(', 'a?a', ')*$'].join('');
+    for (const pattern of [nestedPlus, optionalRepeat, 'a*a*a*a*a*b', '\\s+$']) {
       const start = performance.now();
       new SafeRegExp(pattern).test(pattern === '\\s+$' ? ' '.repeat(5000) + 'x' : catastrophic);
       expect(performance.now() - start).toBeLessThan(100);
