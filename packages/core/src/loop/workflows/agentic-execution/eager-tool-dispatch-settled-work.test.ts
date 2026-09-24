@@ -312,6 +312,84 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     expect(recordedResults(stream)).toContain('answered-a');
   });
 
+  it('lets an in-flight call finish on fallback so the fallback model never runs it again', async () => {
+    // Falling over to the next model throws out of the stream rather than returning a retry,
+    // so it reaches a different early exit than the retry case above.
+    const executions: string[] = [];
+    const failing = new MockLanguageModelV2({
+      modelId: 'failing-model',
+      doStream: async () =>
+        toolCallThen(async controller => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          controller.error(new Error('provider died mid-stream'));
+        }),
+    });
+    const fallback = new MockLanguageModelV2({ modelId: 'fallback-model', doStream: async () => textOnly() });
+    const agent = createAgent(failing, executions, { delayMs: 80 });
+    agent.__updateModel({
+      model: [
+        { model: failing, maxRetries: 0 },
+        { model: fallback, maxRetries: 0 },
+      ] as never,
+    });
+
+    const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
+    await drain(stream);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    expect(fallback.doStreamCalls.length).toBe(1);
+    expect(executions).toEqual(['a']);
+    expect(recordedResults(stream)).toContain('answered-a');
+  });
+
+  it('keeps the error of an in-flight call that throws while its attempt is retried', async () => {
+    const executions: string[] = [];
+    let attempts = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        attempts += 1;
+        if (attempts > 1) return textOnly();
+        return toolCallThen(async controller => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+          controller.close();
+        });
+      },
+    });
+    const agent = new Agent({
+      id: 'eager-throwing-retry-agent',
+      name: 'Eager throwing retry agent',
+      instructions: 'Call tool-a.',
+      model,
+      errorProcessors: [
+        {
+          id: 'retry-once',
+          processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
+        },
+      ] as never,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Fails after doing its work',
+          inputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            executions.push(value);
+            await new Promise(resolve => setTimeout(resolve, 80));
+            throw new Error(`tool-a exploded on ${value}`);
+          },
+        }),
+      },
+    });
+
+    const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
+    await drain(stream);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    expect(attempts).toBe(2);
+    expect(executions).toEqual(['a']);
+    expect(recordedResults(stream)).toContain('tool-a exploded on a');
+  });
+
   it('never repeats pre-suspend work when a suspended eager attempt is retried', async () => {
     // A tool that suspends at runtime without a suspendSchema: its eager attempt has already
     // done the pre-suspend work. Retrying the model must not start that body again.
