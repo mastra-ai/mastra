@@ -135,7 +135,9 @@ export default function SchedulePage() {
               )}
             </MetaItem>
             <MetaItem label="Cron">
-              <code className="font-mono text-body">{schedule.cron}</code>
+              <Txt as="span" variant="body" font="mono">
+                {schedule.cron}
+              </Txt>
               {schedule.timezone ? (
                 <span className="ml-2 text-caption text-muted-foreground">{schedule.timezone}</span>
               ) : null}

@@ -5,6 +5,7 @@ import { SpanRows } from './span-rows';
 import { SpanTreeRow } from './span-tree-row';
 import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
 
 export type TraceSpanTreeProps = {
@@ -28,7 +29,11 @@ export function TraceSpanTreeLoading() {
   return <TraceSpanTreeSkeleton />;
 }
 
-const durationMeta = (ctx: SpanRowContext) => <>{(ctx.span.latency / 1000).toFixed(3)}&nbsp;s</>;
+const durationMeta = (ctx: SpanRowContext) => (
+  <Txt as="span" variant="meta" font="mono">
+    {(ctx.span.latency / 1000).toFixed(3)}&nbsp;s
+  </Txt>
+);
 
 /** Hierarchical span tree: expand toggle, name and duration per row, plus an optional trailing cell. */
 export function TraceSpanTree({

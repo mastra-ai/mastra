@@ -1,3 +1,4 @@
+import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { handleBrowserCommand } from '../browser.js';
@@ -9,6 +10,7 @@ const browserMocks = vi.hoisted(() => ({
   loadSettings: vi.fn(),
   saveSettings: vi.fn(),
   setProfileProvider: vi.fn(),
+  resolveStagehandModel: vi.fn(),
   askModalQuestion: vi.fn(),
 }));
 
@@ -21,6 +23,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importActual => ({
   loadSettings: browserMocks.loadSettings,
   saveSettings: browserMocks.saveSettings,
   setProfileProvider: browserMocks.setProfileProvider,
+  resolveStagehandModel: browserMocks.resolveStagehandModel,
 }));
 
 vi.mock('../../modal-question.js', () => ({
@@ -51,14 +54,14 @@ function createContext() {
   const dynamicAgent = { setBrowser: vi.fn() };
   const controllerState = { mode: 'review' };
   const setState = vi.fn();
-  const settings = {
+  const settings: { browser: BrowserSettings } = {
     browser: {
       enabled: false,
-      provider: 'stagehand' as const,
+      provider: 'stagehand',
       headless: true,
       viewport: { width: 1280, height: 720 },
       profile: '/tmp/mastracode-browser-profile',
-      stagehand: { env: 'LOCAL' as const },
+      stagehand: { env: 'LOCAL' },
     },
   };
   const session = {
@@ -109,6 +112,14 @@ describe('handleBrowserCommand', () => {
     browserMocks.saveSettings.mockReset();
     browserMocks.setProfileProvider.mockReset();
     browserMocks.askModalQuestion.mockReset();
+    browserMocks.resolveStagehandModel.mockReset();
+    // Default: honor a configured model, otherwise Stagehand's own default. Tests
+    // that need the Codex fallback override this so the real auth store is never read.
+    browserMocks.resolveStagehandModel.mockImplementation((s: { stagehand?: { model?: string } }) =>
+      s.stagehand?.model
+        ? { modelName: s.stagehand.model, source: 'settings' }
+        : { modelName: undefined, source: 'stagehand-default' },
+    );
     selectorMocks.promptForApiKeyIfNeeded.mockReset();
     selectorMocks.lastOptions = undefined;
   });
@@ -132,7 +143,10 @@ describe('handleBrowserCommand', () => {
     expect(dynamicAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     const dynamicMode = (ctx.controller.listModes as ReturnType<typeof vi.fn>).mock.results[0]?.value[1];
     expect(dynamicMode.agent).toHaveBeenCalledWith(controllerState);
-    expect(setState).toHaveBeenCalledWith({ activeBrowserSettings: enabledSettings });
+    expect(setState).toHaveBeenCalledWith({
+      activeBrowserSettings: enabledSettings,
+      activeBrowserModel: { modelName: undefined, source: 'stagehand-default' },
+    });
     expect(browserMocks.setProfileProvider).toHaveBeenCalledWith('/tmp/mastracode-browser-profile', 'stagehand');
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     expect(settings.browser.enabled).toBe(true);
@@ -323,6 +337,138 @@ describe('handleBrowserCommand', () => {
     });
   });
 
+  describe('status model line', () => {
+    function statusOutput(ctx: SlashCommandContext): string {
+      return (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    }
+
+    it('shows the configured model', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({
+        modelName: 'anthropic/claude-sonnet-4-5',
+        source: 'settings',
+      });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).toContain('Model: anthropic/claude-sonnet-4-5');
+    });
+
+    it('reveals the implicit Codex fallback so users know which model is really running', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: 'openai/gpt-5.5', source: 'codex-oauth' });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+      expect(browserMocks.resolveStagehandModel).toHaveBeenCalledWith(settings.browser);
+    });
+
+    it('points at /browser set model when Stagehand is left on its own default', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).toContain('Model: Stagehand default (set one with /browser set model)');
+    });
+
+    it('omits the model line for agent-browser, which has no model', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      (settings.browser as any).provider = 'agent-browser';
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).not.toContain('Model:');
+    });
+
+    it('still shows the model after /browser clear removed the stagehand block', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      delete (settings.browser as any).stagehand;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: 'openai/gpt-5.5', source: 'codex-oauth' });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).not.toContain('Environment:');
+      expect(statusOutput(ctx)).toContain('Model: openai/gpt-5.5');
+    });
+
+    it('reports the model the active browser launched with, not what current credentials would resolve to', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      settings.browser.stagehand = { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' };
+      browserMocks.loadSettings.mockReturnValue(settings);
+      // Launched while the model was still the Codex fallback; the file has since changed.
+      const controllerState = ctx.state.session.state.get() as Record<string, unknown>;
+      controllerState.activeBrowserSettings = { ...structuredClone(settings.browser), stagehand: { env: 'LOCAL' } };
+      controllerState.activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' };
+      browserMocks.resolveStagehandModel.mockImplementation((s: any) =>
+        s.stagehand?.model
+          ? { modelName: s.stagehand.model, source: 'settings' }
+          : { modelName: undefined, source: 'stagehand-default' },
+      );
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const out = statusOutput(ctx);
+      const active = out.slice(out.indexOf('Browser (active):'), out.indexOf('Pending changes'));
+      const pending = out.slice(out.indexOf('Pending changes'));
+      expect(active).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+      expect(pending).toContain('Model: anthropic/claude-sonnet-4-5');
+    });
+
+    it('uses the launch-time model in the no-drift status too, ignoring later credential changes', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      const controllerState = ctx.state.session.state.get() as Record<string, unknown>;
+      controllerState.activeBrowserSettings = structuredClone(settings.browser);
+      controllerState.activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' };
+      // Simulates signing out of Codex after launch: a fresh resolve would say "Stagehand default".
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: undefined, source: 'stagehand-default' });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const out = statusOutput(ctx);
+      expect(out).not.toContain('Pending changes');
+      expect(out).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+    });
+
+    it('never stores the Browserbase API key in session state', async () => {
+      const { ctx, settings, setState } = createContext();
+      settings.browser.enabled = true;
+      settings.browser.stagehand = { env: 'BROWSERBASE', apiKey: 'bb-secret', projectId: 'proj' };
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['on']);
+
+      const stored = setState.mock.calls.at(-1)?.[0] as { activeBrowserSettings?: BrowserSettings };
+      expect(stored.activeBrowserSettings?.stagehand).toEqual({ env: 'BROWSERBASE', projectId: 'proj' });
+      expect(JSON.stringify(stored)).not.toContain('bb-secret');
+    });
+
+    it('accepts info as an alias for status', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: 'openai/gpt-5.5', source: 'codex-oauth' });
+
+      await handleBrowserCommand(ctx, ['info']);
+
+      expect(statusOutput(ctx)).toContain('Browser: enabled');
+      expect(statusOutput(ctx)).toContain('Model: openai/gpt-5.5');
+    });
+  });
+
   describe('viewport', () => {
     it('sets explicit dimensions', async () => {
       const { ctx, settings } = createContext();
@@ -369,7 +515,7 @@ describe('handleBrowserCommand', () => {
 
     it('accepts window when stagehand connects over cdpUrl', async () => {
       const { ctx, settings } = createContext();
-      (settings.browser as Record<string, unknown>).cdpUrl = 'http://localhost:9222';
+      settings.browser.cdpUrl = 'http://localhost:9222';
       browserMocks.loadSettings.mockReturnValue(settings);
 
       await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
@@ -379,7 +525,7 @@ describe('handleBrowserCommand', () => {
 
     it('accepts window on the agent-browser provider', async () => {
       const { ctx, settings } = createContext();
-      (settings.browser as Record<string, unknown>).provider = 'agent-browser';
+      settings.browser.provider = 'agent-browser';
       browserMocks.loadSettings.mockReturnValue(settings);
 
       await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
@@ -410,7 +556,7 @@ describe('handleBrowserCommand', () => {
 
     it('offers window in the picker when the provider can honor it', async () => {
       const { ctx, settings } = createContext();
-      (settings.browser as Record<string, unknown>).provider = 'agent-browser';
+      settings.browser.provider = 'agent-browser';
       browserMocks.loadSettings.mockReturnValue(settings);
       browserMocks.askModalQuestion.mockResolvedValue('window');
 
@@ -476,6 +622,58 @@ describe('handleBrowserCommand', () => {
       const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
       expect(output).toContain('Pending changes (not yet applied):');
       expect(output).toContain('Viewport: 1600x1000');
+    });
+
+    it('does not report drift when the active snapshot matches the file, including profile and model', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser = {
+        ...settings.browser,
+        enabled: true,
+        profile: '/tmp/profile',
+        stagehand: { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5', preserveUserDataDir: true },
+      };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+      expect(output).not.toContain('Pending changes');
+      expect(output).toContain('Browser: enabled');
+      expect(output).toContain('Profile: /tmp/profile');
+    });
+
+    it('reports scope and preserveUserDataDir changes as pending since they change the launched browser', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser = {
+        ...settings.browser,
+        enabled: true,
+        profile: undefined,
+        scope: 'shared',
+        stagehand: { env: 'LOCAL', preserveUserDataDir: false },
+      };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      settings.browser.scope = 'thread';
+      settings.browser.stagehand = { env: 'LOCAL', preserveUserDataDir: true };
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain(
+        'Pending changes (not yet applied):',
+      );
+    });
+
+    it('ignores a scope change when a profile forces shared scope anyway', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser = { ...settings.browser, enabled: true, profile: '/tmp/profile', scope: 'shared' };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      settings.browser.scope = 'thread';
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).not.toContain('Pending changes');
     });
   });
 });
