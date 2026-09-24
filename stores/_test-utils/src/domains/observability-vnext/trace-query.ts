@@ -1393,6 +1393,17 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     request: { traces: { timeRange: scopedRange } },
     expected: [{ threadId: 'thread-org-a' }, { threadId: 'thread-org-b' }],
   },
+  {
+    name: 'thread queries qualify threads through context identifiers',
+    request: {
+      traces: {
+        timeRange: scopedRange,
+        where: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+      },
+      where: { traces: { some: { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-2' } } } },
+    },
+    expected: [{ threadId: 'thread-org-b' }],
+  },
 ];
 
 export interface TraceQueryConformanceCase {
