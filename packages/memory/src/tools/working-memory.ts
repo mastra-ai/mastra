@@ -68,7 +68,21 @@ export function deepMergeWorkingMemory(
   return result;
 }
 
-export function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>): unknown {
+/** `.nullable()` wraps a schema as `anyOf: [schema, { type: 'null' }]`; unwrap it so its declared fields are visible. */
+function resolveNullableBranch(value: unknown, schema: Record<string, unknown>): Record<string, unknown> {
+  const branches = schema.anyOf ?? schema.oneOf;
+  if (!Array.isArray(branches)) {
+    return schema;
+  }
+
+  const kind = Array.isArray(value) ? 'array' : 'object';
+  const matching = (branches as Record<string, unknown>[]).filter(branch => branch.type === kind);
+  return matching.length === 1 ? matching[0]! : schema;
+}
+
+export function stripNullsFromOptional(value: unknown, rawSchema: Record<string, unknown>): unknown {
+  const schema = resolveNullableBranch(value, rawSchema);
+
   if (Array.isArray(value)) {
     const itemSchema = (schema.items as Record<string, unknown>) ?? {};
     return value.map(item => stripNullsFromOptional(item, itemSchema));

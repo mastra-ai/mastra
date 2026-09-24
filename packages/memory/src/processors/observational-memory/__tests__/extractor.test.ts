@@ -678,6 +678,20 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(result.failures).toBeUndefined();
   });
 
+  it('treats nulls in optional fields of a nullable object as not provided', async () => {
+    const schema = z.object({
+      name: z.string(),
+      profile: z.object({ nickname: z.string().optional() }).nullable(),
+    });
+
+    const { memory, result } = await runWorkingMemoryHook(schema, { name: 'Tyler', profile: { nickname: null } });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ name: 'Tyler', profile: {} }) }),
+    );
+    expect(result.failures).toBeUndefined();
+  });
+
   it('rejects a null for a key a strict schema does not declare', async () => {
     const { memory, result } = await runWorkingMemoryHook(z.strictObject({ name: z.string() }), {
       name: 'Tyler',
