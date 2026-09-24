@@ -33,20 +33,18 @@ describe('presentTool', () => {
     });
   });
 
-  it("shows a command's description on the row, keeping the command for the expanded body", () => {
+  it("shows a command's description on the row in place of the label and command, keeping the command for the expanded body", () => {
     const command = "cd packages/core && rg -n 'processor' src | head -20";
-    expect(presentTool('execute_command', { description: 'Finding  the processor\n wiring', command })).toMatchObject({
-      label: 'Run',
-      detail: 'Finding the processor wiring',
-      command,
-    });
+    const presentation = presentTool('execute_command', { description: 'Finding  the processor\n wiring', command });
+    // The label stays as the kind of tool, which groups use; the row shows the description alone.
+    expect(presentation).toMatchObject({ label: 'Run', description: 'Finding the processor wiring', command });
+    expect(presentation.detail).toBeUndefined();
   });
 
   it('falls back to the command when the description is blank', () => {
-    expect(presentTool('execute_command', { description: '  ', command: 'git status' })).toMatchObject({
-      detail: 'git status',
-      command: 'git status',
-    });
+    const presentation = presentTool('execute_command', { description: '  ', command: 'git status' });
+    expect(presentation).toMatchObject({ label: 'Run', detail: 'git status', command: 'git status' });
+    expect(presentation.description).toBeUndefined();
   });
 
   it('strips the raw workspace prefix before lookup', () => {

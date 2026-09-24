@@ -118,7 +118,7 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(row).queryByText('execute_command')).not.toBeInTheDocument();
   });
 
-  it("shows a shell command's description on its row and the command when expanded", async () => {
+  it("shows a shell command's description alone on its row and the command when expanded", async () => {
     const command = "cd packages/core && rg -n 'processor' src";
     renderEntries([
       assistantMessage('msg-1', [
@@ -137,6 +137,7 @@ describe('TranscriptEntries tool rows', () => {
 
     const row = screen.getByRole('group', { name: 'Tool: execute_command' });
     expect(within(row).getByText('Finding the processor wiring')).toBeInTheDocument();
+    expect(within(row).queryByText('Run')).not.toBeInTheDocument();
     expect(within(row).queryByText(/rg -n/)).not.toBeInTheDocument();
 
     await userEvent.click(within(row).getAllByRole('button')[0]);

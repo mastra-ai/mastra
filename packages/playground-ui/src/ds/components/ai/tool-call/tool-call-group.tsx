@@ -37,7 +37,8 @@ const MAX_KIND_GLYPHS = 4;
 
 export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) {
   const running = steps.find(step => step.status === 'running');
-  const liveDetail = running && presentTool(running.toolName, running.args).detail;
+  const live = running && presentTool(running.toolName, running.args);
+  const liveDetail = live && (live.description ?? live.detail);
 
   return (
     <ToolCall status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
