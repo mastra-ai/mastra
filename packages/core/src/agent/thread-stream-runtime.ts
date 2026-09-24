@@ -3624,7 +3624,7 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
-        noteRunHalf(data.runId, data.streamId);
+        noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
         const localRecord = state.threadRunsByStreamId.get(data.streamId);
         if (localRecord) {
           localStreamIds.add(data.streamId);
@@ -3830,20 +3830,24 @@ export class AgentThreadStreamRuntime {
     let historyReadAt: number | undefined;
     const storedStreamIds = new Set<string>();
     const suspendedStreamIdsByRunId = new Map<string, string>();
-    const registeredStreamIdsByRunId = new Map<string, Set<string>>();
+    /** streamSeq of each registered stream, per run. */
+    const registeredSeqsByRunId = new Map<string, Map<string, number>>();
     /** Suspended halves whose run has since resumed: their prompts are already answered. */
     const answeredStreamIds = new Set<string>();
-    // A run registering again under a new stream means its suspension was
-    // answered. A lagging publisher can deliver that registration before the
-    // suspended half's `run-suspended`, so check whichever arrives second.
-    function noteRunHalf(runId: string, registeredStreamId?: string) {
-      const registered = registeredStreamIdsByRunId.get(runId) ?? new Set<string>();
-      if (registeredStreamId !== undefined) registered.add(registeredStreamId);
-      registeredStreamIdsByRunId.set(runId, registered);
+    // A run registering a later stream means its suspension was answered. A
+    // lagging publisher can deliver that registration before the suspended
+    // half's `run-suspended`, so check whichever arrives second. Only a later
+    // stream answers: a resumed half that suspends again is still pending.
+    function noteRunHalf(runId: string, registration?: { streamId: string; streamSeq: number }) {
+      const registered = registeredSeqsByRunId.get(runId) ?? new Map<string, number>();
+      if (registration) registered.set(registration.streamId, registration.streamSeq);
+      registeredSeqsByRunId.set(runId, registered);
       const suspendedStreamId = suspendedStreamIdsByRunId.get(runId);
       if (suspendedStreamId === undefined) return;
-      for (const streamId of registered) {
-        if (streamId !== suspendedStreamId) answeredStreamIds.add(suspendedStreamId);
+      const suspendedSeq = registered.get(suspendedStreamId);
+      for (const [streamId, streamSeq] of registered) {
+        if (streamId === suspendedStreamId) continue;
+        if (suspendedSeq === undefined || streamSeq > suspendedSeq) answeredStreamIds.add(suspendedStreamId);
       }
     }
 

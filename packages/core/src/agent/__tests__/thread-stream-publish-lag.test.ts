@@ -3,7 +3,7 @@
  * model: parts must be judged by when they were produced, so nothing storage
  * already holds is sent again after the `thread-history` chunk.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Mastra } from '../../mastra';
@@ -39,8 +39,11 @@ function streamOf(parts: any[]) {
   };
 }
 
-/** Step 1 writes text and calls `tool`; step 2 answers. `beforeAnswer` holds step 2 back. */
-function model(tool: string, beforeAnswer?: Promise<void>) {
+/**
+ * Step 1 writes text and calls `tool` (twice with `siblings`); step 2 answers.
+ * `beforeAnswer` holds step 2 back.
+ */
+function model(tool: string, beforeAnswer?: Promise<void>, siblings = false) {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       if (!JSON.stringify(prompt).includes('"type":"tool-result"')) {
@@ -49,6 +52,7 @@ function model(tool: string, beforeAnswer?: Promise<void>) {
           { type: 'text-delta', id: 't1', delta: 'checking' },
           { type: 'text-end', id: 't1' },
           { type: 'tool-call', toolCallId: 'call-1', toolName: tool, input: '{"q":"x"}' },
+          ...(siblings ? [{ type: 'tool-call', toolCallId: 'call-2', toolName: tool, input: '{"q":"y"}' }] : []),
           { type: 'finish', finishReason: 'tool-calls', usage },
         ]);
       }
@@ -64,7 +68,7 @@ function model(tool: string, beforeAnswer?: Promise<void>) {
 }
 
 /** Saves the previous step at each step boundary, the way Observational Memory does. */
-function stepSaver(memory: MockMemory): Processor {
+function stepSaver(memory: MockMemory, onSaved?: () => void): Processor {
   return {
     id: 'step-saver',
     processInputStep: async ({ messageList, stepNumber }) => {
@@ -76,6 +80,7 @@ function stepSaver(memory: MockMemory): Processor {
       }
       const messages = [...messageList.get.input.db(), ...messageList.get.response.db()];
       await memory.saveMessages({ messages });
+      onSaved?.();
     },
   };
 }
@@ -87,6 +92,8 @@ function setup(options: {
   toolGate?: Promise<void>;
   onToolStart?: () => void;
   saveEachStep?: boolean;
+  onStepSaved?: () => void;
+  siblings?: boolean;
 }) {
   const pubsub = new LeasePubSub();
   pubsub.retain = true;
@@ -101,7 +108,7 @@ function setup(options: {
     id: 'lag-agent',
     name: 'Lag Agent',
     instructions: 'test',
-    model: model(options.tool, options.beforeAnswer),
+    model: model(options.tool, options.beforeAnswer, options.siblings),
     memory,
     tools: {
       lookup: createTool({
@@ -113,7 +120,7 @@ function setup(options: {
       }),
       echo: createTool({ id: 'echo', description: 'e', inputSchema: z.object({ q: z.string() }), execute }),
     },
-    inputProcessors: options.saveEachStep ? [stepSaver(memory)] : [],
+    inputProcessors: options.saveEachStep ? [stepSaver(memory, options.onStepSaved)] : [],
   });
   const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false, pubsub });
   return mastra.getAgent('agent');
@@ -183,9 +190,16 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
 
   it('joining during step 2 of a run saved at each step sends only step 2', async () => {
     const answerGate = deferred();
-    const agent = setup({ delayMs, tool: 'echo', beforeAnswer: answerGate.promise, saveEachStep: true });
+    const stepSaved = deferred();
+    const agent = setup({
+      delayMs,
+      tool: 'echo',
+      beforeAnswer: answerGate.promise,
+      saveEachStep: true,
+      onStepSaved: stepSaved.resolve,
+    });
     const run = drain(await agent.stream('go', { memory: memoryOption }));
-    await new Promise(resolve => setTimeout(resolve, 50 + delayMs * 20));
+    await stepSaved.promise;
 
     const chunks = join(
       agent,
@@ -202,5 +216,35 @@ describe.each([0, 5])('thread history with %i ms publish lag', delayMs => {
     expect(types).not.toContain('tool-call');
     expect(types).not.toContain('tool-result');
     expect(received.filter(c => c.type === 'text-delta').map(c => c.payload.text)).toEqual(['answer']);
+  });
+
+  it('joining after one of two approvals is answered still delivers the other', async () => {
+    const toolGate = deferred();
+    const toolStarted = deferred();
+    const agent = setup({
+      delayMs,
+      tool: 'lookup',
+      siblings: true,
+      toolGate: toolGate.promise,
+      onToolStart: toolStarted.resolve,
+    });
+    const first = await agent.stream('go', { memory: memoryOption });
+    await drain(first);
+
+    const resumed = drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
+    await toolStarted.promise;
+    const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+    const chunks: any[] = [];
+    const consumed = (async () => {
+      for await (const chunk of subscription.stream) chunks.push(chunk);
+    })();
+    toolGate.resolve();
+    await resumed;
+    await vi.waitFor(() => expect(chunks.some(c => c.type === 'tool-call-approval')).toBe(true));
+    await nextTicks(20);
+    subscription.unsubscribe();
+    await consumed;
+
+    expect(chunks.filter(c => c.type === 'tool-call-approval').map(c => c.payload.toolCallId)).toEqual(['call-2']);
   });
 });
