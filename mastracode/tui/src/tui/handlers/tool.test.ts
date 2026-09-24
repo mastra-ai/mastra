@@ -280,6 +280,30 @@ describe('quiet shell description streaming', () => {
     expect(render()).not.toContain('gh run view');
   });
 
+  it('streams the description into a grouped row as it arrives', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    ctx.state.quietModeMaxToolPreviewLines = 0;
+    const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const row = () =>
+      stripAnsi(ctx.state.chatContainer.render(100).join('\n'))
+        .split('\n')
+        .map(line => line.trimEnd())
+        .find(line => /^│ \S /.test(line) && !line.startsWith('│ $'));
+
+    handleToolInputStart(ctx, 'call-1', 'execute_command');
+    handleToolInputDelta(ctx, 'call-1', '{"description":"Drilling in');
+    await flushParser();
+    expect(row()).toMatch(/^│ \S Drilling in +\d+s │$/);
+
+    handleToolInputDelta(ctx, 'call-1', 'to the failed CI job","command":"gh run');
+    await flushParser();
+    expect(row()).toMatch(/^│ \S Drilling into the failed CI job +\d+s │$/);
+    handleToolInputEnd(ctx, 'call-1');
+    ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
+  });
+
   it('falls back to the command once args finish without a description', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
