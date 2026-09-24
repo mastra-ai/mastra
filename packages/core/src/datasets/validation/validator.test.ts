@@ -27,6 +27,18 @@ describe('SafeRegExp', () => {
     expect(() => new SafeRegExp('(?=a)b')).toThrow(UnsupportedSchemaPatternError);
     expect(() => new SafeRegExp('(a)\\1')).toThrow(UnsupportedSchemaPatternError);
   });
+
+  it('rejects RE2-only syntax that native RegExp cannot compile', () => {
+    expect(() => new SafeRegExp('(?i)foo')).toThrow(UnsupportedSchemaPatternError);
+  });
+
+  it('inspects properties whose names collide with data keywords', () => {
+    for (const name of ['const', 'enum', 'default', 'examples']) {
+      expect(() =>
+        assertSupportedPatterns({ type: 'object', properties: { [name]: { type: 'string', pattern: '(?=a)' } } }),
+      ).toThrow(UnsupportedSchemaPatternError);
+    }
+  });
 });
 
 describe('SchemaValidator regex patterns', () => {

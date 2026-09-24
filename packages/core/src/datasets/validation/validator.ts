@@ -17,22 +17,28 @@ function resolveZodSchema(zodString: string): ZodSchema {
 }
 
 const NON_SCHEMA_KEYWORDS = new Set(['const', 'enum', 'default', 'examples']);
+/** Keywords whose object values map arbitrary names (not keywords) to subschemas */
+const SCHEMA_MAP_KEYWORDS = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas']);
 
 /** Compile every `pattern` / `patternProperties` key up front so unsupported syntax fails at schema compile time */
-export function assertSupportedPatterns(node: unknown): void {
+export function assertSupportedPatterns(node: unknown, isSchemaMap = false): void {
   if (Array.isArray(node)) {
-    node.forEach(assertSupportedPatterns);
+    node.forEach(item => assertSupportedPatterns(item));
     return;
   }
   if (!node || typeof node !== 'object') return;
   for (const [key, value] of Object.entries(node)) {
+    if (isSchemaMap) {
+      assertSupportedPatterns(value);
+      continue;
+    }
     if (NON_SCHEMA_KEYWORDS.has(key)) continue;
     if (key === 'pattern' && typeof value === 'string') {
       new SafeRegExp(value);
     } else if (key === 'patternProperties' && value && typeof value === 'object') {
       Object.keys(value).forEach(p => new SafeRegExp(p));
     }
-    assertSupportedPatterns(value);
+    assertSupportedPatterns(value, SCHEMA_MAP_KEYWORDS.has(key));
   }
 }
 

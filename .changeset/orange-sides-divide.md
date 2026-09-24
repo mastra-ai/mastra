@@ -1,6 +1,5 @@
 ---
 '@mastra/server': patch
-'@mastra/core': patch
 ---
 
-Dataset create and update routes now return 400 when a schema uses an unsupported regex pattern.
+Fixed dataset create and update routes returning 500 when a schema uses an unsupported regex pattern; they now return 400 with the offending pattern.

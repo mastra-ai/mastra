@@ -44,7 +44,12 @@ export class SafeRegExp extends RegExp {
     const source = typeof pattern === 'string' ? pattern : pattern.source;
     const resolvedFlags = flags ?? (typeof pattern === 'string' ? '' : pattern.flags);
     const re2 = compileRe2(source, resolvedFlags);
-    super(source, resolvedFlags);
+    try {
+      super(source, resolvedFlags);
+    } catch (error) {
+      // RE2-only syntax such as inline flags `(?i)` compiles in RE2 but not natively
+      throw new UnsupportedSchemaPatternError(source, error instanceof Error ? error.message : String(error));
+    }
     this.#re2 = re2;
   }
 
