@@ -45,6 +45,8 @@ export const STRUCTURED_TRACE_QUERY_MAX_PATH_SEGMENTS = 12;
 
 const PAGINATION_MODE_CONFLICT_MESSAGE = 'Trace queries cannot combine keyset and page pagination';
 const GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support page pagination';
+const INVALID_TIME_RANGE_MESSAGE = '`from` must be earlier than `to`';
+const TIME_RANGE_TOO_LARGE_MESSAGE = 'The time range cannot exceed 31 days';
 
 const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
 const structuredLiteralStringSchema = z
@@ -333,9 +335,9 @@ const structuredDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine
   const from = new Date(timeRange.from);
   const to = new Date(timeRange.to);
   if (from >= to) {
-    context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
+    context.addIssue({ code: 'custom', path: [], message: INVALID_TIME_RANGE_MESSAGE });
   } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
+    context.addIssue({ code: 'custom', path: [], message: TIME_RANGE_TOO_LARGE_MESSAGE });
   }
 });
 const structuredDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
@@ -1296,9 +1298,9 @@ function normalizeTimeRange(timeRange: { from: string; to: string }): { from: st
 
 function validateTimeRange(from: Date, to: Date, path: Array<string | number>, issues: TraceQueryIssue[]): void {
   if (from >= to) {
-    issues.push({ code: 'invalid_time_range', path, message: '`from` must be earlier than `to`' });
+    issues.push({ code: 'invalid_time_range', path, message: INVALID_TIME_RANGE_MESSAGE });
   } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({ code: 'time_range_too_large', path, message: 'The time range cannot exceed 31 days' });
+    issues.push({ code: 'time_range_too_large', path, message: TIME_RANGE_TOO_LARGE_MESSAGE });
   }
 }
 
@@ -1315,14 +1317,14 @@ function sortedStructuredRoots(roots: Set<StructuredTraceQueryRoot>): Structured
 
 function formatStructuredSchemaIssues(error: z.ZodError): TraceQueryIssue[] {
   return error.issues.map(issue => {
-    const customCode =
-      issue.code === 'custom' && issue.message === TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE
-        ? 'predicate_too_complex'
-        : issue.code === 'custom' && issue.message === PAGINATION_MODE_CONFLICT_MESSAGE
-          ? 'pagination_mode_conflict'
-          : issue.code === 'custom' && issue.message === GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE
-            ? 'group_pagination_not_supported'
-            : undefined;
+    let customCode: TraceQueryIssue['code'] | undefined;
+    if (issue.code === 'custom') {
+      if (issue.message === TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE) customCode = 'predicate_too_complex';
+      if (issue.message === PAGINATION_MODE_CONFLICT_MESSAGE) customCode = 'pagination_mode_conflict';
+      if (issue.message === GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE) customCode = 'group_pagination_not_supported';
+      if (issue.message === INVALID_TIME_RANGE_MESSAGE) customCode = 'invalid_time_range';
+      if (issue.message === TIME_RANGE_TOO_LARGE_MESSAGE) customCode = 'time_range_too_large';
+    }
     return {
       code: customCode ?? 'invalid_request',
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),

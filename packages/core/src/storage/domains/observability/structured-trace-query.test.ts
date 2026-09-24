@@ -28,6 +28,19 @@ const baseTimeRange = {
   to: '2026-09-01T00:00:00Z',
 };
 
+const structuredDiscoveryParsers = [
+  {
+    name: 'observed fields',
+    parse: (timeRange: { from: string; to: string }) =>
+      parseGetStructuredTraceQueryFieldsArgs({ timeRange, predicateScope: 'trace' }),
+  },
+  {
+    name: 'values',
+    parse: (timeRange: { from: string; to: string }) =>
+      parseGetStructuredTraceQueryValuesArgs({ timeRange, predicateScope: 'trace', path: 'metadata.customer.plan' }),
+  },
+];
+
 const structuredComparison = (path: string | readonly ['metadata', string, ...string[]], literal: unknown) => ({
   op: 'eq' as const,
   left: { path },
@@ -307,6 +320,31 @@ describe('structured trace-query planning', () => {
 });
 
 describe('structured trace-query discovery', () => {
+  describe.each(structuredDiscoveryParsers)('$name parser', ({ parse }) => {
+    it.each([
+      {
+        timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        code: 'invalid_time_range',
+        message: '`from` must be earlier than `to`',
+      },
+      {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-02T00:00:00Z' },
+        code: 'time_range_too_large',
+        message: 'The time range cannot exceed 31 days',
+      },
+    ])('preserves the $code issue', ({ timeRange, code, message }) => {
+      expect(() => parse(timeRange)).toThrowError(
+        expect.objectContaining<Partial<TraceQueryValidationError>>({
+          issues: [{ code, path: ['timeRange'], message }],
+        }),
+      );
+    });
+
+    it('accepts an exact 31-day range', () => {
+      expect(() => parse(baseTimeRange)).not.toThrow();
+    });
+  });
+
   it('derives configured roots and exact value paths inside planners', () => {
     const fields = planStructuredTraceQueryObservedFields(
       parseGetStructuredTraceQueryFieldsArgs({ timeRange: baseTimeRange, predicateScope: 'spans' }),
