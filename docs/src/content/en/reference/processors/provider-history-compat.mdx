@@ -103,7 +103,7 @@ Registering in `errorProcessors` alone, as the example above does, covers both h
 
 | Rule | Provider | Timing | Behavior |
 | - | - | - | - |
-| `anthropic-tool-id-format` | Anthropic | Preemptive prompt rewrite | Rewrites tool call IDs that contain characters outside `[a-zA-Z0-9_-]` in the outbound prompt, on both the call and its result. A sanitized ID that would collide with one already in the prompt gets a `_2`, `_3`, … suffix. The provider's rejection never fires, and persisted history keeps the original IDs. The reactive fallback is deprecated. |
+| `anthropic-tool-id-format` | Anthropic | Preemptive prompt rewrite | Rewrites tool call IDs that contain characters outside `[a-zA-Z0-9_-]` in the outbound prompt, on both the call and its result. A sanitized ID that would collide with one already in the prompt gets a `_2`, `_3`, … suffix. The provider's rejection never fires, and persisted history keeps the original IDs. A reactive fallback covers providers the preemptive check doesn't recognize, such as Vertex-hosted Claude. |
 | `cerebras-strip-reasoning-content` | Cerebras | Preemptive prompt rewrite | Removes assistant `reasoning` parts from the outbound prompt so they're not serialized as unsupported `reasoning_content` fields. |
 | `anthropic-strip-foreign-reasoning-content` | Anthropic | Preemptive prompt rewrite | Removes non-Anthropic assistant `reasoning` parts from the outbound prompt. Anthropic-native thinking history is preserved. |
 | `anthropic-strip-foreign-signed-reasoning` | Anthropic-compatible | Preemptive prompt rewrite | Drops signed thinking from the outbound prompt when its origin turn was stamped with a different provider (for example Kimi For Coding ↔ `__GATEWAY_ANTHROPIC_MODEL_SONNET__`), since the receiving provider can't verify another provider's signature. Turns emptied of all content by the drop are removed from the prompt. Unstamped history is left untouched. |
@@ -227,13 +227,11 @@ toolCallId: 'call.abc:1'
 
 Both the `tool-call` and its paired `tool-result` are rewritten from the same map, so call/result pairing survives the rewrite. Replacement IDs are assigned in encounter order and never collide with an ID the prompt already carries: if `a.b` sanitizes to `a_b` and the prompt already has an `a_b`, the rewritten ID becomes `a_b_2`.
 
-Because nothing is persisted, a caller that reuses the same message list in a later turn sees the original IDs again, and the repair runs again on that request. If you need the sanitized IDs written back to storage, supply a custom rule that implements `fix` instead.
+Because nothing is persisted, a caller that reuses the same message list in a later turn sees the original IDs again, and the repair runs again on that request.
 
-### Deprecated reactive recovery
+### Reactive fallback
 
-The rule's `errorPatterns` and `fix` hooks are deprecated. They remain as a dormant fallback for placements where the prompt lane can't see the request (for example a `CompatRule` applied outside the agent's prompt path), and they're the only repair available once a provider has already rejected the call. They'll be removed in a future major release.
-
-`fix` on the `CompatRule` interface itself isn't deprecated. Custom rules legitimately use the reactive hook, and the two hooks can be combined on one rule.
+The rule's `errorPatterns` and `fix` hooks repair the same rejection after the provider raises it. The preemptive rewrite only runs when `isMaybeAnthropic(model)` matches, so the reactive path stays the fallback for Claude served through a provider the check doesn't recognize, such as Vertex-hosted Claude, and the only repair once a call has already been rejected. A rule can use both hooks together, and `fix` on the `CompatRule` interface itself isn't deprecated: custom rules legitimately use it.
 
 ## Related
 
