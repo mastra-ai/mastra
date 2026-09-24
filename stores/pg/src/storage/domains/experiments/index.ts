@@ -11,6 +11,7 @@ import {
   ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   safelyParseJSON,
   ensureDate,
 } from '@mastra/core/storage';
@@ -38,6 +39,7 @@ import type {
 import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
@@ -442,7 +444,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       }
       if (input.metadata !== undefined) {
         setClauses.push(`"metadata" = $${paramIndex++}`);
-        values.push(JSON.stringify(input.metadata));
+        values.push(toPgJson(input.metadata));
       }
       if (input.status !== undefined) {
         setClauses.push(`"status" = $${paramIndex++}`);
@@ -527,6 +529,10 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
@@ -601,7 +607,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.readClient.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 
@@ -711,19 +717,19 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.itemDatasetVersion ?? null,
             input.organizationId ?? null,
             input.projectId ?? null,
-            JSON.stringify(purgeMetadata ? null : input.input),
-            purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
-            purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
-            JSON.stringify(purgeMetadata ?? input.metadata ?? null),
-            purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+            toPgJson(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : toPgJson(input.output),
+            purgeMetadata || input.groundTruth == null ? null : toPgJson(input.groundTruth),
+            toPgJson(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : toPgJson(input.error),
             input.startedAt.toISOString(),
             input.completedAt.toISOString(),
             input.retryCount,
             input.attempt ?? 0,
             input.traceId ?? null,
             input.status ?? null,
-            purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
-            purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+            purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
             nowIso,
           ],
         );
@@ -784,19 +790,19 @@ export class ExperimentsPG extends ExperimentsStorage {
               input.itemDatasetVersion ?? null,
               input.organizationId ?? null,
               input.projectId ?? null,
-              JSON.stringify(purgeMetadata ? null : input.input),
-              purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
-              purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
-              JSON.stringify(purgeMetadata ?? input.metadata ?? null),
-              purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+              toPgJson(purgeMetadata ? null : input.input),
+              purgeMetadata || input.output == null ? null : toPgJson(input.output),
+              purgeMetadata || input.groundTruth == null ? null : toPgJson(input.groundTruth),
+              toPgJson(purgeMetadata ?? input.metadata ?? null),
+              purgeMetadata || input.error == null ? null : toPgJson(input.error),
               input.startedAt.toISOString(),
               input.completedAt.toISOString(),
               input.retryCount,
               attempt,
               input.traceId ?? null,
               input.status ?? null,
-              purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
-              purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+              purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
+              purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
               new Date().toISOString(),
             ],
           );
@@ -815,19 +821,19 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.itemDatasetVersion ?? null,
             input.organizationId ?? null,
             input.projectId ?? null,
-            JSON.stringify(purgeMetadata ? null : input.input),
-            purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
-            purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
-            JSON.stringify(purgeMetadata ?? input.metadata ?? null),
-            purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+            toPgJson(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : toPgJson(input.output),
+            purgeMetadata || input.groundTruth == null ? null : toPgJson(input.groundTruth),
+            toPgJson(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : toPgJson(input.error),
             input.startedAt.toISOString(),
             input.completedAt.toISOString(),
             input.retryCount,
             attempt,
             input.traceId ?? null,
             input.status ?? null,
-            purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
-            purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+            purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
           ],
         );
       });
@@ -875,7 +881,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.status ?? null,
             Boolean(purgeMetadata),
             input.tags !== undefined,
-            input.tags === undefined ? null : JSON.stringify(input.tags),
+            input.tags === undefined ? null : toPgJson(input.tags),
             input.comment !== undefined,
             input.comment ?? null,
             ...(input.experimentId !== undefined ? [input.experimentId] : []),
@@ -941,6 +947,10 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
 
@@ -959,7 +969,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       // All requested tags must be present (AND semantics)
       for (const tag of args.tags ?? []) {
         conditions.push(`"tags" @> $${paramIndex++}::jsonb`);
-        queryParams.push(JSON.stringify([tag]));
+        queryParams.push(toPgJson([tag]));
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
@@ -990,7 +1000,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.readClient.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 

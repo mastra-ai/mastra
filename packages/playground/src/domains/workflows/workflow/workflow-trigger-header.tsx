@@ -10,10 +10,10 @@ export function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetW
 
   return (
     <div className="flex w-full items-center gap-2 px-5">
-      <Icon className="text-neutral4 shrink-0">
+      <Icon className="shrink-0 text-muted-foreground">
         <WorkflowIcon />
       </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 truncate font-semibold">
+      <Txt as="span" variant="subheading" tone="ink" className="truncate">
         {workflow.name ?? workflowId}
       </Txt>
       <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />

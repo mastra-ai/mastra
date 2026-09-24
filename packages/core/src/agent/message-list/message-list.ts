@@ -5,6 +5,8 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import type { AnySpan } from '../../observability/types';
+import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
@@ -35,16 +37,19 @@ import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
   MastraMessagePart,
+  MastraStepStartPart,
   MastraMessageV1,
   MessageSource,
   MemoryInfo,
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
+import type { MastraToolInvocation } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
+import { advancesToolInvocationState } from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -102,9 +107,108 @@ function mergeBackgroundTasks(
   return merged;
 }
 
+/**
+ * Returns `live` with every tool part that would not move its stored counterpart forward turned
+ * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
+ * stays canonical, and a stale or edited echo can't overwrite it. Live state may only fill in a
+ * call the stored copy still has pending.
+ */
+function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
+  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  for (const part of stored.content.parts) {
+    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+  }
+  if (storedStates.size === 0) return live;
+
+  let changed = false;
+  const parts = live.content.parts.map(part => {
+    if (part.type !== 'tool-invocation') return part;
+    const storedState = storedStates.get(part.toolInvocation.toolCallId);
+    if (!storedState || advancesToolInvocationState(storedState, part.toolInvocation.state)) return part;
+    changed = true;
+    const { toolCallId, toolName, args } = part.toolInvocation;
+    return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
+  });
+  return changed ? { ...live, content: { ...live.content, parts } } : live;
+}
+
 type MessageListAddOptions = {
   merge?: boolean;
 };
+
+/**
+ * Locate the step boundary a loop iteration opened, for `rollbackToStepBoundary`.
+ *
+ * In order: the held reference, wherever it sits in the parts being rolled back; else the marker
+ * carrying the boundary's `createdAt`, if exactly one does, provided the boundary was opened in
+ * this message and the same parts still stand in front of it. Anything else is -1 and the caller
+ * removes the message whole. The reference needs no such corroboration — a part physically
+ * present in this message's array is the boundary, and nothing else can be.
+ *
+ * Reference first because it is exact. It is lost when a processor returns an array rather than
+ * mutating the list: the runner re-adds each returned message with `{ merge: false }`
+ * (`processors/runner.ts`), so a processor that maps or clones its messages hands back parts this
+ * list has never seen. `stampPart` puts a `createdAt` on every marker and cloning carries it, so
+ * the timestamp can find the anchor again.
+ *
+ * The rest of the conditions exist because a wrong match is worse than no match: too early
+ * over-splices accepted content, too late strands the rejected step, which is the bug this
+ * anchoring exists to prevent. The same processors that can clone parts can also drop them, and a
+ * dropped boundary leaves a same-millisecond marker as the sole timestamp match, sitting further
+ * down the message with the rejected step in front of it. So the checkpoint pins what preceded
+ * the boundary — by identifying content, since types alone line up by coincidence once a
+ * processor trims accepted parts — and which message it preceded it in.
+ */
+function findBoundaryIndex(
+  parts: MastraMessagePart[],
+  boundary: MastraStepStartPart,
+  messageId: string,
+  checkpoint: BoundaryCheckpoint | undefined,
+): number {
+  const byReference = parts.indexOf(boundary);
+  if (byReference !== -1) return byReference;
+
+  const stampedAt = boundary.createdAt;
+  if (stampedAt == null || checkpoint === undefined || checkpoint.messageId !== messageId) return -1;
+
+  const matches = parts.flatMap((part, index) =>
+    // Unary + so a Date, or a string from some storage round trip, compares as a number or not at all.
+    part.type === 'step-start' && part.createdAt != null && +part.createdAt === +stampedAt ? [index] : [],
+  );
+  if (matches.length !== 1) return -1;
+
+  const index = matches[0]!;
+  const prefix = prefixFingerprint(parts, index);
+  const held = checkpoint.prefix;
+  const same =
+    prefix.length === held.length && prefix.every((token, i) => token[0] === held[i]![0] && token[1] === held[i]![1]);
+  return same ? index : -1;
+}
+
+/** A preceding part, named by its type and by whatever identifies it within that type. */
+type BoundaryToken = [type: string, identity: string | undefined];
+
+/** Where a boundary was opened, and what stood in front of it there. */
+type BoundaryCheckpoint = { messageId: string; prefix: BoundaryToken[] };
+
+/**
+ * Identify the parts preceding an index — what a splice at that index is actually a statement
+ * about. A tool call is named by its id, text and reasoning by their own string, anything else by
+ * its type alone. Each token holds that string as-is rather than building one out of it, so the
+ * capture every iteration allocates a pair per preceding part and copies no content; the
+ * comparing happens only on a rejection.
+ */
+function prefixFingerprint(parts: MastraMessagePart[], index: number): BoundaryToken[] {
+  const tokens: BoundaryToken[] = [];
+  for (let i = 0; i < index; i++) {
+    const part = parts[i]!;
+    if (part.type === 'text') tokens.push([part.type, part.text]);
+    else if (part.type === 'tool-invocation') tokens.push([part.type, part.toolInvocation?.toolCallId]);
+    else if (part.type === 'reasoning') tokens.push([part.type, part.reasoning]);
+    else tokens.push([part.type, undefined]);
+  }
+  return tokens;
+}
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -164,6 +268,7 @@ export class MessageList {
 
   // Event recording for observability
   private isRecording = false;
+  private spanRecordings = new Map<AnySpan, ReturnType<MessageList['getRecordedEvents']>>();
   private recordedEvents: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
     source?: MessageSource;
@@ -199,9 +304,14 @@ export class MessageList {
   }
 
   /**
-   * Start recording mutations to the MessageList for observability/tracing
+   * Start recording mutations to the MessageList for observability/tracing.
+   * A span scopes recording to that async context, allowing parallel processors.
    */
-  public startRecording(): void {
+  public startRecording(span?: AnySpan): void {
+    if (span) {
+      this.spanRecordings.set(span, []);
+      return;
+    }
     this.isRecording = true;
     this.recordedEvents = [];
   }
@@ -226,7 +336,7 @@ export class MessageList {
   /**
    * Stop recording and return the list of recorded events
    */
-  public stopRecording(): Array<{
+  public stopRecording(span?: AnySpan): Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
     source?: MessageSource;
     count?: number;
@@ -235,10 +345,32 @@ export class MessageList {
     tag?: string;
     message?: CoreMessageV4;
   }> {
+    if (span) {
+      const events = this.spanRecordings.get(span) ?? [];
+      this.spanRecordings.delete(span);
+      return events;
+    }
     this.isRecording = false;
     const events = this.getRecordedEvents();
     this.recordedEvents = [];
     return events;
+  }
+
+  private recordMutation(event: ReturnType<MessageList['getRecordedEvents']>[number]): void {
+    // Child operations belong to the nearest processor recording. Parallel
+    // processors share the list, but have separate async span contexts.
+    if (this.spanRecordings.size > 0) {
+      let span = resolveCurrentSpan();
+      while (span) {
+        const events = this.spanRecordings.get(span);
+        if (events) {
+          events.push(event);
+          return;
+        }
+        span = span.parent;
+      }
+    }
+    if (this.isRecording) this.recordedEvents.push(event);
   }
 
   public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
@@ -313,13 +445,11 @@ export class MessageList {
     const messageArray = Array.isArray(messages) ? messages : [messages];
 
     // Record event if recording is enabled
-    if (this.isRecording) {
-      this.recordedEvents.push({
-        type: 'add',
-        source: messageSource,
-        count: messageArray.length,
-      });
-    }
+    this.recordMutation({
+      type: 'add',
+      source: messageSource,
+      count: messageArray.length,
+    });
 
     for (const message of messageArray) {
       if (isCreatedAgentSignal(message) && messageSource === 'input') {
@@ -514,8 +644,8 @@ export class MessageList {
           const allMessages = [...this.messages];
           this.messages = [];
           this.stateManager.clearAll();
-          if (this.isRecording && allMessages.length > 0) {
-            this.recordedEvents.push({
+          if (allMessages.length > 0) {
+            this.recordMutation({
               type: 'clear',
               count: allMessages.length,
             });
@@ -528,8 +658,8 @@ export class MessageList {
           const userMessages = Array.from(this.stateManager.getUserMessages());
           this.messages = this.messages.filter(m => !this.stateManager.isUserMessage(m));
           this.stateManager.clearUserMessages();
-          if (this.isRecording && userMessages.length > 0) {
-            this.recordedEvents.push({
+          if (userMessages.length > 0) {
+            this.recordMutation({
               type: 'clear',
               source: 'input',
               count: userMessages.length,
@@ -543,8 +673,8 @@ export class MessageList {
           const responseMessages = Array.from(this.stateManager.getResponseMessages());
           this.messages = this.messages.filter(m => !this.stateManager.isResponseMessage(m));
           this.stateManager.clearResponseMessages();
-          if (this.isRecording && responseMessages.length > 0) {
-            this.recordedEvents.push({
+          if (responseMessages.length > 0) {
+            this.recordMutation({
               type: 'clear',
               source: 'response',
               count: responseMessages.length,
@@ -572,14 +702,131 @@ export class MessageList {
       }
       return true;
     });
-    if (this.isRecording && removed.length > 0) {
-      this.recordedEvents.push({
+    if (removed.length > 0) {
+      this.recordMutation({
         type: 'removeByIds',
         ids,
         count: removed.length,
       });
     }
     return removed;
+  }
+
+  /**
+   * Roll a response message back to the boundary the caller's loop iteration opened, discarding
+   * the parts produced by that step while keeping every earlier, completed step intact.
+   *
+   * Used by the processor-retry path: the rejected attempt must not survive into the next
+   * prompt (PR #12799), but the accepted steps before it must. Removing the whole message
+   * instead — as that path used to do — also destroyed the reasoning (`rs_…`) and
+   * tool-invocation (`fc_…`) parts of accepted steps, leaving a persisted assistant message
+   * with an OpenAI text `itemId` and no reasoning item to pair with it, which OpenAI rejects
+   * with a non-retryable 400 on replay (issue #22291).
+   *
+   * The boundary must be the marker handed back by `openStepBoundary()`, not "the last
+   * `step-start` in the message". Markers are also synthesized *within* a single response
+   * whenever a tool call is followed by text, and nothing stored on the part says which writer
+   * produced it, so the last marker is routinely an intra-response one. Anchoring on it splices
+   * below the rejected step and leaves part of the rejected attempt behind — on a first
+   * iteration, which opens no boundary at all, that is the whole bug: a rejected tool call
+   * survives, unexecuted and still carrying its `fc_…` item id.
+   *
+   * Where no boundary can be located — a first iteration, which opens none; a sealed message; or
+   * a marker `findBoundaryIndex` cannot resolve — the message is removed whole. That is not a
+   * claim that no accepted step exists, only that this cannot tell where one ends, and it is the
+   * pre-#12799 behaviour, so the fallback is never worse than the path it replaced.
+   *
+   * Mirrors: `content.content` and `content.toolInvocations` are re-derived below, because
+   * `MessageMerger` keeps both in step with the parts as a turn streams. `content.reasoning`
+   * and `content.experimental_attachments` are deliberately *not* touched: the merger never
+   * writes them (they are set once when a DB message is built from model messages), so they
+   * describe the first chunk of the message — which a rollback that keeps any parts has by
+   * definition kept. `AIV5Adapter` only re-synthesizes a part from either field when no such
+   * part survives, so there is nothing to resurrect today. If the merger is ever changed to
+   * update them per step, as it does `content.content`, they will need the same treatment here.
+   * `content.metadata.structuredOutput` is invalidated for the same reason `content.content` is
+   * re-derived: it is written per step and a retry that emits no object never overwrites it.
+   *
+   * @param messageId - ID of the message to roll back
+   * @param boundary - the marker returned by `openStepBoundary()` for the step being discarded
+   * @returns true if a message was found and rolled back or removed
+   */
+  public rollbackToStepBoundary(messageId: string, boundary?: MastraStepStartPart): boolean {
+    const message = this.messages.find(m => m.id === messageId);
+    if (!message) return false;
+
+    const parts = message.content?.parts;
+    if (!parts) {
+      this.removeByIds([messageId]);
+      return true;
+    }
+
+    // Reference, then timestamp, then give up — see findBoundaryIndex.
+    const boundaryIndex = boundary
+      ? findBoundaryIndex(parts, boundary, messageId, this.#boundaryFingerprints.get(boundary))
+      : -1;
+
+    // Nowhere to splice: discard the message rather than guess which parts were accepted.
+    if (boundaryIndex === -1) {
+      this.removeByIds([messageId]);
+      return true;
+    }
+
+    // Drop the marker itself along with the step it opened, so the next iteration's
+    // openStepBoundary() writes a fresh marker for the retry rather than reusing the rejected one.
+    parts.splice(boundaryIndex);
+
+    if (parts.length === 0) {
+      this.removeByIds([messageId]);
+      return true;
+    }
+
+    // `content.toolInvocations` is the legacy AIV4 mirror of the tool-invocation parts, also
+    // maintained by MessageMerger. convert-to-mastra-v1 treats any entry that is in the mirror
+    // but not in `parts` as an *unprocessed* invocation and pushes it back into the prompt, so
+    // leaving the rejected step's calls behind would resurrect exactly what the rollback dropped.
+    if (Array.isArray(message.content.toolInvocations)) {
+      const survivingCallIds = new Set(
+        parts.flatMap(part =>
+          part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+        ),
+      );
+      message.content.toolInvocations = message.content.toolInvocations.filter(invocation =>
+        survivingCallIds.has(invocation.toolCallId),
+      );
+    }
+
+    // `content.content` mirrors the latest text part (see MessageMerger), and readers such as
+    // AIV4Adapter prefer it over `parts` when it is non-empty. Re-derive it from what survived,
+    // otherwise the rejected attempt's text outlives the rollback whenever the retry emits no
+    // text of its own to overwrite it.
+    if (typeof message.content.content === 'string') {
+      let lastText = '';
+      for (const part of parts) {
+        if (part.type === 'text') lastText = part.text;
+      }
+      message.content.content = lastText;
+    }
+
+    // `content.metadata.structuredOutput` is written straight onto the merged message by the
+    // execution step, before output processors get a chance to reject the step, and nothing
+    // clears it when a retry emits no object of its own — so the rejected attempt's object would
+    // otherwise outlive the rollback, still readable on the message. Invalidate rather than
+    // restore: the write is in place, so an earlier accepted object is already overwritten
+    // whenever the rejected step produced one of its own, and there is nothing to roll back to
+    // when it did not. Other metadata is left alone; the keys
+    // that are step-derived, such as the model identity, are rewritten by the retry itself.
+    if (message.content.metadata) {
+      delete message.content.metadata.structuredOutput;
+    }
+
+    // Ensure the mutated message is persisted.
+    if (!this.stateManager.isResponseMessage(message)) {
+      this.stateManager.removeMessage(message);
+      this.stateManager.addToSource(message, 'response');
+    }
+
+    return true;
   }
 
   private all = {
@@ -670,6 +917,10 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+                // The stored modelOutput is substituted into `output` here. The
+                // internal `mastra.modelOutput` marker stays on the part: input
+                // processors read it to tell a toModelOutput-mapped result apart
+                // from a raw fallback (see ToolCallFilter).
                 modelMsg.content[i] = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
@@ -1444,6 +1695,7 @@ export class MessageList {
       ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
         ? { providerExecuted: originalPart.providerExecuted }
         : {}),
+      ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
 
@@ -1504,30 +1756,72 @@ export class MessageList {
    * source so the updated content is re-saved.
    */
   public stepStart(): boolean {
+    return this.openStepBoundary().appended;
+  }
+
+  /**
+   * Open the boundary for a new loop iteration and hand back the marker that delimits it.
+   *
+   * This is `stepStart()` with the marker returned instead of discarded, for callers that
+   * need to name *their own* boundary later — `rollbackToStepBoundary` is the only one today.
+   * The distinction matters because `step-start` has several writers and they are
+   * indistinguishable once stored: besides this loop boundary, a marker is synthesized inside a
+   * single model response whenever a tool call is followed by text
+   * (`build-messages-from-chunks.ts`, `MessageMerger.pushNewPart`, `addStartStepPartsForAIV5`).
+   * Nothing on the part records which writer produced it — `model` in particular does not, since
+   * `MessageMerger` deliberately copies it from the preceding marker onto the synthetic one.
+   * So "the last `step-start`" is not "the boundary this iteration opened", and only the caller
+   * that opened one can tell them apart. The reference is the primary handle; a checkpoint is
+   * recorded alongside it so `findBoundaryIndex` can still recognise the marker if a processor
+   * hands the list a cloned copy of the parts. Nothing new is written to the part itself.
+   *
+   * When the last part is already a `step-start` the iteration begins at *that* marker — nothing
+   * has been appended after it — so it is returned rather than duplicated.
+   *
+   * @returns the marker beginning this iteration, and whether it had to be appended
+   */
+  public openStepBoundary(): { boundary?: MastraStepStartPart; appended: boolean } {
     const lastMsg = this.messages[this.messages.length - 1];
     if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
-      return false;
+      return { appended: false };
     }
 
     if (MessageMerger.isSealed(lastMsg)) {
-      return false;
+      return { appended: false };
     }
 
     // Don't add a duplicate step-start
     const lastPart = lastMsg.content.parts[lastMsg.content.parts.length - 1];
-    if (lastPart?.type === 'step-start') {
-      return false;
-    }
+    const appended = lastPart?.type !== 'step-start';
 
-    lastMsg.content.parts.push(stampPart({ type: 'step-start' as const }));
+    // A reused marker can be unstamped — `MessageMerger` leaves one so when the marker before it
+    // carries no `model` — which would cost this iteration its recovery in `findBoundaryIndex`.
+    // `stampPart` is a no-op on a marker that already has a `createdAt`.
+    const boundary = appended ? stampPart({ type: 'step-start' as const }) : stampPart(lastPart);
+    if (appended) lastMsg.content.parts.push(boundary);
+    this.#rememberBoundaryFingerprint(lastMsg.id, lastMsg.content.parts, boundary);
 
-    // Ensure the mutated message is persisted
+    // Ensure the mutated message is persisted. The reused branch stamps too, so it needs this as
+    // much as the appended one does. When the reused marker was already stamped there is nothing
+    // to write, and re-sourcing then costs one redundant write of a message this run produced.
     if (!this.stateManager.isResponseMessage(lastMsg)) {
       this.stateManager.removeMessage(lastMsg);
       this.stateManager.addToSource(lastMsg, 'response');
     }
 
-    return true;
+    return { boundary, appended };
+  }
+
+  /**
+   * What preceded a boundary when it was opened, and in which message, kept beside the part
+   * rather than on it so nothing new has to survive serialization. `findBoundaryIndex` needs it
+   * to tell a recovered boundary from a same-millisecond marker that merely took its place.
+   */
+  #boundaryFingerprints = new WeakMap<MastraStepStartPart, BoundaryCheckpoint>();
+
+  #rememberBoundaryFingerprint(messageId: string, parts: MastraMessagePart[], boundary: MastraStepStartPart) {
+    const index = parts.indexOf(boundary);
+    if (index !== -1) this.#boundaryFingerprints.set(boundary, { messageId, prefix: prefixFingerprint(parts, index) });
   }
 
   /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
@@ -1678,21 +1972,17 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
-      if (this.isRecording) {
-        this.recordedEvents.push({
-          type: 'addSystem',
-          tag,
-          message: coreMessage,
-        });
-      }
+      this.recordMutation({
+        type: 'addSystem',
+        tag,
+        message: coreMessage,
+      });
     } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
-      if (this.isRecording) {
-        this.recordedEvents.push({
-          type: 'addSystem',
-          message: coreMessage,
-        });
-      }
+      this.recordMutation({
+        type: 'addSystem',
+        message: coreMessage,
+      });
     }
   }
 
@@ -1808,6 +2098,58 @@ export class MessageList {
     const latestMessageIndex = this.messages.length - 1;
     const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
 
+    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+
+    // Stored history loads as the base layer, underneath whatever this run already holds.
+    // When a stored row shares an id with a live message (client input, or a response part
+    // such as a tool result), the stored copy must not replace it wholesale - that would drop
+    // the client-supplied content from the prompt. Fold the stored copy into the live one and
+    // keep the live message's source so it stays visible to output processing.
+    const replacementTargetSource: MessageSource | undefined = !replacementTarget
+      ? undefined
+      : this.stateManager.isUserMessage(replacementTarget)
+        ? 'input'
+        : this.stateManager.isResponseMessage(replacementTarget)
+          ? 'response'
+          : this.stateManager.isContextMessage(replacementTarget)
+            ? 'context'
+            : undefined;
+
+    if (
+      messageSource === 'memory' &&
+      replacementTarget &&
+      replacementTargetSource &&
+      !MessageMerger.isSealed(messageV2)
+    ) {
+      const replacementIndex = this.messages.indexOf(replacementTarget);
+      if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+        messageV2.content = {
+          ...messageV2.content,
+          ...replacementTarget.content,
+          metadata: {
+            ...(messageV2.content.metadata ?? {}),
+            ...(replacementTarget.content.metadata ?? {}),
+          },
+        };
+      } else {
+        for (const incomingPart of replacementTarget.content.parts) {
+          if (incomingPart.type !== 'text') continue;
+          const storedPart = messageV2.content.parts.find(
+            part => part.type === 'text' && part.text.trim() === incomingPart.text.trim(),
+          );
+          if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
+        }
+        MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
+      }
+      this.stateManager.removeMessage(replacementTarget);
+      this.messages[replacementIndex] = messageV2;
+      this.pushMessageToSource(messageV2, 'memory');
+      this.pushMessageToSource(messageV2, replacementTargetSource);
+      this.updateLastCreatedAt(messageV2);
+      this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      return this;
+    }
+
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
         // don't double store any messages
@@ -1817,7 +2159,6 @@ export class MessageList {
       }
     }
 
-    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
     const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
 
     // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
@@ -1929,6 +2270,9 @@ export class MessageList {
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
             return this;
           }
+          // The replaced object must not linger in its old source set, otherwise a
+          // client-echoed input message replaced by its stored copy would be re-persisted.
+          this.stateManager.removeMessage(existingMessage);
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {

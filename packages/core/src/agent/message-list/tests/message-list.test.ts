@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
 import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
@@ -775,7 +774,7 @@ describe('MessageList', () => {
       // msg2
       messages = appendResponseMessages({
         messages,
-        responseMessages: [{ ...msg2, id: randomUUID() }],
+        responseMessages: [{ ...msg2, id: globalThis.crypto.randomUUID() }],
       });
       // Filter out tool invocations with state="call" from expected UI messages
       const expectedUIMessages = messages.map(m => {
@@ -794,7 +793,10 @@ describe('MessageList', () => {
       expect(list.get.all.ui()).toEqual(expectedUIMessages);
 
       // msg3
-      messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
+      messages = appendResponseMessages({
+        messages,
+        responseMessages: [{ id: globalThis.crypto.randomUUID(), ...msg3 }],
+      });
       expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
         expect.objectContaining({
           role: 'user',
@@ -2206,7 +2208,7 @@ describe('MessageList', () => {
       ];
       expect(uiMessages).toEqual(expectedMessages);
 
-      let newId = randomUUID();
+      let newId = globalThis.crypto.randomUUID();
       const responseMessages = [
         {
           id: newId,
@@ -2241,7 +2243,7 @@ describe('MessageList', () => {
       ]);
 
       const newClientMessage = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         role: 'user',
         createdAt: new Date(),
         content: 'Do it anyway please',
@@ -2261,14 +2263,14 @@ describe('MessageList', () => {
       );
 
       const responseMessages2 = [
-        { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+        { id: globalThis.crypto.randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'assistant',
           content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
         },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'tool',
           content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
         },

@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { Button } from '../Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { TooltipProvider } from '../Tooltip';
 import { DataPanel } from './data-panel';
@@ -84,8 +85,8 @@ describe('DataPanel', () => {
       <TooltipProvider>
         <DataPanel open title="Span details" onClose={onClose}>
           <DataPanel.Header>
-            <DataPanel.Heading>Span</DataPanel.Heading>
             <DataPanel.CloseButton onClick={onClose} />
+            <DataPanel.Heading>Span</DataPanel.Heading>
           </DataPanel.Header>
           <DataPanel.Content>Panel body</DataPanel.Content>
         </DataPanel>
@@ -241,26 +242,83 @@ describe('DataPanel', () => {
       expect(screen.getByLabelText('Started at 2024-01-01').textContent).toBe('2 min ago');
       expect(screen.getByText('plain').closest('[aria-label]')).toBeNull();
     });
+
+    it('renders metadata in the same row as the heading', () => {
+      renderHeader();
+      const heading = screen.getByRole('heading', { name: 'Trace' });
+      const list = screen.getByRole('list');
+      expect(heading.parentElement).toBe(list.parentElement);
+    });
   });
 
   describe('when the header has actions', () => {
-    it('renders actions after the heading', () => {
+    const renderHeader = () =>
       render(
         <TooltipProvider>
           <DataPanel open title="Trace">
             <DataPanel.Header>
+              <DataPanel.CloseButton onClick={() => {}} />
               <DataPanel.Heading>Trace</DataPanel.Heading>
               <DataPanel.HeaderActions>
-                <DataPanel.CloseButton onClick={() => {}} />
+                <Button size="sm" variant="ghost" aria-label="Score trace">
+                  Score
+                </Button>
               </DataPanel.HeaderActions>
             </DataPanel.Header>
           </DataPanel>
         </TooltipProvider>,
       );
 
+    it('renders actions after the heading', () => {
+      renderHeader();
+      const heading = screen.getByRole('heading', { name: 'Trace' });
+      const action = screen.getByRole('button', { name: 'Score trace' });
+      expect(heading.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders the close button before the heading', () => {
+      renderHeader();
       const heading = screen.getByRole('heading', { name: 'Trace' });
       const close = screen.getByRole('button', { name: 'Close Panel' });
-      expect(heading.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(heading.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    });
+
+    it('renders a vertical separator between the heading and the metadata', () => {
+      render(
+        <TooltipProvider>
+          <DataPanel open title="Trace">
+            <DataPanel.Header>
+              <DataPanel.HeaderContent>
+                <DataPanel.Heading>Trace</DataPanel.Heading>
+                <DataPanel.Metadata>
+                  <DataPanel.Meta>weather-agent</DataPanel.Meta>
+                </DataPanel.Metadata>
+              </DataPanel.HeaderContent>
+            </DataPanel.Header>
+          </DataPanel>
+        </TooltipProvider>,
+      );
+      const heading = screen.getByRole('heading', { name: 'Trace' });
+      const separator = screen.getByRole('separator');
+      const list = screen.getByRole('list');
+      expect(separator.getAttribute('aria-orientation')).toBe('vertical');
+      expect(heading.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(separator.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('does not render a separator when there is no metadata', () => {
+      render(
+        <TooltipProvider>
+          <DataPanel open title="Trace">
+            <DataPanel.Header>
+              <DataPanel.HeaderContent>
+                <DataPanel.Heading>Trace</DataPanel.Heading>
+              </DataPanel.HeaderContent>
+            </DataPanel.Header>
+          </DataPanel>
+        </TooltipProvider>,
+      );
+      expect(screen.queryByRole('separator')).toBeNull();
     });
   });
 });

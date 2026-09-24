@@ -97,7 +97,7 @@ export function WorkflowsPage() {
             <SubSectionHeader title="Available Workflows" icon={<WorkflowIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>
@@ -117,7 +117,7 @@ export function WorkflowsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={workflow.value} className="bg-surface2">
+                  <Entity key={workflow.value} className="bg-background">
                     <EntityContent>
                       <EntityName>{workflow.label}</EntityName>
                       <EntityDescription>
@@ -125,8 +125,8 @@ export function WorkflowsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                            !isDisabled && 'border-dashed border-border',
                           )}
                           value={
                             isSelected

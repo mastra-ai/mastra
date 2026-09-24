@@ -1,3 +1,4 @@
+import { MastraError } from '@mastra/core/error';
 import type {
   MCPServerBase as MastraMCPServerImplementation,
   MCPToolExecutionResultV2,
@@ -21,6 +22,7 @@ import {
   readResourceResponseSchema,
   listResourcesResponseSchema,
 } from '../schemas/mcp';
+import type { MCPServerTransport } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -35,6 +37,15 @@ import { createRoute } from '../server-adapter/routes/route-builder';
  */
 function hasSSETransport(server: MastraMCPServerImplementation): boolean {
   return server.mcpVersion !== 2;
+}
+
+export interface MCPServerInfoResponse extends ServerInfo {
+  /** Endpoints served under `/mcp/:serverId`; 2026-07-28 servers speak Streamable HTTP only. */
+  transports: MCPServerTransport[];
+}
+
+function transportsOf(server: MastraMCPServerImplementation): MCPServerTransport[] {
+  return hasSSETransport(server) ? ['streamable-http', 'sse'] : ['streamable-http'];
 }
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
@@ -106,7 +117,10 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     }
 
     // Get server info for each server
-    const serverInfoList: ServerInfo[] = paginatedServers.map(server => server.getServerInfo());
+    const serverInfoList: MCPServerInfoResponse[] = paginatedServers.map(server => ({
+      ...server.getServerInfo(),
+      transports: transportsOf(server),
+    }));
 
     return {
       servers: serverInfoList,
@@ -138,7 +152,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
     }
 
-    const serverDetail = server.getServerDetail();
+    const serverDetail = { ...server.getServerDetail(), transports: transportsOf(server) };
 
     // If a specific version was requested, check if it matches
     if (version && serverDetail.version_detail.version !== version) {
@@ -258,11 +272,15 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       // A 2026-07-28 server runs the tool with no protocol client attached: a tool
       // that suspends for input is reported as such instead of pretending it finished, and
       // the caller answers by sending the same args with `resumeData` and `suspendPayload`.
-      const execution: MCPToolExecutionResultV2 = await server.executeTool(toolId, data, {
-        requestContext,
-        resumeData,
-        suspendPayload,
-      });
+      let execution: MCPToolExecutionResultV2;
+      try {
+        execution = await server.executeTool(toolId, data, { requestContext, resumeData, suspendPayload });
+      } catch (error) {
+        if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') {
+          throw new HTTPException(400, { message: error.message, cause: error });
+        }
+        throw error;
+      }
       if (execution.status === 'suspended') {
         return {
           status: 'suspended' as const,

@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 
-import type { ToolsInput } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import FirecrawlApp from '@mendable/firecrawl-js';
 import type { ScrapeParams, MapParams, CrawlParams, FirecrawlDocument } from '@mendable/firecrawl-js';
-import type { Tool } from '@modelcontextprotocol/server';
 import { MCPServer } from '../server/server';
 
+interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: JSONSchema7;
+}
+
 // Tool definitions
-const SCRAPE_TOOL: Tool = {
+const SCRAPE_TOOL: ToolDefinition = {
   name: 'firecrawl_scrape',
   description:
     'Scrape a single webpage with advanced options for content extraction. ' +
@@ -145,7 +151,7 @@ const SCRAPE_TOOL: Tool = {
   },
 };
 
-const MAP_TOOL: Tool = {
+const MAP_TOOL: ToolDefinition = {
   name: 'firecrawl_map',
   description: 'Discover URLs from a starting point. Can use both sitemap.xml and HTML link discovery.',
   inputSchema: {
@@ -180,7 +186,7 @@ const MAP_TOOL: Tool = {
   },
 };
 
-const CRAWL_TOOL: Tool = {
+const CRAWL_TOOL: ToolDefinition = {
   name: 'firecrawl_crawl',
   description:
     'Start an asynchronous crawl of multiple pages from a starting URL. ' +
@@ -284,7 +290,7 @@ const CRAWL_TOOL: Tool = {
   },
 };
 
-const CHECK_CRAWL_STATUS_TOOL: Tool = {
+const CHECK_CRAWL_STATUS_TOOL: ToolDefinition = {
   name: 'firecrawl_check_crawl_status',
   description: 'Check the status of a crawl job.',
   inputSchema: {
@@ -299,7 +305,7 @@ const CHECK_CRAWL_STATUS_TOOL: Tool = {
   },
 };
 
-const SEARCH_TOOL: Tool = {
+const SEARCH_TOOL: ToolDefinition = {
   name: 'firecrawl_search',
   description:
     'Search and retrieve content from web pages with optional scraping. ' +
@@ -373,7 +379,7 @@ const SEARCH_TOOL: Tool = {
   },
 };
 
-const EXTRACT_TOOL: Tool = {
+const EXTRACT_TOOL: ToolDefinition = {
   name: 'firecrawl_extract',
   description:
     'Extract structured information from web pages using LLM. ' +
@@ -415,7 +421,7 @@ const EXTRACT_TOOL: Tool = {
   },
 };
 
-const DEEP_RESEARCH_TOOL: Tool = {
+const DEEP_RESEARCH_TOOL: ToolDefinition = {
   name: 'firecrawl_deep_research',
   description: 'Conduct deep research on a query using web crawling, search, and AI analysis.',
   inputSchema: {
@@ -442,7 +448,7 @@ const DEEP_RESEARCH_TOOL: Tool = {
   },
 };
 
-const GENERATE_LLMSTXT_TOOL: Tool = {
+const GENERATE_LLMSTXT_TOOL: ToolDefinition = {
   name: 'firecrawl_generate_llmstxt',
   description:
     'Generate standardized LLMs.txt file for a given URL, which provides context about how LLMs should interact with the website.',
@@ -965,22 +971,24 @@ ${result.markdown ? `\nContent:\n${result.markdown}` : ''}`,
   }
 };
 
-// Create the tools object with execute functions attached
-export const allTools: ToolsInput = {
-  firecrawl_scrape: { ...SCRAPE_TOOL, execute: createExecuteFunction('firecrawl_scrape') } as any,
-  firecrawl_map: { ...MAP_TOOL, execute: createExecuteFunction('firecrawl_map') } as any,
-  firecrawl_crawl: { ...CRAWL_TOOL, execute: createExecuteFunction('firecrawl_crawl') } as any,
-  firecrawl_check_crawl_status: {
-    ...CHECK_CRAWL_STATUS_TOOL,
-    execute: createExecuteFunction('firecrawl_check_crawl_status'),
-  } as any,
-  firecrawl_search: { ...SEARCH_TOOL, execute: createExecuteFunction('firecrawl_search') } as any,
-  firecrawl_extract: { ...EXTRACT_TOOL, execute: createExecuteFunction('firecrawl_extract') } as any,
-  firecrawl_deep_research: { ...DEEP_RESEARCH_TOOL, execute: createExecuteFunction('firecrawl_deep_research') } as any,
-  firecrawl_generate_llmstxt: {
-    ...GENERATE_LLMSTXT_TOOL,
-    execute: createExecuteFunction('firecrawl_generate_llmstxt'),
-  } as any,
+// Create Mastra tools from the raw MCP tool definitions (JSON Schema inputs)
+const toTool = (definition: ToolDefinition) =>
+  createTool({
+    id: definition.name,
+    description: definition.description,
+    inputSchema: definition.inputSchema,
+    execute: createExecuteFunction(definition.name),
+  });
+
+export const allTools = {
+  firecrawl_scrape: toTool(SCRAPE_TOOL),
+  firecrawl_map: toTool(MAP_TOOL),
+  firecrawl_crawl: toTool(CRAWL_TOOL),
+  firecrawl_check_crawl_status: toTool(CHECK_CRAWL_STATUS_TOOL),
+  firecrawl_search: toTool(SEARCH_TOOL),
+  firecrawl_extract: toTool(EXTRACT_TOOL),
+  firecrawl_deep_research: toTool(DEEP_RESEARCH_TOOL),
+  firecrawl_generate_llmstxt: toTool(GENERATE_LLMSTXT_TOOL),
 };
 
 export const mcpServerName = 'firecrawl-mcp-fixture';

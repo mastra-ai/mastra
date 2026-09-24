@@ -1059,7 +1059,9 @@ type BaseMemoryConfig = {
   /**
    * Automatically generate descriptive thread titles based on the first user message.
    * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
-   * Title generation runs asynchronously and doesn't affect response time.
+   * Title generation runs asynchronously and doesn't affect response time — unless
+   * `emitEvent` is set on a stream run, in which case the final `finish` chunk is held
+   * until the title is generated and persisted.
    *
    * @default false
    * @example
@@ -1078,13 +1080,35 @@ type BaseMemoryConfig = {
          * Language model to use for title generation.
          * Can be static or a function that receives request context for dynamic selection.
          * Accepts both Mastra models and standard AI SDK LanguageModelV1/V2.
+         * Defaults to the agent's own model when omitted.
          */
-        model: DynamicArgument<MastraModelConfig>;
+        model?: DynamicArgument<MastraModelConfig>;
         /**
          * Custom instructions for title generation.
          * Can be static or a function that receives request context for dynamic customization.
          */
         instructions?: DynamicArgument<string>;
+        /**
+         * Minimum number of messages in the thread (user + assistant) before
+         * a title is generated.
+         * @default 1
+         */
+        minMessages?: number;
+        /**
+         * Emit the generated title as a transient `data-thread-title` chunk
+         * (`{ threadId, title }`) on the run's stream immediately before the
+         * `finish` chunk, so HTTP/stream consumers receive it on the same run.
+         * Only applies to `stream()` runs; `generate()` and durable/evented agents
+         * keep persist-only behavior.
+         *
+         * Trade-off: the `finish` chunk (and therefore the response's completion)
+         * is delayed until the title is generated and persisted. If the run is
+         * aborted during that wait, `finish` is released immediately and title
+         * generation continues in the background.
+         *
+         * @default false
+         */
+        emitEvent?: boolean;
       };
 
   /**
@@ -1105,6 +1129,29 @@ type BaseMemoryConfig = {
    * ```
    */
   filterIncompleteToolCalls?: boolean;
+
+  /**
+   * Whether the request input is processed in full instead of being trimmed to the part
+   * stored history does not already cover.
+   *
+   * By default, when memory loads thread history, only the new messages in the input are
+   * used: the input is trimmed back to the last assistant message (or, when the input ends
+   * with an assistant message, to that message's trailing tool results), and the stored
+   * history is layered underneath. Set this to true when the caller assembled the input
+   * itself and needs the exact message sequence preserved — for example a nested
+   * `useAgent` structuring pass that deliberately replays the parent request so its prompt
+   * keeps the parent's message prefix.
+   *
+   * This controls trimming only. When a memory-sourced message and an input message share
+   * an id, the stored copy still occupies the slot and the input's parts are layered on top.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * retainFullInput: true // Process the request input exactly as supplied
+   * ```
+   */
+  retainFullInput?: boolean;
 
   /**
    * Thread management configuration.
@@ -1318,10 +1365,14 @@ export type SerializedMemoryConfig = {
     generateTitle?:
       | boolean
       | {
-          /** Model ID in format provider/model-name */
-          model: ModelRouterModelId;
+          /** Model ID in format provider/model-name; omitted to use the agent's own model */
+          model?: ModelRouterModelId;
           /** Custom instructions for title generation */
           instructions?: string;
+          /** Minimum number of messages in the thread before a title is generated */
+          minMessages?: number;
+          /** Emit a transient `data-thread-title` chunk before `finish` on stream runs */
+          emitEvent?: boolean;
         };
   };
 

@@ -176,7 +176,7 @@ async function getInputPlugins(
     ),
     tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
-    subpathExternalsResolver(externals),
+    subpathExternalsResolver(externals, workspaceMap),
     transpilePackagesMap.size
       ? esbuild({
           format: 'esm',

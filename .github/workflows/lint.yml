@@ -89,8 +89,17 @@ jobs:
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs
 
+      # The automated Changesets release PR only rewrites package.json versions,
+      # changelogs and .changeset/pre.json: the changesets it consumes are already
+      # in the merge base, so `--since origin/main` never sees a new changeset and
+      # the status check fails on every regeneration of that PR. Skip it — its
+      # changesets were validated on the PRs that introduced them. The branch name
+      # alone is not a trusted signal, since a fork can pick any name, so the skip
+      # also requires the head to live in this repository.
+      #
       # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
         run: pnpm changeset-cli status --since origin/main
 
   lint:
@@ -141,6 +150,13 @@ jobs:
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+      # The build transpiles without type checking, so a type error here would
+      # otherwise reach main unnoticed: nothing else in CI runs this package's
+      # `check` script, because the root `typecheck` task only visits packages
+      # that define a `typecheck` script and this one is named `check`.
+      - name: Validate Mastra Code types
+        run: pnpm --filter ./mastracode/sdk check
 
       - name: Validate generated files are committed
         run: bash .github/scripts/check-clean-worktree.bash

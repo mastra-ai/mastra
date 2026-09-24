@@ -13,6 +13,128 @@ function stripAnsi(text: string): string {
     .replace(/\u001b\]8;;\u0007/g, '');
 }
 
+describe('completed shell/process background status', () => {
+  it.each(['execute_command', 'get_process_output', 'kill_process'])(
+    '%s preserves terminal background badges',
+    toolName => {
+      for (const isError of [false, true]) {
+        const component = new ToolExecutionComponentEnhanced(toolName, { command: 'echo done', pid: '123' }, {}, ui);
+        component.setBackgroundTaskId('shell-task');
+        component.updateResult({ content: [{ type: 'text', text: 'done' }], isError });
+        expect(stripAnsi(component.render(120).join('\n'))).toContain(`${isError ? '✗' : '✓'} background · shell-task`);
+        component.cancelBackground();
+        expect(stripAnsi(component.render(120).join('\n'))).toContain('■ background · shell-task');
+      }
+    },
+  );
+
+  it('preserves inferred shell errors with and without background identity', () => {
+    for (const background of [false, true]) {
+      const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'example' }, {}, ui);
+      if (background) component.setBackgroundTaskId('shell-task');
+      component.updateResult({ content: [{ type: 'text', text: 'Error: failed' }], isError: false });
+      const output = stripAnsi(component.render(120).join('\n'));
+      expect(output).toContain(background ? '✗ background · shell-task' : '✗');
+      if (!background) expect(output).not.toContain('background');
+    }
+  });
+});
+
+describe('agent_signal_send rendering', () => {
+  const args = {
+    targetId: 'code-agent:resource-2:thread-2',
+    message: ['Please review the auth refactor.', 'Focus on session renewal.', 'Report any blocking issues.'].join(
+      '\n',
+    ),
+    priority: 'high',
+    expectsReply: true,
+  };
+
+  it('shows the full sent message and routing outcome', () => {
+    const component = new ToolExecutionComponentEnhanced('agent_signal_send', args, {}, ui);
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain('target:');
+    expect(visible).toContain(args.targetId);
+    expect(visible).toContain('priority: high');
+    expect(visible).toContain('expects reply: yes');
+    expect(visible).toContain('Please review the auth refactor.');
+    expect(visible).toContain('Focus on session renewal.');
+    expect(visible).toContain('Report any blocking issues.');
+    expect(visible).toContain('Delivered high signal to "Peer Reviewer" in run run-1');
+  });
+
+  it.each([
+    ['standard', {}],
+    ['quiet', { quietDisplayMode: 'quiet' as const, quietPreviewLineLimit: 20, collapsedByDefault: true }],
+  ])('preserves paragraphs and grapheme clusters in %s mode', (mode, options) => {
+    const message = `First paragraph.\n\n${'👩‍💻'.repeat(40)}`;
+    const component = new ToolExecutionComponentEnhanced('agent_signal_send', { ...args, message }, options, ui);
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const lines = stripAnsi(component.render(80).join('\n')).split('\n');
+    const firstParagraph = lines.findIndex(line => line.includes('First paragraph.'));
+    const emojiParagraph = lines.findIndex(line => line.includes('👩‍💻'));
+    expect(emojiParagraph - firstParagraph).toBe(2);
+    const visible = lines.join('\n');
+    const graphemes = visible.match(/👩‍💻/gu) ?? [];
+    if (mode === 'standard') expect(graphemes).toHaveLength(40);
+    else expect(graphemes.length).toBeGreaterThan(0);
+    expect(visible.replaceAll('👩‍💻', '')).not.toMatch(/[👩💻‍�]/u);
+  });
+
+  it.each([40, 80, 120, 180])('keeps every word of mixed emoji and text lines in quiet mode at width %i', width => {
+    const message =
+      'This message has two paragraphs and an emoji sequence 👩‍💻👩‍💻👩‍💻 to check wrapping. Please reply with the exact phrase: RECEIVED FULL MESSAGE, and confirm.';
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      { ...args, message },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      ui,
+    );
+
+    const rendered = stripAnsi(component.render(width).join('\n'));
+    const previewText = rendered
+      .split('\n')
+      .filter(line => line.startsWith('  │ '))
+      .map(line => line.slice(4).trimEnd())
+      .join(' ');
+
+    expect(previewText).not.toContain('…');
+    expect(previewText.replace(/\s+/g, '')).toBe(message.replace(/\s+/g, ''));
+  });
+
+  it('shows the opening lines of the message up to the quiet preview line limit', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      args,
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain('send');
+    expect(visible).toContain(args.targetId);
+    expect(visible).toContain('high');
+    expect(visible).toContain('reply expected');
+    expect(visible).toContain('Please review the auth refactor.');
+    expect(visible).toContain('Focus on session renewal.');
+    expect(visible).not.toContain('Report any blocking issues.');
+    expect(visible).not.toContain('Delivered high signal to "Peer Reviewer" in run run-1');
+  });
+});
+
 describe('ToolExecutionComponentEnhanced quiet display', () => {
   it('shows the latest lines from partial generic tool progress in quiet mode', () => {
     const component = new ToolExecutionComponentEnhanced(

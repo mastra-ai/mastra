@@ -272,6 +272,40 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
       );
     });
+
+    it('should list a registered MCP server and execute its tool', async () => {
+      const listRes = await fetch(`http://localhost:${port}/api/mcp/v0/servers`);
+      const list = await listRes.json();
+      expect(listRes.status).toBe(200);
+      expect(list.servers.map((server: { id: string }) => server.id)).toContain('calculator');
+
+      const toolsRes = await fetch(`http://localhost:${port}/api/mcp/calculator/tools`);
+      const tools = await toolsRes.json();
+      expect(toolsRes.status).toBe(200);
+      expect(tools.tools.map((tool: { id: string }) => tool.id)).toEqual(['calculatorTool']);
+
+      const execRes = await fetch(`http://localhost:${port}/api/mcp/calculator/tools/calculatorTool/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { a: 2, b: 3 } }),
+      });
+      const executed = await execRes.json();
+      expect(execRes.status).toBe(200);
+      expect(executed).toEqual({ result: 5 });
+    });
+
+    it('should answer invalid MCP tool input with 400', async () => {
+      const res = await fetch(`http://localhost:${port}/api/mcp/calculator/tools/calculatorTool/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { a: 'two', b: 3 } }),
+      });
+      const body = await res.json();
+      expect({ status: res.status, body }).toEqual({
+        status: 400,
+        body: { error: expect.stringContaining('calculatorTool') },
+      });
+    });
   }
 
   describe.sequential('dev', async () => {
@@ -516,8 +550,18 @@ export const environmentRoute = registerApiRoute('/environment', {
       const originalPackageJsons = await Promise.all(packageJsonPaths.map(path => readFile(path, 'utf-8')));
       const sourceLockfilePath = join(fixturePath, 'pnpm-lock.yaml');
       const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
+      const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+      const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
 
       try {
+        // Keep the lockfile probe external so optimization cannot remove it from the output manifest.
+        await writeFile(
+          mastraConfigPath,
+          originalMastraConfig.replace(
+            "externals: ['bcrypt', '@inner/subpath-only']",
+            "externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic']",
+          ),
+        );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
           packageJson.dependencies['unicorn-magic'] = '>=0.2.0';
@@ -541,6 +585,7 @@ export const environmentRoute = registerApiRoute('/environment', {
       } finally {
         await Promise.all(packageJsonPaths.map((path, index) => writeFile(path, originalPackageJsons[index]!)));
         await writeFile(sourceLockfilePath, sourceLockfile);
+        await writeFile(mastraConfigPath, originalMastraConfig);
       }
 
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
@@ -623,6 +668,12 @@ export const environmentRoute = registerApiRoute('/environment', {
           typescript: expect.any(String),
         }),
       );
+    });
+
+    it('should exclude dependencies imported only from dead NODE_ENV branches', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
       expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
     });
 
@@ -1031,6 +1082,54 @@ export const mastra = new Mastra({
 
   describe.sequential('workspace subpath externals', () => {
     it(
+      'should not analyze dependencies listed in bundler externals',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-analysis-external-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const unsafePackageDir = join(appDir, 'node_modules', 'analysis-unsafe');
+          await mkdir(unsafePackageDir, { recursive: true });
+          await Promise.all([
+            writeFile(
+              join(unsafePackageDir, 'package.json'),
+              JSON.stringify({ name: 'analysis-unsafe', version: '1.0.0', type: 'module', exports: './index.js' }),
+            ),
+            writeFile(join(unsafePackageDir, 'index.js'), 'export const broken = ;'),
+          ]);
+
+          const mastraConfigPath = join(appDir, 'src', 'mastra', 'index.ts');
+          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(
+            mastraConfigPath,
+            `import 'analysis-unsafe';\n${mastraConfig.replace(
+              "externals: ['bcrypt', '@inner/subpath-only']",
+              "externals: ['analysis-unsafe', 'bcrypt', '@inner/subpath-only']",
+            )}`,
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
       'should build a workspace subpath imported transitively when the app imports the package root',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
@@ -1120,11 +1219,19 @@ export const mastra = new Mastra({
     );
 
     it(
-      'should exit non-zero when a workspace subpath import cannot be resolved',
+      'should reject an unresolved subpath from an externalized workspace package',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Runtime externals skip resolution; this case must exercise bundling the missing subpath.
+          const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(
+            mastraConfigPath,
+            mastraConfig.replace("externals: ['bcrypt', '@inner/subpath-only']", "externals: ['bcrypt']"),
+          );
 
           const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
           await mkdir(join(corePath, 'runtime-context'), { recursive: true });
@@ -1148,8 +1255,7 @@ export const mastra = new Mastra({
           const output = `${buildResult.stdout}\n${buildResult.stderr}`;
 
           expect(buildResult.exitCode, output).toBe(1);
-          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
-          expect(output).toContain('@inner/subpath-only/missing');
+          expect(output).toContain('Could not resolve workspace package subpath "@inner/subpath-only/missing".');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
@@ -1357,7 +1463,123 @@ export const mastra = new Mastra({
           expect(await findInDir(outputRoot, 'node_modules')).toBe(true);
         } finally {
           await removeOutputDir(isolatedFixturePath);
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('pnpm patched dependencies', () => {
+    it(
+      'keeps source workspace patches applied in the built output',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Adding a file is version-independent, so the patch stays valid as the package moves.
+          await mkdir(join(isolatedFixturePath, 'patches'), { recursive: true });
+          await writeFile(
+            join(isolatedFixturePath, 'patches', 'unicorn-magic.patch'),
+            [
+              'diff --git a/mastra-patch-marker.txt b/mastra-patch-marker.txt',
+              'new file mode 100644',
+              '--- /dev/null',
+              '+++ b/mastra-patch-marker.txt',
+              '@@ -0,0 +1 @@',
+              '+patched-by-mastra-e2e',
+              '',
+            ].join('\n'),
+          );
+
+          const workspacePath = join(isolatedFixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(
+            workspacePath,
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+          );
+          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
+            cwd: isolatedFixturePath,
+            env: process.env,
+          });
+
+          await removeOutputDir(isolatedFixturePath);
+          await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            env: process.env,
+          });
+
+          const outputDir = join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output');
+          const outputWorkspace = await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8');
+
+          expect(outputWorkspace).toContain('"unicorn-magic@0.4.0": "pnpm-patches/unicorn-magic.patch"');
+          expect(outputWorkspace).toContain('allowUnusedPatches: true');
+          expect(await readFile(join(outputDir, 'pnpm-patches', 'unicorn-magic.patch'), 'utf8')).toContain(
+            'patched-by-mastra-e2e',
+          );
+          expect(
+            await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
+          ).toContain('patched-by-mastra-e2e');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('patches applied in node_modules', () => {
+    it(
+      'applies patches to node_modules during install from the workspace config',
+      async () => {
+        const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-monorepo-patch-install-'));
+        try {
+          await setupMonorepo(fixturePath, pkgManager);
+
+          // Add unicorn-magic as a dependency of the custom app (version matches
+          // the transitive dep already resolved by setupMonorepo's pnpm install)
+          const appPkgPath = join(fixturePath, 'apps', 'custom', 'package.json');
+          const appPkg = JSON.parse(await readFile(appPkgPath, 'utf8'));
+          appPkg.dependencies = { ...appPkg.dependencies, 'unicorn-magic': '0.2.0' };
+          await writeFile(appPkgPath, JSON.stringify(appPkg, null, 2));
+
+          // Create patch file at the monorepo root
+          await mkdir(join(fixturePath, 'patches'), { recursive: true });
+          await writeFile(
+            join(fixturePath, 'patches', 'unicorn-magic.patch'),
+            [
+              'diff --git a/mastra-patch-marker.txt b/mastra-patch-marker.txt',
+              'new file mode 100644',
+              '--- /dev/null',
+              '+++ b/mastra-patch-marker.txt',
+              '@@ -0,0 +1 @@',
+              '+patched-by-mastra-e2e',
+              '',
+            ].join('\n'),
+          );
+
+          // After setupMonorepo, setupMonorepo's pnpm install already resolved
+          // unicorn-magic as a transitive dependency at 0.2.0. Use 0.2.0 in
+          // both the explicit app dep and the patch specifier so they match.
+          const workspacePath = join(fixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(
+            workspacePath,
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.2.0: patches/unicorn-magic.patch\n`,
+          );
+
+          // Install with patches — the patched file should appear in node_modules
+          await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
+            cwd: fixturePath,
+            env: process.env,
+          });
+
+          expect(
+            await readFile(join(fixturePath, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
+          ).toContain('patched-by-mastra-e2e');
+        } finally {
+          await rm(fixturePath, { recursive: true, force: true });
         }
       },
       timeout,

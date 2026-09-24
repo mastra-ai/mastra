@@ -1,6 +1,8 @@
 export { SidebarNew } from './sidebar-new';
 export { SidebarNewBrand, type SidebarNewBrandProps } from './sidebar-new-brand';
+export { SidebarNewCommandHeader, type SidebarNewCommandHeaderProps } from './sidebar-new-command-header';
 export { SidebarNewFooter, type SidebarNewFooterProps } from './sidebar-new-footer';
+export { SidebarNewFooterMeta, type SidebarNewFooterMetaProps } from './sidebar-new-footer-meta';
 export { SidebarNewHeader, type SidebarNewHeaderProps } from './sidebar-new-header';
 export { SidebarNewMeter, type SidebarNewMeterProps, type SidebarNewMeterTone } from './sidebar-new-meter';
 export { SidebarNewNav, type SidebarNewNavProps } from './sidebar-new-nav';
@@ -12,7 +14,8 @@ export {
   type SidebarNewNavStackViewProps,
 } from './sidebar-new-nav-stack';
 export { SidebarNewRoot, type SidebarNewRootProps } from './sidebar-new-root';
-export { SidebarNewSections, type SidebarNewSectionsProps } from './sidebar-new-sections';
+export { SidebarNewSearchTrigger, type SidebarNewSearchTriggerProps } from './sidebar-new-search-trigger';
+export { SidebarNewSections, type SidebarNewSection, type SidebarNewSectionsProps } from './sidebar-new-sections';
 export { SidebarNewTrigger, type SidebarNewTriggerProps } from './sidebar-new-trigger';
 export {
   getIsLinkActive,
@@ -21,6 +24,5 @@ export {
   navItemClasses,
   type MainSidebarNavItemSize as SidebarNewNavItemSize,
   type NavLink as SidebarNewLink,
-  type NavSection as SidebarNewSection,
   useMainSidebar as useSidebarNew,
 } from '@/ds/components/MainSidebar/main-sidebar';

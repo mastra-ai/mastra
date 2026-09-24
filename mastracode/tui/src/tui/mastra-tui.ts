@@ -7,6 +7,8 @@ import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
+import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
@@ -20,6 +22,7 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
   MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
@@ -54,7 +57,7 @@ import type { ModelItem } from './components/model-selector.js';
 import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
-import { dispatchEvent } from './event-dispatch.js';
+import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
@@ -115,21 +118,67 @@ const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
+function fallbackStatusFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): { usingPack: string; failedPack: string } | undefined {
+  const persisted = metadata?.[THREAD_FALLBACK_STATUS_KEY];
+  if (
+    persisted &&
+    typeof persisted === 'object' &&
+    typeof (persisted as Record<string, unknown>).usingPack === 'string' &&
+    typeof (persisted as Record<string, unknown>).failedPack === 'string'
+  ) {
+    return persisted as { usingPack: string; failedPack: string };
+  }
+  return undefined;
+}
+
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.session.thread.getId();
   if (!initThreadId) {
     setCurrentThreadTitle(state, undefined);
+    state.fallbackStatus = undefined;
     return;
   }
 
   const initThreads = await state.session.thread.list();
+  if (state.session.thread.getId() !== initThreadId) return;
+
   const initThread = initThreads.find(t => t.id === initThreadId);
-  setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  const persistedFallbackStatus = fallbackStatusFromMetadata(metadata);
+  const pendingFallback = metadata?.[PACK_FALLBACK_STATE_KEY] as Partial<PendingPackFallback> | null | undefined;
+  const validPendingFallback =
+    pendingFallback &&
+    typeof pendingFallback === 'object' &&
+    typeof pendingFallback.fromPackId === 'string' &&
+    typeof pendingFallback.toPackId === 'string' &&
+    typeof pendingFallback.toModelId === 'string' &&
+    (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
+    typeof pendingFallback.at === 'string'
+      ? (pendingFallback as PendingPackFallback)
+      : null;
+  const currentState = state.session.state?.get?.() as Record<string, unknown> | undefined;
+  const currentPending = currentState?.[PACK_FALLBACK_STATE_KEY];
+  if (validPendingFallback || currentPending) {
+    const updates = {
+      [PACK_FALLBACK_STATE_KEY]: validPendingFallback,
+    };
+    const applied = state.session.state.setIf
+      ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
+      : state.session.thread.getId() === initThreadId
+        ? await state.session.state.set(updates).then(() => true)
+        : false;
+    if (!applied || state.session.thread.getId() !== initThreadId) return;
+  }
+
+  setCurrentThreadTitle(state, initThread?.title);
+  state.fallbackStatus = persistedFallbackStatus;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
   await state.goalManager.loadFromThread(state);
+  if (state.session.thread.getId() !== initThreadId) return;
   if (!state.goalManager.getGoal()) {
     state.goalManager.loadFromThreadMetadata(metadata);
   }
@@ -358,43 +407,14 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided (e.g. piped stdin content).
-    // Runs the same validation as interactive input: model check, prompt hooks.
+    // Initial message (--tui-initial-prompt / --tui-prompt and/or piped stdin) is
+    // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
-      const msg = this.state.options.initialMessage;
-
-      if (!this.state.session.model.hasSelection()) {
-        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
+      const { resumeSkipNotice } = this.state.options;
+      if (resumeSkipNotice && (await this.resumedConversation())) {
+        showInfo(this.state, resumeSkipNotice);
       } else {
-        const messageId = `user-${Date.now()}`;
-        addUserMessage(this.state, {
-          id: messageId,
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: msg }] },
-          createdAt: new Date(),
-        });
-        flushRender(this.state);
-
-        const allowed = await this.runUserPromptHook(msg);
-        if (!allowed) {
-          const comp = this.state.messageComponentsById.get(messageId);
-          if (comp) {
-            this.state.chatContainer.removeChild(comp as never);
-            this.state.messageComponentsById.delete(messageId);
-            flushRender(this.state);
-          }
-        } else {
-          try {
-            if (this.state.pendingNewThread) {
-              await this.state.session.thread.create();
-              this.state.pendingNewThread = false;
-            }
-            this.fireMessage(msg);
-          } catch (error) {
-            this.state.pendingNewThread = false;
-            showError(this.state, error instanceof Error ? error.message : 'Failed to start thread');
-          }
-        }
+        await this.submitUserInput(this.state.options.initialMessage);
       }
     }
 
@@ -404,42 +424,58 @@ export class MastraTUI {
       const userInput = await this.getUserInput();
       // allow space as transparent continue (for recovering from api errors manually)
       if (!userInput.trim() && userInput !== ' ') continue;
+      await this.submitUserInput(userInput);
+    }
+  }
 
-      try {
-        const pendingNewThread = this.state.pendingNewThread;
+  /** Whether startup loaded a thread that already has messages. */
+  private async resumedConversation(): Promise<boolean> {
+    if (this.state.pendingNewThread) return false;
+    const threadId = this.state.session.thread.getId();
+    if (!threadId) return false;
+    const messages = await this.state.session.thread.listMessages({ threadId, limit: 1 });
+    return messages.length > 0;
+  }
 
-        // Handle slash commands
-        if (userInput.startsWith('/')) {
-          const handled = await this.handleSlashCommand(userInput);
-          if (handled) continue;
-        }
+  /**
+   * Handle one submitted input: slash command, shell passthrough, or a message
+   * to the agent (after the model check and prompt hooks).
+   */
+  private async submitUserInput(userInput: string): Promise<void> {
+    try {
+      const pendingNewThread = this.state.pendingNewThread;
 
-        // Handle shell passthrough (! prefix)
-        if (userInput.startsWith('!')) {
-          await handleShellPassthrough(this.state, userInput.slice(1).trim());
-          continue;
-        }
-
-        // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.session.model.hasSelection()) {
-          showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
-          continue;
-        }
-
-        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
-        this.state.pendingImages = [];
-
-        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
-          this.removeOptimisticUserMessage(optimisticMessageId);
-          continue;
-        }
-
-        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
-      } catch (error) {
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      // Handle slash commands
+      if (userInput.startsWith('/')) {
+        const handled = await this.handleSlashCommand(userInput);
+        if (handled) return;
       }
+
+      // Handle shell passthrough (! prefix)
+      if (userInput.startsWith('!')) {
+        await handleShellPassthrough(this.state, userInput.slice(1).trim());
+        return;
+      }
+
+      // Check if a model is selected (sync — fast, no reason to defer)
+      if (!this.state.session.model.hasSelection()) {
+        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
+        return;
+      }
+
+      const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
+      this.state.pendingImages = [];
+
+      const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
+      const allowed = await this.runUserPromptHook(userInput);
+      if (!allowed) {
+        this.removeOptimisticUserMessage(optimisticMessageId);
+        return;
+      }
+
+      this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
+    } catch (error) {
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -832,8 +868,9 @@ export class MastraTUI {
     }, 60_000);
   }
 
-  private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
-    await renderExistingMessages(this.state);
+  private async renderExistingMessagesAndSeedIdleCounter(isCurrent?: () => boolean): Promise<void> {
+    await renderExistingMessages(this.state, isCurrent);
+    if (isCurrent && !isCurrent()) return;
 
     if (this.state.session.run.isRunning()) {
       this.clearStatusTimingTicker();
@@ -892,15 +929,27 @@ export class MastraTUI {
     }
 
     try {
+      const lifecycleGeneration = getThreadLifecycleGeneration(this.state);
+      const lifecycleThreadId =
+        event.type === 'thread_created'
+          ? event.thread.id
+          : event.type === 'thread_changed'
+            ? event.threadId
+            : undefined;
+      const lifecycleIsCurrent = () =>
+        lifecycleThreadId === undefined ||
+        (getThreadLifecycleGeneration(this.state) === lifecycleGeneration + 1 &&
+          this.state.session.thread.getId() === lifecycleThreadId);
+
       this.fireLifecycleHooksForEvent(event);
       await dispatchEvent(event, this.getEventContext(), this.state);
       this.captureAgentControllerAnalytics(event);
 
-      if (event.type === 'thread_created') {
-        await this.syncThreadActivePackMetadata(event.thread);
-      } else if (event.type === 'thread_changed') {
+      if (event.type === 'thread_created' && lifecycleIsCurrent()) {
+        await this.syncThreadActivePackMetadata(event.thread, lifecycleIsCurrent);
+      } else if (event.type === 'thread_changed' && lifecycleIsCurrent()) {
         this.refreshBackgroundActivity();
-        await this.syncThreadActivePackMetadata();
+        await this.syncThreadActivePackMetadata(undefined, lifecycleIsCurrent);
       }
 
       if (event.type === 'agent_start' && this.state.agentRunStartedAt !== undefined) {
@@ -1074,13 +1123,17 @@ export class MastraTUI {
     return access;
   }
 
-  private async syncThreadActivePackMetadata(thread?: {
-    id: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<void> {
+  private async syncThreadActivePackMetadata(
+    thread?: {
+      id: string;
+      metadata?: Record<string, unknown>;
+    },
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
     const settings = loadSettings();
     const currentThreadId = this.state.session.thread.getId();
-    if (!currentThreadId) return;
+    if (!currentThreadId || !isCurrent()) return;
+    const ownsUpdate = () => isCurrent() && this.state.session.thread.getId() === currentThreadId;
 
     const resolvedThread =
       thread?.id === currentThreadId
@@ -1088,20 +1141,21 @@ export class MastraTUI {
         : (await this.state.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
-    const resolvedPackId = resolveThreadActiveModelPackId(
-      settings,
-      packs,
-      resolvedThread?.metadata as Record<string, unknown> | undefined,
-    );
-
-    if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
-      // Re-read settings to avoid overwriting concurrent changes
-      const fresh = loadSettings();
-      if (fresh.models.activeModelPackId !== resolvedPackId) {
-        fresh.models.activeModelPackId = resolvedPackId;
-        saveSettings(fresh);
-      }
-    }
+    const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
+    if (!ownsUpdate()) return;
+    const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
+    const fallbackStatus = fallbackStatusFromMetadata(metadata);
+    const updates = {
+      activeModelPackId: resolvedPackId,
+    };
+    const applied = this.state.session.state.setIf
+      ? await this.state.session.state.setIf(updates, ownsUpdate)
+      : ownsUpdate()
+        ? (await this.state.session.state.set(updates), ownsUpdate())
+        : false;
+    if (!applied || !ownsUpdate()) return;
+    this.state.fallbackStatus = fallbackStatus;
+    updateStatusLine(this.state);
   }
 
   private showHookWarnings(event: string, warnings: string[]): void {
@@ -1341,10 +1395,10 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      startGoal: (objective, cancelMessage, options) =>
-        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
+      startGoal: (objective, cancelMessage) =>
+        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
-      renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
+      renderExistingMessages: isCurrent => this.renderExistingMessagesAndSeedIdleCounter(isCurrent),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
       renderCompletedTasksInline: (completedTasks, insertIndex) =>
@@ -1609,7 +1663,16 @@ export class MastraTUI {
     settings.models.activeModelPackId = activeModePackId;
     if (this.state.session.thread.getId()) {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+      // Selecting a pack here is a deliberate choice, not a fallback landing:
+      // a status restored from a previous run on this thread would otherwise
+      // keep claiming the thread is on a fallback pack.
+      await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
     }
+    await this.state.session.state.set({ activeModelPackId: activeModePackId, fallbackStatus: undefined });
+    // The status line reads the TUI's own field, not the controller session
+    // state — clearing only the latter would leave "Using fallback …" on screen
+    // until the next thread sync.
+    this.state.fallbackStatus = undefined;
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;

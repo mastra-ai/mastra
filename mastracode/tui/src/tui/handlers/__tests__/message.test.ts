@@ -22,7 +22,7 @@ import { RenderScheduler } from '../../render-scheduler.js';
 import type { TUIState } from '../../state.js';
 import { handleGoalEvaluation } from '../agent-lifecycle.js';
 import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
-import { handleToolInputStart } from '../tool.js';
+import { handleToolEnd, handleToolInputStart } from '../tool.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
@@ -248,16 +248,14 @@ describe('handleMessageStart signals', () => {
             updates: [
               {
                 id: 'activity-1',
-                action: 'fact-created',
-                type: 'fact',
-                recordId: 'fact-1',
+                action: 'node-created',
+                type: 'node',
+                recordId: 'node-1',
                 name: 'Atlas launch',
-                targetId: 'atlas',
-                targetType: 'entity',
                 createdAt: '2026-07-15T00:00:00.000Z',
               },
             ],
-            hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
+            hot: [{ type: 'node', name: 'Atlas launch', updates: 1 }],
           },
         },
       } as Parameters<typeof createSignal>[0]),
@@ -800,6 +798,28 @@ describe('handleMessageUpdate assistant streaming', () => {
     expect([...record.segments.values()].map(segment => segment.finalized)).toEqual([true, false]);
     expect(record.activeSegmentKey).toContain('tool-1');
     expect(state.streamingComponent).toBe(record.segments.get(record.activeSegmentKey!)?.component);
+  });
+
+  it.each(['aborted', 'error'])('preserves detached tool rows after %s and reconciles their result', stopReason => {
+    state.pendingAskUserComponents = new Map();
+    handleMessageUpdate(ctx, assistantMessage([{ type: 'text', text: 'partial' }]));
+    const background = new ToolExecutionComponentEnhanced('view', {}, { showImages: false }, state.ui);
+    background.setBackgroundTaskId('task-detached');
+    background.updateResult({ content: [{ type: 'text', text: 'Running in background…' }], isError: false }, true);
+    const foreground = new ToolExecutionComponentEnhanced('view', {}, { showImages: false }, state.ui);
+    state.pendingTools.set('detached', background);
+    state.pendingTools.set('foreground', foreground);
+    state.pendingTaskToolIds.add('foreground');
+
+    handleMessageEnd(ctx, terminalMessage([], { stopReason }));
+
+    expect(state.pendingTools.get('detached')).toBe(background);
+    expect(state.pendingTools.has('foreground')).toBe(false);
+    expect(state.pendingTaskToolIds.has('foreground')).toBe(false);
+    expect(stripAnsi(background.render(100).join('\n'))).not.toContain('Operation aborted');
+    handleToolEnd(ctx, 'detached', 'Detached result', false);
+    expect(state.pendingTools.has('detached')).toBe(false);
+    expect(stripAnsi(background.render(100).join('\n'))).toContain('✓ background · task-detached');
   });
 
   it.each([

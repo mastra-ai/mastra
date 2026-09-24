@@ -21,6 +21,7 @@ import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
 import { GithubAppOwnerResolver } from './github-app-owner.js';
+import { resolveGithubAuthEnv } from './github-auth-env.js';
 
 // Lazy-init execFileAsync to avoid vitest mock issues when only
 // constants/types are imported from this module.
@@ -28,7 +29,7 @@ let _execFileAsync: ((...a: any[]) => Promise<{ stdout: string; stderr: string }
 async function execFileAsync(
   file: string,
   args: readonly string[],
-  options?: { cwd?: string; signal?: AbortSignal; maxBuffer?: number },
+  options?: { cwd?: string; signal?: AbortSignal; maxBuffer?: number; env?: NodeJS.ProcessEnv },
 ): Promise<{ stdout: string; stderr: string }> {
   if (!_execFileAsync) {
     const cp = await import('node:child_process');
@@ -1094,6 +1095,7 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         cwd: input.cwd,
         signal: input.abortSignal,
         maxBuffer: 10 * 1024 * 1024,
+        env: await resolveGithubAuthEnv(),
       });
       return { ok: true, stdout, stderr };
     } catch (error) {
@@ -2258,12 +2260,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       if (this.#options.permissionResolver) {
         permission = await this.#options.permissionResolver.getPermission(owner, repo, user);
       } else {
-        const { stdout } = await execFileAsync('gh', [
-          'api',
-          `repos/${owner}/${repo}/collaborators/${user}/permission`,
-          '--jq',
-          '.permission',
-        ]);
+        const { stdout } = await execFileAsync(
+          'gh',
+          ['api', `repos/${owner}/${repo}/collaborators/${user}/permission`, '--jq', '.permission'],
+          { env: await resolveGithubAuthEnv() },
+        );
         const raw = stdout.trim();
         permission = (['admin', 'maintain', 'write', 'triage', 'read', 'none'] as const).includes(
           raw as GithubPermission,

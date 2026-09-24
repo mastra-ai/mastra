@@ -17,7 +17,7 @@ const TONE_FILL: Record<StatusTone, string> = {
   progress: 'bg-notice-warning',
   error: 'bg-notice-destructive',
   idle: 'bg-notice-info',
-  neutral: 'bg-neutral4',
+  neutral: 'bg-muted-foreground',
 };
 
 const PROGRESS_DECORATION =
@@ -26,7 +26,7 @@ const PROGRESS_DECORATION =
 const GLYPH_CLASS: Record<StatusDotGlyph, string> = {
   circle: 'rounded-full',
   square: 'rounded-xs',
-  dashed: 'border-neutral4 rounded-full border border-dashed bg-transparent',
+  dashed: 'border-muted-foreground rounded-full border border-dashed bg-transparent',
 };
 
 export function statusToneFill(tone: StatusTone): string {

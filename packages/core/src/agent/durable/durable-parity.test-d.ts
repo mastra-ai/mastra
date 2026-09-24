@@ -69,6 +69,8 @@ type ConsumedDuringPreparation =
   | 'experimentalTransform'
   // Applied to caller-local stream output, never serialized or used to filter generation.
   | 'hideSignals'
+  // Caller-local stream lifecycle; read by DurableAgent.stream()/resume(), never serialized.
+  | 'closeOnSuspend'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during
@@ -86,7 +88,7 @@ type ConsumedDuringPreparation =
   // untilIdle is handled by DurableAgent.streamUntilIdle() before preparation
   | 'untilIdle'
   // Serverless waitUntil is call-site only for non-durable generate/stream.
-  // Durable finish already awaits title generation, so this is intentionally unused.
+  // Durable execution manages its own finish lifecycle, so this is intentionally unused.
   | 'serverless'
   // Observability context keys from Partial<ObservabilityContext>
   | 'tracing'

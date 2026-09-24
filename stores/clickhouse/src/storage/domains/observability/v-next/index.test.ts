@@ -32,6 +32,9 @@ import {
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_SCORE_EVENTS_CURRENT,
+  MV_TRACE_ROOTS_DELTA,
+  MV_SCORE_EVENTS_DELTA,
+  buildScoreEventsDeltaMvDDL,
   parseTtlExpression,
   SCORE_EVENT_COLUMN_NAMES,
   TABLE_DELETION_REQUESTS,
@@ -45,8 +48,9 @@ import {
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
+  TABLE_TRACE_ROOTS_DELTA,
 } from './ddl';
-import { feedbackRecordToRow, scoreRecordToRow } from './helpers';
+import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
 import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
@@ -480,7 +484,10 @@ LIMIT 1`,
 
   describe('delta polling', () => {
     async function withFallbackStorage<T>(
-      run: (fallbackStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
+      run: (
+        fallbackStorage: ObservabilityStorageClickhouseVNext,
+        client: ReturnType<typeof createClient>,
+      ) => Promise<T>,
     ): Promise<T> {
       let adminClient: ReturnType<typeof createClient> | null = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -496,8 +503,12 @@ LIMIT 1`,
       const database = `fallback_delta_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       await adminClient.command({ query: `CREATE DATABASE ${database}` });
 
+      // A database in the URL overrides the explicit database option.
+      const fixtureUrl = new URL(process.env.CLICKHOUSE_URL || 'http://localhost:8123');
+      fixtureUrl.pathname = '/';
+      fixtureUrl.searchParams.delete('database');
       let client: ReturnType<typeof createClient> | null = createClient({
-        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        url: fixtureUrl.toString(),
         username: process.env.CLICKHOUSE_USERNAME || 'default',
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
         database,
@@ -517,7 +528,7 @@ LIMIT 1`,
       try {
         await fallbackStorage.init();
         await fallbackStorage.dangerouslyClearAll();
-        return await run(fallbackStorage);
+        return await run(fallbackStorage, client);
       } finally {
         if (fallbackStorage) {
           await fallbackStorage.dangerouslyClearAll();
@@ -532,14 +543,146 @@ LIMIT 1`,
       }
     }
 
+    it('characterizes a delta index entry becoming visible before its trace root', async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const poll = async (after?: string) => {
+          const result = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after })),
+          );
+          if (!('delta' in result)) throw new Error('Expected delta response');
+          return result;
+        };
+        const bootstrap = await poll();
+        const root = spanRecordToRow({
+          traceId: 'visibility-gap',
+          spanId: 'visibility-gap-root',
+          parentSpanId: null,
+          name: 'delayed root visibility',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt,
+          endedAt: new Date(startedAt.getTime() + 1),
+        });
+
+        // Stage physical-table visibility explicitly: ClickHouse does not make
+        // a source insert and its materialized views atomic for concurrent readers.
+        await client.insert({
+          table: TABLE_TRACE_ROOTS_DELTA,
+          format: 'JSONEachRow',
+          values: [
+            {
+              cursorId: '1',
+              ingestedAt: startedAt.toISOString(),
+              startedAt: startedAt.toISOString(),
+              traceId: root.traceId,
+              dedupeKey: root.dedupeKey,
+            },
+          ],
+        });
+        const gap = await poll(bootstrap.deltaCursor);
+        expect(gap.traces).toEqual([]);
+        expect(gap.deltaCursor).not.toBe(bootstrap.deltaCursor);
+
+        // The same insert becomes visible in the root table without producing a
+        // second index entry. Isolate the fixture so no shared MV is detached.
+        await client.command({ query: `DETACH TABLE ${MV_TRACE_ROOTS_DELTA}` });
+        try {
+          await client.insert({ table: TABLE_TRACE_ROOTS, format: 'JSONEachRow', values: [root] });
+        } finally {
+          await client.command({ query: `ATTACH TABLE ${MV_TRACE_ROOTS_DELTA}` });
+        }
+        expect((await poll(gap.deltaCursor)).traces).toEqual([]);
+        // An older cursor still sees the row, but the advanced cursor cannot.
+        expect((await poll(bootstrap.deltaCursor)).traces.map(trace => trace.traceId)).toEqual(['visibility-gap']);
+        const reloaded = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
+        );
+        expect('traces' in reloaded && reloaded.traces.map(trace => trace.traceId)).toEqual(['visibility-gap']);
+      });
+    });
+
+    it('characterizes concurrent trace inserts and delta polls with numbered-page reconciliation', async () => {
+      await withFallbackStorage(async isolatedStorage => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const poll = async (after?: string) => {
+          const result = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after, limit: 3 })),
+          );
+          if (!('delta' in result)) throw new Error('Expected delta response');
+          return result;
+        };
+        let after = (await poll()).deltaCursor;
+        const expected = Array.from({ length: 12 }, (_, index) => `concurrent-${String(index).padStart(2, '0')}`);
+        const observed = new Set<string>();
+        const record = (result: Awaited<ReturnType<typeof poll>>) => {
+          expect(result.traces.length).toBeLessThanOrEqual(3);
+          expect(new Set(result.traces.map(trace => trace.traceId)).size).toBe(result.traces.length);
+          for (const trace of result.traces) {
+            expect(expected).toContain(trace.traceId);
+            observed.add(trace.traceId);
+          }
+          after = result.deltaCursor;
+        };
+        // Promise.all starts each poll before waiting for the insert acknowledgment.
+        // A missed trace is permitted: this test characterizes best-effort polling.
+        for (const traceId of expected) {
+          const [, result] = await Promise.all([
+            isolatedStorage.batchCreateSpans({
+              records: [
+                {
+                  traceId,
+                  spanId: `${traceId}-root`,
+                  parentSpanId: null,
+                  name: 'concurrent completed root',
+                  spanType: SpanType.AGENT_RUN,
+                  isEvent: false,
+                  startedAt,
+                  endedAt: new Date(startedAt.getTime() + 1),
+                },
+              ],
+            }),
+            poll(after),
+          ]);
+          record(result);
+        }
+        for (let batch = 0; batch <= expected.length; batch++) {
+          const result = await poll(after);
+          record(result);
+          if (!result.delta.hasMore) break;
+          expect(batch).toBeLessThan(expected.length);
+        }
+        const reloaded = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 100 } })),
+        );
+        if (!('pagination' in reloaded)) throw new Error('Expected numbered-page response');
+        expect(reloaded.traces.map(trace => trace.traceId).sort()).toEqual(expected);
+        expect(reloaded.pagination.total).toBe(expected.length);
+        // Reload reconciles every acknowledged insert, including any polling gaps.
+        expect([...observed].every(traceId => reloaded.traces.some(trace => trace.traceId === traceId))).toBe(true);
+        expect(reloaded.deltaCursor).toBeTypeOf('string');
+        expect((await poll(reloaded.deltaCursor)).traces).toEqual([]);
+      });
+    });
+
     it('advertises metrics, logs, delta polling, trace query discovery, and queries when enabled', () => {
       expect(storage.getFeatures()).toEqual([
         'metrics',
         'logs',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
+        'trace-query-tenant-scope',
       ]);
     });
 
@@ -551,8 +694,10 @@ LIMIT 1`,
           'metrics',
           'logs',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
+          'trace-query-tenant-scope',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -709,6 +854,124 @@ LIMIT 1`,
       );
       expect(delta.scores.map(score => score.scoreId)).toEqual(['delta-score-2']);
       expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('emits a retried score once across delta polls', async () => {
+      const filters = { scorerId: 'delta-retry-scorer' } as any;
+      const score = {
+        scoreId: 'delta-score-retry',
+        timestamp: new Date('2026-05-05T00:00:02Z'),
+        traceId: 'delta-score-retry-trace',
+        spanId: null,
+        scorerId: 'delta-retry-scorer',
+        score: 0.3,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+
+      const bootstrap = await storage.listScores({ mode: 'delta', filters });
+      await storage.createScore({ score });
+
+      const first = await waitForValue(
+        () => storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters }),
+        result => result.scores.length > 0,
+      );
+      expect(first.scores.map(s => s.scoreId)).toEqual(['delta-score-retry']);
+
+      // The consumer has already seen the score; a retry and a rewrite land
+      // afterwards. The rewrite moves the score to another trace, so the
+      // delta row's original traceId no longer matches the current row.
+      await storage.createScore({ score });
+      await storage.createScore({ score: { ...score, traceId: 'delta-score-retry-trace-2', score: 0.9 } });
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      try {
+        const deltaRows = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect((await deltaRows.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([1]);
+      } finally {
+        await client.close();
+      }
+
+      const second = await storage.listScores({ mode: 'delta', after: first.deltaCursor!, filters });
+      expect(second.scores).toEqual([]);
+      expect(second.deltaCursor).toBe(first.deltaCursor);
+
+      const replay = await storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters });
+      expect(replay.scores.map(s => [s.scoreId, s.traceId, s.score])).toEqual([
+        ['delta-score-retry', 'delta-score-retry-trace-2', 0.9],
+      ]);
+      const page = await storage.listScores({ filters });
+      expect(page.scores.map(s => [s.scoreId, s.traceId, s.score])).toEqual([
+        ['delta-score-retry', 'delta-score-retry-trace-2', 0.9],
+      ]);
+    });
+
+    it('collapses duplicate delta rows for one score within and across polls', async () => {
+      const filters = { scorerId: 'delta-dup-scorer' } as any;
+      const score = {
+        scoreId: 'delta-score-dup-rows',
+        timestamp: new Date('2026-05-05T00:00:04Z'),
+        traceId: 'delta-score-dup-trace',
+        spanId: null,
+        scorerId: 'delta-dup-scorer',
+        score: 0.4,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      try {
+        const bootstrap = await storage.listScores({ mode: 'delta', filters });
+        await storage.createScore({ score });
+        await waitForValue(
+          () => storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters }),
+          result => result.scores.length > 0,
+        );
+
+        // Model the delta rows a concurrent-insert race can leave behind by
+        // writing two extra rows for the same score straight into the delta table.
+        await client.command({
+          query: `INSERT INTO ${TABLE_SCORE_EVENTS_DELTA} (cursorId, ingestedAt, traceId, timestamp, scoreId)
+                  SELECT (SELECT max(cursorId) FROM ${TABLE_SCORE_EVENTS_DELTA}) + n, now64(9, 'UTC'), {traceId:String}, parseDateTime64BestEffort({timestamp:String}, 3, 'UTC'), {scoreId:String}
+                  FROM (SELECT arrayJoin([1, 2]) AS n)`,
+          query_params: { traceId: score.traceId, timestamp: score.timestamp.toISOString(), scoreId: score.scoreId },
+        });
+        const deltaRows = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect((await deltaRows.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([3]);
+
+        const poll = await storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters });
+        expect(poll.scores.map(s => s.scoreId)).toEqual(['delta-score-dup-rows']);
+        expect(poll.delta?.hasMore).toBe(false);
+
+        // The two higher-cursor duplicates must not resurface on the next poll either.
+        const next = await storage.listScores({ mode: 'delta', after: poll.deltaCursor!, filters });
+        expect(next.scores).toEqual([]);
+      } finally {
+        // Remove the hand-written rows so their cursorIds don't outrun the stream head for later tests.
+        await client.command({
+          query: `DELETE FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+        });
+        await client.close();
+      }
     });
 
     it('supports page deltaCursor and delta polling for feedback', async () => {
@@ -5517,6 +5780,105 @@ LIMIT 1`,
           migration => migration.kind === 'column' && migration.table === table && migration.name === 'writeVersion',
         )?.sql,
       ).toContain('ADD COLUMN IF NOT EXISTS writeVersion UInt64 DEFAULT 0');
+    });
+
+    it('mints one delta cursor per scoreId', () => {
+      for (const strategy of ['serial', 'fallback'] as const) {
+        const mvDdl = buildAllMvDDL(strategy).find(ddl =>
+          ddl.includes(`CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}`),
+        );
+        expect(mvDdl).toContain(`SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}`);
+        expect(mvDdl).toContain(`WHERE scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS})`);
+        expect(mvDdl).toContain('LIMIT 1 BY scoreId');
+      }
+
+      const deltaTableDdl = buildAllTableDDL().find(ddl =>
+        ddl.includes(`CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA}`),
+      );
+      expect(deltaTableDdl).toContain('INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1');
+      expect(
+        ALL_MIGRATIONS.find(
+          migration =>
+            migration.kind === 'index' &&
+            migration.table === TABLE_SCORE_EVENTS_DELTA &&
+            migration.name === 'idx_scoreId',
+        ),
+      ).toBeDefined();
+    });
+
+    it('upgrades a score delta view that predates per-scoreId deduplication in place', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const score = {
+        scoreId: 'legacy-delta-mv-score',
+        timestamp: new Date('2026-01-02T00:00:00Z'),
+        traceId: 'legacy-delta-mv-trace',
+        spanId: null,
+        scorerId: 'quality',
+        score: 0.4,
+        reason: null,
+        metadata: null,
+      };
+      const readMvDdl = async () => {
+        const result = await client.query({
+          query: `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+          query_params: { name: MV_SCORE_EVENTS_DELTA },
+          format: 'JSONEachRow',
+        });
+        return (await result.json<{ create_table_query: string }>())[0]?.create_table_query ?? '';
+      };
+
+      try {
+        const strategy = (await readMvDdl()).includes('generateSerialID(') ? 'serial' : 'fallback';
+        const legacyMvDdl = buildScoreEventsDeltaMvDDL(strategy)
+          .replace(/\n\s*WHERE scoreId NOT IN \([\s\S]*?\n\s*\)/, '')
+          .replace(/\n\s*LIMIT 1 BY scoreId/, '');
+        expect(legacyMvDdl).not.toContain('NOT IN');
+
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}` });
+        await client.command({ query: legacyMvDdl });
+        expect(await readMvDdl()).not.toContain('NOT IN');
+
+        // init() must alter the view in place: a drop-and-recreate would leave
+        // a window in which score writes get no delta row.
+        const countDropViews = async () => {
+          await client.command({ query: 'SYSTEM FLUSH LOGS' });
+          const result = await client.query({
+            query: `SELECT count() AS count FROM system.query_log
+                    WHERE type = 'QueryFinish' AND query ILIKE {pattern:String}`,
+            query_params: { pattern: `DROP VIEW%${MV_SCORE_EVENTS_DELTA}%` },
+            format: 'JSONEachRow',
+          });
+          return Number((await result.json<{ count: string | number }>())[0]?.count ?? 0);
+        };
+        const dropsBefore = await countDropViews();
+
+        const storage = new ObservabilityStorageClickhouseVNext({ client });
+        await storage.init();
+        expect(await readMvDdl()).toContain('NOT IN');
+        expect(await countDropViews()).toBe(dropsBefore);
+
+        await storage.createScore({ score });
+        await storage.createScore({ score });
+
+        const deltaResult = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect((await deltaResult.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([1]);
+
+        // A missing view is created by the regular CREATE pass, nothing to alter.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}` });
+        await storage.init();
+        expect(await readMvDdl()).toContain('NOT IN');
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
     });
 
     it('additively upgrades legacy score rows without losing source or delta data', async () => {

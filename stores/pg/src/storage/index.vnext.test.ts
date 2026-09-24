@@ -108,8 +108,10 @@ describe('PostgresStoreVNext', () => {
           'logs',
           'delta-polling',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
+          'trace-query-tenant-scope',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -117,8 +119,10 @@ describe('PostgresStoreVNext', () => {
           'metrics',
           'logs',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
+          'trace-query-tenant-scope',
         ]);
       } finally {
         coreFeatures.clear();
@@ -201,6 +205,8 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     sharedStorage = new ObservabilityStoragePostgresVNext({
       client: sharedClient,
       schemaName: sharedSchema,
+      // Shared conformance fixtures use fixed dates, outside the rolling discovery window.
+      discovery: { lookbackSeconds: 0 },
     });
     await sharedStorage.init();
   });

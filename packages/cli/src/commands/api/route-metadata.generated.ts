@@ -208,6 +208,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "clearPendingSignals",
+      "expectedRunId",
       "resourceId",
       "threadId"
     ],
@@ -215,6 +217,25 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/threads/signals/cancel": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/signals/cancel",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "signalIds",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "cancelledSignalIds"
     }
   },
   "POST /agents/:agentId/tools/:toolId/execute": {
@@ -1248,7 +1269,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "GET /memory/threads/:threadId/working-memory": {
@@ -1511,7 +1533,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "POST /memory/network/save-messages": {
@@ -2001,7 +2024,10 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "after",
       "group",
+      "limit",
+      "mode",
       "orderBy",
       "page",
       "pagination",
@@ -5009,6 +5035,7 @@ export const API_ROUTE_METADATA = {
     "path": "/datasets",
     "pathParams": [],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "targetIds",
@@ -5114,6 +5141,7 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "search",
@@ -5317,6 +5345,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "comparisonId",
       "experimentSetId",
+      "orderBy",
       "page",
       "perPage",
       "targetId",
@@ -5372,6 +5401,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "comparisonId",
       "experimentSetId",
+      "orderBy",
       "page",
       "perPage",
       "targetId",
@@ -5539,6 +5569,7 @@ export const API_ROUTE_METADATA = {
       "experimentId"
     ],
     "queryParams": [
+      "orderBy",
       "page",
       "perPage",
       "tags"

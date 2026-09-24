@@ -17,7 +17,7 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_201 =
+type InputShared_Auxiliary_203 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -51,42 +51,47 @@ type InputShared_Auxiliary_201 =
       path: string;
     }
   | {
+      op: 'includes' | 'notIncludes';
+      path: string;
+      value: string;
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_201[];
+      args: InputShared_Auxiliary_203[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_201;
+      arg: InputShared_Auxiliary_203;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_222;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_222;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_222;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_222;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_222;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_222;
           };
     };
 
-type InputShared_Auxiliary_219 =
+type InputShared_Auxiliary_222 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -120,34 +125,39 @@ type InputShared_Auxiliary_219 =
       path: string;
     }
   | {
+      op: 'includes' | 'notIncludes';
+      path: string;
+      value: string;
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_219[];
+      args: InputShared_Auxiliary_222[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_219;
+      arg: InputShared_Auxiliary_222;
     };
 
-type InputShared_Auxiliary_246 =
+type InputShared_Auxiliary_250 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_246[];
+      args: InputShared_Auxiliary_250[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_246;
+      arg: InputShared_Auxiliary_250;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_201;
+            some: InputShared_Auxiliary_203;
           }
         | {
-            none: InputShared_Auxiliary_201;
+            none: InputShared_Auxiliary_203;
           };
     };
 
-type InputShared_Auxiliary_662 =
+type InputShared_Auxiliary_666 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,27 +202,27 @@ type InputShared_Auxiliary_662 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_662[];
+      args: InputShared_Auxiliary_666[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_662;
+      arg: InputShared_Auxiliary_666;
     };
 
-type InputShared_Auxiliary_736 = {
+type InputShared_Auxiliary_740 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_736[] | undefined;
+  children?: InputShared_Auxiliary_740[] | undefined;
 };
 
-type Shared_Auxiliary_745 = {
+type Shared_Auxiliary_747 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_745[] | undefined;
+  children?: Shared_Auxiliary_747[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -247,6 +257,7 @@ type InputShared_Type_1 = {
 };
 
 type InputShared_Type_2 = {
+  rootSpanName?: string | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -493,6 +504,7 @@ type InputShared_Type_13 = {
 type InputShared_Type_14 =
   | 'agent_run'
   | 'scorer_run'
+  | 'classifier_evaluation'
   | 'scorer_step'
   | 'generic'
   | 'model_generation'
@@ -500,6 +512,7 @@ type InputShared_Type_14 =
   | 'model_inference'
   | 'model_chunk'
   | 'mcp_tool_call'
+  | 'mcp_server_request'
   | 'processor_run'
   | 'tool_call'
   | 'client_tool_call'
@@ -536,6 +549,7 @@ type InputShared_Type_15 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
@@ -1214,10 +1228,14 @@ type InputShared_Type_53 = {
 };
 
 type InputShared_Type_54 = {
-  /** Model ID in format provider/model-name (ModelRouterModelId) */
-  model: string;
+  /** Model ID in format provider/model-name (ModelRouterModelId); defaults to the agent's own model */
+  model?: string | undefined;
   /** Custom instructions for title generation */
   instructions?: string | undefined;
+  /** Minimum number of thread messages required before a title is generated */
+  minMessages?: number | undefined;
+  /** Emit the generated title as a data-thread-title chunk on the run stream */
+  emitEvent?: boolean | undefined;
 };
 
 type InputShared_Type_55 = {
@@ -1725,7 +1743,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_662[];
+  predicates: InputShared_Auxiliary_666[];
 };
 
 type InputShared_Type_87 = {
@@ -1739,7 +1757,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_662;
+  predicate: InputShared_Auxiliary_666;
 };
 
 type InputShared_Type_88 =
@@ -2134,6 +2152,7 @@ type InputShared_Type_111 = {
 
 type Shared_Type_0 = {
   id: string;
+  title?: string | undefined;
   description?: string | undefined;
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;
@@ -2514,10 +2533,14 @@ type Shared_Type_22 = {
 };
 
 type Shared_Type_23 = {
-  /** Model ID in format provider/model-name (ModelRouterModelId) */
-  model: string;
+  /** Model ID in format provider/model-name (ModelRouterModelId); defaults to the agent's own model */
+  model?: string | undefined;
   /** Custom instructions for title generation */
   instructions?: string | undefined;
+  /** Minimum number of thread messages required before a title is generated */
+  minMessages?: number | undefined;
+  /** Emit the generated title as a data-thread-title chunk on the run stream */
+  emitEvent?: boolean | undefined;
 };
 
 type Shared_Type_24 = {
@@ -3070,6 +3093,7 @@ type Shared_Type_46 = {
     | 'step'
     | 'agent'
     | 'tool'
+    | 'classifier'
     | 'mapping'
     | 'sleep'
     | 'sleepUntil'
@@ -3243,6 +3267,7 @@ type Shared_Type_56 = {
 type Shared_Type_57 =
   | 'agent_run'
   | 'scorer_run'
+  | 'classifier_evaluation'
   | 'scorer_step'
   | 'generic'
   | 'model_generation'
@@ -3250,6 +3275,7 @@ type Shared_Type_57 =
   | 'model_inference'
   | 'model_chunk'
   | 'mcp_tool_call'
+  | 'mcp_server_request'
   | 'processor_run'
   | 'tool_call'
   | 'client_tool_call'
@@ -3286,6 +3312,7 @@ type Shared_Type_58 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
@@ -3544,6 +3571,7 @@ type Shared_Type_63 = {
 };
 
 type Shared_Type_64 = {
+  id?: string | undefined;
   name: string;
   description?: string | undefined;
   inputSchema: unknown;
@@ -4047,7 +4075,7 @@ type Shared_Type_79 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_745[] | undefined;
+  files?: Shared_Auxiliary_747[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5053,6 +5081,8 @@ export type PostAgentsAgentIdThreadsAbort_PathParams = GetAgentsAgentId_PathPara
 export type PostAgentsAgentIdThreadsAbort_Body = {
   resourceId?: string | undefined;
   threadId: string;
+  clearPendingSignals?: boolean | undefined;
+  expectedRunId?: string | undefined;
 };
 
 export type PostAgentsAgentIdThreadsAbort_Response = {
@@ -5079,11 +5109,50 @@ export interface PostAgentsAgentIdThreadsAbort_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/threads/signals/cancel
+// ============================================================================
+export type PostAgentsAgentIdThreadsSignalsCancel_PathParams = GetAgentsAgentId_PathParams;
+
+export type PostAgentsAgentIdThreadsSignalsCancel_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+  signalIds: string[];
+};
+
+export type PostAgentsAgentIdThreadsSignalsCancel_Response = {
+  cancelledSignalIds: string[];
+};
+
+export type PostAgentsAgentIdThreadsSignalsCancel_Request = Simplify<
+  (PostAgentsAgentIdThreadsSignalsCancel_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdThreadsSignalsCancel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdThreadsSignalsCancel_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdThreadsSignalsCancel_Body
+        ? { body?: PostAgentsAgentIdThreadsSignalsCancel_Body }
+        : { body: PostAgentsAgentIdThreadsSignalsCancel_Body })
+>;
+
+export interface PostAgentsAgentIdThreadsSignalsCancel_RouteContract {
+  pathParams: PostAgentsAgentIdThreadsSignalsCancel_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdThreadsSignalsCancel_Body;
+  request: PostAgentsAgentIdThreadsSignalsCancel_Request;
+  response: PostAgentsAgentIdThreadsSignalsCancel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/threads/subscribe
 // ============================================================================
 export type PostAgentsAgentIdThreadsSubscribe_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdThreadsSubscribe_Body = PostAgentsAgentIdThreadsAbort_Body;
+export type PostAgentsAgentIdThreadsSubscribe_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+};
 
 export type PostAgentsAgentIdThreadsSubscribe_Response = PostAgentsAgentIdGenerate_Response;
 
@@ -8505,6 +8574,10 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
 export type GetMemoryThreadsThreadIdMessages_Response = {
   messages: unknown[];
   uiMessages: unknown[] | null;
+  total?: number | undefined;
+  page?: number | undefined;
+  perPage?: (number | false) | undefined;
+  hasMore?: boolean | undefined;
 };
 
 export type GetMemoryThreadsThreadIdMessages_Request = Simplify<
@@ -9957,6 +10030,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
+          | 'classifier_evaluation'
           | 'scorer_step'
           | 'generic'
           | 'model_generation'
@@ -9964,6 +10038,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'model_inference'
           | 'model_chunk'
           | 'mcp_tool_call'
+          | 'mcp_server_request'
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'
@@ -10043,7 +10118,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_201 | undefined;
+  where?: InputShared_Auxiliary_203 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10070,6 +10145,11 @@ export type PostObservabilityTracesQuery_Body = {
         perPage?: number | undefined;
       }
     | undefined;
+  mode?: 'delta' | undefined;
+  /** Opaque cursor value for incremental polling */
+  after?: string | undefined;
+  /** Maximum number of updates to return in one delta poll */
+  limit?: number | undefined;
 };
 
 export type PostObservabilityTracesQuery_Response =
@@ -10082,6 +10162,15 @@ export type PostObservabilityTracesQuery_Response =
   | {
       traces: Shared_Type_62[];
       pagination: Shared_Type_55;
+      /** Opaque cursor value for incremental polling */
+      deltaCursor?: string | undefined;
+    }
+  | {
+      traces: Shared_Type_62[];
+      /** Incremental polling metadata */
+      delta: Shared_Type_56;
+      /** Opaque cursor value for incremental polling */
+      deltaCursor: string;
     }
   | {
       groups: {
@@ -10120,9 +10209,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_201 | undefined;
+    where?: InputShared_Auxiliary_203 | undefined;
   };
-  where?: InputShared_Auxiliary_246 | undefined;
+  where?: InputShared_Auxiliary_250 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10173,8 +10262,21 @@ export type PostObservabilityTracesQueryFields_Body = {
 export type PostObservabilityTracesQueryFields_Response = {
   canonicalFields: {
     path: string;
-    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
-    operators: ('eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'notIn' | 'exists' | 'notExists')[];
+    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence' | 'array';
+    operators: (
+      | 'eq'
+      | 'ne'
+      | 'lt'
+      | 'lte'
+      | 'gt'
+      | 'gte'
+      | 'in'
+      | 'notIn'
+      | 'exists'
+      | 'notExists'
+      | 'includes'
+      | 'notIncludes'
+    )[];
     valueSuggestions: boolean;
   }[];
   observedFields: {
@@ -13261,7 +13363,7 @@ export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_PathP
   workspaceId: string;
   /** Skill name identifier */
   skillName: string;
-  /** Reference file path (URL encoded) */
+  /** Reference file path */
   referencePath: string;
 };
 
@@ -13763,6 +13865,7 @@ export type GetMcpV0Servers_Response = {
       release_date: string;
       is_latest: boolean;
     };
+    transports?: ('streamable-http' | 'sse')[] | undefined;
   }[];
   total_count: number;
   next: string | null;
@@ -13811,6 +13914,7 @@ export type GetMcpV0ServersId_Response = {
   package_canonical?: string | undefined;
   packages?: unknown[] | undefined;
   remotes?: unknown[] | undefined;
+  transports?: ('streamable-http' | 'sse')[] | undefined;
 };
 
 export type GetMcpV0ServersId_Request = Simplify<
@@ -17943,7 +18047,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_736[] | undefined;
+  files?: InputShared_Auxiliary_740[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18001,7 +18105,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_736[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_740[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -18885,6 +18989,15 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'createdAt' | 'updatedAt' | 'name';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetDatasets_Response = {
@@ -19122,6 +19235,15 @@ export type GetDatasetsDatasetIdItems_QueryParams = {
   perPage?: number | undefined;
   version?: number | undefined;
   search?: string | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'createdAt' | 'updatedAt';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetDatasetsDatasetIdItems_Response = {
@@ -19587,6 +19709,15 @@ export type GetExperiments_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return experiments run against this target ID */
   targetId?: string | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'createdAt' | 'status';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetExperiments_Response = {
@@ -19878,6 +20009,12 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response 
     score: number | null;
     reason: string | null;
     error: string | null;
+    notScorable?:
+      | {
+          step: string;
+          reason?: string | undefined;
+        }
+      | undefined;
     failedStep?: string | undefined;
     completedSteps?: string[] | undefined;
     targetScope?: ('span' | 'trajectory') | undefined;
@@ -20112,6 +20249,15 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
   perPage?: number | undefined;
   /** Only return results that have all of these tags */
   tags?: string[] | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'startedAt' | 'createdAt';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
@@ -23401,6 +23547,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
+  'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
   'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
@@ -24083,6 +24230,9 @@ export interface Client {
   };
   '/agents/:agentId/threads/abort': {
     POST: PostAgentsAgentIdThreadsAbort_RouteContract;
+  };
+  '/agents/:agentId/threads/signals/cancel': {
+    POST: PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
   };
   '/agents/:agentId/threads/subscribe': {
     POST: PostAgentsAgentIdThreadsSubscribe_RouteContract;

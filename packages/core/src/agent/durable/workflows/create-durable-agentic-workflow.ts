@@ -682,6 +682,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             });
           }
 
+          // Keep title generation inside the workflow lifecycle so durable workers do not
+          // abandon it, but wait only after FINISH has released stream/generate callers.
+          await finishResult.titleGeneration;
+
           // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
           // originals were ended as `suspended`, so end the *resume* spans (registry override).
           try {

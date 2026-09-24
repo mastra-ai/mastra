@@ -1,4 +1,12 @@
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
+import type { OAuthAccountRecord } from '@mastra/code-sdk/auth/types';
+import {
+  loadSettings,
+  migrateAccountPreferences,
+  pruneRemovedAccountPreferences,
+  saveSettings,
+} from '@mastra/code-sdk/onboarding/settings';
+import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import { promptAuthMode } from '../components/login-mode-selector.js';
 import { LoginSelectorComponent } from '../components/login-selector.js';
@@ -6,7 +14,58 @@ import { seedOMDefaultAfterLogin } from '../om-defaults.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
-async function performLogin(ctx: SlashCommandContext, providerId: string): Promise<void> {
+function toManagedAccounts(accounts: OAuthAccountRecord[]) {
+  return accounts.map(account => ({ id: account.id, label: account.label, active: account.active }));
+}
+
+function removeAccountRoutingPreferences(accountIds: Iterable<string>): void {
+  const settings = loadSettings();
+  pruneRemovedAccountPreferences(settings, accountIds);
+  saveSettings(settings);
+}
+
+function withProviderPrefix(providerName: string, label: string): string {
+  const normalizedProviderName = providerName.toLowerCase();
+  const normalizedLabel = label.toLowerCase();
+  return normalizedLabel === normalizedProviderName || normalizedLabel.startsWith(`${normalizedProviderName} `)
+    ? label
+    : `${providerName} ${label}`;
+}
+
+/**
+ * After a successful login the account was just registered — offer a
+ * one-shot rename before the dialog closes. Escape keeps the resolved label;
+ * empty submit keeps it under the provider's full display name.
+ *
+ * The typed text is a postfix on the provider's full display name: typing
+ * "work" for Anthropic labels the account "Anthropic (Claude Pro/Max) work",
+ * matching the registry's default labels (`<provider name> account N`).
+ */
+async function promptForAccountName(
+  ctx: SlashCommandContext,
+  dialog: LoginDialogComponent,
+  providerId: string,
+  account: OAuthAccountRecord,
+) {
+  const authStorage = ctx.authStorage;
+  if (!authStorage) return;
+  const provider = getOAuthProviders().find(p => p.id === providerId);
+  const baseLabel = provider?.name ?? providerId;
+  const defaultLabel = withProviderPrefix(baseLabel, account.label);
+  const input = await dialog.promptOptional(`Name this account (Enter to keep "${defaultLabel}")`);
+  if (input === null) return;
+  const name = input.trim();
+  const label = name ? withProviderPrefix(baseLabel, name) : defaultLabel;
+  if (label !== account.label) {
+    authStorage.renameAccount(providerId, account.id, label);
+  }
+}
+
+async function performLogin(
+  ctx: SlashCommandContext,
+  providerId: string,
+  opts?: { replaceAccountId?: string; activate?: boolean },
+): Promise<void> {
   const provider = getOAuthProviders().find(p => p.id === providerId);
   const providerName = provider?.name || providerId;
 
@@ -36,34 +95,53 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
     dialog.focused = true;
 
     ctx
-      .authStorage!.login(providerId, {
-        onAuth: (info: { url: string; instructions?: string }) => {
-          dialog.showAuth(info.url, info.instructions);
+      .authStorage!.login(
+        providerId,
+        {
+          onAuth: (info: { url: string; instructions?: string }) => {
+            dialog.showAuth(info.url, info.instructions);
+          },
+          onPrompt: async (prompt: { message: string; placeholder?: string }) => {
+            return dialog.showPrompt(prompt.message, prompt.placeholder);
+          },
+          onProgress: (message: string) => {
+            dialog.showProgress(message);
+          },
+          signal: dialog.signal,
+          authMode,
         },
-        onPrompt: async (prompt: { message: string; placeholder?: string }) => {
-          return dialog.showPrompt(prompt.message, prompt.placeholder);
-        },
-        onProgress: (message: string) => {
-          dialog.showProgress(message);
-        },
-        signal: dialog.signal,
-        authMode,
-      })
-      .then(async () => {
+        opts,
+      )
+      .then(async account => {
+        if (opts?.replaceAccountId) {
+          const settings = loadSettings();
+          migrateAccountPreferences(settings, opts.replaceAccountId, account.id);
+          saveSettings(settings);
+        }
+        await promptForAccountName(ctx, dialog, providerId, account);
         ctx.state.ui.hideOverlay();
         ctx.state.controller.invalidateAvailableModelsCache();
 
         // The `/login` command must not change the user's active model or model
         // pack — that only belongs to the onboarding flow. Only auto-select the
         // provider default when no model is selected yet (e.g. onboarding was
-        // skipped), so the user isn't left without a usable model.
-        const hasSelectedModel = ctx.state.session.model.get() !== '';
-        const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
-        if (defaultModel && !hasSelectedModel) {
-          await ctx.state.session.model.switch({ modelId: defaultModel });
-          ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
+        // skipped), so the user isn't left without a usable model. An
+        // add-another login (activate:false) never touches the model, and
+        // neither does re-authenticating an account that stays inactive — the
+        // account is registered but not activated in both cases.
+        const label = ctx.authStorage?.listAccounts(providerId).find(a => a.id === account.id)?.label ?? account.label;
+        const activated = opts?.activate !== false && account.active !== false;
+        if (!activated) {
+          ctx.showInfo(`Added ${label} (not active)`);
         } else {
-          ctx.showInfo(`Successfully logged in to ${providerName}`);
+          const hasSelectedModel = ctx.state.session.model.get() !== '';
+          const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
+          if (defaultModel && !hasSelectedModel) {
+            await ctx.state.session.model.switch({ modelId: defaultModel });
+            ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
+          } else {
+            ctx.showInfo(`Successfully logged in to ${providerName}`);
+          }
         }
         await seedOMDefaultAfterLogin(ctx.state, providerId, message => ctx.showInfo(message));
 
@@ -76,6 +154,73 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
         }
         resolve();
       });
+  });
+}
+
+/**
+ * Open the account manager overlay for a provider that already has
+ * registered accounts. Add/re-authenticate re-run the normal login flow
+ * (`addAccount` updates an existing account in place on id collision).
+ */
+async function openAccountManager(
+  ctx: SlashCommandContext,
+  providerId: string,
+  providerName: string,
+  initialAccounts: OAuthAccountRecord[],
+): Promise<void> {
+  return new Promise<void>(resolve => {
+    const finish = () => {
+      ctx.state.ui.hideOverlay();
+      resolve();
+    };
+
+    const manager = new LoginAccountManagerComponent(providerName, toManagedAccounts(initialAccounts), {
+      onAddAnother: () => {
+        finish();
+        // Add-another registers the account without activating it, then
+        // returns to the manager so the user can activate it (or Esc out).
+        // Cancelled/failed logins land back here too.
+        void performLogin(ctx, providerId, { activate: false }).then(() => {
+          const accounts = ctx.authStorage?.listAccounts(providerId) ?? [];
+          if (accounts.length > 0) {
+            return openAccountManager(ctx, providerId, providerName, accounts);
+          }
+        });
+      },
+      onReauthenticate: accountId => {
+        finish();
+        void performLogin(ctx, providerId, { replaceAccountId: accountId });
+      },
+      onRemove: accountId => {
+        const label =
+          ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
+        ctx.authStorage?.removeAccount(providerId, accountId);
+        removeAccountRoutingPreferences([accountId]);
+        ctx.state.controller.invalidateAvailableModelsCache();
+        ctx.showInfo(`Removed ${label}`);
+        finish();
+      },
+      onActivate: accountId => {
+        // `activateAccount` reloads the registry first, so another process may
+        // have removed the account since the manager snapshot — in that case it
+        // returns undefined and nothing changed. Reporting a switch then would
+        // be a lie about which credential the next request uses.
+        const activated = ctx.authStorage?.activateAccount(providerId, accountId);
+        if (!activated) {
+          ctx.showError(`Could not activate that ${providerName} account. It may have been removed elsewhere.`);
+          finish();
+          return;
+        }
+        ctx.state.controller.invalidateAvailableModelsCache();
+        // `activated.label` already carries the provider-name postfix the
+        // account manager renders, so don't prefix it again.
+        ctx.showInfo(`Switched to ${activated.label ?? accountId}`);
+        finish();
+      },
+      onBack: () => finish(),
+    });
+
+    showModalOverlay(ctx.state.ui, manager, { widthPercent: 0.8, maxHeight: '60%' });
   });
 }
 
@@ -111,16 +256,24 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
       {
         getOAuthProviders: () => providers,
         isLoggedIn: providerId => loggedInIds.includes(providerId),
+        countAccounts: providerId => ctx.authStorage?.listAccounts(providerId).length ?? 0,
       },
       async providerId => {
         ctx.state.ui.hideOverlay();
         const provider = providers.find(p => p.id === providerId);
         if (provider) {
           if (mode === 'login') {
-            await performLogin(ctx, provider.id);
+            const accounts = ctx.authStorage?.listAccounts(provider.id) ?? [];
+            if (accounts.length > 0) {
+              await openAccountManager(ctx, provider.id, provider.name, accounts);
+            } else {
+              await performLogin(ctx, provider.id);
+            }
           } else {
             if (ctx.authStorage) {
+              const removedAccountIds = ctx.authStorage.listAccounts(provider.id).map(account => account.id);
               ctx.authStorage.logout(provider.id);
+              removeAccountRoutingPreferences(removedAccountIds);
               ctx.state.controller.invalidateAvailableModelsCache();
               ctx.showInfo(`Logged out from ${provider.name}`);
             } else {

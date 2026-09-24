@@ -11,6 +11,7 @@ import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { isAwaitingInput, resolveStepSpan } from '../context/workflow-step-timing';
 import { useWaitingStepKey } from './use-workflow-trigger';
 import { WorkflowBodyGraph } from './workflow-body-graph';
 import { getWorkflowCardKind } from './workflow-node-kind';
@@ -24,8 +25,9 @@ export interface WorkflowGraphNodeProps {
 
 const getDisplayStatus = (step?: Step): { displayStatus: WorkflowCardDisplayStatus; isTripwire: boolean } => {
   const isTripwire = step?.status === 'failed' && step?.tripwire !== undefined;
+  const displayStatus = step && isAwaitingInput(step) ? 'suspended' : step?.status;
   return {
-    displayStatus: isTripwire ? 'tripwire' : step?.status,
+    displayStatus: isTripwire ? 'tripwire' : displayStatus,
     isTripwire,
   };
 };
@@ -58,6 +60,7 @@ const WorkflowStepCard = ({
   const isHovered = hoverStepId === stepKey;
   const step = steps[stepKey];
   const { displayStatus, isTripwire } = getDisplayStatus(step);
+  const stepSpan = step ? resolveStepSpan(step) : undefined;
 
   return (
     <WorkflowStepCardView
@@ -85,8 +88,9 @@ const WorkflowStepCard = ({
       mapConfig={mapConfig}
       canSuspend={data.canSuspend}
       stepGraph={stepGraph}
-      startedAt={step?.startedAt}
-      endedAt={step?.endedAt}
+      startedAt={stepSpan?.start}
+      endedAt={stepSpan?.end}
+      spansSuspension={stepSpan?.spansSuspension}
       actionBar={
         <WorkflowStepActionBar
           stepName={label}

@@ -16,7 +16,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
-import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -764,6 +764,35 @@ https://mastra.ai/en/docs/memory/overview`,
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
+    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
+
+    // Check if user already manually added MessageHistory
+    const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
+
+    // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
+    const hasObservationalMemory =
+      configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+      isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+
+    // MemoryInputFilter trims the request down to the part that stored history does
+    // not already cover. That is only correct when a loader is about to pull stored
+    // history in underneath it: with no loader, the request is the entire context
+    // and trimming it deletes messages the caller meant the model to see.
+    // Semantic recall does not qualify - it adds recalled fragments, not the thread's history.
+    const loadsStoredHistory = hasMessageHistory || hasObservationalMemory || lastMessages.enabled;
+
+    if (memoryStore && loadsStoredHistory) {
+      processors.push(
+        new MemoryInputFilter({
+          storage: memoryStore,
+          // Resolved from the merged config so the flag can be set agent-wide (Memory options)
+          // or per call (memory.options on the request), matching how the other memory options
+          // are resolved. The filter reads config nowhere else.
+          retainFullInput: effectiveConfig.retainFullInput === true,
+        }),
+      );
+    }
+
     // Add working memory input processor if configured
     const isWorkingMemoryEnabled =
       typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
@@ -812,7 +841,6 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
     const messageTokenCounter =
       lastMessages.maxTokens === undefined
         ? undefined
@@ -825,14 +853,6 @@ https://mastra.ai/en/docs/memory/overview`,
           id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
-
-      // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
-
-      // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
-      const hasObservationalMemory =
-        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
       // Skip MessageHistory input processor if ObservationalMemory handles message loading
       if (!hasMessageHistory && !hasObservationalMemory) {
@@ -1125,16 +1145,15 @@ https://mastra.ai/en/docs/memory/overview`,
     if (generateTitle !== undefined && config.options) {
       if (typeof generateTitle === 'boolean') {
         config.options.generateTitle = generateTitle;
-      } else if (typeof generateTitle === 'object' && generateTitle.model) {
+      } else if (typeof generateTitle === 'object' && generateTitle !== null) {
         const model = generateTitle.model;
-        // Extract ModelRouterModelId from various model configurations
+        // Extract ModelRouterModelId from string or config-object model specs.
+        // AI SDK LanguageModel instances are deliberately left unset — their
+        // modelId is not a valid model-router ID; dynamic functions cannot serialize.
         let modelId: string | undefined;
 
         if (typeof model === 'string') {
           modelId = model;
-        } else if (typeof model === 'function') {
-          // Cannot serialize dynamic functions - skip
-          modelId = undefined;
         } else if (model && typeof model === 'object') {
           // Handle config objects with id field
           if ('id' in model && typeof model.id === 'string') {
@@ -1142,12 +1161,12 @@ https://mastra.ai/en/docs/memory/overview`,
           }
         }
 
-        if (modelId && config.options) {
-          config.options.generateTitle = {
-            model: modelId as ModelRouterModelId,
-            instructions: typeof generateTitle.instructions === 'string' ? generateTitle.instructions : undefined,
-          };
-        }
+        config.options.generateTitle = {
+          ...(modelId ? { model: modelId as ModelRouterModelId } : {}),
+          ...(typeof generateTitle.instructions === 'string' ? { instructions: generateTitle.instructions } : {}),
+          ...(typeof generateTitle.minMessages === 'number' ? { minMessages: generateTitle.minMessages } : {}),
+          ...(typeof generateTitle.emitEvent === 'boolean' ? { emitEvent: generateTitle.emitEvent } : {}),
+        };
       }
     }
 

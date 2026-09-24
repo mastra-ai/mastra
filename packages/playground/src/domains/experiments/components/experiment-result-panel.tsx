@@ -18,7 +18,6 @@ import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -83,12 +82,11 @@ export function ExperimentResultPanel({
       ) : itemId ? (
         <>
           <DataPanel.Header>
+            <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
             <DataPanel.Heading>
-              Experiment item <b>#{itemId}</b>
+              Experiment item
+              <DataPanel.CopyId id={itemId} />
             </DataPanel.Heading>
-            <DataPanel.HeaderActions>
-              <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
-            </DataPanel.HeaderActions>
           </DataPanel.Header>
           {fallback}
         </>
@@ -262,26 +260,12 @@ function ExperimentResultPanelBody({
   return (
     <>
       <DataPanel.Header>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         <DataPanel.Heading>
-          Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
+          Result
+          <DataPanel.CopyId id={result.id} />
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Previous result"
-            nextLabel="Next result"
-          />
-          {experimentLink && (
-            <Button size="sm" variant="ghost" as={Link} to={experimentLink} icon={<FlaskConical />}>
-              See experiment
-            </Button>
-          )}
-          {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
-              Trace
-            </Button>
-          )}
           {canFlag && (
             <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
               Flag for Review
@@ -292,25 +276,45 @@ function ExperimentResultPanelBody({
               Mark as reviewed
             </Button>
           )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
+          {experimentLink && (
+            <Button
+              size="sm"
+              variant="ghost"
+              render={<Link href={experimentLink} />}
+              tooltip="See experiment"
+              aria-label="See experiment"
+            >
+              <FlaskConical />
+            </Button>
+          )}
+          {result.traceId && onShowTrace && (
+            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+              <TraceIcon />
+            </Button>
+          )}
+          <DataPanel.NextPrevNav
+            onPrevious={onPrevious}
+            onNext={onNext}
+            previousLabel="Go to previous result"
+            nextLabel="Go to next result"
+          />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       {feedbackTraceId ? (
         <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
           <DataPanel.Header>
-            <TabList variant="pill-ghost">
+            <TabList variant="pill-ghost" size="sm">
               <Tab value="details">Details</Tab>
               <Tab value="feedback">
-                Feedback
-                <NeedsReviewDot feedback={traceFeedback?.feedback} />
+                Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
               </Tab>
             </TabList>
           </DataPanel.Header>
-          <TabContent value="details" className="min-h-0 py-0">
+          <TabContent value="details" flush>
             {details}
           </TabContent>
-          <TabContent value="feedback" className="h-full min-h-0 py-0">
+          <TabContent value="feedback" flush>
             <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
           </TabContent>
         </Tabs>

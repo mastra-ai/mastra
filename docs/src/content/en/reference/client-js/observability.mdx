@@ -92,6 +92,33 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
+### Load a page and poll for traces
+
+`queryTraces()` supports keyset traversal with `page`, numbered pages with `pagination`, and delta polling with `mode: 'delta'`. Use one mode per request. To migrate from `listTracesLight()`, read `traces` instead of `spans` and retain the numbered page's `deltaCursor`:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+const initial = await mastraClient.queryTraces({
+  timeRange,
+  pagination: { page: 0, perPage: 100 },
+})
+if (!initial.deltaCursor) throw new Error('Delta polling is unavailable')
+
+const changes = await mastraClient.queryTraces({
+  timeRange,
+  mode: 'delta',
+  after: initial.deltaCursor,
+  limit: 100,
+})
+```
+
+Merge `changes.traces` by `traceId`, retain `changes.deltaCursor`, and continue while `changes.delta.hasMore` is `true`. Keep the same time range and predicate across polls. Only completed traces are returned; polling doesn't guarantee notifications for related-record updates, deletions, or traces that stop matching.
+
+See [Delta polling](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop. `queryTraceThreads()` remains keyset-only.
+
 ### Discover trace-query fields and values
 
 `getTraceQueryFields()` returns canonical query fields and observed top-level string metadata fields for one predicate scope. The response includes each field's value kind, supported operators, and whether value suggestions are available.
@@ -205,7 +232,7 @@ const result = await mastraClient.deleteTraces({
 console.log(result.success)
 ```
 
-Each request accepts up to 1,000 trace IDs. Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
+Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
 
 ## Scoring traces
 
@@ -236,7 +263,7 @@ const scores = await mastraClient.listScoresBySpan({
 
 ## Feedback
 
-Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform feedback query API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform Feedback API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
 
 ### Creating feedback
 
@@ -287,6 +314,8 @@ const feedback = await mastraClient.listFeedback({
   orderBy: { field: 'timestamp', direction: 'DESC' },
 })
 ```
+
+`filters` accepts every [`FeedbackFilter`](/reference/observability/feedback#feedbackfilter) field. The client sends them as query parameters on `GET /api/observability/feedback`. See [list query parameters](/reference/observability/feedback#list-query-parameters).
 
 ### Aggregating feedback
 
