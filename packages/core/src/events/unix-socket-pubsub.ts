@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import { decode, encode } from './codec';
 import { PubSub } from './pubsub';
@@ -543,11 +543,13 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     };
 
     while (true) {
+      await this.#completeLeaseMutationRecoveries(lockPath);
       const candidatePath = `${lockPath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(candidatePath, JSON.stringify(lockRecord), { flag: 'wx' });
+      let installed = false;
       try {
         await link(candidatePath, lockPath);
-        break;
+        installed = true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
         const existingLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
@@ -556,49 +558,100 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
           continue;
         }
         if (await this.#isLeaseMutationLockStale(existingLock)) {
-          await this.#removeLeaseMutationLock(lockPath, existingLock);
+          await this.#startLeaseMutationRecovery(lockPath, existingLock);
         } else {
           await delay(LEASE_LOCK_RETRY_MS);
         }
       } finally {
         await unlink(candidatePath).catch(() => {});
       }
+
+      if (!installed) continue;
+      await this.#completeLeaseMutationRecoveries(lockPath);
+      const currentLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
+      if (this.#sameLeaseMutationLock(currentLock, lockRecord)) break;
     }
 
     try {
       return await mutate(leasePath);
     } finally {
-      await this.#removeLeaseMutationLock(lockPath, lockRecord);
+      await this.#releaseLeaseMutationLock(lockPath, lockRecord);
     }
   }
 
-  /** Moves and removes a mutation lock only when its process identity and unique token still match. */
-  async #removeLeaseMutationLock(lockPath: string, expected: FileLeaseMutationLock): Promise<boolean> {
-    const isolatedPath = `${lockPath}.${process.pid}.${randomUUID()}.reap`;
+  /** Returns recovery markers for one lock, excluding isolated files left by interrupted recovery helpers. */
+  async #leaseMutationRecoveryPaths(lockPath: string): Promise<string[]> {
+    const recoveryDirectory = `${lockPath}.recoveries`;
+    const names = await readdir(recoveryDirectory).catch(() => [] as string[]);
+    return names.filter(name => !name.endsWith('.isolated')).map(name => join(recoveryDirectory, name));
+  }
+
+  /** Completes any in-progress recovery before acquisition or release touches the canonical lock path. */
+  async #completeLeaseMutationRecoveries(lockPath: string): Promise<void> {
+    while (true) {
+      const recoveryPaths = await this.#leaseMutationRecoveryPaths(lockPath);
+      if (recoveryPaths.length === 0) return;
+      await Promise.all(recoveryPaths.map(recoveryPath => this.#completeLeaseMutationRecovery(lockPath, recoveryPath)));
+    }
+  }
+
+  /** Returns a stable generation name for both current and pre-token mutation-lock records. */
+  #leaseMutationLockGeneration(lock: FileLeaseMutationLock): string {
+    if (typeof lock.token === 'string') return lock.token;
+    return createHash('sha256').update(JSON.stringify(lock)).digest('hex');
+  }
+
+  /** Starts recovery through a generation-specific hard link so contenders cannot reap a replacement lock. */
+  async #startLeaseMutationRecovery(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
+    const recoveryDirectory = `${lockPath}.recoveries`;
+    const recoveryPath = join(recoveryDirectory, this.#leaseMutationLockGeneration(expected));
+    await mkdir(recoveryDirectory, { recursive: true });
+    try {
+      await link(lockPath, recoveryPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST' && code !== 'ENOENT') throw error;
+    }
+    await this.#completeLeaseMutationRecovery(lockPath, recoveryPath);
+  }
+
+  /** Removes the lock generation named by a recovery marker while all acquisitions observe that marker. */
+  async #completeLeaseMutationRecovery(lockPath: string, recoveryPath: string): Promise<void> {
+    const expectedGeneration = basename(recoveryPath);
+    const expected = await this.#readJson<FileLeaseMutationLock>(recoveryPath);
+    if (
+      !expected ||
+      this.#leaseMutationLockGeneration(expected) !== expectedGeneration ||
+      !(await this.#isLeaseMutationLockStale(expected))
+    ) {
+      await unlink(recoveryPath).catch(() => {});
+      return;
+    }
+
+    const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
+    if (!this.#sameLeaseMutationLock(current, expected)) {
+      await unlink(recoveryPath).catch(() => {});
+      return;
+    }
+
+    const isolatedPath = `${recoveryPath}.isolated`;
     try {
       await rename(lockPath, isolatedPath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-      throw error;
-    }
-
-    const isolatedLock = await this.#readJson<FileLeaseMutationLock>(isolatedPath);
-    if (this.#sameLeaseMutationLock(isolatedLock, expected)) {
-      await unlink(isolatedPath).catch(() => {});
-      return true;
-    }
-
-    while (true) {
-      try {
-        await link(isolatedPath, lockPath);
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        await delay(LEASE_LOCK_RETRY_MS);
-      }
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'EEXIST') throw error;
     }
     await unlink(isolatedPath).catch(() => {});
-    return false;
+    await unlink(recoveryPath).catch(() => {});
+  }
+
+  /** Releases this holder's immutable lock generation after any earlier recovery has completed. */
+  async #releaseLeaseMutationLock(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
+    await this.#completeLeaseMutationRecoveries(lockPath);
+    const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
+    if (this.#sameLeaseMutationLock(current, expected)) {
+      await unlink(lockPath).catch(() => {});
+    }
   }
 
   /** Compares mutation-lock identities without relying on a reusable pathname. */
@@ -614,8 +667,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   /** Detects abandoned mutation locks using both PID liveness and process incarnation. */
   async #isLeaseMutationLockStale(lock: FileLeaseMutationLock): Promise<boolean> {
-    if (!Number.isInteger(lock.pid) || typeof lock.processNonce !== 'string' || typeof lock.token !== 'string')
-      return true;
+    if (!Number.isInteger(lock.pid) || typeof lock.processNonce !== 'string') return true;
     try {
       process.kill(lock.pid, 0);
     } catch (error) {
