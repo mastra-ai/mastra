@@ -2,4 +2,4 @@
 '@mastra/editor': patch
 ---
 
-Builder agents keep their own stability error processors (`ProviderHistoryCompat`, `PrefillErrorHandler`, `StreamErrorRetryProcessor`) instead of relying on the framework defaults, because the `@mastra/core` peer range allows cores that predate them — so the builder behaves the same on every supported core version. The processors are declared in the repair-first order the framework uses. `DEFAULT_BUILDER_ERROR_PROCESSORS` is still exported.
+Builder agents keep their own stability error processors (`ProviderHistoryCompat`, `PrefillErrorHandler`, `StreamErrorRetryProcessor`) instead of relying on the framework defaults, because the `@mastra/core` peer range allows cores that predate them — so the builder's recovery stack holds on every supported core version. A caller's `errorProcessors` list merges with the builder's list: defaults the caller replaces by `id` are dropped in favor of the caller's instance, other caller processors run after the defaults, and an explicit `errorProcessors: []` opts out. The processors are declared in the repair-first order the framework uses. `DEFAULT_BUILDER_ERROR_PROCESSORS` is still exported.
