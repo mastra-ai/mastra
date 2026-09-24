@@ -1,5 +1,20 @@
 # @mastra/oracledb
 
+## 0.4.1-alpha.0
+
+### Patch Changes
+
+- The Oracle observability store now declares its logs and filter discovery support (entity types, entity names, service names, environments and tags), so Studio can show the matching filters. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.logs; // true
+  capabilities.discovery.entityNames; // true
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
 ## 0.4.0
 
 ### Minor Changes

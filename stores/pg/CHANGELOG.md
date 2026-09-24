@@ -1,5 +1,28 @@
 # @mastra/pg
 
+## 1.27.1-alpha.0
+
+### Patch Changes
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
 ## 1.27.0
 
 ### Minor Changes

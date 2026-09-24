@@ -1,5 +1,139 @@
 # @mastra/playground-ui
 
+## 59.0.0-alpha.1
+
+### Minor Changes
+
+- Added `InlineCode` for code inside a sentence, and documented when to use monospace text. ([#25012](https://github.com/mastra-ai/mastra/pull/25012))
+
+  Code is always marked as code: `InlineCode` in running text, and a highlighted `CodeBlock` for anything longer. `Txt font="mono"` is for machine identifiers such as model IDs, hashes, and log lines, and for timestamps and durations. Other numbers, such as counts and costs, stay in the body face with `tabular-nums`. It keeps the role's size, line height, and weight and changes only the typeface. `DataList.NumberCell` takes `font="mono"` for duration columns, and trace and workflow durations now render in mono. KPI values and chart axes stay in the body face.
+
+  ```tsx
+  import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+  import { Txt } from '@mastra/playground-ui/components/Txt';
+
+  <Txt variant="body-sm" tone="muted">
+    Set <InlineCode>OPENAI_API_KEY</InlineCode> to use this model.
+  </Txt>
+
+  <Txt variant="caption" font="mono" tone="muted">
+    run_01JQX8K2M4
+  </Txt>
+  ```
+
+  `Txt` now accepts `font="body"`, the default, alongside `font="mono"`. Set `--font-mono` in your own CSS to use a different monospace typeface. Set `--font-mono-size-adjust` to the body face's x-height ratio, such as `ex-height 0.508`, so mono text looks the same size as the text around it.
+
+- Added `required` and `errorMsg` to `SettingsRow`. A required row shows the same asterisk as a form field label, and an error message appears under the label as an alert the control can reference. ([#24980](https://github.com/mastra-ai/mastra/pull/24980))
+
+  ```tsx
+  <SettingsRow label="Model" htmlFor="model" required errorMsg="Choose the model this agent runs on.">
+    <Input id="model" error aria-describedby={fieldErrorId('model')} />
+  </SettingsRow>
+  ```
+
+- Added `RelativeTimestamp`, which shows a compact relative time such as `3m ago` or `in 2h` in monospace. Hover or focus shows a card with the time since, counting up live, and the date and time in your timezone and in UTC. Studio schedules, trigger history, and workflow run headers now use it. ([#25001](https://github.com/mastra-ai/mastra/pull/25001))
+
+  ```tsx
+  import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
+
+  <RelativeTimestamp value={run.createdAt} />;
+  ```
+
+- Added `CompactNumber`, which shows a compact metric such as `12.3K` or `$1.2K` and reveals the full value (`12,310`) in a tooltip on hover or focus. The compact value can hide digits (`$123.45` shows as `$123`), and the full value in the tooltip keeps the currency's precision. An amount smaller than the currency's smallest unit shows as `<$0.01`, and a unit that isn't a currency, such as `credits`, shows as a plain number. ([#24979](https://github.com/mastra-ai/mastra/pull/24979))
+
+  ```tsx
+  import { CompactNumber } from '@mastra/playground-ui/components/CompactNumber';
+
+  <CompactNumber value={12310} />
+  <CompactNumber value={12345.67} currency="USD" />
+  ```
+
+  The number and cost formatters now live in one place, `@mastra/playground-ui/utils/cost`. `formatCompact` is renamed to `formatCompactNumber`, and `formatCompact` and `formatCost` are no longer exported from the metrics components.
+
+  ```ts
+  // Before
+  import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components';
+
+  // After
+  import { formatCompactNumber, formatCost, formatFullNumber } from '@mastra/playground-ui/utils/cost';
+  ```
+
+- **Status dots use one circular shape.** `StatusDot` and `Status` now draw every state as a circle. Meaning comes from color plus a filled or ring treatment. The `square` and `dashed` glyphs and the blue `idle` tone are removed. ([#24960](https://github.com/mastra-ai/mastra/pull/24960))
+
+  **Canonical deploy states.** `deployStates` exports the six deploy and server states: Ready, Building, Idle, Queued, Stopped, and Error. Idle and Queued are gray rings, Stopped is a gray filled dot.
+
+  ```tsx
+  // Before
+  { label: 'Stopped', tone: 'neutral', glyph: 'square', description }
+  { label: 'Idle', tone: 'idle', description }
+
+  // After
+  { ...deployStates.stopped, description }
+  { ...deployStates.idle, description } // { tone: 'neutral', glyph: 'ring' }
+  ```
+
+  **Status labels inherit text style.** The label now always takes the size and color of its container, so it matches the other cells in a `DataList` without a wrapper. The `children` slot is removed; style the container instead.
+
+  ```tsx
+  // Before
+  <Status presentation={presentation}>
+    <Txt as="span" variant="body-sm">{presentation.label}</Txt>
+  </Status>
+
+  // After
+  <Status presentation={presentation} />
+  ```
+
+### Patch Changes
+
+- Field error messages now show an alert icon before the text, so an invalid field no longer relies on red alone. This applies to every field block, `Combobox`, and anything that renders `FieldBlock.ErrorMsg`. ([#24987](https://github.com/mastra-ai/mastra/pull/24987))
+
+- Fixed Studio timestamps losing their time on historical dates. Date-only cells now stay date-only even today, while trace tooltips and unnamed chat threads preserve seconds. Timeline timestamps use the browser locale while keeping UTC. Calendar labels respect the requested timezone at year boundaries. ([#24955](https://github.com/mastra-ai/mastra/pull/24955))
+
+  Added shared date, duration, and elapsed-time helpers for custom Studio interfaces. `formatDate` requires an explicit preset: `date`, `date-time`, `date-time-seconds`, `time`, `time-seconds`, or `relative-time`. Trace list dates, table timestamps, and tool-call timestamps preserve visible seconds without requiring a hover. Relative labels fall back to the `date` preset after seven days. `formatTimestampPrecise` retains milliseconds for debugging.
+
+  ```tsx
+  import { formatDate } from '@mastra/playground-ui/utils/date-format';
+  import { formatDuration } from '@mastra/playground-ui/utils/duration';
+  import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
+  import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
+
+  formatDate('2026-09-24T10:00:00Z', 'date-time-seconds', { timeZone: 'UTC' });
+  formatRelativeTime('2026-09-24T10:00:00Z');
+  formatDuration(1234); // "1.23s"
+
+  function Elapsed({ isRunning }: { isRunning: boolean }) {
+    const elapsed = useElapsedTime(isRunning);
+    return <span>{formatDuration(elapsed)}</span>;
+  }
+  ```
+
+- Added a `useObservabilityCapabilities` hook (`@mastra/playground-ui/domains/capabilities`) that reads which observability features the server supports. Studio's traces page now uses it to list traces through the lightweight endpoint when the server doesn't support trace queries. Older servers that don't report capabilities keep the current behavior. ([#25014](https://github.com/mastra-ai/mastra/pull/25014))
+
+  Also added `useTraceQueryAvailable`, which returns `{ isLoading, enabled }`. `enabled` is false while capabilities load and when the server doesn't support trace queries. Studio uses it to pick the traces list endpoint and to hide feedback on servers without trace query support.
+
+  Also exported `useTracesListSource` from `@mastra/playground-ui/domains/traces`, so other apps can rebuild the traces list (auto-refresh, rolling time window, list rows). It takes `withQueryTrace` and `enabled` as inputs and does not read capabilities itself; callers decide which endpoint to use.
+
+- Added a `defaultOpen` option to the reasoning block (`Reasoning` and `ReasoningPartRenderer`), so apps can start reasoning collapsed. It defaults to `true`, so existing views are unchanged. While reasoning streams, the "Reasoning" label now shimmers, so a collapsed block still shows the model is thinking. ([#25036](https://github.com/mastra-ai/mastra/pull/25036))
+
+  ```tsx
+  <ReasoningPartRenderer part={part} defaultOpen={false} />
+  ```
+
+- Added a `withQueryTrace` option for servers that do not support the trace query API. Set it to `false` to list traces through the older light trace list endpoint: ([#25007](https://github.com/mastra-ai/mastra/pull/25007))
+
+  - `useTraceQuery` accepts `withQueryTrace` and `legacyFilters` (built with `buildTraceListFilters`).
+  - `createTraceFilterBarFields` only offers fields the light endpoint can filter on, with the `is` operator.
+  - `TraceColumnsMenu` hides the "Add metadata column" action.
+
+- Studio hides the trace/span Feedback tab when the observability store does not support feedback. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`867df31`](https://github.com/mastra-ai/mastra/commit/867df31d35fdf9dcf1a02b3563af7c6f76b6b166)]:
+  - @mastra/core@1.71.0-alpha.1
+  - @mastra/client-js@1.50.0-alpha.1
+  - @mastra/memory@1.32.1-alpha.0
+  - @mastra/react@1.6.3-alpha.1
+
 ## 58.1.0-alpha.0
 
 ### Minor Changes

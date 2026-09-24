@@ -1,5 +1,35 @@
 # @mastra/code-sdk
 
+## 1.8.3-alpha.1
+
+### Patch Changes
+
+- **Stagehand model selection now follows your chat setup instead of a hardcoded fallback.** ([#25028](https://github.com/mastra-ai/mastra/pull/25028))
+
+  - Added `resolveStagehandModel()` to report which model Stagehand will use and why. It resolves, in order: `browser.stagehand.model` (`settings`), the chat model captured at browser launch when Stagehand can route it (`chat-model`), the OpenAI Codex default model when you are signed in with Codex (`codex-oauth`), then Stagehand's own default (`stagehand-default`).
+  - Any `openai/*` model, configured or inferred, now goes through the Codex endpoint when your OpenAI login is Codex OAuth, with the same `-codex` model-id remaps the chat agents apply. Codex-only users no longer need a separate `OPENAI_API_KEY` for browser automation.
+  - Dotted Anthropic ids such as `anthropic/claude-opus-4.6` are normalized before being handed to Stagehand, matching the chat agents.
+  - Fixed the Browserbase API key being saved in session state; the active-browser snapshot is now credential-free and records which model the browser launched with.
+
+  ```ts
+  import { resolveStagehandModel } from '@mastra/code-sdk/onboarding/settings';
+
+  const { modelName, source, viaCodexOAuth } = resolveStagehandModel(settings.browser, {
+    chatModelId: session.model.get(),
+  });
+  // e.g. { modelName: 'anthropic/claude-sonnet-4-5', source: 'chat-model', viaCodexOAuth: false }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`527e1d8`](https://github.com/mastra-ai/mastra/commit/527e1d8e705de7002f9fa2222b08baf3bbaf4267), [`b410849`](https://github.com/mastra-ai/mastra/commit/b4108495c7a60343b83b82ae80d6ca9b75305fbf), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`867df31`](https://github.com/mastra-ai/mastra/commit/867df31d35fdf9dcf1a02b3563af7c6f76b6b166), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503)]:
+  - @mastra/core@1.71.0-alpha.1
+  - @mastra/duckdb@1.11.1-alpha.1
+  - @mastra/observability@1.18.1-alpha.0
+  - @mastra/fastembed@1.3.2-alpha.0
+  - @mastra/libsql@1.23.3-alpha.0
+  - @mastra/pg@1.27.1-alpha.0
+  - @mastra/memory@1.32.1-alpha.0
+  - @mastra/mcp@2.1.0
+
 ## 1.8.3-alpha.0
 
 ### Patch Changes
