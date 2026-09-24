@@ -964,7 +964,19 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+      TParsedInput = TInput,
+    >(
+      // A schema with `.default()`/`.coerce` has two faces: callers provide the schema's
+      // input type (`TInput`), while the first step receives the parsed output type
+      // (`TParsedInput`) because `Run._validateInput` replaces the input with the
+      // parser's return value. Re-matching `inputSchema` against the two-parameter
+      // `PublicSchema<Output, Input>` captures both faces so `.then(step)` compares
+      // the first step's input against the parsed type, while `run.start`, cron, and
+      // configured `inputData` keep accepting the raw caller input.
+      params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext> & {
+        inputSchema: PublicSchema<TParsedInput, TInput>;
+      },
+    ) {
       return new InngestWorkflow<
         InngestEngineType,
         TSteps,
@@ -972,7 +984,7 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         TState,
         TInput,
         TOutput,
-        TInput,
+        TParsedInput,
         TRequestContext
       >(params, inngest);
     },

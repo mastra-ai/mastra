@@ -21,6 +21,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
@@ -262,7 +263,7 @@ export class NotificationsPG extends NotificationsStorage {
     const setColumns = entries.map(([key], index) => `"${parseSqlIdentifier(key, 'column name')}" = $${index + 1}`);
     const values = entries.map(([key, value]) => {
       const columnSchema = TABLE_SCHEMAS[TABLE_NOTIFICATIONS][key];
-      if (columnSchema?.type === 'jsonb' && value !== null) return JSON.stringify(value);
+      if (columnSchema?.type === 'jsonb' && value !== null) return toPgJson(value);
       return value;
     });
 
