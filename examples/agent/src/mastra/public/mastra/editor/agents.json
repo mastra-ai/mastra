@@ -1,0 +1,100 @@
+{
+  "c1imd_kqwunZ_xWYl_ewd": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "support triage",
+    "requestContextSchema": {
+      "properties": {
+        "required": [
+          "user"
+        ],
+        "user": {
+          "properties": {
+            "avatarUrl": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "permissions": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "roles": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "tools": {}
+  },
+  "IILNdcGCv91qZYu-AnVRO": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "support triage",
+    "requestContextSchema": {
+      "properties": {
+        "required": [
+          "user"
+        ],
+        "user": {
+          "properties": {
+            "avatarUrl": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "permissions": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "roles": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "tools": {}
+  }
+}
