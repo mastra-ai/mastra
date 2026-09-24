@@ -351,7 +351,7 @@ export const useChat = ({
   const [subscriptionHistory, setSubscriptionHistory] = useState<
     { key: string; messages: MastraDBMessage[] } | undefined
   >(undefined);
-  const historyKey = `${agentId}:${threadId ?? ''}`;
+  const historyKey = `${agentId}:${resourceId ?? ''}:${threadId ?? ''}`;
   const hydratedMessages =
     withInitialHistory && subscriptionHistory?.key === historyKey ? subscriptionHistory.messages : initialMessages;
 
@@ -613,7 +613,7 @@ export const useChat = ({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
                   setSubscriptionHistory({
-                    key: `${agentId}:${threadId}`,
+                    key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,
                   });
                   return;
