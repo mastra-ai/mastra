@@ -2,9 +2,11 @@
 '@mastra/core': minor
 ---
 
-Added an opt-in structured trace-query Core contract for exact nested metadata paths and typed metadata values. Storage providers can independently advertise structured trace execution, thread execution, and discovery support.
+Added structured trace-query helpers for filtering exact nested metadata paths and preserving string, number, and boolean values during discovery.
 
 ```ts
+import { parseStructuredTraceQueryRequest, planStructuredTraceQuery } from '@mastra/core/storage'
+
 const request = parseStructuredTraceQueryRequest({
   timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-02T00:00:00Z' },
   where: {
@@ -17,4 +19,4 @@ const request = parseStructuredTraceQueryRequest({
 const plan = planStructuredTraceQuery(request)
 ```
 
-Existing trace-query request, discovery, trusted-plan, storage-method, and feature contracts are unchanged.
+Existing trace queries and storage integrations continue to use their current requests, discovery results, plans, methods, and feature names.
