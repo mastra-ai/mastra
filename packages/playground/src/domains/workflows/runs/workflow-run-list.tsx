@@ -11,7 +11,7 @@ import {
   ThreadListItems,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { formatDate } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -65,7 +65,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
     <span className="flex w-full min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
       {timestamp !== undefined && (
         <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
-          {formatDate(timestamp, 'MMM d, yyyy · h:mm a')}
+          {formatDate(timestamp, 'date-time')}
         </time>
       )}
       {resourceId && (

@@ -7,6 +7,7 @@ import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
+import { formatDurationPrecise } from '@/utils/duration';
 
 export type TraceSpanTreeProps = {
   hierarchicalSpans: UISpan[];
@@ -31,7 +32,7 @@ export function TraceSpanTreeLoading() {
 
 const durationMeta = (ctx: SpanRowContext) => (
   <Txt as="span" variant="meta" font="mono">
-    {(ctx.span.latency / 1000).toFixed(3)}&nbsp;s
+    {formatDurationPrecise(ctx.span.latency)}
   </Txt>
 );
 

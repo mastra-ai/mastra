@@ -4,20 +4,10 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { Search, X, ExternalLink } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
-
-// Simple relative time formatter
-const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-  return date.toLocaleDateString();
-};
 
 interface MemorySearchProps {
   searchMemory: (query: string) => Promise<MemorySearchResponse>;
@@ -305,8 +295,8 @@ export const MemorySearch = ({
                           >
                             {result.role}
                           </span>
-                          <Txt variant="meta" tone="muted">
-                            {formatRelativeTime(new Date(result.createdAt))}
+                          <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
+                            {formatRelativeTime(result.createdAt)}
                           </Txt>
                           {result.threadTitle && (
                             <div className="flex items-center gap-1">

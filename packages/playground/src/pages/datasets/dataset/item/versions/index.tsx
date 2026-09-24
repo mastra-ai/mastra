@@ -7,8 +7,8 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { format } from 'date-fns';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -43,7 +43,7 @@ function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number
       label: (
         <span className="flex w-full items-center gap-2">
           <span>
-            <b>v. {v.datasetVersion}</b> · {format(date, 'MMM d, HH:mm')}
+            <b>v. {v.datasetVersion}</b> · {formatDate(date, 'date-time')}
           </span>
           {v.isLatest ? (
             <Badge variant="blue" size="xs" className="ml-auto">
