@@ -3,6 +3,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { ClockIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
@@ -22,10 +23,10 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function formatDuration(side: ComparisonSide): string | null {
+function sideDuration(side: ComparisonSide): string | null {
   if (!side.startedAt || !side.completedAt) return null;
   const ms = new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
-  return Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)}s` : null;
+  return formatDuration(ms) ?? null;
 }
 
 const codeBoxClass = cn(
@@ -39,7 +40,7 @@ const codeBoxClass = cn(
  */
 export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
   const data = row[side];
-  const duration = formatDuration(data);
+  const duration = sideDuration(data);
 
   if (isLoading) {
     return (

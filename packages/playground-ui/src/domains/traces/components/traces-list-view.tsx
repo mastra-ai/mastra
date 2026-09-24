@@ -9,12 +9,13 @@ import {
   hasTraceColumn,
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
-import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
+import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { cn } from '@/lib/utils';
+import { formatDuration } from '@/utils/duration';
 
 export type TracesListViewTrace = {
   traceId: string;
@@ -276,7 +277,9 @@ export function TracesListView({
                 )}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
-                  <DataList.NumberCell>{formatSpanDuration(trace.startedAt, trace.endedAt)}</DataList.NumberCell>
+                  <DataList.NumberCell>
+                    {formatDuration(getSpanDurationMs(trace.startedAt, trace.endedAt))}
+                  </DataList.NumberCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'endTime') && (
                   <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} />

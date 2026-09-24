@@ -5,6 +5,7 @@ import { Badge } from '@/ds/components/Badge';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/utils/cn';
+import { formatDuration } from '@/utils/duration';
 
 export interface OmMarkerData {
   observedAt?: string;
@@ -314,7 +315,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                 {tokensObserved && <span>Input: {formatTokens(tokensObserved)}</span>}
                 {observationTokens && <span>Output: {formatTokens(observationTokens)}</span>}
                 {compressionRatio && compressionRatio > 1 && <span>Compression: {compressionRatio}x</span>}
-                {durationMs && <span>Duration: {(durationMs / 1000).toFixed(2)}s</span>}
+                {durationMs && <span>Duration: {formatDuration(durationMs)}</span>}
               </div>
               {observations && (
                 <div className="mt-1 border-t border-border pt-1">

@@ -29,7 +29,7 @@ describe('NoTracesInfo', () => {
     );
 
     expect(
-      screen.getByRole('heading', { name: 'No traces between Sep 1, 2026 09:00 and Sep 7, 2026 18:00' }),
+      screen.getByRole('heading', { name: 'No traces between Sep 1, 2026, 9:00 AM and Sep 7, 2026, 6:00 PM' }),
     ).toBeTruthy();
   });
 });

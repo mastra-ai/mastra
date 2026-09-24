@@ -6,6 +6,7 @@ import { TabContent } from '../../../ds/components/Tabs/tabs-content';
 import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
+import { formatDuration } from '../../../utils/duration';
 import type { LatencyPoint } from '../hooks/use-latency-metrics';
 import { averageLatency, isDrillablePoint, isLatencyTab } from './latency-card-view.utils';
 import type { LatencyTab } from './latency-card-view.utils';
@@ -88,7 +89,7 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
         .filter((v): v is number => typeof v === 'number')
     : [];
   const avgP50 =
-    p50Values.length > 0 ? `${Math.round(p50Values.reduce((s, v) => s + v, 0) / p50Values.length)}ms` : '—';
+    p50Values.length > 0 ? (formatDuration(p50Values.reduce((s, v) => s + v, 0) / p50Values.length) ?? '—') : '—';
 
   return (
     <MetricsCard>

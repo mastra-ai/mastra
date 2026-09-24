@@ -1,3 +1,4 @@
+import { formatDate, formatShortDate } from '@mastra/playground-ui/utils/date-format';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMergedRequestContext } from '@/domains/request-context';
@@ -140,13 +141,10 @@ export function useScoreMetrics(dateRange?: ScoreMetricsDateRange) {
         let timeLabel: string;
         if (spanDays > 1) {
           // Multi-day: show "Mar 20 14:00"
-          timeLabel =
-            d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-            ' ' +
-            d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+          timeLabel = `${formatShortDate(d)} ${formatDate(d, 'time')}`;
         } else {
           // Single day: just show time
-          timeLabel = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+          timeLabel = formatDate(d, 'time') ?? '';
         }
         const point: ScoresOverTimePoint = { time: timeLabel };
         for (const name of scorerNames) {

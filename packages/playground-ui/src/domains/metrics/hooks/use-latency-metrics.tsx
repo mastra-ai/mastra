@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
+import { formatDate } from '@/utils/date-format';
 
 export interface LatencyPoint {
   [key: string]: unknown;
@@ -37,7 +38,7 @@ async function fetchPercentiles(
     const ts = new Date(p.timestamp);
     const tsMs = ts.getTime();
     return {
-      time: ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: formatDate(ts, 'time') ?? '',
       tsMs,
       p50: Math.round(p.value),
       p95: Math.round(p95Map.get(tsMs) ?? 0),

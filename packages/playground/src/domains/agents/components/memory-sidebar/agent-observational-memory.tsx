@@ -1,12 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { Brain, ExternalLink, Info } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
@@ -42,34 +44,6 @@ const getBaseThresholdValue = (threshold: ThresholdValue | undefined, defaultVal
   if (!threshold) return defaultValue;
   if (typeof threshold === 'number') return threshold;
   return threshold.min;
-};
-
-const useElapsedTime = (isActive: boolean) => {
-  const [state, setState] = useState({ isActive, elapsed: 0 });
-  const startTimeRef = useRef<number | null>(null);
-
-  if (state.isActive !== isActive) {
-    startTimeRef.current = isActive ? Date.now() : null;
-    setState({ isActive, elapsed: 0 });
-  }
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    if (!startTimeRef.current) {
-      startTimeRef.current = Date.now();
-    }
-
-    const interval = setInterval(() => {
-      const startTime = startTimeRef.current;
-      if (!startTime) return;
-      setState(current => ({ ...current, elapsed: (Date.now() - startTime) / 1000 }));
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  return state.isActive === isActive ? state.elapsed : 0;
 };
 
 const ProgressBar = ({
@@ -164,7 +138,7 @@ const ProgressBar = ({
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColor} pointer-events-none`}
           >
             {isProcessing
-              ? `${activeText} ${elapsed.toFixed(1)}s`
+              ? `${activeText} ${formatElapsed(elapsed)}`
               : showAdaptiveLabel
                 ? 'adaptive'
                 : `${Math.round(percentage)}%`}
@@ -174,7 +148,7 @@ const ProgressBar = ({
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
             {isProcessing
-              ? `${activeText} ${elapsed.toFixed(1)}s`
+              ? `${activeText} ${formatElapsed(elapsed)}`
               : showAdaptiveLabel
                 ? 'adaptive'
                 : `${Math.round(percentage)}%`}

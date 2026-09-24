@@ -1,7 +1,5 @@
-import { isThisYear } from 'date-fns';
-import { format } from 'date-fns/format';
-import { isToday } from 'date-fns/isToday';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 export type ItemListDateCellProps = {
   date: Date | string | null;
@@ -10,15 +8,9 @@ export type ItemListDateCellProps = {
 };
 
 export function ItemListDateCell({ date, className, withTime = false }: ItemListDateCellProps) {
-  const isThisYearDate = date ? isThisYear(new Date(date)) : false;
-
-  const displayDayAndMonth = date ? (isToday(new Date(date)) ? 'Today' : format(new Date(date), 'MMM dd')) : '';
-  const displayYear = date && !isThisYearDate ? format(new Date(date), 'yyyy') : '';
-  const displayTime = date && withTime ? `${format(new Date(date), "'at' h:mm aaa")}` : '';
-
   return (
     <div className={cn('truncate text-body text-placeholder', className)}>
-      {displayDayAndMonth} {displayYear} {displayTime}
+      {formatDate(date, withTime ? 'dateTime' : 'smart')}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { LogRecord } from '../types';
@@ -7,12 +6,9 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 import { cn } from '@/lib/utils';
+import { formatTimestampPrecise, toDate } from '@/utils/date-format';
 
 const KV = DataDetailsPanel.KeyValueList;
-
-function toDate(value: Date | string): Date {
-  return value instanceof Date ? value : new Date(value);
-}
 
 export interface LogDetailsViewProps {
   log: LogRecord;
@@ -46,7 +42,7 @@ export function LogDetailsView({
     <DataDetailsPanel collapsed={collapsed}>
       <DataDetailsPanel.Header>
         <DataDetailsPanel.Heading>
-          Log <b>{format(date, 'MMM dd, HH:mm:ss.SSS')}</b>
+          Log <b>{formatTimestampPrecise(date)}</b>
         </DataDetailsPanel.Heading>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {onCollapsedChange && (

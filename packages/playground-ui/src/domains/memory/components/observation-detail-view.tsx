@@ -5,6 +5,7 @@ import { EmptyState } from '../../../ds/components/EmptyState';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { cn } from '../../../lib/utils';
 import type { OMHistoryRecord } from '../types';
+import { formatDate } from '@/utils/date-format';
 
 type ParsedItem = {
   text: string;
@@ -24,10 +25,7 @@ function formatObservationTime(time: string | null) {
   const match = time.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return time;
   const [, hours, minutes] = match;
-  const hour = Number(hours);
-  const suffix = hour >= 12 ? 'PM' : 'AM';
-  const normalizedHour = hour % 12 || 12;
-  return `${normalizedHour}:${minutes} ${suffix}`;
+  return formatDate(new Date(2000, 0, 1, Number(hours), Number(minutes)), 'time') ?? time;
 }
 
 function getPriorityFromEmoji(emoji?: string): ParsedItem['priority'] {

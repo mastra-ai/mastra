@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
+import { formatDate, formatShortDate } from '@/utils/date-format';
 
 export type TokenUsageTimeSeriesInterval = '1h' | '1d';
 
@@ -47,9 +48,9 @@ function chooseTokenUsageInterval(
 
 function formatTime(ts: Date, interval: TokenUsageTimeSeriesInterval): string {
   if (interval === '1h') {
-    return ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return formatDate(ts, 'time') ?? '';
   }
-  return ts.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  return formatShortDate(ts) ?? '';
 }
 
 function addSeriesPoints(

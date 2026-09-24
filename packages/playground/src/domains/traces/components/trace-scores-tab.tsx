@@ -8,7 +8,7 @@ import { getShortId } from '@mastra/playground-ui/components/Text';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { format, isToday } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -70,8 +70,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
         <span className="font-mono text-meta text-muted-foreground">
-          {getShortId(score.id)} · {isToday(createdAt) ? 'Today' : format(createdAt, 'MMM dd')}{' '}
-          {format(createdAt, 'h:mm:ss aaa')}
+          {getShortId(score.id)} · {formatDate(createdAt, 'smart')}
         </span>
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}

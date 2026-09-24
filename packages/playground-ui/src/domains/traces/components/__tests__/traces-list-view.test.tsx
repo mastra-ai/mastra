@@ -451,7 +451,7 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       expect(screen.getByText('End')).toBeTruthy();
-      expect(screen.getByText('Jun 10 13:07:47')).toBeTruthy();
+      expect(screen.getByTitle('Jun 10, 2026, 1:07 PM').textContent).toBe('Jun 10');
     });
   });
 });

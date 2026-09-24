@@ -6,14 +6,11 @@ import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { cn } from '@/lib/utils';
+import { formatDurationPrecise } from '@/utils/duration';
 
 export type SpanTimelineRowProps = {
   ctx: SpanRowContext;
 };
-
-function formatDuration(ms: number) {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
-}
 
 /**
  * One row of `TraceSpanTimeline`: compact single-line name cell plus a bar on the
@@ -133,7 +130,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
             />
           </div>
           <div className="w-12 text-right text-meta text-muted-foreground tabular-nums">
-            {formatDuration(span.latency)}
+            {formatDurationPrecise(span.latency)}
           </div>
         </HoverCardTrigger>
         <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
