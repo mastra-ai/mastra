@@ -1491,6 +1491,20 @@ describe('EagerToolExecutionCoordinator', () => {
     expect(coordinator.hasSuspendedHandback).toBe(false);
   });
 
+  it('stops waiting for running work once the run aborts', async () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    coordinator.start('call-1', () => new Promise<never>(() => {}));
+    coordinator.stop();
+
+    const controller = new AbortController();
+    const settled = coordinator.settleRunning(controller.signal).then(() => 'settled');
+    controller.abort();
+
+    await expect(Promise.race([settled, new Promise(resolve => setTimeout(() => resolve('hung'), 50))])).resolves.toBe(
+      'settled',
+    );
+  });
+
   it('aborts and forgets running work when the caller aborts, not just queued work', async () => {
     // What the caller-abort listener asks of the coordinator. The run's own signal only
     // reaches tools that bother to observe it, and an aborted run bails before any

@@ -1316,7 +1316,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        */
       const discardAttemptEagerWork = async () => {
         eagerCoordinator?.stop();
-        await eagerCoordinator?.settleRunning();
+        await eagerCoordinator?.settleRunning(runAbortSignal);
         const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
         // Written the moment the attempt dies, not when a replacement starts: a retry that
@@ -2411,7 +2411,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // Settled before deciding, so a call that suspends while still running is seen
           // by the retry gates below rather than after the attempt was already retried.
           // After the abort branch: an abort cancels running work instead of waiting.
-          await eagerCoordinator?.settleRunning();
+          await eagerCoordinator?.settleRunning(runAbortSignal);
 
           const isUpstreamError = APICallError.isInstance(error);
 
@@ -2613,7 +2613,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         // Settled first so the suspension gate below sees calls still running.
-        await eagerCoordinator?.settleRunning();
+        await eagerCoordinator?.settleRunning(runAbortSignal);
         const currentRetryCount = inputData.processorRetryCount || 0;
         // Never retry an attempt holding a call that already ran up to a runtime suspend().
         const canRetryError =

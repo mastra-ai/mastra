@@ -339,10 +339,24 @@ export class EagerToolExecutionCoordinator {
    * A discarded attempt waits here instead of cancelling: a running tool may already have
    * done its side effect, and cancelling it would leave the replacement attempt free to
    * call it again. Settled, its outcome is committed and the replacement sees it as done.
+   * An abort of the run stops the wait so abort cleanup can cancel what is still running.
    */
-  async settleRunning() {
-    while (this.#inFlight.size) {
-      await Promise.allSettled([...this.#inFlight]);
+  async settleRunning(signal?: AbortSignal) {
+    if (signal?.aborted) return;
+    let onAbort: (() => void) | undefined;
+    const aborted = signal
+      ? new Promise<void>(resolve => {
+          onAbort = resolve;
+          signal.addEventListener('abort', onAbort, { once: true });
+        })
+      : undefined;
+    try {
+      while (this.#inFlight.size && !signal?.aborted) {
+        const settled = Promise.allSettled([...this.#inFlight]);
+        await (aborted ? Promise.race([settled, aborted]) : settled);
+      }
+    } finally {
+      if (onAbort) signal!.removeEventListener('abort', onAbort);
     }
   }
 
