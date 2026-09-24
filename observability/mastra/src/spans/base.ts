@@ -221,6 +221,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
+    if (this.isEvent) {
+      // Event spans are point-in-time and never go through end(), so they end
+      // at the instant they start (zero duration).
+      this.endTime = this.startTime;
+    }
     this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
     const parent = options.parent;
@@ -249,7 +254,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
 
     if (this.isEvent) {
-      // Event spans don't have endTime or input.
+      // Event spans have no input; their endTime equals startTime (set above).
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
       this.output = deepClean(this.prepareSpanOutput(options.output), this.deepCleanOptions);
     } else {

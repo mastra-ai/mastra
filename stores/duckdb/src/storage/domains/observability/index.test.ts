@@ -462,6 +462,94 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(span.endedAt).toBeInstanceOf(Date);
     });
 
+    it('stores an event span as a single row that ends when it starts', async () => {
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-event',
+          spanId: 'span-event',
+          parentSpanId: 'span-parent',
+          name: "chunk: 'tool-result'",
+          spanType: SpanType.MODEL_CHUNK,
+          isEvent: true,
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt,
+          endedAt: startedAt,
+        },
+      });
+
+      const result = await storage.getSpan({ traceId: 'trace-event', spanId: 'span-event' });
+      expect(result!.span.isEvent).toBe(true);
+      expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
+
+      const rows = await store.db.query<{ eventType: string }>(
+        `SELECT eventType FROM span_events WHERE traceId = 'trace-event'`,
+      );
+      expect(rows.map(r => r.eventType)).toEqual(['start']);
+    });
+
+    it('reads an event span stored without an end time as ending when it starts', async () => {
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-legacy-event',
+          spanId: 'span-legacy-event',
+          parentSpanId: 'span-parent',
+          name: "chunk: 'tool-result'",
+          spanType: SpanType.MODEL_CHUNK,
+          isEvent: true,
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt,
+          endedAt: null,
+        },
+      });
+      // Simulate a row written before event spans carried an end time.
+      await store.db.execute(`UPDATE span_events SET endedAt = NULL WHERE traceId = 'trace-legacy-event'`);
+
+      const result = await storage.getSpan({ traceId: 'trace-legacy-event', spanId: 'span-legacy-event' });
+      expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
+    });
+
     it('does not support span updates for event-sourced tracing', async () => {
       await expect(
         storage.updateSpan({

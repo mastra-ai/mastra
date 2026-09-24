@@ -175,6 +175,23 @@ describe('AutoExtractedMetrics', () => {
     expect(emittedMetrics[0]!.metric.value).toBe(200);
   });
 
+  it('should not emit duration metric for event spans', () => {
+    setup();
+    const startTime = new Date('2026-01-01T00:00:00.000Z');
+    const span = createMockSpan({
+      type: SpanType.TOOL_CALL,
+      entityType: EntityType.TOOL,
+      entityName: 'my-tool',
+      isEvent: true,
+      startTime,
+      endTime: startTime,
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    expect(emittedMetrics).toHaveLength(0);
+  });
+
   it('should emit duration metric for workflow spans', () => {
     setup();
     const span = createMockSpan({

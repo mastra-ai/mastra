@@ -1191,7 +1191,7 @@ interface BaseSpan<TType extends SpanType> {
   errorInfo?: SpanErrorInfo;
   /** Snapshot of the RequestContext */
   requestContext?: Record<string, any>;
-  /** Is an event span? (event occurs at startTime, has no endTime) */
+  /** Is an event span? (point-in-time: endTime equals startTime) */
   isEvent: boolean;
 }
 
@@ -1664,7 +1664,7 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
 
 /**
  * Options for new child events
- * Event spans have no input, and no endTime
+ * Event spans have no input, and their endTime equals their startTime
  */
 export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Output data */
