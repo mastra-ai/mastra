@@ -3,15 +3,14 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { useObservabilityCapabilities } from '../use-observability-capabilities';
 import { legacyTraceCapabilities, traceQueryCapabilities } from './fixtures/observability-capabilities';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const CAPABILITIES_URL = `${BASE_URL}/api/observability/capabilities`;
-const server = setupServer();
 
 function makeWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -22,14 +21,9 @@ function makeWrapper() {
   );
 }
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-
 afterEach(() => {
   cleanup();
-  server.resetHandlers();
 });
-
-afterAll(() => server.close());
 
 describe('useObservabilityCapabilities', () => {
   describe('when the server supports trace query', () => {

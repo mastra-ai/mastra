@@ -29,6 +29,7 @@ import {
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
+import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
   buildTraceListFilters,
   createTraceFilterBarFields,
@@ -50,7 +51,6 @@ import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useTracesListSource } from './hooks/use-traces-list-source';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { navCrumb } from '@/domains/navigation/crumbs';

@@ -4,6 +4,7 @@ import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/tr
 import type { ThreadTraceSelectedSpan } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
+import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
@@ -17,7 +18,6 @@ import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
-import { useTracesListSource } from '@/pages/traces/hooks/use-traces-list-source';
 
 export interface ThreadViewByTraceProps {
   threadId: string;
