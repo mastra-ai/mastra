@@ -507,6 +507,50 @@ describe('waitForPendingFilesystemCapture', () => {
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps waiting for a capture chained by a turn that ends during the wait', async () => {
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-wait-successor');
+    let releaseFirst: (() => void) | undefined;
+    const firstGate = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let releaseSecond: (() => void) | undefined;
+    const secondGate = new Promise<void>(resolve => {
+      releaseSecond = resolve;
+    });
+    const dependencies = createDependencies();
+    // Execs of the first capture wait on firstGate; once it has persisted,
+    // the successor capture's execs wait on secondGate.
+    const executeCommand = vi.fn(async () => {
+      const firstPersisted = vi.mocked(dependencies.filesystem.replaceFiles).mock.calls.length > 0;
+      await (firstPersisted ? secondGate : firstGate);
+      return commandResult();
+    });
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    observeSessionFilesystem(session, dependencies);
+
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    let waitSettled = false;
+    const wait = waitForPendingFilesystemCapture('resource-wait-successor').then(() => {
+      waitSettled = true;
+    });
+
+    // Another turn ends while the first capture is still running.
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+
+    releaseFirst?.();
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(waitSettled).toBe(false);
+
+    releaseSecond?.();
+    await wait;
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2);
+  });
+
   it('bounds the wait so a stuck capture cannot block readers', async () => {
     const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-wait-stuck');
     session.getWorkspace = () => ({

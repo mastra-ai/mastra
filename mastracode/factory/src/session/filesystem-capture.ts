@@ -131,16 +131,24 @@ const pendingCaptures = new Map<string, Promise<void>>();
  * capture body is fully try/catch contained.
  */
 export async function waitForPendingFilesystemCapture(resourceId: string, timeoutMs = 10_000): Promise<void> {
-  const pending = pendingCaptures.get(resourceId);
+  let pending = pendingCaptures.get(resourceId);
   if (!pending) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const deadline = new Promise<void>(resolve => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve();
+    }, timeoutMs);
+  });
   try {
-    await Promise.race([
-      pending,
-      new Promise<void>(resolve => {
-        timer = setTimeout(resolve, timeoutMs);
-      }),
-    ]);
+    // A turn that ends while we wait chains a successor capture; keep waiting
+    // until the latest chain settles so the final snapshot is not lost.
+    while (pending && !timedOut) {
+      await Promise.race([pending, deadline]);
+      const next = pendingCaptures.get(resourceId);
+      pending = next === pending ? undefined : next;
+    }
   } finally {
     clearTimeout(timer);
   }
