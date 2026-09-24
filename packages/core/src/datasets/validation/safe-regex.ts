@@ -14,10 +14,38 @@ export class UnsupportedSchemaPatternError extends MastraError {
       details: { pattern },
       text:
         `Unsupported regex pattern in dataset schema: /${pattern}/ (${reason}). ` +
-        'Dataset schema patterns are evaluated with a linear-time (RE2) engine, which does not support lookarounds or backreferences.',
+        'Dataset schema patterns are evaluated with a linear-time (RE2) engine, which does not support some syntax such as lookarounds and backreferences.',
     });
     this.name = 'UnsupportedSchemaPatternError';
   }
+}
+
+/** Rewrite ECMA-262 escapes that RE2 spells differently (`\uXXXX`, `\u{X}`, `\cX`) to RE2's `\x{...}` form */
+export function toRe2Source(source: string): string {
+  let out = '';
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch !== '\\' || i + 1 >= source.length) {
+      out += ch;
+      continue;
+    }
+    const rest = source.slice(i + 1);
+    const hex4 = /^u([0-9a-fA-F]{4})/.exec(rest);
+    const braced = /^u\{([0-9a-fA-F]{1,6})\}/.exec(rest);
+    const control = /^c([a-zA-Z])/.exec(rest);
+    const match = hex4 ?? braced;
+    if (match) {
+      out += `\\x{${match[1]}}`;
+      i += match[0].length;
+    } else if (control) {
+      out += `\\x{${(control[1]!.charCodeAt(0) % 32).toString(16)}}`;
+      i += control[0].length;
+    } else {
+      out += ch + source[i + 1];
+      i++;
+    }
+  }
+  return out;
 }
 
 function compileRe2(source: string, flags: string): RE2JS {
@@ -26,7 +54,7 @@ function compileRe2(source: string, flags: string): RE2JS {
   if (flags.includes('m')) re2Flags |= RE2JS.MULTILINE;
   if (flags.includes('s')) re2Flags |= RE2JS.DOTALL;
   try {
-    return RE2JS.compile(source, re2Flags);
+    return RE2JS.compile(toRe2Source(source), re2Flags);
   } catch (error) {
     throw new UnsupportedSchemaPatternError(source, error instanceof Error ? error.message : String(error));
   }

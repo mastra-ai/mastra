@@ -28,6 +28,14 @@ describe('SafeRegExp', () => {
     expect(() => new SafeRegExp('(a)\\1')).toThrow(UnsupportedSchemaPatternError);
   });
 
+  it('accepts ECMA-262 escapes RE2 spells differently', () => {
+    expect(new SafeRegExp('^[\\^@-\\u007F]*$').test('abc~')).toBe(true);
+    expect(new SafeRegExp('^[\\^@-\\u007F]*$').test('é')).toBe(false);
+    expect(new SafeRegExp('^\\u{1F600}$', 'u').test('😀')).toBe(true);
+    expect(new SafeRegExp('^\\cA$').test('\u0001')).toBe(true);
+    expect(new SafeRegExp('^\\\\u0041$').test('\\u0041')).toBe(true);
+  });
+
   it('rejects RE2-only syntax that native RegExp cannot compile', () => {
     expect(() => new SafeRegExp('(?i)foo')).toThrow(UnsupportedSchemaPatternError);
   });
