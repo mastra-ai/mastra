@@ -16,6 +16,7 @@ import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
 
@@ -91,7 +92,9 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
       )}
       {duration && exactDuration && (
         <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
-          {duration}
+          <Txt as="span" variant="label" font="mono">
+            {duration}
+          </Txt>
         </DataPanel.Meta>
       )}
       {usage && (

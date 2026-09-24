@@ -34,11 +34,13 @@ function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waiting
 
   return (
     <span
-      className="flex items-center gap-1.5 text-meta text-muted-foreground tabular-nums"
+      className="flex items-center gap-1.5 text-meta text-muted-foreground"
       title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
     >
       <Timer aria-hidden className="size-3.5" />
-      {elapsed}
+      <Txt as="span" variant="meta" font="mono">
+        {elapsed}
+      </Txt>
     </span>
   );
 }

@@ -64,7 +64,9 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
             render={
               <p className="flex items-center justify-end gap-1.5 text-body text-muted-foreground [&>svg]:size-3.5">
                 <ClockIcon />
-                {duration}
+                <Txt as="span" variant="body" font="mono">
+                  {duration}
+                </Txt>
               </p>
             }
           />

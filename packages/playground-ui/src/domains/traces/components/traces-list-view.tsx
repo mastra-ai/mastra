@@ -279,7 +279,9 @@ export function TracesListView({
                 )}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
-                  <DataList.NumberCell>{formatSpanDuration(trace.startedAt, trace.endedAt)}</DataList.NumberCell>
+                  <DataList.NumberCell font="mono">
+                    {formatSpanDuration(trace.startedAt, trace.endedAt)}
+                  </DataList.NumberCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'endTime') && (
                   <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} />
