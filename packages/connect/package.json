@@ -73,5 +73,10 @@
   },
   "dependencies": {
     "@mastra/mcp": "workspace:^"
+  },
+  "optionalDependencies": {
+    "@chat-adapter/discord": ">=4.0.0",
+    "@mastra/slack": "workspace:^",
+    "@mastra/telegram": "workspace:^"
   }
 }
