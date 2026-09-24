@@ -1216,6 +1216,66 @@ describe('Workflow (Evented Engine Specific)', () => {
     });
   });
 
+  describe('foreach progress size', () => {
+    it('keeps each iteration record free of the whole foreach input', async () => {
+      const items = Array.from({ length: 20 }, (_, index) => ({ index, blob: 'x'.repeat(5_000) }));
+      const itemSchema = z.object({ index: z.number(), blob: z.string() });
+
+      const seed = createStep({
+        id: 'evented-progress-size-seed',
+        inputSchema: z.object({}),
+        outputSchema: z.array(itemSchema),
+        execute: async () => items,
+      });
+      const processItem = createStep({
+        id: 'evented-progress-size-item',
+        inputSchema: itemSchema,
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => inputData.index,
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-foreach-progress-size',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+      });
+      workflow.then(seed).foreach(processItem, { concurrency: 2 }).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-progress-size': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('success');
+
+        const workflowsStore = await testStorage.getStore('workflows');
+        const snapshot = await workflowsStore!.loadWorkflowSnapshot({
+          workflowName: 'evented-foreach-progress-size',
+          runId: run.runId,
+        });
+        const stepResult = (snapshot!.context as Record<string, any>)['evented-progress-size-item'];
+        const entries = Object.values(stepResult.suspendPayload.__workflow_meta.foreachOutput) as any[];
+        expect(entries).toHaveLength(items.length);
+        for (const entry of entries) {
+          expect(entry.status).toBe('success');
+          // The input list is saved once as the step payload, never once per iteration.
+          expect(entry).not.toHaveProperty('payload');
+        }
+        // A few whole copies of the list are expected (seed output, foreach payload);
+        // one copy per iteration (20 here) is the regression.
+        expect(JSON.stringify(snapshot).length).toBeLessThan(JSON.stringify(items).length * 5);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('non-retryable workflow failures', () => {
     it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
       let calls = 0;
