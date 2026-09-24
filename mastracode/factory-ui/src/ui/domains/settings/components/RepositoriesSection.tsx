@@ -7,11 +7,11 @@ import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
 import { FactorySetupSection } from './FactorySetupSection';
 import { GithubPatBlock } from './GithubPatBlock';
+import { ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
@@ -29,6 +29,12 @@ export function RepositoriesSection() {
 
   const showGithubSettings = githubConnected || activeFactory.repositories.some(repo => repo.provider !== 'gitlab');
 
+  const gitlabConnections = gitlabStatus?.connections ?? [];
+  const gitlabReconnectTarget =
+    gitlabStatus?.mode === 'platform' && gitlabStatus.reauthRequired
+      ? (gitlabConnections.find(connection => connection.status === 'needs_reauth') ?? gitlabConnections[0])
+      : undefined;
+
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
@@ -42,15 +48,22 @@ export function RepositoriesSection() {
                 Manage GitHub connection
               </Button>
             )}
-            {gitlabStatus?.mode === 'platform' && (
-              <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" size="sm">
-                {gitlabStatus.reauthRequired
-                  ? 'Reconnect GitLab'
-                  : gitlabStatus.configured
-                    ? 'Manage GitLab connection'
-                    : 'Connect GitLab'}
-              </Button>
-            )}
+            {gitlabStatus?.mode === 'platform' &&
+              (gitlabReconnectTarget ? (
+                <ProviderConnectControl
+                  provider="gitlab"
+                  reconnectConnectionId={gitlabReconnectTarget.id}
+                  label="Reconnect GitLab"
+                  size="sm"
+                />
+              ) : (
+                <ProviderConnectControl
+                  provider="gitlab"
+                  label={gitlabStatus.configured ? 'Connect another GitLab account' : 'Connect GitLab'}
+                  size="sm"
+                  variant={gitlabStatus.configured ? 'ghost' : 'default'}
+                />
+              ))}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
               <span className="text-meta text-muted-foreground">
                 GitLab managed by deployment environment variables
