@@ -220,7 +220,7 @@ async function runThreadTransition() {
 
     const delayedReply = await readRun(initialIterator);
     emit('delayed-reply', { ...delayedReply, threadId: senderThreadId });
-    await waitForCommand('close');
+    await waitForCommand('prepare-close');
 
     transitionedClaim.unsubscribe();
     transitionedSubscription.unsubscribe();
@@ -255,7 +255,7 @@ async function runThreadTransition() {
       targetThreadId: capturedPeer.threadId,
       runId: 'runId' in accepted ? accepted.runId : undefined,
     });
-    await waitForCommand('close');
+    await waitForCommand('prepare-close');
   }
 
   initialSubscription.unsubscribe();
@@ -487,6 +487,11 @@ async function main() {
   else if (scenario === 'simultaneous-owner-wake') await runSimultaneousOwnerWake();
   else if (scenario === 'simultaneous-wake-sender') await runSimultaneousWakeSender();
   else await runRequestReply();
+  if (scenario === 'thread-transition') {
+    await pubsub.flush();
+    emit('close-ready');
+    await waitForCommand('close');
+  }
   commandLines.close();
   await pubsub.close();
 }

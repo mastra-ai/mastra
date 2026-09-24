@@ -174,12 +174,14 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     const delayedSend = await owner.waitFor('delayed-send');
     const delayedReply = await sender.waitFor('delayed-reply');
 
-    sender.child.stdin.write('close\n');
-    sender.child.stdin.end();
-    const senderCode = await sender.result;
+    owner.child.stdin.write('prepare-close\n');
+    sender.child.stdin.write('prepare-close\n');
+    await Promise.all([owner.waitFor('close-ready'), sender.waitFor('close-ready')]);
     owner.child.stdin.write('close\n');
+    sender.child.stdin.write('close\n');
     owner.child.stdin.end();
-    const ownerCode = await owner.result;
+    sender.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
 
     expect(capturedRoute.threadId).toBe('sender-thread');
     expect(transitioned).toMatchObject({ fromThreadId: 'sender-thread', threadId: 'sender-thread-2' });
