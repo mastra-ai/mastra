@@ -28,10 +28,12 @@ import {
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
+  createReasoningEffortMiddleware,
   getEffectiveThinkingLevel,
   openaiCodexProvider,
   THINKING_LEVEL_TO_REASONING_EFFORT,
@@ -174,11 +176,19 @@ function anthropicApiKeyProvider(
   });
 }
 
-function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
+function openaiApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  headers?: ModelRequestHeaders,
+  thinkingLevel?: ThinkingLevel,
+) {
   const openai = createOpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL, headers });
+  const effectiveLevel = getEffectiveThinkingLevel(modelId, thinkingLevel ?? 'medium');
+  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
+  const middleware = createReasoningEffortMiddleware('openai', reasoningEffort);
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: [],
+    middleware: middleware ? [middleware] : [],
   });
 }
 
@@ -496,7 +506,15 @@ export class MastraCodeGateway extends MastraModelGateway {
         apiKey: args.apiKey,
         headers: args.headers,
       });
-      return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+      const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
+      const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
+      if (!middleware) {
+        return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+      }
+      return wrapLanguageModel({
+        model: provider.chatModel(args.modelId),
+        middleware: [middleware],
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (args.providerId === 'github-copilot') {
@@ -537,6 +555,10 @@ export class MastraCodeGateway extends MastraModelGateway {
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;
+    }
+
+    if (args.providerId === 'google') {
+      return this.#resolveGoogleModel(args);
     }
 
     if (this.#routeThroughMastraGateway) {
@@ -686,9 +708,39 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     const apiKey = getOpenAIApiKey(this.#credentials);
     if (apiKey) {
-      return openaiApiKeyProvider(args.modelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
+      return openaiApiKeyProvider(
+        args.modelId,
+        apiKey,
+        args.headers,
+        this.#thinkingLevel,
+      ) as unknown as GatewayLanguageModel;
     }
 
     return undefined;
+  }
+
+  #resolveGoogleModel(args: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+    headers?: Record<string, string>;
+    transport?: any;
+    responsesWebSocket?: any;
+  }): GatewayLanguageModel {
+    const baseModel = this.#routeThroughMastraGateway
+      ? (this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel)
+      : (new ModelRouterLanguageModel({
+          id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+          apiKey: args.apiKey,
+          headers: args.headers,
+        }) as unknown as GatewayLanguageModel);
+
+    const thinkingMiddleware = createGoogleThinkingMiddleware(this.#thinkingLevel);
+    if (!thinkingMiddleware) return baseModel;
+
+    return wrapLanguageModel({
+      model: baseModel as any,
+      middleware: [thinkingMiddleware],
+    }) as unknown as GatewayLanguageModel;
   }
 }
