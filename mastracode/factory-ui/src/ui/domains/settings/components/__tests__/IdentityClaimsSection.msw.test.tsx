@@ -175,6 +175,45 @@ describe('IdentityClaimsSection', () => {
     });
   });
 
+  it('given a slow POST, when the user picks a row, then the tick flips optimistically before the network settles', async () => {
+    const backend: Backend = { index: baseIndex([octocat, alice]) };
+    let releasePost: () => void = () => {};
+    const postGate = new Promise<void>(resolve => {
+      releasePost = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/identity`, () => HttpResponse.json(backend.index)),
+      http.post(`${TEST_BASE_URL}/web/identity`, async ({ request }) => {
+        const body = (await request.json()) as {
+          integrationId: string;
+          externalUserId: string;
+          label: string;
+          email?: string;
+        };
+        await postGate;
+        backend.index = setClaimed(backend.index, body.integrationId, body.externalUserId, true);
+        return new HttpResponse(null, { status: 201 });
+      }),
+    );
+
+    renderWithProviders(<IdentityClaimsSection />);
+    await openCombobox();
+
+    const octocatRow = await screen.findByRole('option', { name: /The Octocat/ });
+    expect(octocatRow.getAttribute('aria-selected')).toBe('false');
+
+    await userEvent.click(octocatRow);
+
+    // The tick must flip immediately — before we release the POST. If we were
+    // still waiting on the invalidated refetch, this would time out.
+    await waitFor(() => {
+      const row = screen.getByRole('option', { name: /The Octocat/ });
+      expect(row.getAttribute('aria-selected')).toBe('true');
+    });
+
+    releasePost();
+  });
+
   it('given a provider-served avatar, when the option renders, then the avatar image and initial fallback both appear', async () => {
     stub({ index: baseIndex([octocat, alice]) });
 

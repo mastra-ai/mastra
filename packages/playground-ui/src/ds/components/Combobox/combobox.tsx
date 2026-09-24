@@ -187,7 +187,19 @@ export function Combobox(props: ComboboxProps) {
           <BaseCombobox.Popup className={comboboxStyles.popup}>
             <div className={comboboxStyles.searchContainer}>
               <Search className={comboboxStyles.searchIcon} />
-              <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+              <BaseCombobox.Input
+                className={comboboxStyles.searchInput}
+                placeholder={searchPlaceholder}
+                // Suppress Chrome/Safari/1Password autofill. Search fields shouldn't
+                // trigger address, email, or credential suggestions, and a stable
+                // `name` lets the browser remember prior queries — neither is what
+                // a combobox filter wants.
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                name={`combobox-search-${generatedName}`}
+              />
             </div>
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
             <ScrollArea maxHeight="var(--spacing-dropdown)" viewPortClassName="scroll-py-8">
