@@ -3669,10 +3669,10 @@ describe('Observer Agent Helpers', () => {
           ]),
       },
       {
-        configuration: 'an older compatible Core router without the provenance accessor',
+        configuration: 'an older compatible Core router that does not expose its ID',
         createModel: () => {
           const model = new ModelRouterLanguageModel('openai/gpt-5.5');
-          Object.defineProperty(model, '__getReusableRouterId', { value: undefined });
+          Object.defineProperty(model, 'id', { value: undefined });
           return model;
         },
       },
@@ -3791,6 +3791,96 @@ describe('Observer Agent Helpers', () => {
 
       expect(doGenerate).toHaveBeenCalledOnce();
       expect(actorModel.modelId).toBe('runtime-model');
+    });
+
+    it('keeps the gateway route of a labeled main model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = Object.assign(new MockLanguageModelV2({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }), {
+        id: 'mastra/openai/gpt-5.5',
+      });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } }),
+      ).resolves.toMatchObject({ model: 'mastra/openai/gpt-5.4-mini' });
+    });
+
+    it('applies autoModels overrides, including the Gemini pick', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        model: 'auto',
+        autoModels: { google: 'google/gemini-3.5-flash', anthropic: 'anthropic/claude-sonnet-4-6' },
+      });
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'anthropic/claude-opus-4-6' } }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-sonnet-4-6' });
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'google/gemini-3.1-pro-preview' } }),
+      ).resolves.toMatchObject({ model: 'google/gemini-3.5-flash' });
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'openai/gpt-5.5' } }),
+      ).resolves.toMatchObject({ model: 'google/gemini-3.5-flash' });
+    });
+
+    it('routes the pick through resolveModel with the request context', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const routedModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
+      const resolveModel = vi.fn(async () => routedModel);
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
+      const requestContext = new RequestContext();
+
+      const resolved = await (om as any).resolveReflectionModel(1, {
+        requestContext,
+        currentModel: { model: 'anthropic/claude-opus-4-6' },
+      });
+
+      expect(resolveModel).toHaveBeenCalledWith('anthropic/claude-haiku-4-5', { requestContext });
+      expect(resolved.model).toBe(routedModel);
+    });
+
+    it('does not call resolveModel when the main model is reused', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const resolveModel = vi.fn();
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
+
+      const resolved = await (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } });
+
+      expect(resolved.model).toBe(actorModel);
+      expect(resolveModel).not.toHaveBeenCalled();
+    });
+
+    it('lets a dynamic model function choose auto or a concrete model per request', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        model: ({ requestContext }: { requestContext: RequestContext }) =>
+          (requestContext.get('pinned') as string | undefined) ?? 'auto',
+      });
+      const autoContext = new RequestContext();
+      const pinnedContext = new RequestContext();
+      pinnedContext.set('pinned', 'openai/gpt-5.5');
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          requestContext: autoContext,
+          currentModel: { model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          requestContext: pinnedContext,
+          currentModel: { model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.5' });
+      await expect(om.getResolvedConfig(autoContext)).resolves.toMatchObject({
+        observation: { model: 'auto' },
+        reflection: { model: 'auto' },
+      });
     });
 
     it('keeps explicit observer and reflector models independent', async () => {

@@ -1,5 +1,5 @@
 import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
-import type { WidenModelId } from '@mastra/core/llm';
+import type { MastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -93,9 +93,10 @@ export interface ObservationConfig {
   /**
    * Model for the Observer agent.
    * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
-   * then a low-cost model for the active provider when the actor is a model ID,
-   * then the exact effective actor model/config, the main agent model when no
-   * invocation model was captured, and finally this package's default model.
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
    * Can also be a model ID string
    * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
    * either (for dynamic model selection), a `ModelByInputTokens` selector
@@ -299,9 +300,10 @@ export interface ReflectionConfig {
   /**
    * Model for the Reflector agent.
    * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
-   * then a low-cost model for the active provider when the actor is a model ID,
-   * then the exact effective actor model/config, the main agent model when no
-   * invocation model was captured, and finally this package's default model.
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
    * Can also be a model ID string
    * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
    * either (for dynamic model selection), a `ModelByInputTokens` selector
@@ -1001,13 +1003,33 @@ export interface ObservationalMemoryConfig {
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
    * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
-   * then a low-cost model for the active provider when the actor is a model ID,
-   * then the exact effective actor model/config, the main agent model when no
-   * invocation model was captured, and finally this package's default model.
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
    *
    * @default 'auto'
    */
   model?: ObservationalMemoryModel;
+
+  /**
+   * Per-provider low-cost models for `'auto'`, replacing the built-in picks.
+   * Keys are provider IDs, values are model IDs.
+   *
+   * @example { google: 'google/gemini-3.5-flash' }
+   */
+  autoModels?: Record<string, string>;
+
+  /**
+   * Resolves the model ID `'auto'` picks into a model. Use this when the main agent's models
+   * come from your own resolver (custom credentials, gateways, or providers) so observer and
+   * reflector calls use the same routing. Receives a concrete ID, never `'auto'`.
+   * Defaults to the standard model router.
+   */
+  resolveModel?: (
+    modelId: string,
+    context: { requestContext?: RequestContext },
+  ) => MastraModelConfig | Promise<MastraModelConfig>;
 
   /**
    * Observation step configuration.

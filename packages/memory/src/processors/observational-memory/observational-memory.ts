@@ -8,7 +8,7 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
@@ -16,6 +16,7 @@ import xxhash from 'xxhash-wasm';
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
+import { resolveAutoModelId } from './auto-model';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
@@ -91,34 +92,13 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   return `${first.id}:${last.id}`;
 }
 
-/**
- * Low-cost model `'auto'` resolves to, per actor provider.
- *
- * Google is the one entry that is not a literal: it reuses this package's own
- * default observation model. The consumer-side Gemini pack differs
- * (`mastracode/sdk/src/onboarding/packs.ts` resolves `google/gemini-3.5-flash`).
- * The two tables are intentionally separate — `@mastra/memory` cannot import
- * from a consumer — so a Google de-duplication pass has to edit both.
- */
-const AUTO_MODEL_BY_PROVIDER: Record<string, string> = {
-  google: OBSERVATIONAL_MEMORY_DEFAULTS.observation.model,
-  anthropic: 'anthropic/claude-haiku-4-5',
-  openai: 'openai/gpt-5.4-mini',
-  'openai-codex': 'openai/gpt-5.4-mini',
-  deepseek: 'deepseek/deepseek-v4-flash',
-};
-
-function normalizeActorProvider(provider?: string): string | undefined {
-  if (!provider) return undefined;
-  const normalized = provider
-    .replace(/^mastracode\//, '')
-    .replace(/^mastra\//, '')
-    .split(/[/.]/, 1)[0];
-  return normalized || undefined;
-}
-
-function hasGoogleGenerativeAIKey(): boolean {
-  return typeof process !== 'undefined' && Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+/** The full model ID a main model was configured or labeled with, when known. */
+function getModelId(model: unknown): string | undefined {
+  if (typeof model === 'string') return model;
+  if (model && typeof model === 'object' && 'specificationVersion' in model && 'id' in model) {
+    return typeof model.id === 'string' ? model.id : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -395,6 +375,8 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+  private readonly autoModels?: ObservationalMemoryConfig['autoModels'];
+  private readonly resolveAutoModelHook?: ObservationalMemoryConfig['resolveModel'];
   private memory?: Memory;
 
   /**
@@ -530,6 +512,8 @@ export class ObservationalMemory {
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
+    this.autoModels = config.autoModels;
+    this.resolveAutoModelHook = config.resolveModel;
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
@@ -927,9 +911,13 @@ export class ObservationalMemory {
       currentModel?: ObservationModelContext;
     },
   ): Promise<InvocationModelResolution<ResolvedInvocationModel>> {
-    const resolved = this.resolveTieredModel(model, inputTokens);
+    const tiered = this.resolveTieredModel(model, inputTokens);
+    const resolved = {
+      ...tiered,
+      model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as ResolvedInvocationModel | 'auto',
+    };
     if (resolved.model !== 'auto') {
-      return resolved;
+      return resolved as InvocationModelResolution<ResolvedInvocationModel>;
     }
 
     return {
@@ -943,33 +931,37 @@ export class ObservationalMemory {
     mainAgent?: ProcessorContext['agent'];
     currentModel?: ObservationModelContext;
   }): Promise<ResolvedInvocationModel> {
-    if (hasGoogleGenerativeAIKey()) {
-      return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
-    }
+    const mainModel =
+      options?.currentModel?.model ??
+      (options?.mainAgent
+        ? ((await options.mainAgent.getModel({ requestContext: options.requestContext })) as ResolvedInvocationModel)
+        : undefined);
+    const mainModelId = getModelId(mainModel);
+    const pick =
+      resolveAutoModelId(mainModelId, { autoModels: this.autoModels }) ??
+      (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
 
-    const actorModel = options?.currentModel?.model;
-    const actorProvider =
-      normalizeActorProvider(options?.currentModel?.provider) ??
-      normalizeActorProvider(
-        typeof actorModel === 'object' && actorModel && 'provider' in actorModel
-          ? String(actorModel.provider)
-          : undefined,
-      );
-    if (actorModel && typeof actorModel !== 'string') {
-      return actorModel;
+    // No cheaper sibling is known: reuse the main model exactly as configured.
+    if (mainModel && (!pick || pick === mainModelId)) {
+      return mainModel;
     }
-    const providerModel = actorProvider ? AUTO_MODEL_BY_PROVIDER[actorProvider] : undefined;
-    if (providerModel) {
-      return providerModel;
-    }
-    if (actorModel) {
-      return actorModel;
-    }
-    if (options?.mainAgent) {
-      return (await options.mainAgent.getModel({ requestContext: options.requestContext })) as ResolvedInvocationModel;
-    }
+    const modelId = pick!;
+    return this.resolveAutoModelHook
+      ? ((await this.resolveAutoModelHook(modelId, { requestContext: options?.requestContext })) as ResolvedInvocationModel)
+      : modelId;
+  }
 
-    return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+  private async resolveModelFunction(
+    model: WidenedObservationalMemoryModel,
+    requestContext?: RequestContext,
+  ): Promise<WidenedObservationalMemoryModel> {
+    if (typeof model !== 'function') {
+      return model;
+    }
+    return (await model({
+      requestContext: requestContext ?? new RequestContext(),
+      mastra: this.mastra,
+    })) as WidenedObservationalMemoryModel;
   }
 
   private resolveTieredModel(
@@ -996,13 +988,14 @@ export class ObservationalMemory {
     requestContext?: RequestContext,
   ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> {
     try {
-      if (modelConfig === 'auto') {
+      const model = (await this.resolveModelFunction(modelConfig, requestContext)) as ObservationalMemoryModel;
+      if (model === 'auto') {
         return { model: 'auto' };
       }
-      if (modelConfig instanceof ModelByInputTokens) {
+      if (model instanceof ModelByInputTokens) {
         const routing = await Promise.all(
-          modelConfig.getThresholds().map(async upTo => {
-            const resolvedModel = modelConfig.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
+          model.getThresholds().map(async upTo => {
+            const resolvedModel = model.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
             const resolved = await this.resolveModelContext(resolvedModel, requestContext);
 
             return {
@@ -1018,7 +1011,7 @@ export class ObservationalMemory {
         };
       }
 
-      const resolved = await this.resolveModelContext(modelConfig, requestContext);
+      const resolved = await this.resolveModelContext(model, requestContext);
       return {
         model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
       };
@@ -1036,7 +1029,11 @@ export class ObservationalMemory {
     if (modelConfig === 'auto') {
       return undefined;
     }
-    const modelToResolve = this.getModelToResolve(modelConfig, inputTokens);
+    const concreteModel = await this.resolveModelFunction(this.getConcreteModel(modelConfig, inputTokens), requestContext);
+    if (concreteModel === 'auto') {
+      return undefined;
+    }
+    const modelToResolve = this.getModelToResolve(concreteModel as ObservationalMemoryModel, inputTokens);
     if (!modelToResolve) {
       return undefined;
     }
@@ -1054,10 +1051,11 @@ export class ObservationalMemory {
    */
   async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
     try {
+      const reflectionModel = await this.resolveModelFunction(this.reflectionConfig.model, requestContext);
       const modelId =
-        this.reflectionConfig.model === 'auto' && hasGoogleGenerativeAIKey()
-          ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model
-          : ((await this.resolveModelContext(this.reflectionConfig.model, requestContext))?.modelId ?? '');
+        reflectionModel === 'auto'
+          ? (resolveAutoModelId(undefined, { autoModels: this.autoModels }) ?? '')
+          : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ?? '');
 
       // gemini-2.5-flash is conservative about compression - start at level 2
       if (modelId.includes('gemini-2.5-flash')) {
