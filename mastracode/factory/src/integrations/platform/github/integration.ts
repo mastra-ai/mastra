@@ -219,13 +219,16 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
   /**
-   * Identity capability — walks each org's stored installations and fetches
-   * the org-members roster from platform's `/v1/server/github-app/installations/:id/members`
-   * endpoint. Empty when an installation targets a user account.
+   * Identity capability — discovers every installation the caller has
+   * connected on Platform (via `/v1/server/github-app/installations`) and
+   * fetches each one's org-members roster from
+   * `/v1/server/github-app/installations/:id/members`. Discovery does not
+   * depend on Factory's source-control storage, so a user who has connected
+   * GitHub on Platform but not yet registered any repositories still gets
+   * their org members surfaced as claim candidates.
    */
   readonly identity = buildPlatformGithubIdentity({
     client: () => this.#client,
-    storage: () => this.storage,
     apiPrefix: API_PREFIX,
   });
   readonly #rules: GithubEventRules;
