@@ -162,16 +162,13 @@ describe('public dataset snapshot transfer', () => {
     ['agent', 'agents', 'registered-agent'],
     ['workflow', 'workflows', 'registered-workflow'],
     ['scorer', 'scorers', 'registered-scorer'],
-    ['processor', 'processors', 'registered-processor'],
   ] as const)('resolves %s targets by registry key and by id', async (targetType, registryOption, id) => {
     const registered =
       targetType === 'agent'
         ? new Agent({ id, name: 'Registered', instructions: 'noop', model: 'openai/gpt-4o-mini' })
         : targetType === 'workflow'
           ? createWorkflow({ id, inputSchema: z.unknown(), outputSchema: z.unknown() }).commit()
-          : targetType === 'scorer'
-            ? createScorer({ id, name: 'Registered', description: 'Registered' }).generateScore(() => 1)
-            : { id, name: 'Registered', processInput: async ({ messages }: { messages: unknown }) => messages };
+          : createScorer({ id, name: 'Registered', description: 'Registered' }).generateScore(() => 1);
     const mastra = new Mastra({
       storage: new InMemoryStore(),
       [registryOption]: { registryKey: registered },
@@ -194,6 +191,33 @@ describe('public dataset snapshot transfer', () => {
       canImport: false,
       errors: [{ kind: 'target', id: 'unregistered' }],
     });
+  });
+
+  it('rejects registered processor targets because experiments cannot run them', async () => {
+    const processor = {
+      id: 'registered-processor',
+      name: 'Registered',
+      processInput: async ({ messages }: { messages: unknown }) => messages,
+    };
+    const mastra = new Mastra({ storage: new InMemoryStore(), processors: { registryKey: processor } } as never);
+    const { digest: _digest, ...content } = fixture();
+    content.configuration = {
+      ...content.configuration,
+      targetType: 'processor',
+      targetIds: ['registryKey', 'registered-processor'],
+      scorerIds: [],
+    };
+    content.items = [];
+    const request = { snapshot: JSON.stringify(createDatasetSnapshot(content)), idempotencyKey: 'processor' };
+    expect(await mastra.datasets.preflightSnapshot(request)).toMatchObject({
+      canImport: false,
+      errors: [
+        { kind: 'target', id: 'registryKey' },
+        { kind: 'target', id: 'registered-processor' },
+      ],
+    });
+    await expect(mastra.datasets.importSnapshot(request)).rejects.toThrow('references are unavailable');
+    expect(await mastra.datasets.getSnapshotImport({ idempotencyKey: 'processor' })).toBeNull();
   });
 
   it('recovers completed imports even after registry removal or destination deletion, without making another copy', async () => {

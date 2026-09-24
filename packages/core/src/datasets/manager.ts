@@ -105,7 +105,10 @@ export class DatasetsManager {
     return this.#checkSnapshotReferences(store.describeSnapshotImport(await store.prepareSnapshotImport(input)));
   }
 
-  /** Registered keys and ids for one target type. Registry keys are valid references too. */
+  /**
+   * Registered keys and ids for one target type. Registry keys are valid references too.
+   * Processor targets resolve to nothing because the experiment runner can't execute them yet.
+   */
   #registeredIds(targetType: TargetType | null | undefined): Set<string> {
     const registry: Record<string, { id?: string; name?: string }> | undefined =
       targetType === 'agent'
@@ -114,9 +117,7 @@ export class DatasetsManager {
           ? this.#mastra.listWorkflows()
           : targetType === 'scorer'
             ? this.#mastra.listScorers()
-            : targetType === 'processor'
-              ? this.#mastra.listProcessors()
-              : undefined;
+            : undefined;
     return new Set(
       Object.entries(registry ?? {}).flatMap(([key, entry]) =>
         [key, entry.id, entry.name].filter((value): value is string => typeof value === 'string'),
