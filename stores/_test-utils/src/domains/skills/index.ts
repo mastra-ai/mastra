@@ -35,6 +35,27 @@ export function createSkillsTests({ storage }: { storage: MastraStorage }) {
       await skillsStorage.dangerouslyClearAll();
     });
 
+    it('persists visibility on create, update, and list', async () => {
+      const publicSkill = createSkill(`skill-public-${Date.now()}`);
+      const created = await skillsStorage.create({ skill: publicSkill });
+      expect(created.visibility).toBe('public');
+      expect((await skillsStorage.getById(publicSkill.id))?.visibility).toBe('public');
+
+      const { visibility: _visibility, ...privateInput } = createSkill(`skill-private-${Date.now()}`);
+      await skillsStorage.create({ skill: privateInput });
+      expect((await skillsStorage.getById(privateInput.id))?.visibility).toBe('private');
+
+      const publicList = await skillsStorage.list({ visibility: 'public' });
+      expect(publicList.skills.map(s => s.id)).toEqual([publicSkill.id]);
+
+      await skillsStorage.update({ id: privateInput.id, visibility: 'public' });
+      expect((await skillsStorage.getById(privateInput.id))?.visibility).toBe('public');
+      expect(await skillsStorage.countVersions(privateInput.id)).toBe(1);
+
+      const updatedList = await skillsStorage.list({ visibility: 'public' });
+      expect(updatedList.skills.map(s => s.id).sort()).toEqual([privateInput.id, publicSkill.id].sort());
+    });
+
     it('does not create duplicate versions for semantically unchanged snapshots', async () => {
       const skill = createSkill(`skill-${Date.now()}`);
       await skillsStorage.create({ skill });

@@ -9,7 +9,8 @@ import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { ActiveThreadRow } from '../hooks/use-top-active-threads-metrics';
 import type { ResourceThreadsRow } from '../hooks/use-top-resources-by-threads-metrics';
-import { formatCompact, formatCost, METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { formatCompactNumber, formatCost } from '@/lib/cost';
 
 export type MemoryTab = 'threads' | 'resources';
 
@@ -100,7 +101,7 @@ export function MemoryCardView({
               <Tab value="threads">Threads</Tab>
               <Tab value="resources">Resources</Tab>
             </TabList>
-            <TabContent value="threads">
+            <TabContent value="threads" className="pt-3">
               {hasThreadData ? (
                 <DataList columns="auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
                   <DataList.Top>
@@ -119,7 +120,9 @@ export function MemoryCardView({
                         </DataList.RowHeaderCell>
                         <DataList.NumberCell>{row.resourceId ? shortId(row.resourceId) : '—'}</DataList.NumberCell>
                         <DataList.NumberCell highlight>{row.runs.toLocaleString()}</DataList.NumberCell>
-                        <DataList.NumberCell>{row.tokens > 0 ? formatCompact(row.tokens) : '—'}</DataList.NumberCell>
+                        <DataList.NumberCell>
+                          {row.tokens > 0 ? formatCompactNumber(row.tokens) : '—'}
+                        </DataList.NumberCell>
                         <DataList.NumberCell>
                           {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
                         </DataList.NumberCell>
@@ -139,7 +142,7 @@ export function MemoryCardView({
                 <MetricsCard.NoData message="No thread activity yet" />
               )}
             </TabContent>
-            <TabContent value="resources">
+            <TabContent value="resources" className="pt-3">
               {hasResourceData ? (
                 <DataList columns="auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
                   <DataList.Top>
@@ -156,7 +159,9 @@ export function MemoryCardView({
                           {shortId(row.resourceId)}
                         </DataList.RowHeaderCell>
                         <DataList.NumberCell highlight>{row.threadCount.toLocaleString()}</DataList.NumberCell>
-                        <DataList.NumberCell>{row.tokens > 0 ? formatCompact(row.tokens) : '—'}</DataList.NumberCell>
+                        <DataList.NumberCell>
+                          {row.tokens > 0 ? formatCompactNumber(row.tokens) : '—'}
+                        </DataList.NumberCell>
                         <DataList.NumberCell>
                           {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
                         </DataList.NumberCell>

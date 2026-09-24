@@ -1143,7 +1143,8 @@ type BaseMemoryConfig = {
    * keeps the parent's message prefix.
    *
    * This controls trimming only. When a memory-sourced message and an input message share
-   * an id, the stored copy still occupies the slot and the input's parts are layered on top.
+   * an id, the stored copy stays authoritative: only tool outcomes for calls it still has
+   * pending are taken from the input. Input text, reasoning, and metadata are ignored.
    *
    * @default false
    * @example

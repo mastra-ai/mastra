@@ -81,7 +81,7 @@ export function LogsListView({
   }, [isLoading]);
 
   if (isLoading) {
-    return <LogsDataListSkeleton columns={COLUMNS} />;
+    return <LogsDataListSkeleton columns={COLUMNS} fit="container" />;
   }
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -91,7 +91,7 @@ export function LogsListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0" fit="container">
       <LogsDataList.Top>
         {onSortChange ? (
           <LogsDataList.SortableTopCell sortKey="timestamp" sort={timestampSort} onSortChange={onSortChange}>

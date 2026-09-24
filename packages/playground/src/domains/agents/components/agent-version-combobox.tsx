@@ -1,18 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useAgentVersions } from '../hooks/use-agent-versions';
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export interface AgentVersionComboboxProps {
   agentId: string;
@@ -51,7 +41,7 @@ export function AgentVersionCombobox({
 
       const trimmedMessage = version.changeMessage?.trim();
       const description = [
-        formatTimestamp(version.createdAt),
+        formatDate(version.createdAt, 'date-time') ?? '',
         trimmedMessage && trimmedMessage !== 'Auto-saved after edit' ? trimmedMessage : undefined,
       ]
         .filter(Boolean)

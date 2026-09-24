@@ -52,6 +52,8 @@
     "fireworks_ai/accounts/fireworks/models/muse-glimmer-30b",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
+    "google/deep-research-max-preview-04-2026",
+    "google/deep-research-preview-04-2026",
     "google/gemini-2.5-flash-image",
     "google/gemini-3-flash-preview",
     "google/gemini-3-pro-image",

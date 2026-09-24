@@ -1442,6 +1442,8 @@ export interface MastraPackage {
 
 export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
 
+export type GetObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
+
 // ============================================================================
 // Workspace Types
 // ============================================================================

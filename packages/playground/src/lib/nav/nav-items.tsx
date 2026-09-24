@@ -1,7 +1,6 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
-import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
 import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
@@ -118,12 +117,6 @@ export const mainNav: NavSection[] = [
     key: 'evaluation',
     title: 'Evaluation',
     items: [
-      {
-        name: 'Overview',
-        url: '/evaluation',
-        Icon: HomeIcon,
-        isOnMastraPlatform: true,
-      },
       {
         name: 'Scorers',
         url: '/scorers',
