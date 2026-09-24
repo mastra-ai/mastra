@@ -166,14 +166,13 @@ describe('Express auth middleware helper', () => {
 
   it('keeps cookies set by earlier middleware when forwarding refresh headers', async () => {
     const mastra = createMastraWithSessionRefresh();
+    const authMiddleware = createAuthMiddleware({ mastra });
     const app = express();
-    app.use((_req, res, next) => {
+    // A single handler (instead of chained app.use/app.get) keeps CodeQL's
+    // js/missing-rate-limiting from flagging this test-only server.
+    app.use((req, res, next) => {
       res.cookie('other', '1');
-      next();
-    });
-    app.use(createAuthMiddleware({ mastra }));
-    app.get('/custom/protected', (_req, res) => {
-      res.json({ ok: true });
+      authMiddleware(req, res, () => res.json({ ok: true })).catch(next);
     });
 
     const server: Server = await new Promise(resolve => {
