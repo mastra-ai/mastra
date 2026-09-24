@@ -33,6 +33,22 @@ describe('presentTool', () => {
     });
   });
 
+  it("shows a command's description on the row, keeping the command for the expanded body", () => {
+    const command = "cd packages/core && rg -n 'processor' src | head -20";
+    expect(presentTool('execute_command', { description: 'Finding  the processor\n wiring', command })).toMatchObject({
+      label: 'Run',
+      detail: 'Finding the processor wiring',
+      command,
+    });
+  });
+
+  it('falls back to the command when the description is blank', () => {
+    expect(presentTool('execute_command', { description: '  ', command: 'git status' })).toMatchObject({
+      detail: 'git status',
+      command: 'git status',
+    });
+  });
+
   it('strips the raw workspace prefix before lookup', () => {
     expect(presentTool('mastra_workspace_read_file', { path: 'a.ts' })).toMatchObject({
       label: 'Read',

@@ -19,7 +19,7 @@ import type { LucideIcon } from 'lucide-react';
 export interface ToolPresentation {
   icon: LucideIcon;
   label: string;
-  /** Salient argument shown next to the label: command, path, pattern… */
+  /** Salient argument shown next to the label: command (or its description), path, pattern… */
   detail?: string;
   /** Shell command, when the tool is terminal-style. Drives the expanded body. */
   command?: string;
@@ -106,7 +106,10 @@ export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
   if (!detail) return { icon: style.icon, label: style.label };
   if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
-  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), command: detail };
+  // Workspaces with `requireDescription` have the agent say what a command does; that reads better
+  // on a one-line row than the command, which stays in the expanded body.
+  const description = stringArg(args, 'description')?.replace(/\s+/g, ' ').trim();
+  return { icon: style.icon, label: style.label, detail: description || withoutCdPrefix(detail), command: detail };
 }
 
 export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });

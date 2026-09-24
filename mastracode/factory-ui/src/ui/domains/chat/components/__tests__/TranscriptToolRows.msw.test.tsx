@@ -118,6 +118,31 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(row).queryByText('execute_command')).not.toBeInTheDocument();
   });
 
+  it("shows a shell command's description on its row and the command when expanded", async () => {
+    const command = "cd packages/core && rg -n 'processor' src";
+    renderEntries([
+      assistantMessage('msg-1', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'execute_command',
+            args: { description: 'Finding the processor wiring', command },
+            result: 'src/a.ts:1:processor',
+          },
+        },
+      ]),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: execute_command' });
+    expect(within(row).getByText('Finding the processor wiring')).toBeInTheDocument();
+    expect(within(row).queryByText(/rg -n/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getAllByRole('button')[0]);
+    expect(within(row).getByText(/rg -n 'processor' src/)).toBeInTheDocument();
+  });
+
   it('collapses three or more consecutive tool calls into a single group row', async () => {
     renderEntries([
       assistantMessage('msg-1', [
