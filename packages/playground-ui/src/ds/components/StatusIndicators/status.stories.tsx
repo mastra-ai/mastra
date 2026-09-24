@@ -3,7 +3,7 @@ import { Status } from './status';
 import { Txt } from '@/ds/components/Txt';
 
 const RUNNING = {
-  label: 'Running',
+  label: 'Ready',
   tone: 'success',
   description: 'The server is live and responding to requests.',
 } as const;
@@ -16,7 +16,7 @@ const meta: Meta<typeof Status> = {
     docs: {
       description: {
         component:
-          'Status labels use ui-xs by default because they occupy the meta/badge level in the Marvin text hierarchy. Pass text through children when the surrounding context requires another Txt role.',
+          'The label inherits the surrounding text size and color by default, so it matches its siblings in a DataList cell, table row, or sentence. Pass `textVariant` with a `TextRole` (for example `meta` in a card or header) when the container sets no text style or the label needs its own level. Pass `children` for custom content.',
       },
     },
   },
@@ -25,6 +25,7 @@ const meta: Meta<typeof Status> = {
   },
   argTypes: {
     children: { control: false },
+    textVariant: { control: 'select' },
   },
 };
 
@@ -33,25 +34,29 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-export const TextSlot: Story = {
+export const TextVariants: Story = {
   render: () => (
     <main className="flex flex-col gap-4">
-      <h1 className="sr-only">Status text hierarchy</h1>
+      <h1 className="sr-only">Status text variants</h1>
       <div className="flex items-center gap-4">
-        <Txt as="span" variant="caption" tone="muted" className="w-24">
-          Meta
+        <Txt as="span" variant="caption" tone="muted" className="w-40">
+          textVariant="meta"
         </Txt>
-        <Status presentation={RUNNING} />
+        <Status presentation={RUNNING} textVariant="meta" />
       </div>
       <div className="flex items-center gap-4">
-        <Txt as="span" variant="caption" tone="muted" className="w-24">
-          Secondary
+        <Txt as="span" variant="caption" tone="muted" className="w-40">
+          textVariant="body-sm"
         </Txt>
-        <Status presentation={RUNNING}>
-          <Txt as="span" variant="caption">
-            {RUNNING.label}
-          </Txt>
-        </Status>
+        <Status presentation={RUNNING} textVariant="body-sm" />
+      </div>
+      <div className="flex items-center gap-4">
+        <Txt as="span" variant="caption" tone="muted" className="w-40">
+          Default (inherit)
+        </Txt>
+        <span className="text-meta text-muted-foreground">
+          <Status presentation={RUNNING} />
+        </span>
       </div>
     </main>
   ),
