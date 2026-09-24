@@ -237,10 +237,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         timeoutType: 'total',
       });
 
-      // Give the run its own signal, linked to the caller's. Callers often reuse one
-      // long-lived signal across many runs; anything downstream that listens for abort
-      // then attaches to this run-owned signal, and the single link back to the caller's
-      // signal is removed in the `finally` below, so no listener outlives the run.
+      // A run-owned signal linked to the caller's. Callers often reuse one long-lived signal
+      // across many runs, so run internals listen here rather than on the caller's signal;
+      // the single link back is removed in the `finally` below. Tools and sub-agents still
+      // receive the caller's signal unchanged through `options.abortSignal`.
       const upstreamAbortSignal = totalTimeoutPromise ? totalTimeoutSignal : rest.options?.abortSignal;
       const runAbortController = upstreamAbortSignal ? new AbortController() : undefined;
       const onUpstreamAbort = () => runAbortController?.abort(upstreamAbortSignal?.reason);
@@ -250,9 +250,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         upstreamAbortSignal?.addEventListener('abort', onUpstreamAbort, { once: true });
       }
 
-      const restWithTimeoutSignal = runAbortController
-        ? { ...rest, options: { ...rest.options, abortSignal: runAbortController.signal } }
-        : rest;
+      const restWithTimeoutSignal = {
+        ...(totalTimeoutPromise ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } } : rest),
+        runAbortSignal: runAbortController?.signal,
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,

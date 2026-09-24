@@ -250,6 +250,12 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   agentVersionId?: string;
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
+  /**
+   * @internal Aborts with the caller's signal and once more when the run ends. Run
+   * internals that must not outlive the run listen here instead of on `options.abortSignal`,
+   * which is the caller's own signal and may be reused across many runs.
+   */
+  runAbortSignal?: AbortSignal;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */
