@@ -1,5 +1,37 @@
 # @mastra/client-js
 
+## 1.50.0
+
+### Minor Changes
+
+- Added `getObservabilityCapabilities()`, which returns the optional observability features the server's configured storage supports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { observabilityStorageType, capabilities } = await client.getObservabilityCapabilities();
+
+  if (!capabilities.traceQuery) {
+    // List traces with the legacy endpoint instead
+    const traces = await client.listTracesLight({ pagination: { page: 0, perPage: 25 } });
+  }
+  ```
+
+### Patch Changes
+
+- Stopped retrying requests that fail with 501 Not Implemented. The server returns 501 when the configured storage does not support an API, so retrying only added repeated failed requests and server error logs. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+- Added a `feedback` flag to the observability capabilities response so you can check whether the configured store supports the feedback endpoints before calling them. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  if (capabilities.feedback) {
+    const feedback = await client.listFeedback({ traceId });
+  }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
 ## 1.50.0-alpha.1
 
 ### Minor Changes

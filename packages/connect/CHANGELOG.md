@@ -1,5 +1,33 @@
 # @mastra/connect
 
+## 0.4.0
+
+### Minor Changes
+
+- Add `environment()` for sandboxed agents. Materialize provider credentials from your project's Platform connections into a `{ env, onStart }` pair that any sandbox provider (e2b, Modal, Daytona, Docker, subprocess) can consume — so CLI tooling inside the sandbox is authenticated without hand-wiring tokens per agent. ([#24912](https://github.com/mastra-ai/mastra/pull/24912))
+
+  ```ts
+  import { environment } from '@mastra/connect';
+
+  const env = environment({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
+  });
+
+  const { env: envVars, onStart } = await env();
+
+  await sandbox.start({ env: envVars, onStart });
+  ```
+
+  `environment()` shares its resolution model with `connect()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS authenticate as the connected user, and `onStart` installs a git credential helper that reads the token from the environment rather than baking it into git config.
+
+### Patch Changes
+
+- Updated dependencies [[`d47a70d`](https://github.com/mastra-ai/mastra/commit/d47a70d14aa2486089115069416fb0a9cac5eef5), [`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`1640470`](https://github.com/mastra-ai/mastra/commit/1640470792c1138f91f543526b3a516a948cf129), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/discord@1.1.0
+  - @mastra/core@1.71.0
+  - @mastra/telegram@0.1.3
+
 ## 0.4.0-alpha.0
 
 ### Minor Changes

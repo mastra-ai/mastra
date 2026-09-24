@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.71.0-alpha.1",
+  "version": "1.71.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -916,6 +916,7 @@
     "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
     "posthog-node": "^5.46.1",
+    "re2js": "^2.8.6",
     "ws": "^8.21.3",
     "xxhash-wasm": "^1.1.0",
     "hono": "^4.13.7",

@@ -1,5 +1,37 @@
 # mastracode
 
+## 0.42.2
+
+### Patch Changes
+
+- Quiet mode now trims `execute_command` entries and notifications, which previously ignored it. `execute_command` kept up to 15 lines of output in its terminal box while other tools collapsed to a single line; it now keeps the same box and follows the quiet preview line limit like every other tool: the command is always shown (long commands are capped at the limit) and only the last N lines of output appear under it, with hidden lines noted by a `⋯ (+N lines)` marker (when only one line would be hidden it is shown instead, since the marker costs the same row). Setting the limit to None shows the command alone. Expanding tool output (ctrl+e) reveals the full command and output. Notifications keep their bordered style but drop the priority/kind/status row and cap the message at the quiet preview line limit, and notification summaries drop the usage hint. Toggling quiet mode updates existing notifications live. ([#24214](https://github.com/mastra-ai/mastra/pull/24214))
+
+- Split Factory onboarding into shared organization provider setup and optional personal provider setup. ([#24959](https://github.com/mastra-ai/mastra/pull/24959))
+
+- **Fixed Stagehand browser automation for OpenAI Codex users and made the browser model visible.** ([#25028](https://github.com/mastra-ai/mastra/pull/25028))
+
+  - Stagehand actions (observe, act, extract) no longer fail with "Bad Request" when signed in with a ChatGPT/Codex account and no browser model is configured.
+  - A model chosen with `/browser set model openai/...` now runs through your Codex login instead of requiring a separate `OPENAI_API_KEY`.
+  - With no browser model configured, Stagehand reuses the chat model active at launch when it can route it, then falls back to the Codex default, then to Stagehand's default.
+  - The `/browser` setup summary and `/browser status` show which model is in use and why (configured, current chat model, Codex login default, or Stagehand default), reporting the model the running browser actually launched with.
+  - Fixed `/browser status` wrongly reporting "Pending changes (not yet applied)" whenever a profile, executable path, or Stagehand model was configured.
+  - The Browserbase API key is no longer stored in session state.
+
+  ```
+  /browser info    # alias for /browser status
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`3cc745e`](https://github.com/mastra-ai/mastra/commit/3cc745e436b0ae9005f4730296ce51d338dae68c), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`527e1d8`](https://github.com/mastra-ai/mastra/commit/527e1d8e705de7002f9fa2222b08baf3bbaf4267), [`b410849`](https://github.com/mastra-ai/mastra/commit/b4108495c7a60343b83b82ae80d6ca9b75305fbf), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`0a1f74a`](https://github.com/mastra-ai/mastra/commit/0a1f74a94e3d7944640978c9334b7a6e6f97b886), [`867df31`](https://github.com/mastra-ai/mastra/commit/867df31d35fdf9dcf1a02b3563af7c6f76b6b166), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5), [`fec55ac`](https://github.com/mastra-ai/mastra/commit/fec55acdb25540a3b7c2434451db0234063f8a1e), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503)]:
+  - @mastra/core@1.71.0
+  - @mastra/code-sdk@1.8.3
+  - @mastra/duckdb@1.11.1
+  - @mastra/observability@1.18.1
+  - @mastra/fastembed@1.3.2
+  - @mastra/libsql@1.23.3
+  - @mastra/pg@1.27.1
+  - @mastra/memory@1.32.1
+  - @mastra/mcp@2.1.0
+
 ## 0.42.2-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,34 @@
 # @mastra/clickhouse
 
+## 1.21.1
+
+### Patch Changes
+
+- Fixed slow feedback review-status updates on ClickHouse. Since 1.21.0, each update ran a ClickHouse mutation that scanned every part of the feedback table, taking several seconds on tables with months of daily partitions and timing out on larger ones. Review updates now write a new row again, which takes milliseconds regardless of table size. ([#25000](https://github.com/mastra-ai/mastra/pull/25000))
+
+  **Upgrade note:** the runtime database user no longer needs `ALTER UPDATE(reviewStatus)` on `mastra_feedback_events` or `INSERT` on `mastra_feedback_events_delta` for review updates. Grants you added for 1.21.0 are harmless. Keep `ALTER UPDATE` if you run ClickHouse 26.6 or earlier, because lightweight deletes still need it there.
+
+  Deleted feedback still can't reappear through a review update: an update that lands during a delete of the same feedback retries the delete and reports the feedback as not found. A failed delete no longer blocks review updates: the next update saves the new status, then retries the delete and reports its error if it fails again. If a network error or a lagging replica lets a review row outlive a successful delete, the next review update of that feedback removes it.
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
 ## 1.21.1-alpha.0
 
 ### Patch Changes
