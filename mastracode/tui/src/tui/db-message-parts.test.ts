@@ -4,6 +4,7 @@ import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectCommandExits,
   getAssistantRenderParts,
   getMessageText,
   getNotificationSummaryView,
@@ -268,6 +269,25 @@ describe('getAssistantRenderParts', () => {
       [4_078, 4_500],
       [undefined, undefined],
     ]);
+  });
+
+  it('collects sandbox exit records across the thread, including ones saved in a later message', () => {
+    const exit = (toolCallId: string, data: Record<string, unknown>) =>
+      ({ type: 'data-sandbox-exit', data: { toolCallId, ...data }, createdAt: 1 }) as never;
+    const exits = collectCommandExits([
+      assistantMessage([exit('call-1', { exitCode: 0, success: true, executionTimeMs: 8_746 })]),
+      assistantMessage([
+        { type: 'step-start' } as never,
+        exit('call-2', { exitCode: -1, success: false, executionTimeMs: 12 }),
+        exit('call-3', { exitCode: 2 }),
+        exit('call-4', { success: true }),
+      ]),
+    ]);
+    expect(Object.fromEntries(exits)).toEqual({
+      'call-1': { exitCode: 0, success: true, executionTimeMs: 8_746 },
+      'call-2': { exitCode: -1, success: false, executionTimeMs: 12 },
+      'call-3': { exitCode: 2, success: false },
+    });
   });
 
   it('uses canonical tool error metadata for completed tool render items', () => {

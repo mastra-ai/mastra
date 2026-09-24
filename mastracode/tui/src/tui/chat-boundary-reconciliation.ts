@@ -85,7 +85,7 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   let currentCompactRun: CompactToolGroupingParticipant[] = [];
   let previousSpacingComponent: Component | undefined;
 
-  const flushCompactRunColor = () => {
+  const flushCompactRun = () => {
     const color = getCompactRunLabelColor(currentCompactRun);
     // Calls sharing a quiet shell box must agree on its width: the widest row wins.
     const widths = currentCompactRun
@@ -106,7 +106,7 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   for (let i = 0; i < components.length; i++) {
     const component = components[i]!;
 
-    // --- compact-tool grouping (unchanged logic) --------------------------
+    // --- compact-tool grouping --------------------------------------------
     const participant = component as CompactToolGroupingParticipant;
     const compactToolGroupKey = compactToolGroupKeys[i];
     const compactToolGroupSummary = participant.getCompactToolGroupSummary?.();
@@ -117,12 +117,12 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
       !!compactToolGroupKey && compactToolGroupKey === nextCompactToolGroupKey,
     );
     if (compactToolGroupKey) {
-      if (!isContinuation) flushCompactRunColor();
+      if (!isContinuation) flushCompactRun();
       currentCompactRun.push(participant);
     } else {
       // Entries that take no space (e.g. a quiet assistant message with only hidden thinking)
       // don't break a run, matching the continuation check above.
-      if (getChatSpacingKind(component)) flushCompactRunColor();
+      if (getChatSpacingKind(component)) flushCompactRun();
       participant.setCompactToolGroupLabelColor?.(undefined);
     }
     if (getChatSpacingKind(component)) {
@@ -153,7 +153,7 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
     nextChildren.push(component);
   }
 
-  flushCompactRunColor();
+  flushCompactRun();
 
   const childrenChanged =
     children.length !== nextChildren.length || children.some((child, index) => child !== nextChildren[index]);

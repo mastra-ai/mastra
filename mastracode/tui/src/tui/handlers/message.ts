@@ -225,7 +225,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       const component = new ToolExecutionComponentEnhanced(
         tool.toolName,
         tool.args as Record<string, unknown>,
-        { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+        { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
         state.ui,
       );
       component.setExpanded(state.toolOutputExpanded);

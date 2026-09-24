@@ -7,6 +7,7 @@ import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
 import {
   clearToolInputParsers,
+  handleCommandExit,
   handleToolEnd,
   handleToolInputDelta,
   handleToolInputEnd,
@@ -365,6 +366,30 @@ describe('quiet shell description streaming', () => {
     const final = stripAnsi(frames.at(-1)!.join('\n'));
     expect(final.match(/╭/g)).toHaveLength(3);
   }, 20_000);
+
+  it('marks a shell call failed from its live exit record when the result text does not say', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'ls', description: 'Listing files' });
+    // The sandbox threw: its exit event arrives before the result, which only carries `Error: …`.
+    handleCommandExit(ctx, 'call-1', -1, false);
+    handleToolEnd(ctx, 'call-1', 'Error: Sandbox failed to start', false);
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toMatch(/✗ Listing files/);
+    expect(output).toContain('└▸ Error: Sandbox failed to start');
+  });
+
+  it('labels quiet shell boxes with the project root commands run in', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    ctx.state.projectInfo = { rootPath: '/work/repo' } as typeof ctx.state.projectInfo;
+    handleToolStart(ctx, 'call-1', 'execute_command', {
+      command: 'cd /work/repo/packages/core && ls',
+      description: 'Listing',
+    });
+    handleToolEnd(ctx, 'call-1', 'a.ts', false);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('$ ./packages/core');
+  });
 
   it('marks a call rejected by input validation as failed', () => {
     const ctx = createToolHandlerContext();

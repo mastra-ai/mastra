@@ -56,7 +56,11 @@ export const quietShellGroupedScenario: McE2eScenario = {
           },
         },
         { type: 'data-workspace-metadata', data: {}, createdAt: startedAt },
-        { type: 'data-sandbox-exit', data: {}, createdAt: startedAt + 3_028 },
+        {
+          type: 'data-sandbox-exit',
+          data: { toolCallId: 'grouped-history-sleep', exitCode: 0, success: true, executionTimeMs: 2_940 },
+          createdAt: startedAt + 3_028,
+        },
         { type: 'step-start', createdAt: startedAt + 3_078 },
         { type: 'text', text: 'Grouped shell history loaded.', createdAt: startedAt + 3_500 },
       ],
@@ -105,7 +109,8 @@ values
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Grouped shell history loaded\./i, terminal, 8_000);
-    await runtime.waitForScreenText(/✓ Sleeping through the loaded history run +3\.1s/, terminal, 5_000);
+    // The sandbox's recorded run time wins over the 3.1s between the surrounding parts.
+    await runtime.waitForScreenText(/✓ Sleeping through the loaded history run +2\.9s/, terminal, 5_000);
     runtime.printScreen('grouped quiet shell history', terminal);
 
     terminal.keyCtrlC();

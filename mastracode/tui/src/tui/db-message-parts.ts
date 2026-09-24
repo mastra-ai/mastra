@@ -10,6 +10,7 @@ import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
 
 import { getBackgroundToolMetadata } from './background-tool-result.js';
+import type { CommandExitRecord } from './components/tool-execution-interface.js';
 
 /**
  * DB-native accessors for `MastraDBMessage`.
@@ -185,6 +186,28 @@ function getToolPartTiming(
   const startedAt = partCreatedAt(parts[index]) ?? firstDataAt ?? previousAt ?? messageCreatedAt;
   if (startedAt === undefined || endedAt === undefined || endedAt < startedAt) return {};
   return { startedAt, endedAt };
+}
+
+/**
+ * Collects the sandbox exit records (`data-sandbox-exit`) of shell calls by tool call id. They
+ * carry the real exit status and run time, and can land in a later message than the call itself,
+ * so collect them across the whole thread.
+ */
+export function collectCommandExits(messages: readonly MastraDBMessage[]): Map<string, CommandExitRecord> {
+  const exits = new Map<string, CommandExitRecord>();
+  for (const message of messages) {
+    for (const part of getParts(message)) {
+      if ((part as { type?: unknown }).type !== 'data-sandbox-exit') continue;
+      const data = (part as { data?: Record<string, unknown> }).data;
+      if (typeof data?.toolCallId !== 'string' || typeof data.exitCode !== 'number') continue;
+      exits.set(data.toolCallId, {
+        exitCode: data.exitCode,
+        success: typeof data.success === 'boolean' ? data.success : data.exitCode === 0,
+        ...(typeof data.executionTimeMs === 'number' ? { executionTimeMs: data.executionTimeMs } : {}),
+      });
+    }
+  }
+  return exits;
 }
 
 export function getAssistantRenderParts(message: MastraDBMessage): AssistantRenderPart[] {

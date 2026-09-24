@@ -20,6 +20,7 @@ import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type {
+  CommandExitRecord,
   CompactToolLabelColor,
   IToolExecutionComponent,
   QuietToolDisplayMode,
@@ -105,6 +106,8 @@ export interface ToolExecutionOptions {
   quietDisplayMode?: QuietToolDisplayMode;
   quietPreviewLineLimit?: number;
   compactToolModeColor?: string;
+  /** Where shell commands run (the git root, not necessarily where the TUI was launched). */
+  projectRoot?: string;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
@@ -236,6 +239,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private endTime?: number;
   /** Set for history entries whose run time could not be recovered, so no fake `0ms` is shown. */
   private durationUnknown = false;
+  /** The sandbox's exit record for a shell call; more reliable than parsing the result text. */
+  private commandExit?: CommandExitRecord;
   private liveUpdatesStopped = false;
   private quietShellTicker?: ReturnType<typeof setInterval>;
   private quietShellGroupWidth?: number;
@@ -307,6 +312,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       this.startTime = startedAt;
       this.endTime = endedAt;
     }
+    this.rebuild();
+  }
+
+  setCommandExit(exit: CommandExitRecord): void {
+    this.commandExit = exit;
     this.rebuild();
   }
 
@@ -404,12 +414,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { command: command.slice(cdMatch[0].length), cdPath: cdMatch[1] ?? cdMatch[2] ?? cdMatch[3] ?? '' };
   }
 
-  /** The directory a quiet shell group shows in its `$ <path>` header: always the full path, so tabs are easy to tell apart. */
+  /** The directory a quiet shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
   private getShellHeaderPath(): string {
     const argsObj = this.args as Record<string, unknown> | undefined;
     const raw = argsObj?.cwd ? String(argsObj.cwd) : this.parseShellCommand().cdPath;
     const expanded = raw === '~' || raw.startsWith('~/') ? os.homedir() + raw.slice(1) : raw;
-    const projectRoot = process.cwd();
+    const projectRoot = this.options.projectRoot ?? process.cwd();
     const resolved = resolvePath(projectRoot, expanded || '.');
     // The project root shows in full so tabs stay distinguishable; paths inside it stay short.
     const relative = relativePath(projectRoot, resolved);
@@ -1806,19 +1816,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     this.syncQuietShellTicker(running && !isBackground && !this.liveUpdatesStopped);
   }
 
-  /** `undefined` when the call succeeded; otherwise the most telling line of its output (may be empty). */
   /**
    * Returns the line explaining a failed shell call, or `undefined` when it succeeded. Failure comes
-   * from the result itself (an error result, or ordinary output ending in a nonzero "Exit code: N"),
-   * never from the output text, which routinely contains words like "error:" on success.
+   * from the sandbox's exit record, an error result, or ordinary output ending in a nonzero
+   * "Exit code: N" — never from the output text, which routinely contains words like "error:" on success.
    */
   private getShellFailureLine(): string | undefined {
     const resultLines = this.getFormattedOutput().split('\n');
-    const exitCode = resultLines
-      .findLast(line => line.trim() !== '')
-      ?.trim()
-      .match(/^Exit code: (-?\d+)$/)?.[1];
-    const failed = this.result?.isError || (exitCode !== undefined && exitCode !== '0');
+    const exitCode =
+      resultLines
+        .findLast(line => line.trim() !== '')
+        ?.trim()
+        .match(/^Exit code: (-?\d+)$/)?.[1] ??
+      (this.commandExit && this.commandExit.exitCode >= 0 ? String(this.commandExit.exitCode) : undefined);
+    const failed =
+      this.result?.isError || this.commandExit?.success === false || (exitCode !== undefined && exitCode !== '0');
     if (!failed) return undefined;
     const message = parseErrorMessage(resultLines.join('\n'));
     if (message) return message;

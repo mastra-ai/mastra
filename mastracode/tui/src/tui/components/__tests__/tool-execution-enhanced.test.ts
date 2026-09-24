@@ -1370,6 +1370,22 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       expect(getSpacingBetweenComponents(root, view)).toBe(1);
     });
 
+    it('resolves directories against the project root commands run in, not where the TUI was launched', () => {
+      // Launched from a subdirectory: commands still run from the git root.
+      const inRepo = (args: Record<string, unknown>) =>
+        new ToolExecutionComponentEnhanced(
+          'execute_command',
+          args,
+          { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0, projectRoot: '/work/repo' },
+          ui,
+        );
+      expect(inRepo({ command: 'ls', description: 'Listing' }).getCompactToolGroupKey()).toBe('$ /work/repo');
+      expect(inRepo({ command: 'cd packages/core && ls', description: 'Listing' }).getCompactToolGroupKey()).toBe(
+        '$ ./packages/core',
+      );
+      expect(inRepo({ command: 'ls', description: 'Listing', cwd: 'docs' }).getCompactToolGroupKey()).toBe('$ ./docs');
+    });
+
     it('never wraps a row onto a second terminal line, at any width', () => {
       const long = 'x'.repeat(300);
       const cases = [
@@ -1405,6 +1421,28 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       const unknown = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
       unknown.setRecordedTiming(undefined, undefined);
       expect(lines(unknown).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +│$/);
+    });
+
+    it('marks a call failed from its sandbox exit record when the result text does not say', () => {
+      // When the sandbox itself throws, the result is plain output ending in `Error: …`, no exit code.
+      const cases = [
+        'Error: Sandbox failed to start',
+        'stdout:\nfile.ts\n\nstderr:\nwarning\n\nError: connection reset',
+      ];
+      for (const text of cases) {
+        const withoutRecord = make({ command: 'ls', description: 'Listing files' }, { text });
+        expect(lines(withoutRecord).find(line => line.includes('Listing files'))).toMatch(/^│ ✓ /);
+
+        const component = make({ command: 'ls', description: 'Listing files' }, { text });
+        component.setCommandExit({ exitCode: -1, success: false });
+        const rendered = lines(component);
+        expect(rendered.find(line => line.includes('Listing files'))).toMatch(/^│ ✗ /);
+        expect(rendered).toContainEqual(expect.stringMatching(/└▸ Error: (Sandbox failed to start|connection reset)/));
+      }
+
+      const exited = make({ command: 'false', description: 'Failing quietly' }, { text: '(no output)' });
+      exited.setCommandExit({ exitCode: 3, success: false });
+      expect(lines(exited)).toContainEqual(expect.stringMatching(/└▸ exit code 3/));
     });
 
     it('marks failures with a red error line and background calls as started', () => {

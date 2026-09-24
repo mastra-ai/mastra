@@ -472,7 +472,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       args,
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
@@ -549,6 +549,22 @@ export function handleShellOutput(
 }
 
 /**
+ * Handle the sandbox's exit record for an execute_command call. It decides pass/fail even when the
+ * result text doesn't say, e.g. when the sandbox itself threw and the result is a bare `Error: …`.
+ */
+export function handleCommandExit(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  exitCode: number,
+  success: boolean,
+): void {
+  const component = ctx.state.pendingTools.get(toolCallId);
+  if (!component?.setCommandExit) return;
+  component.setCommandExit({ exitCode, success });
+  requestRender(ctx.state);
+}
+
+/**
  * Handle the start of streaming tool call input arguments.
  * Creates the tool component early so partial args can render as they arrive.
  */
@@ -620,7 +636,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
