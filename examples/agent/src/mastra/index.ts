@@ -133,9 +133,9 @@ const duckdbStore = new DuckDBStore({ path: './mastra-observability.duckdb' });
 const storage = new MastraCompositeStore({
   id: 'composite-storage',
   default: libsqlStore,
-  // domains: {
-  //   observability: duckdbStore.observability,
-  // },
+  domains: {
+    observability: duckdbStore.observability,
+  },
 });
 
 export const mastra = new Mastra({
