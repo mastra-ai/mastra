@@ -58,6 +58,20 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: "'auto'",
   },
   {
+    name: 'autoModels',
+    type: 'Record<string, string>',
+    description:
+      'Overrides the model automatic selection picks for a provider, keyed by provider ID. For example, `{ openai: "__GATEWAY_OPENAI_MODEL_NANO__" }`. Providers not listed use the built-in pick.',
+    isOptional: true,
+  },
+  {
+    name: 'resolveModel',
+    type: '(modelId: string, context: { requestContext?: RequestContext }) => MastraModelConfig | Promise<MastraModelConfig>',
+    description:
+      'Creates the model automatic selection picked, so it can use your credentials and routing. Receives only concrete model IDs, never `"auto"`. When omitted, the picked ID goes through Mastra model routing.',
+    isOptional: true,
+  },
+  {
     name: 'scope',
     type: "'resource' | 'thread'",
     description:

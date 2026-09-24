@@ -79,7 +79,7 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 `/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 
-For legacy settings without a saved per-role [observational memory model selection](#om-model-settings), the same chain also covers observational memory. If the active pack's memory-model provider is unavailable, the role falls back to the next pack's memory model in chain order.
+When the active pack sets a concrete [memory model](#om-model-settings), the same chain also covers observational memory. If that model's provider is unavailable, the role falls back to the next pack's memory model in chain order.
 
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
@@ -729,7 +729,15 @@ The observer and reflector default to **Auto**. Each role follows the active mai
 
 Use the `/om` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
 
-Custom model packs can carry an optional legacy memory model stored as `models.memory`. For settings created before per-role selections were introduced, Mastra Code checks explicit role overrides, then the active pack and its fallback chain, then the standalone memory setting. Saving either **Auto** or a concrete per-role selection replaces this legacy fallback behavior for that role.
+Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/om` to switch a role back.
+
+Custom model packs can also set a memory model in `/models`, which applies to both roles while the pack is active:
+
+| Pack memory model | Behavior |
+| - | - |
+| Not set (default) | Each role uses its `/om` selection |
+| **Auto** | Both roles use automatic selection |
+| Concrete model | Both roles use that model. If its provider is unavailable, the role uses the next fallback pack's memory model |
 
 ### OM thresholds
 

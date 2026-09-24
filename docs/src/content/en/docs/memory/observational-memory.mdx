@@ -562,7 +562,22 @@ The Observer and Reflector run in the background. Any model that works with Mast
 
 Automatic selection uses `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is configured. Otherwise, it selects a low-cost model for the active main model's provider, then falls back to the active main model. Observer and Reflector resolve independently before each invocation.
 
-For a plain router-backed model instance, automatic selection can reuse its `provider/model` ID and select the provider's low-cost model. It preserves the original instance when the router has custom routing configuration, such as a URL, API key, headers, transport API, or custom gateway, because a sibling model isn't known to share that route. It also preserves router instances from older compatible Core versions that don't expose routing provenance. Pass a concrete model ID to the role to override either behavior.
+Automatic selection reads the main model's `provider/model` ID. Models created from a plain model string carry that ID, and a dynamic model function can label a custom model by returning `{ model, id }`. When the ID is unknown, such as a model with a custom URL, API key, headers, or gateway, automatic selection reuses the main model itself because a sibling model isn't known to share that route. Pass a concrete model ID to the role to override either behavior.
+
+Use `autoModels` to change the model picked for a provider, and `resolveModel` to create the picked model with your own credentials or routing:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      autoModels: { openai: '__GATEWAY_OPENAI_MODEL_NANO__' },
+      resolveModel: (modelId, { requestContext }) => createRoutedModel(modelId, requestContext),
+    },
+  },
+})
+```
+
+`resolveAutoModelId(mainModelId, { autoModels })` from `@mastra/memory` returns the model automatic selection would pick, which is useful for showing the effective model in a settings UI.
 
 Mastra recommends using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
