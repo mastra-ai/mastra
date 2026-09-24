@@ -447,7 +447,7 @@ console.log(result.scores.trajectory['trajectory-accuracy'])
 
 ### Multiple trajectory gates on one workflow
 
-To assert several independent facts about a run, create one scorer per expectation and give each a unique `id`. Without an override every instance shares the default id, so `runEvals` merges them into a single averaged row and a failing gate can't be attributed to one expectation.
+To assert several independent facts about a run, create one scorer per expectation and give each a unique `id`. Without an override every instance shares the default id, so `runEvals` collapses them into a single result and a failing gate can't be attributed to one expectation.
 
 ```typescript title="src/example-trajectory-gates.ts"
 import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'

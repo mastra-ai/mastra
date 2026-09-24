@@ -8,9 +8,12 @@ interface ContentSimilarityOptions extends ScorerIdentityOptions {
   ignoreWhitespace?: boolean;
 }
 
-export function createContentSimilarityScorer(
-  { ignoreCase, ignoreWhitespace, id, name }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
-) {
+export function createContentSimilarityScorer({
+  ignoreCase = true,
+  ignoreWhitespace = true,
+  id,
+  name,
+}: ContentSimilarityOptions = {}) {
   return createScorer({
     id: id ?? 'content-similarity-scorer',
     name: name ?? 'Content Similarity Scorer',

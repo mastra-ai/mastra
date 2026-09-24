@@ -980,17 +980,29 @@ function validateEvalsInputs(
     });
   }
 
-  if (Array.isArray(scorers)) warnDuplicateScorerIds(scorers, 'scorers');
+  if (Array.isArray(scorers)) {
+    warnDuplicateScorerIds(scorers, 'scorers');
+  } else {
+    if (scorers.trajectory) warnDuplicateScorerIds(scorers.trajectory, 'scorers.trajectory');
+    if ('agent' in scorers && scorers.agent) warnDuplicateScorerIds(scorers.agent, 'scorers.agent');
+    if ('workflow' in scorers && scorers.workflow) warnDuplicateScorerIds(scorers.workflow, 'scorers.workflow');
+    if ('steps' in scorers && scorers.steps) {
+      for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
+        warnDuplicateScorerIds(stepScorers, `scorers.steps.${stepId}`);
+      }
+    }
+  }
   if (gates) warnDuplicateScorerIds(gates, 'gates');
 }
 
 const runEvalsLogger = new ConsoleLogger({ name: 'runEvals', level: LogLevel.WARN });
 
 /**
- * Results are keyed by scorer id, so entries sharing an id are merged into a
- * single averaged row. Prebuilt factories accept `{ id }` to disambiguate.
+ * Results are keyed by scorer id, so entries sharing an id collapse into one
+ * result (a later scorer overwrites the earlier one's score for an item;
+ * gates pool their scores). Prebuilt factories accept `{ id }` to disambiguate.
  */
-function warnDuplicateScorerIds(scorers: MastraScorer<any, any, any, any>[], field: 'scorers' | 'gates'): void {
+function warnDuplicateScorerIds(scorers: MastraScorer<any, any, any, any>[], field: string): void {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const scorer of scorers) {
@@ -999,7 +1011,7 @@ function warnDuplicateScorerIds(scorers: MastraScorer<any, any, any, any>[], fie
   }
   for (const id of duplicates) {
     runEvalsLogger.warn(
-      `Duplicate scorer id "${id}" in \`${field}\`. Results are keyed by id, so these entries will be reported as a single averaged row and a failure can't be attributed to one of them. ` +
+      `Duplicate scorer id "${id}" in \`${field}\`. Results are keyed by id, so these entries collapse into a single result and a failure can't be attributed to one of them. ` +
         `Pass a unique id to the factory, e.g. createTrajectoryAccuracyScorerCode({ id: 'fetch-weather-ran', ... }).`,
     );
   }

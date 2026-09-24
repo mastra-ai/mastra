@@ -104,7 +104,7 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
     name: 'gates',
     type: 'MastraScorer[]',
     description:
-      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item. When provided, `scorers` may be omitted. Each gate needs a unique id: results are keyed by id, so gates sharing an id are merged into one row (pass `{ id }` to prebuilt factories to disambiguate).',
+      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item. When provided, `scorers` may be omitted. Each gate needs a unique id: results are keyed by id, so gates sharing an id collapse into one result (pass `{ id }` to prebuilt factories to disambiguate).',
     isOptional: true,
   },
   {

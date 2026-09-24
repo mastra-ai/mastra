@@ -361,6 +361,33 @@ describe('runEvals', () => {
       }
     });
 
+    it('should warn on duplicate ids inside structured scorer configs', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: {
+            agent: [createMockScorer('toxicity', 0.9), createMockScorer('toxicity', 0.9)],
+            trajectory: [
+              createMockScorer('code-trajectory-accuracy-scorer', 1),
+              createMockScorer('code-trajectory-accuracy-scorer', 1),
+            ],
+          },
+          target: mockAgent,
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Duplicate scorer id "toxicity" in `scorers.agent`'),
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Duplicate scorer id "code-trajectory-accuracy-scorer" in `scorers.trajectory`'),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('should not warn when scorer ids are unique', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
