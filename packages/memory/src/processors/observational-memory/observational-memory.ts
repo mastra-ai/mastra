@@ -275,6 +275,8 @@ import type {
   ObservationModelContext,
 } from './types';
 
+let hasWarnedResourceScopeDeprecation = false;
+
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -483,6 +485,15 @@ export class ObservationalMemory {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    if (this.scope === 'resource' && !hasWarnedResourceScopeDeprecation) {
+      hasWarnedResourceScopeDeprecation = true;
+      console.warn(
+        "[Mastra] Observational memory `scope: 'resource'` is deprecated and will be removed in a future release " +
+          'because it works much worse than thread scope for prompt caching and agent understanding. ' +
+          'Remove `scope` to use the default thread scope, and enable `retrieval` for cross-thread recall. ' +
+          'See https://mastra.ai/docs/memory/observational-memory#resource-scope-deprecated',
+      );
+    }
     this.retrieval = Boolean(config.retrieval);
     this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
     this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;

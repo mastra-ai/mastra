@@ -1009,6 +1009,11 @@ export interface ObservationalMemoryConfig {
    * Memory scope for observations.
    * - 'resource': Observations span all threads for a resource (cross-thread memory)
    * - 'thread': Observations are per-thread (default)
+   *
+   * @deprecated `scope: 'resource'` is deprecated and will be removed in a future release. It works much
+   * worse than thread scope for prompt caching and agent understanding. Omit this option to use the default
+   * thread scope. For cross-thread recall, enable `retrieval`; for durable facts across threads, use
+   * resource-scoped working memory. A new knowledge and subconscious memory primitive will replace it.
    */
   scope?: 'resource' | 'thread';
 
