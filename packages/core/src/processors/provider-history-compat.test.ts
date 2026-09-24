@@ -2053,6 +2053,44 @@ describe('anthropicToolIdFormat.applyToPrompt', () => {
     expect(idsIn(second!)).toEqual(ids);
   });
 
+  it('assigns distinct replacements when two calls share one invalid original id', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'one', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'dup.id', toolName: 'one', output: { type: 'text', value: 'first' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'two', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'dup.id', toolName: 'two', output: { type: 'text', value: 'second' } },
+        ],
+      },
+    ];
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    expect(result).toBeDefined();
+    const [firstCall, firstResult, secondCall, secondResult] = idsIn(result!);
+    // Every outbound tool_use.id is unique — Anthropic rejects duplicates.
+    expect(new Set([firstCall, secondCall]).size).toBe(2);
+    // Pairing is preserved: each result keeps the id of its call, in order.
+    expect(firstResult).toBe(firstCall);
+    expect(secondResult).toBe(secondCall);
+    for (const id of [firstCall, firstResult, secondCall, secondResult]) {
+      expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    }
+  });
+
   it('is reached through ProviderHistoryCompat.processLLMRequest', async () => {
     const handler = new ProviderHistoryCompat();
 

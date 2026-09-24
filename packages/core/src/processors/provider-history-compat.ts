@@ -161,15 +161,17 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
  * pairing intact. Nothing is persisted — the prompt is rebuilt, and the
  * original ids stay in the message list.
  *
- * Replacements are assigned in encounter order and never collide with an id
- * the prompt already carries: a sanitized id that is already claimed — by
- * another original id or by a valid id elsewhere in the prompt — gets `_2`,
- * `_3`, … appended until it is unique. Anthropic rejects duplicate
+ * Replacements are assigned per call, in encounter order, and never collide
+ * with an id the prompt already carries: a sanitized id that is already
+ * claimed — by another original id or by a valid id elsewhere in the prompt —
+ * gets `_2`, `_3`, … appended until it is unique. Anthropic rejects duplicate
  * `tool_use.id` values, so uniqueness is what keeps call/result pairing
- * resolvable.
+ * resolvable. Two calls that share one invalid original id still receive
+ * distinct replacements; the nth result carrying that id pairs with the nth
+ * call, which is the only resolvable reading of an already-degenerate prompt.
  */
 function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt | undefined {
-  const rename = new Map<string, string>();
+  const replacements = new Map<string, string[]>();
   const claimed = new Set<string>();
 
   // Every id the prompt carries is unavailable as a replacement target.
@@ -185,13 +187,14 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
     }
   }
 
-  // Assign replacements to invalid ids in encounter order.
+  // Assign a replacement to every call with an invalid id, per occurrence.
+  let assigned = 0;
   for (const message of prompt) {
     if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
     for (const part of message.content) {
       if (part.type !== 'tool-call') continue;
       const id = part.toolCallId;
-      if (VALID_TOOL_ID_PATTERN.test(id) || rename.has(id)) continue;
+      if (VALID_TOOL_ID_PATTERN.test(id)) continue;
 
       const sanitized = sanitizeToolId(id);
       let candidate = sanitized;
@@ -199,18 +202,35 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
         candidate = `${sanitized}_${suffix}`;
       }
       claimed.add(candidate);
-      rename.set(id, candidate);
+      const queue = replacements.get(id);
+      if (queue) queue.push(candidate);
+      else replacements.set(id, [candidate]);
+      assigned++;
     }
   }
 
-  if (rename.size === 0) return undefined;
+  if (assigned === 0) return undefined;
+
+  // Calls and results interleave in the prompt, so each side tracks its own
+  // occurrence index: the nth result carrying an id pairs with the nth call.
+  const callIndex = new Map<string, number>();
+  const resultIndex = new Map<string, number>();
+  const takeAt = (index: Map<string, number>, id: string): string | undefined => {
+    const queue = replacements.get(id);
+    if (!queue) return undefined;
+    const i = index.get(id) ?? 0;
+    index.set(id, i + 1);
+    return i < queue.length ? queue[i] : undefined;
+  };
+  const takeCall = (id: string) => takeAt(callIndex, id);
+  const takeResult = (id: string) => takeAt(resultIndex, id);
 
   const rewritten: LanguageModelV2Prompt = prompt.map(message => {
     if (message.role === 'assistant' && Array.isArray(message.content)) {
       let changed = false;
       const content = message.content.map(part => {
         if (part.type !== 'tool-call') return part;
-        const replacement = rename.get(part.toolCallId);
+        const replacement = takeCall(part.toolCallId);
         if (!replacement) return part;
         changed = true;
         return { ...part, toolCallId: replacement };
@@ -221,7 +241,7 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
     if (message.role === 'tool') {
       let changed = false;
       const content = message.content.map(part => {
-        const replacement = rename.get(part.toolCallId);
+        const replacement = takeResult(part.toolCallId);
         if (!replacement) return part;
         changed = true;
         return { ...part, toolCallId: replacement };
