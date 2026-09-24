@@ -61,14 +61,6 @@ interface BaseSpan<TType extends SpanType> {
 }
 ```
 
-### Event spans
-
-An event span (`isEvent: true`) records a point-in-time occurrence, such as a `tool-result` or `tool-call-approval` model chunk. Event spans are emitted as soon as they're created and never end, so they have no `endTime` by design:
-
-- `endTime` is `undefined` on the span, and stored or exported span records have `endedAt: null`.
-- Use `isEvent` to tell an event span apart from a span that is still running. A span with `isEvent: false` and no `endTime` is still open. A span with `isEvent: true` is always complete.
-- Treat the duration of an event span as zero.
-
 ## Span
 
 Span interface, used internally for tracing. Extends BaseSpan with lifecycle methods and properties.
@@ -262,7 +254,7 @@ createEventSpan<TChildType extends SpanType>(
 ): Span<TChildType>
 ```
 
-Creates an event span under this span. Event spans represent point-in-time occurrences with no duration. They're emitted immediately and have no `endTime`. See [Event spans](#event-spans).
+Creates an event span under this span. Event spans represent point-in-time occurrences with no duration.
 
 <PropertiesTable
   props={[
