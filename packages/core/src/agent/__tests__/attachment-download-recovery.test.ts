@@ -3,11 +3,13 @@ import { createServer } from 'node:http';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { Memory } from '../../../../memory/src';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, Processor } from '../../processors';
 import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
 
@@ -41,6 +43,42 @@ function makeModel(supported = false) {
   });
   return { model, prompts };
 }
+
+/** Calls a tool on its first step, then answers, so one run makes two model calls. */
+function makeToolCallingModel() {
+  const prompts: LanguageModelV2Prompt[] = [];
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  const model = new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      prompts.push(prompt);
+      return {
+        stream: convertArrayToReadableStream(
+          prompts.length === 1
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+                { type: 'finish', finishReason: 'tool-calls', usage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 'text' },
+                { type: 'text-delta', id: 'text', delta: 'ok' },
+                { type: 'text-end', id: 'text' },
+                { type: 'finish', finishReason: 'stop', usage },
+              ],
+        ),
+      };
+    },
+  });
+  return { model, prompts };
+}
+
+const lookupTool = createTool({
+  id: 'lookup',
+  description: 'Look something up',
+  inputSchema: z.object({}),
+  execute: async () => ({ found: true }),
+});
 
 describe('attachment download recovery', () => {
   let server: ReturnType<typeof createServer>;
@@ -79,11 +117,13 @@ describe('attachment download recovery', () => {
     errorProcessor,
     inputProcessor,
     models,
+    tools,
   }: {
     durable?: boolean;
     errorProcessor?: ErrorProcessorOrWorkflow;
     inputProcessor?: InputProcessorOrWorkflow;
     models?: MockLanguageModelV2[];
+    tools?: Record<string, typeof lookupTool>;
   } = {}) {
     const { model, prompts } = makeModel();
     const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 100, generateTitle: false } });
@@ -95,6 +135,7 @@ describe('attachment download recovery', () => {
       memory,
       inputProcessors: inputProcessor ? [inputProcessor] : [],
       errorProcessors: errorProcessor ? [errorProcessor] : [],
+      tools,
     });
     const pubsub = new EventEmitterPubSub();
     pubsubs.push(pubsub);
@@ -187,38 +228,114 @@ describe('attachment download recovery', () => {
     }
   }
 
-  it.each([false, true])('fails closed with an error processor present: %s', async present => {
-    const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
-    const { run, memory, prompts } = setup({
-      errorProcessor: present ? { id: 'decline', processAPIError } : undefined,
-    });
-    expect((await run(attachment())).text).toBe('ok');
-    await waitForHistory(memory);
-    failure = '404';
-    for (let turn = 0; turn < 2; turn++) {
-      const result = await run('Continue');
-      expect(result.text).toBe('');
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toMatchObject({ id: 'DOWNLOAD_ASSETS_FAILED', details: { url } });
-      if (present) expect(result.errors[0]).toBe(processAPIError.mock.calls[turn]![0].error);
-    }
-    expect(processAPIError).toHaveBeenCalledTimes(present ? 2 : 0);
-    expect(prompts).toHaveLength(1);
-    expect(requests).toBe(3);
+  function promptAttachments(prompt: LanguageModelV2Prompt) {
+    const parts = prompt.flatMap(message => (message.role === 'user' ? message.content : []));
+    return {
+      files: parts.filter(part => part.type === 'file'),
+      placeholders: parts.flatMap(part =>
+        part.type === 'text' && part.text.startsWith('[Attachment unavailable') ? [part.text] : [],
+      ),
+    };
+  }
+
+  describe.each([false, true])('durable: %s', durable => {
+    it.each([false, true])(
+      'skips an unavailable attachment that nothing recovers, with an error processor present: %s',
+      async present => {
+        const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
+        const { run, memory, prompts } = setup({
+          durable,
+          errorProcessor: present ? { id: 'decline', processAPIError } : undefined,
+        });
+        expect((await run(attachment())).text).toBe('ok');
+        await waitForHistory(memory);
+        failure = '404';
+        for (let turn = 0; turn < 2; turn++) {
+          const result = await run('Continue');
+          expect(result.errors).toEqual([]);
+          expect(result.text).toBe('ok');
+        }
+        // Error processors still get the first chance to recover, on the turn it first fails.
+        expect(processAPIError).toHaveBeenCalledTimes(present ? 1 : 0);
+        expect(prompts).toHaveLength(3);
+        for (const prompt of prompts.slice(1)) {
+          expect(promptAttachments(prompt)).toEqual({
+            files: [],
+            placeholders: ['[Attachment unavailable: application/pdf]'],
+          });
+        }
+        // First turn, then the failed download and the check before skipping it. The
+        // attachment is then recorded as unavailable, so the last turn does not fetch it.
+        expect(requests).toBe(3);
+        await waitForHistory(memory); // The attachment itself stays in stored history.
+        const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
+        const stored = messages.find(message => JSON.stringify(message.content.parts).includes(url));
+        expect(stored?.content.metadata?.mastra).toMatchObject({ unavailableAttachments: [url] });
+      },
+    );
   });
 
-  it.each([0, 2])('bounds unsuccessful processor retries to %i', async budget => {
+  describe.each([false, true])('durable: %s', durable => {
+    it('downloads an attachment once per run, not once per step', async () => {
+      const toolCalling = makeToolCallingModel();
+      const { run } = setup({ durable, models: [toolCalling.model], tools: { lookup: lookupTool } });
+      const result = await run(attachment());
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      expect(toolCalling.prompts).toHaveLength(2);
+      for (const prompt of toolCalling.prompts) {
+        expect(promptAttachments(prompt).files).toHaveLength(1);
+      }
+      expect(requests).toBe(1);
+    });
+
+    it('replaces an undecodable data URL in history with a placeholder right away', async () => {
+      const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: true }));
+      const { run, memory, prompts } = setup({ durable, errorProcessor: { id: 'unused', processAPIError } });
+      // A relative path persisted as a base64 data URL by older versions (#23705).
+      await memory.saveThread({
+        thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'poisoned',
+            role: 'user',
+            threadId: 'thread',
+            resourceId: 'resource',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Look at this' },
+                { type: 'file', mimeType: 'image/svg+xml', data: 'data:image/svg+xml;base64,/api/images/foo.svg' },
+              ],
+            },
+          },
+        ],
+      });
+      const result = await run('Continue');
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      expect(processAPIError).not.toHaveBeenCalled();
+      expect(prompts).toHaveLength(1);
+      expect(promptAttachments(prompts[0]!).placeholders).toEqual(['[Attachment unavailable: image/svg+xml]']);
+    });
+  });
+
+  it.each([0, 2])('bounds unsuccessful processor retries to %i before skipping the attachment', async budget => {
     const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: true }));
     const { run, prompts } = setup({ errorProcessor: { id: 'retry-without-repair', processAPIError } });
     failure = '404';
     const result = await run(attachment(), budget);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toBe(processAPIError.mock.calls[budget]![0].error);
+    expect(result.errors).toEqual([]);
+    expect(result.text).toBe('ok');
     expect(processAPIError.mock.calls.map(([args]) => args.retryCount)).toEqual(
       Array.from({ length: budget + 1 }, (_, i) => i),
     );
-    expect(prompts).toHaveLength(0);
-    expect(requests).toBe(budget + 1);
+    expect(prompts).toHaveLength(1);
+    expect(promptAttachments(prompts[0]!).placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+    expect(requests).toBe(budget + 2);
   });
 
   it('retries the same model before advancing to a fallback', async () => {

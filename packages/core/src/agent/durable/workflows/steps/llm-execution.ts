@@ -10,6 +10,7 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { persistUnavailableAttachments } from '../../../../loop/shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
@@ -41,6 +42,7 @@ import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
+import { isDownloadAssetsError } from '../../../message-list/prompt/download-assets';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
@@ -308,6 +310,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // 4. Execute with model fallback - try each model in the list with retries
       let lastError: Error | undefined;
       let processorRetryCount = 0;
+      let skipUnavailableAttachments = false;
       const maxProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries: typedInput.options?.maxProcessorRetries,
         hasErrorProcessors: Boolean(globalRunRegistry.get(runId)?.errorProcessors?.length),
@@ -649,6 +652,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // ever become user-facing they should be plumbed in identically.
             const messageListPromptArgs = await buildLlmPromptArgs({
               model: currentModel,
+              skipUnavailableAttachments,
             });
             const llmPromptForModel =
               currentModel.specificationVersion === 'v4'
@@ -657,6 +661,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ? messageList.get.all.aiV6.llmPrompt
                   : messageList.get.all.aiV5.llmPrompt;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            await persistUnavailableAttachments({
+              messageList,
+              memory: globalRunRegistry.get(runId)?.memory,
+              readOnly: typedInput.state?.memoryConfig?.readOnly,
+              logger,
+            });
 
             // Inject the auto-resume directive into the leading system message when
             // there are suspended tools waiting for resumption (parity with the
@@ -1920,6 +1930,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               } catch (processorError) {
                 logger?.debug?.(`processAPIError handler failed: ${processorError}`, { runId });
               }
+            }
+
+            // Nothing recovered an attachment download failure. Rather than failing the
+            // turn (and every later turn that replays the same history), retry the last
+            // model once with unavailable attachments replaced by a placeholder.
+            if (
+              attempt >= maxRetries &&
+              modelIndex === modelList.length - 1 &&
+              !skipUnavailableAttachments &&
+              isDownloadAssetsError(lastError)
+            ) {
+              logger?.warn?.('Could not download an attachment; retrying without unavailable attachments', {
+                runId,
+                error: lastError.message,
+              });
+              skipUnavailableAttachments = true;
+              attempt--;
+              continue;
             }
 
             if (attempt >= maxRetries) {

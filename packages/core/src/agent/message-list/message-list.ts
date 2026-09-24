@@ -32,8 +32,14 @@ import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
-import { downloadAssetsFromMessages } from './prompt/download-assets';
+import { downloadAssetsFromMessages, getAssetUrl } from './prompt/download-assets';
+import type { AssetDownloadCache } from './prompt/download-assets';
 import { assertValidFilePartDataString, resolveFilePartMediaTypeAndData } from './prompt/image-utils';
+import {
+  getMessageAttachmentUrls,
+  getUnavailableAttachmentUrls,
+  withUnavailableAttachmentUrls,
+} from './prompt/unavailable-attachments';
 import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
@@ -306,6 +312,11 @@ export class MessageList {
   private get userContextMessagesPersisted() {
     return this.stateManager.getContextMessagesPersisted();
   }
+
+  // Each attachment is downloaded at most once per MessageList (i.e. per run).
+  private assetDownloads: AssetDownloadCache = new Map();
+  // Attachment URLs newly found unavailable, by message id, awaiting persistence.
+  private unavailableAttachmentUpdates = new Map<string, Set<string>>();
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
@@ -933,6 +944,11 @@ export class MessageList {
            * @see https://github.com/mastra-ai/mastra/issues/23082
            */
           targetProvider?: string;
+          /**
+           * Replace user attachments that fail to download with a text placeholder
+           * instead of failing the whole prompt, and record them as unavailable.
+           */
+          skipUnavailableAttachments?: boolean;
         } = {
           downloadConcurrency: 10,
           downloadRetries: 3,
@@ -994,11 +1010,24 @@ export class MessageList {
           this.messages,
         );
 
+        const unavailableUrls = new Set(
+          this.messages.filter(message => message.role === 'user').flatMap(getUnavailableAttachmentUrls),
+        );
         const downloadedAssets = await downloadAssetsFromMessages({
           messages: modelMessages,
           downloadConcurrency: options?.downloadConcurrency,
           downloadRetries: options?.downloadRetries,
           supportedUrls: options?.supportedUrls,
+          cache: this.assetDownloads,
+          isUnavailable: url => unavailableUrls.has(url),
+          onUnavailable: (url, error) => {
+            const isDataUrl = url.startsWith('data:');
+            // A network download failure goes to error processors and fallback models first.
+            if (!isDataUrl && !options?.skipUnavailableAttachments) throw error;
+            unavailableUrls.add(url);
+            if (!isDataUrl) this.recordUnavailableAttachment(url);
+            this.logger?.warn(`Skipping an attachment that could not be downloaded: ${error.message}`);
+          },
         });
 
         let messages = [...systemMessages, ...modelMessages];
@@ -1025,6 +1054,11 @@ export class MessageList {
               const convertedContent = message.content
                 .map(part => {
                   if (part.type === 'image' || part.type === 'file') {
+                    const assetUrl = getAssetUrl(part);
+                    if (assetUrl && unavailableUrls.has(assetUrl)) {
+                      const name = (part.type === 'file' && part.filename) || part.mediaType || part.type;
+                      return { type: 'text' as const, text: `[Attachment unavailable: ${name}]` };
+                    }
                     return convertImageFilePart(part, downloadedAssets);
                   }
                   return part;
@@ -1078,6 +1112,7 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
+        skipUnavailableAttachments?: boolean;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
     aiV7: {
@@ -1090,6 +1125,7 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
+        skipUnavailableAttachments?: boolean;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
@@ -1312,6 +1348,30 @@ export class MessageList {
         ),
     },
   };
+
+  private recordUnavailableAttachment(url: string) {
+    for (const message of this.messages) {
+      if (message.role !== 'user' || !getMessageAttachmentUrls(message).includes(url)) continue;
+      message.content.metadata = withUnavailableAttachmentUrls(message.content.metadata, [url]);
+      const urls = this.unavailableAttachmentUpdates.get(message.id) ?? new Set<string>();
+      urls.add(url);
+      this.unavailableAttachmentUpdates.set(message.id, urls);
+    }
+  }
+
+  /**
+   * Returns and clears the attachments newly recorded as unavailable while building
+   * prompts. The in-memory messages already carry the record; callers persist it for
+   * messages that were loaded from storage.
+   */
+  public drainUnavailableAttachmentUpdates(): { messageId: string; urls: string[] }[] {
+    const updates = [...this.unavailableAttachmentUpdates].map(([messageId, urls]) => ({
+      messageId,
+      urls: [...urls],
+    }));
+    this.unavailableAttachmentUpdates.clear();
+    return updates;
+  }
 
   public drainUnsavedMessages(): MastraDBMessage[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));

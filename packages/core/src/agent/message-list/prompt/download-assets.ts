@@ -71,16 +71,51 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
   }
 };
 
+function toAssetUrl(part: AIV5Type.ImagePart | AIV5Type.FilePart) {
+  const data = part.type === 'image' ? part.image : part.data;
+  if (typeof data !== 'string') return data;
+  try {
+    return new URL(data);
+  } catch {
+    return data;
+  }
+}
+
+/** The key a part's download result is stored under, or `undefined` when the part is not a URL. */
+export function getAssetUrl(part: AIV5Type.ImagePart | AIV5Type.FilePart): string | undefined {
+  const data = toAssetUrl(part);
+  return data instanceof URL ? data.toString() : undefined;
+}
+
+/**
+ * Successful downloads keyed by URL, shared across the prompt builds of one run so
+ * each attachment is downloaded at most once per run. Failures are not kept, so a
+ * retry requested by an error processor fetches again.
+ */
+export type AssetDownloadCache = Map<string, ReturnType<typeof downloadFromUrl>>;
+
+export function isDownloadAssetsError(error: unknown): error is MastraError {
+  return error instanceof MastraError && error.id === 'DOWNLOAD_ASSETS_FAILED';
+}
+
 export async function downloadAssetsFromMessages({
   messages,
   downloadConcurrency = 10,
   downloadRetries = 3,
   supportedUrls,
+  cache,
+  isUnavailable,
+  onUnavailable,
 }: {
   messages: AIV5Type.ModelMessage[];
   downloadConcurrency?: number;
   downloadRetries?: number;
   supportedUrls?: Record<string, RegExp[]>;
+  cache?: AssetDownloadCache;
+  /** Returns true for URLs already known to be unavailable. They are not fetched. */
+  isUnavailable?: (url: string) => boolean;
+  /** When set, a failed download is reported here instead of failing the whole prompt. */
+  onUnavailable?: (url: string, error: MastraError) => void;
 }) {
   const pMap = (await import('p-map')).default;
 
@@ -93,14 +128,7 @@ export async function downloadAssetsFromMessages({
     .map(part => {
       const mediaType = part.mediaType ?? (part.type === 'image' ? 'image/*' : undefined);
 
-      let data = part.type === 'image' ? part.image : part.data;
-      if (typeof data === 'string') {
-        try {
-          data = new URL(data);
-        } catch {}
-      }
-
-      return { mediaType, data };
+      return { mediaType, data: toAssetUrl(part) };
     })
 
     .filter((part): part is { mediaType: string | undefined; data: URL } => part.data instanceof URL)
@@ -120,13 +148,28 @@ export async function downloadAssetsFromMessages({
   const downloadedFiles = await pMap(
     filesToDownload,
     async fileItem => {
-      if (fileItem.isUrlSupportedByModel) {
+      const url = fileItem.url.toString();
+      if (fileItem.isUrlSupportedByModel || isUnavailable?.(url)) {
         return null;
       }
-      return {
-        url: fileItem.url.toString(),
-        ...(await downloadFromUrl({ url: fileItem.url, downloadRetries })),
-      };
+      let download = cache?.get(url);
+      if (!download) {
+        download = downloadFromUrl({ url: fileItem.url, downloadRetries });
+        if (cache) {
+          const cached = download;
+          cache.set(url, cached);
+          cached.catch(() => {
+            if (cache.get(url) === cached) cache.delete(url);
+          });
+        }
+      }
+      try {
+        return { url, ...(await download) };
+      } catch (error) {
+        if (!onUnavailable || !isDownloadAssetsError(error)) throw error;
+        onUnavailable(url, error);
+        return null;
+      }
     },
     {
       concurrency: downloadConcurrency,
