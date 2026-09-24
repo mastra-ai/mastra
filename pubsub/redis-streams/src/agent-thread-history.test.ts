@@ -27,6 +27,7 @@ function makeAgent(stored: () => unknown[]) {
   return {
     id: 'redis-history-agent',
     getMemory: async () => ({
+      getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
       recall: async () => ({ messages: [...stored()].reverse(), hasMore: false }),
     }),
   } as any;
