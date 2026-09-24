@@ -1,16 +1,10 @@
 import type { TaskItem } from '@mastra/core/signals';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { TaskGraphLines } from './task-graph';
-import {
-  TASK_ROW_HEIGHT,
-  taskGraphLaneShift,
-  taskGraphMotion,
-  glideScrollTop,
-  taskGraphNodeClass,
-  useCompletionPulse,
-} from './task-graph-node';
+import { TASK_ROW_HEIGHT, taskGraphLaneShift, taskGraphMotion, taskGraphNodeClass } from './task-graph-node';
+import { useFocusedRowScroll } from './use-focused-row-scroll';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -148,36 +142,28 @@ export interface TaskListRowProps extends ComponentProps<'li'> {
   task: TaskListItem;
 }
 
-export const TaskListRow = ({ task, className, style, ...props }: TaskListRowProps) => {
-  const pulseRef = useCompletionPulse<HTMLSpanElement>(task.status);
-  return (
-    <li
-      className={cn('relative flex items-center', className)}
-      style={{ height: TASK_ROW_HEIGHT, ...style }}
-      {...props}
+export const TaskListRow = ({ task, className, style, ...props }: TaskListRowProps) => (
+  <li className={cn('relative flex items-center', className)} style={{ height: TASK_ROW_HEIGHT, ...style }} {...props}>
+    <TaskListStatusIcon
+      status={task.status}
+      className={cn(
+        taskGraphNodeClass,
+        taskGraphMotion,
+        taskGraphLaneShift[task.status],
+        'group-data-collapsed/task-list:translate-x-0',
+      )}
+    />
+    <span
+      className={cn(
+        'flex min-w-0 transition-[padding-left]',
+        taskGraphMotion,
+        task.status === 'in_progress' ? 'pl-10 group-data-collapsed/task-list:pl-6' : 'pl-6',
+      )}
     >
-      <TaskListStatusIcon
-        ref={pulseRef}
-        status={task.status}
-        className={cn(
-          taskGraphNodeClass,
-          taskGraphMotion,
-          taskGraphLaneShift[task.status],
-          'group-data-collapsed/task-list:translate-x-0',
-        )}
-      />
-      <span
-        className={cn(
-          'flex min-w-0 transition-[padding-left]',
-          taskGraphMotion,
-          task.status === 'in_progress' ? 'pl-10 group-data-collapsed/task-list:pl-6' : 'pl-6',
-        )}
-      >
-        <TaskListLabel task={task} />
-      </span>
-    </li>
-  );
-};
+      <TaskListLabel task={task} />
+    </span>
+  </li>
+);
 
 const EXPANDED_VISIBLE_ROWS = 4.5;
 const LIST_INSET_Y = 10;
@@ -187,15 +173,12 @@ const edgeFades =
   'mask-no-repeat [--fade-bottom:0.875rem] [--fade-top:0.875rem] [mask-composite:subtract,add] [mask-image:linear-gradient(black,black),linear-gradient(to_bottom,black_40%,transparent),linear-gradient(to_top,black_40%,transparent)] [mask-position:0_0,0_0,0_100%] [mask-size:100%_100%,100%_var(--fade-top),100%_var(--fade-bottom)]';
 const edgeFadesWhenScrolled = 'data-[overflow-y-end]:[--fade-bottom:2rem] data-[overflow-y-start]:[--fade-top:2rem]';
 
-const clampScrollTop = (top: number, contentHeight: number, windowHeight: number) =>
-  Math.min(Math.max(top, 0), Math.max(contentHeight - windowHeight, 0));
-
-const revealedScrollTop = (rowIndex: number, currentTop: number, windowHeight: number) => {
-  const rowTop = rowIndex * TASK_ROW_HEIGHT;
-  const rowBottom = rowTop + TASK_ROW_HEIGHT;
-  if (rowTop < currentTop) return rowTop;
-  if (rowBottom > currentTop + windowHeight) return rowBottom - windowHeight;
-  return currentTop;
+const focusedTaskIndex = (tasks: TaskListItem[]) => {
+  const activeIndex = tasks.findIndex(task => task.status === 'in_progress');
+  if (activeIndex >= 0) return activeIndex;
+  const pendingIndex = tasks.findIndex(task => task.status === 'pending');
+  if (pendingIndex >= 0) return pendingIndex;
+  return tasks.length - 1;
 };
 
 export interface TaskListProps extends Omit<ComponentProps<typeof TaskListContainer>, 'children'> {
@@ -215,33 +198,17 @@ export const TaskList = ({
 }: TaskListProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const listId = useId();
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const placedOnce = useRef(false);
   const completed = tasks.filter(task => task.status === 'completed').length;
   const total = tasks.length;
-  const activeIndex = tasks.findIndex(task => task.status === 'in_progress');
-  const pendingIndex = tasks.findIndex(task => task.status === 'pending');
-  const focusIndex = activeIndex >= 0 ? activeIndex : pendingIndex >= 0 ? pendingIndex : total - 1;
-  const contentHeight = total * TASK_ROW_HEIGHT;
+  const focusIndex = focusedTaskIndex(tasks);
   const windowHeight = open ? Math.min(total, EXPANDED_VISIBLE_ROWS) * TASK_ROW_HEIGHT : TASK_ROW_HEIGHT;
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || typeof viewport.scrollTo !== 'function') return;
-    const currentTop = viewport.scrollTop;
-    const wantedTop = open
-      ? scrollActiveIntoView
-        ? revealedScrollTop(focusIndex, currentTop, windowHeight)
-        : currentTop
-      : focusIndex * TASK_ROW_HEIGHT;
-    const top = clampScrollTop(wantedTop, contentHeight, windowHeight);
-    if (!placedOnce.current) {
-      placedOnce.current = true;
-      viewport.scrollTo({ top });
-      return;
-    }
-    if (top !== currentTop) return glideScrollTop(viewport, top);
-  }, [open, focusIndex, windowHeight, contentHeight, scrollActiveIntoView]);
+  const viewportRef = useFocusedRowScroll({
+    focusIndex,
+    rowCount: total,
+    windowHeight,
+    open,
+    followFocus: scrollActiveIntoView,
+  });
 
   if (total === 0 || (hideWhenComplete && completed === total)) return null;
 

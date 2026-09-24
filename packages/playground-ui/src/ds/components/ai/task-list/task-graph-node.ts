@@ -1,5 +1,4 @@
 import type { TaskItem } from '@mastra/core/signals';
-import { useEffect, useRef } from 'react';
 
 type TaskStatus = TaskItem['status'];
 
@@ -15,47 +14,4 @@ export const taskGraphLaneShift: Record<TaskStatus, string> = {
   completed: 'translate-x-0',
   in_progress: 'translate-x-4',
   pending: 'translate-x-0',
-};
-
-export const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-
-export const useCompletionPulse = <T extends HTMLElement>(status: TaskStatus) => {
-  const ref = useRef<T>(null);
-  const previousStatus = useRef(status);
-
-  useEffect(() => {
-    if (previousStatus.current === status) return;
-    previousStatus.current = status;
-    const node = ref.current;
-    if (status !== 'completed' || typeof node?.animate !== 'function' || prefersReducedMotion()) return;
-    node.animate(
-      [
-        { boxShadow: '0 0 0 0 color-mix(in oklab, var(--accent1) 45%, transparent)' },
-        { boxShadow: '0 0 0 5px color-mix(in oklab, var(--accent1) 0%, transparent)' },
-      ],
-      { duration: 700, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
-    );
-  }, [status]);
-
-  return ref;
-};
-
-const easeOutQuint = (progress: number) => 1 - (1 - progress) ** 5;
-
-export const glideScrollTop = (viewport: HTMLElement, top: number) => {
-  const start = viewport.scrollTop;
-  const distance = top - start;
-  if (prefersReducedMotion()) {
-    viewport.scrollTo({ top });
-    return () => {};
-  }
-  let frame = 0;
-  const startedAt = performance.now();
-  const step = (now: number) => {
-    const progress = Math.min((now - startedAt) / TASK_GRAPH_MOTION_MS, 1);
-    viewport.scrollTo({ top: start + distance * easeOutQuint(progress) });
-    if (progress < 1) frame = requestAnimationFrame(step);
-  };
-  frame = requestAnimationFrame(step);
-  return () => cancelAnimationFrame(frame);
 };
