@@ -28,10 +28,17 @@ function createGatewayFetch(
      * connection, the default two-tool catalog is served.
      */
     toolsByConnectionId?: Record<string, Array<Record<string, unknown>>>;
+    /**
+     * Mutable set of raw connection ids that should reject `tools/list` with
+     * a JSON-RPC error. Tests can clear it between resolver calls to simulate
+     * a transient failure that recovers on the next refresh.
+     */
+    failToolsListForConnectionIds?: Set<string>;
   } = {},
 ) {
   const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string }> = [];
   let initializeCount = 0;
+  const initializeCountByConnectionId = new Map<string, number>();
   const connections = options.connections ?? [
     {
       id: CONNECTION_ID,
@@ -73,6 +80,9 @@ function createGatewayFetch(
       // simultaneous MCP clients (one per connection) don't collide on the
       // SDK's session bookkeeping.
       const match = url.pathname.match(/\/v2\/connections\/([^/]+)\/mcp/);
+      if (match) {
+        initializeCountByConnectionId.set(match[1]!, (initializeCountByConnectionId.get(match[1]!) ?? 0) + 1);
+      }
       const sessionId = match ? `catalog-session-${match[1]}` : 'catalog-session-1';
       return Response.json(
         {
@@ -92,7 +102,15 @@ function createGatewayFetch(
       // Resolve per-connection tool list by parsing the connection id from
       // the request URL. Falls back to the default two-tool catalog.
       const connectionIdMatch = url.pathname.match(/\/v2\/connections\/([^/]+)\/mcp/);
-      const perConnection = connectionIdMatch ? options.toolsByConnectionId?.[connectionIdMatch[1]!] : undefined;
+      const parsedConnectionId = connectionIdMatch?.[1];
+      if (parsedConnectionId && options.failToolsListForConnectionIds?.has(parsedConnectionId)) {
+        return Response.json({
+          jsonrpc: '2.0',
+          id: body.id,
+          error: { code: -32000, message: `tools/list failed for ${parsedConnectionId}` },
+        });
+      }
+      const perConnection = parsedConnectionId ? options.toolsByConnectionId?.[parsedConnectionId] : undefined;
       const defaultTools = [
         {
           name: 'list_records',
@@ -137,7 +155,12 @@ function createGatewayFetch(
     }
     return new Response(null, { status: 202 });
   });
-  return { fetchMock, protocolRequests, getInitializeCount: () => initializeCount };
+  return {
+    fetchMock,
+    protocolRequests,
+    getInitializeCount: () => initializeCount,
+    getInitializeCountForConnection: (connectionId: string) => initializeCountByConnectionId.get(connectionId) ?? 0,
+  };
 }
 
 const resolvers: Array<ReturnType<typeof connect>> = [];
@@ -495,5 +518,49 @@ describe('MCP tool approval — multi-connection wrappers', () => {
         { requestContext: new RequestContext() },
       ),
     ).resolves.toBeDefined();
+  });
+
+  it('cleans up MCP clients cached by a failed multi-connection discovery so the next refresh reconnects', async () => {
+    const acmeId = TWO_CONNECTIONS[0]!.id as string;
+    const globexId = TWO_CONNECTIONS[1]!.id as string;
+    // Second connection fails discovery on the first pass; both succeed on
+    // the retry after the failure gate is lifted.
+    const failing = new Set<string>([globexId]);
+    const gateway = createGatewayFetch({
+      connections: TWO_CONNECTIONS,
+      matchAnyConnectionMcpPath: true,
+      failToolsListForConnectionIds: failing,
+    });
+    const tools = connect({
+      projectId: 'project-1',
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(tools);
+
+    // First pass: `mapTools` warn-and-skips on any provider error, so the
+    // resolver returns {} and logs a warning naming the failed integration.
+    // The construction path still cached the Acme MCPClient before the
+    // Globex `tools/list` throw; the try/catch inside
+    // `buildMcpMultiConnectionTools` must evict and disconnect it.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const firstPass = await tools();
+    expect(firstPass).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MCP tool discovery failed for connection'));
+    const acmeInitsAfterFailure = gateway.getInitializeCountForConnection(acmeId);
+    expect(acmeInitsAfterFailure).toBeGreaterThanOrEqual(1);
+    warnSpy.mockRestore();
+
+    // Recovery: unblock Globex, invalidate the empty snapshot, and refresh.
+    // If the mcpClients cache still held the first-pass Acme MCPClient, it
+    // would be reused with no fresh `initialize`. The cleanup evicts +
+    // disconnects Acme's client, so both connections re-initialize on the
+    // retry. (`.invalidate()` clears only the snapshot cache, not the
+    // MCPClient cache we are exercising here.)
+    failing.clear();
+    tools.invalidate();
+    const discovered = (await tools()) as Record<string, unknown>;
+    expect(discovered).toHaveProperty('catalog-mcp_update_record');
+    expect(gateway.getInitializeCountForConnection(acmeId)).toBeGreaterThan(acmeInitsAfterFailure);
+    expect(gateway.getInitializeCountForConnection(globexId)).toBeGreaterThanOrEqual(1);
   });
 });

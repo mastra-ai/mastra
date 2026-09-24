@@ -406,58 +406,79 @@ export async function buildMcpMultiConnectionTools(input: {
   // appears on only a later connection would otherwise be rejected as
   // "unknown" against an earlier connection's catalog, even though the
   // wrapper still publishes it via the key-union below.
+  //
+  // Track MCP clients this call newly caches so a failure anywhere in the
+  // construction phase (discovery, autoApproveTools validation, or the
+  // list_connections collision assertion) evicts and disconnects them before
+  // rethrowing. Otherwise a later refresh reuses a half-populated cache and
+  // the caller's stale-client cleanup path in `connect.ts` never runs for
+  // clients that survived from a failed multi-connection build.
   const rawInnerCatalogs = new Map<string, ToolsInput>();
-  for (const connection of connections) {
-    const cacheKey = `${registration.integrationId}::${connection.id}`;
-    let entry = mcpClients.get(cacheKey);
-    if (!entry) {
-      const transport = platformMcpTransport(client, connection.id);
-      entry = {
-        integrationId: registration.integrationId,
-        connectionId: connection.id,
-        client: new MCPClient({
-          id: `mastra-connect-${resolverId}-${registration.integrationId}-${connection.id}`,
-          servers: {
-            [registration.integrationId]: {
-              ...transport,
-              requireToolApproval: ({ toolName }) =>
-                !autoApproved.has(`${registration.integrationId}_${String(toolName)}`),
+  const createdEntries: Array<{ cacheKey: string; client: MCPClient }> = [];
+  const cleanupNewlyCached = async () => {
+    for (const { cacheKey, client } of createdEntries) {
+      if (mcpClients.get(cacheKey)?.client === client) mcpClients.delete(cacheKey);
+    }
+    await Promise.allSettled(createdEntries.map(({ client }) => client.disconnect()));
+  };
+  let innerToolsByConnectionId: Map<string, ToolsInput>;
+  try {
+    for (const connection of connections) {
+      const cacheKey = `${registration.integrationId}::${connection.id}`;
+      let entry = mcpClients.get(cacheKey);
+      if (!entry) {
+        const transport = platformMcpTransport(client, connection.id);
+        entry = {
+          integrationId: registration.integrationId,
+          connectionId: connection.id,
+          client: new MCPClient({
+            id: `mastra-connect-${resolverId}-${registration.integrationId}-${connection.id}`,
+            servers: {
+              [registration.integrationId]: {
+                ...transport,
+                requireToolApproval: ({ toolName }) =>
+                  !autoApproved.has(`${registration.integrationId}_${String(toolName)}`),
+              },
             },
-          },
-        }),
-      };
-      mcpClients.set(cacheKey, entry);
+          }),
+        };
+        mcpClients.set(cacheKey, entry);
+        createdEntries.push({ cacheKey, client: entry.client });
+      }
+      const discovery = await entry.client.listToolsWithErrors();
+      const error = discovery.errors[registration.integrationId];
+      if (error) {
+        throw new Error(`MCP tool discovery failed for connection ${connection.id}: ${error}`);
+      }
+      rawInnerCatalogs.set(connection.id, discovery.tools);
     }
-    const discovery = await entry.client.listToolsWithErrors();
-    const error = discovery.errors[registration.integrationId];
-    if (error) {
-      throw new Error(`MCP tool discovery failed for connection ${connection.id}: ${error}`);
+    const catalogUnion = new Set<string>();
+    for (const catalog of rawInnerCatalogs.values()) {
+      for (const key of Object.keys(catalog)) catalogUnion.add(key);
     }
-    rawInnerCatalogs.set(connection.id, discovery.tools);
+    const unknownAutoApprove = [...autoApproved].filter(name => !catalogUnion.has(name));
+    if (unknownAutoApprove.length > 0) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknownAutoApprove.join(
+          ', ',
+        )}. Known tools: ${[...catalogUnion].join(', ')}.`,
+      );
+    }
+    innerToolsByConnectionId = new Map<string, ToolsInput>();
+    for (const [connectionId, catalog] of rawInnerCatalogs) {
+      const filtered = applyToolFilter(catalog, {
+        allowTools: innerAllowTools,
+        disallowTools: innerDisallowTools,
+      });
+      innerToolsByConnectionId.set(connectionId, filtered);
+    }
+    if (connections.length === 0) return {};
+    assertNoListConnectionsCollision(registration.integrationId, innerToolsByConnectionId);
+  } catch (error) {
+    await cleanupNewlyCached();
+    throw error;
   }
-  const catalogUnion = new Set<string>();
-  for (const catalog of rawInnerCatalogs.values()) {
-    for (const key of Object.keys(catalog)) catalogUnion.add(key);
-  }
-  const unknownAutoApprove = [...autoApproved].filter(name => !catalogUnion.has(name));
-  if (unknownAutoApprove.length > 0) {
-    throw new MastraConnectError(
-      'invalid_options',
-      `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknownAutoApprove.join(
-        ', ',
-      )}. Known tools: ${[...catalogUnion].join(', ')}.`,
-    );
-  }
-  const innerToolsByConnectionId = new Map<string, ToolsInput>();
-  for (const [connectionId, catalog] of rawInnerCatalogs) {
-    const filtered = applyToolFilter(catalog, {
-      allowTools: innerAllowTools,
-      disallowTools: innerDisallowTools,
-    });
-    innerToolsByConnectionId.set(connectionId, filtered);
-  }
-  if (connections.length === 0) return {};
-  assertNoListConnectionsCollision(registration.integrationId, innerToolsByConnectionId);
   // Publish the union of tool keys across every inner MCP client. A tool
   // returned by only one connection is still surfaced; `wrapToolForConnection`
   // scans all inner toolsets for its schema template and, at call time,
