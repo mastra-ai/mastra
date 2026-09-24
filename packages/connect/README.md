@@ -1,6 +1,6 @@
 # @mastra/connect
 
-`@mastra/connect` exposes tools backed by connections attached to a Mastra Platform project. Provider credentials stay in the platform connection. Tool traffic passes through Platform so calls can be authorized, audited, and counted without logging arguments or results.
+`@mastra/connect` turns Mastra Platform project connections into two things an agent app needs: tools that call third-party APIs on the user's behalf (`tools()`), and channel providers that wire the agent into Slack, Telegram, or Discord (`channels()`). Provider credentials stay in the platform connection. Tool traffic passes through Platform so calls can be authorized, audited, and counted without logging arguments or results.
 
 ## Installation
 
@@ -10,12 +10,12 @@ npm install @mastra/connect
 
 ## Usage
 
-Attach a connection to your Platform project using integration ID `resend` or `incident-io`. Configure the Platform project ID and access token, then pass the resolver to your agent's `tools` option:
+Attach one or more integration connections to your Platform project — see the [Generated HTTP providers](#generated-http-providers) table below for the full launch set. Configure the Platform project ID and access token, then pass the resolver to your agent's `tools` option:
 
 ```ts
-import { connect } from '@mastra/connect';
+import { tools } from '@mastra/connect';
 
-const tools = connect({
+const agentTools = tools({
   projectId: process.env.MASTRA_PROJECT_ID,
   client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
   integrations: {
@@ -24,6 +24,8 @@ const tools = connect({
   },
 });
 ```
+
+> `tools()` used to be exported as `connect()`. The old name still works as a deprecated alias for one release cycle so existing code keeps building; migrate at your convenience. The `PROVIDERS` array is renamed to `TOOLS` under the same rule.
 
 The resolver discovers active project connections. Where multiple connections match, select one with `MASTRA_RESEND_CONNECTION_ID`, `MASTRA_INCIDENT_IO_CONNECTION_ID`, or the integration's `connectionId` option. The `integrations` entries configure individual providers; they do not disable other attached providers. Set `disabled: true` on providers you want to exclude.
 
@@ -34,7 +36,7 @@ The resolver discovers active project connections. Where multiple connections ma
 
 ### MCP integrations
 
-`connect()` also discovers any attached integration that advertises `capabilities.mcp: true` in the Platform catalog. No provider-specific registration or release of `@mastra/connect` is required. Discovered tools use the same flat dynamic-tool contract and are namespaced as `<integration-id>_<tool-name>`.
+`tools()` also discovers any attached integration that advertises `capabilities.mcp: true` in the Platform catalog. No provider-specific registration or release of `@mastra/connect` is required. Discovered tools use the same flat dynamic-tool contract and are namespaced as `<integration-id>_<tool-name>`.
 
 Every MCP provider uses `/v2/connections/:connectionId/mcp` for discovery and invocation. The adapter reuses each provider's MCP session across refreshes and closes sessions when the connection changes, is detached, or `disconnect()` is called. If an integration has both checked-in HTTP tools and an MCP capability, the MCP catalog is preferred.
 
@@ -62,9 +64,96 @@ Resend requires a verified sending domain and a key authorized for the operation
 
 List tools return one provider page and preserve its response envelope. When `next_cursor` is present, pass it as `after` for Resend and incident.io. Preserve filters and sort options between pages.
 
+### Channels
+
+`channels()` resolves the project's connections into `Record<string, ChannelProvider>` — the exact shape `new Mastra({ channels })` already accepts. Each launch provider (Slack, Telegram, Discord) with an active project connection becomes a live agent surface with no hardcoded tokens or manual provider wiring:
+
+```ts
+import { Mastra } from '@mastra/core/mastra';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { tools, channels } from '@mastra/connect';
+
+const pat = new Agent({
+  id: 'pat',
+  name: 'Pat',
+  instructions: 'You are Pat.',
+  model: openai('gpt-4o'),
+  tools: tools({ projectId: process.env.MASTRA_PROJECT_ID }),
+});
+
+export const mastra = new Mastra({
+  agents: { pat },
+  channels: await channels({ projectId: process.env.MASTRA_PROJECT_ID }),
+});
+```
+
+Install the peer package for each channel you attach:
+
+```bash
+npm install @mastra/slack     # for the `slack` channel
+npm install @mastra/telegram  # for the `telegram` channel
+npm install @mastra/discord   # for the `discord` channel
+```
+
+They're declared as optional `peerDependencies` and imported inside `channels()` via `await import()`, so nothing extra ships to consumers that don't attach a channel. A missing peer at resolution time is downgraded to a warning and that provider is skipped; the rest of the map keeps working.
+
+#### Return shape and lifecycle
+
+`channels()` returns a thenable resolver — `await channels({...})` yields the map directly, ready to hand to `new Mastra({ channels })`. It's also callable (`channels()({ requestContext })`) and exposes `.invalidate()` / `.refresh()` / `.disconnect()` handles for standalone/test usage.
+
+`Mastra` reads the `Record<string, ChannelProvider>` **synchronously** at construction — top-level `await` on `channels(...)` is required, and the running Mastra instance won't pick up connections added later or rotated credentials without a restart. The `.invalidate()` / `.refresh()` handles only touch the resolver's private cache; they're for tests and long-lived resolver usage outside a Mastra registration, not for the running agent.
+
+`channels()` shares the `projectId` / `client` / `ttlMs` shape with `tools()` and `environment()`. Per-integration overrides work the same way — pin a specific connection with `connectionId`, exclude a provider with `disabled: true`, and pass provider-specific settings through `providerOptions`:
+
+```ts
+channels: await channels({
+  projectId,
+  integrations: {
+    slack: { connectionId: 'c_slack_ws1' },
+    telegram: { providerOptions: { mode: 'webhook', typingStatus: true } },
+    discord: { disabled: true },
+  },
+}),
+```
+
+#### Connection selection
+
+For each channel-capable integration, `channels()` picks a single active project connection:
+
+- A pinned `connectionId` on the integration wins, but is skipped with a warning if it isn't attached to the project, is `needs_reauth`, or isn't `active`.
+- Otherwise, the single active connection is used.
+- When more than one active connection exists and no pin is set, the resolver **warns and uses the first active connection**, naming the chosen id and every id it's ignoring. There is no `MASTRA_*_CONNECTION_ID` env-var fallback for channels — pin explicitly to silence the warning and make the choice deterministic.
+- No attached connections, or only inactive / `needs_reauth` connections, warns and skips the provider (its key is omitted from the map).
+
+Configuration errors (missing project id, negative `ttlMs`, malformed integration id) throw at call time. Actionable per-integration problems during resolution are downgraded to warn-and-skip so one bad integration never takes down the whole map.
+
+#### Reserved `providerOptions`
+
+`providerOptions` rejects reserved fields at both the type level and at runtime. Two categories, applied per integration:
+
+- **Credentials.** `refreshToken`, `token`, `botToken` are managed by the platform connection. Passing another one via `providerOptions` would silently override the connection and bypass rotation, revocation, and auditing.
+- **Framework-managed.** `baseUrl` / `apiBaseUrl` are set by the Mastra server so webhook URLs match the running host. `encryptionKey` is process-wide and cannot be overridden per integration.
+
+Passing any of these is a compile-time error; a runtime cast that bypasses the check is stripped with a warning. Non-reserved provider config (handlers, streaming, default scopes, commands, permissions, etc.) is forwarded unchanged — see each peer package's `ProviderConfig` type for the full option surface.
+
+Discord's `applicationId` and `publicKey` are **not** reserved. They can be supplied via `providerOptions` when the connection doesn't carry them.
+
+#### Launch providers
+
+The three launch providers wrap the corresponding first-party channel packages, so each entry in the returned map is a full `ChannelProvider` with install / OAuth / webhook lifecycle already implemented:
+
+| Provider   | Peer package       |
+| ---------- | ------------------ |
+| `slack`    | `@mastra/slack`    |
+| `telegram` | `@mastra/telegram` |
+| `discord`  | `@mastra/discord`  |
+
+Attach the corresponding integration to your Platform project and the resolver takes care of construction — no manual credential wiring, no per-provider setup code in your app.
+
 ### Sandbox environment
 
-Some agents run inside a sandbox that shells out to CLIs (git, `gh`) or needs provider tokens in the process environment. `environment()` materializes those credentials from the same project connections `connect()` uses, so an agent that already has GitHub attached needs no separate credential wiring.
+Some agents run inside a sandbox that shells out to CLIs (git, `gh`) or needs provider tokens in the process environment. `environment()` materializes those credentials from the same project connections `tools()` uses, so an agent that already has GitHub attached needs no separate credential wiring.
 
 ```ts
 import { environment } from '@mastra/connect';
@@ -82,7 +171,7 @@ await sandbox.start({
 });
 ```
 
-`environment()` mirrors `connect()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS operations authenticate as the connected user, and `onStart` wires a git credential helper that reads the token from the environment rather than baking it into git config.
+`environment()` mirrors `tools()`: same `projectId`, `client`, and per-provider `integrations` overrides (`connectionId` to pin, `disabled: true` to exclude). GitHub is the first provider with an env contributor — its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN` so both `gh` and `git` HTTPS operations authenticate as the connected user, and `onStart` wires a git credential helper that reads the token from the environment rather than baking it into git config.
 
 ### Template provenance
 
