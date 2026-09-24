@@ -5,6 +5,8 @@ import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-tr
 
 export interface TraceThreadPanelProps {
   threadId: string;
+  withQueryTrace: boolean;
+  withFeedback: boolean;
   /** Return to the trace panel this thread view replaced. */
   onBack: () => void;
   /** Close the whole side panel. */
@@ -14,7 +16,14 @@ export interface TraceThreadPanelProps {
 }
 
 /** The trace drawer swapped for the full thread: every turn as traces, anchored on the URL's `traceId`. */
-export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThreadPanelProps) {
+export function TraceThreadPanel({
+  threadId,
+  withQueryTrace,
+  withFeedback,
+  onBack,
+  onClose,
+  title,
+}: TraceThreadPanelProps) {
   // Like the trace panel: the drawer only takes the full frame while a span detail is open.
   const [hasSelectedSpan, setHasSelectedSpan] = useState(false);
   return (
@@ -32,6 +41,8 @@ export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThre
       <div className="min-h-0 flex-1">
         <ThreadViewByTrace
           threadId={threadId}
+          withQueryTrace={withQueryTrace}
+          withFeedback={withFeedback}
           onSelectedSpanChange={selected => setHasSelectedSpan(selected !== null)}
         />
       </div>

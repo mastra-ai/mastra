@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
@@ -34,6 +35,8 @@ function ReviewQueuePage() {
   const featuredResultId = searchParams.get(REVIEW_PARAM);
 
   const { Link, paths } = useLinkComponent();
+  // Servers without the trace-query API don't expose feedback either.
+  const traceQuery = useTraceQueryAvailable();
   const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
@@ -97,6 +100,8 @@ function ReviewQueuePage() {
 
   return (
     <DatasetReview
+      withQueryTrace={traceQuery.enabled}
+      withFeedback={traceQuery.enabled}
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       datasetId={selected?.datasetId ?? undefined}
       experimentId={selectedId ?? undefined}

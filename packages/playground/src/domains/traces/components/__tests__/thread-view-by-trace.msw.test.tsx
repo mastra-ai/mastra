@@ -17,7 +17,6 @@ import {
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { emptyMcpServers } from '@/lib/ai-ui/__tests__/fixtures/agent';
-import { legacyTraceCapabilities, traceQueryCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
 import { emptyTraceSpanScores } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -36,7 +35,6 @@ const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1]
 const installHandlers = ({ list = newestFirstList }: { list?: typeof threadTracesList } = {}) => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
-    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(listFeedbackResponse([]))),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(queryPageFromList(list))),
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(list)),
@@ -94,12 +92,12 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
-const renderView = ({ search = '' }: { search?: string } = {}) =>
+const renderView = ({ search = '', withFeedback = true }: { search?: string; withFeedback?: boolean } = {}) =>
   renderWithProviders(
     <TestLinkProvider>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
-          <ThreadViewByTrace threadId={THREAD_ID} />
+          <ThreadViewByTrace threadId={THREAD_ID} withQueryTrace withFeedback={withFeedback} />
         </ActivatedSkillsProvider>
       </BrowserToolCallsProvider>
     </TestLinkProvider>,
@@ -622,28 +620,21 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  describe('when the server does not support trace query', () => {
+  describe('when feedback is disabled', () => {
     it('shows no Feedback tab and never requests feedback', async () => {
       installHandlers();
       const onFeedback = vi.fn();
-      const onCapabilities = vi.fn();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => {
-          onCapabilities();
-          return HttpResponse.json(legacyTraceCapabilities);
-        }),
         http.get(FEEDBACK_URL, () => {
           onFeedback();
           return HttpResponse.json(listFeedbackResponse([]));
         }),
       );
-      renderView();
+      renderView({ withFeedback: false });
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
       expect(firstRow.getByRole('tab', { name: /Scores/ })).not.toBeNull();
-      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
-      await act(() => new Promise(resolve => setTimeout(resolve, 50)));
       expect(screen.queryByRole('tab', { name: /Feedback/ })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
     });

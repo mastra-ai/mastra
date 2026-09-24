@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
@@ -22,6 +21,10 @@ import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
 export interface ThreadViewByTraceProps {
   threadId: string;
+  /** Lists the thread through the trace-query API; `false` falls back to `listTracesLight`. */
+  withQueryTrace: boolean;
+  /** Shows the per-trace Feedback tab and fetches its feedback. */
+  withFeedback: boolean;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
 }
@@ -31,9 +34,15 @@ export interface ThreadViewByTraceProps {
  * reconstructed messages on the left and the span tree on the right. Clicking a span opens
  * its detail panel on the side so the conversation stays readable.
  */
-export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadViewByTraceProps) {
+export function ThreadViewByTrace({
+  threadId,
+  withQueryTrace,
+  withFeedback,
+  onSelectedSpanChange,
+}: ThreadViewByTraceProps) {
   const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
     initialAutoRefetch: false,
+    withQueryTrace,
     query: now => ({
       timeRange: {
         from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -70,6 +79,7 @@ export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadView
       key={threadId}
       traceIds={traceIds}
       setEndOfListElement={setEndOfListElement}
+      withFeedback={withFeedback}
       onSelectedSpanChange={onSelectedSpanChange}
     />
   );
@@ -78,6 +88,7 @@ export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadView
 interface LoadedThreadViewByTraceProps {
   traceIds: string[];
   setEndOfListElement: (node: HTMLDivElement | null) => void;
+  withFeedback: boolean;
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
 }
 
@@ -85,6 +96,7 @@ interface LoadedThreadViewByTraceProps {
 function LoadedThreadViewByTrace({
   traceIds,
   setEndOfListElement,
+  withFeedback,
   onSelectedSpanChange,
 }: LoadedThreadViewByTraceProps) {
   const railTurns = useThreadRailTurns(traceIds);
@@ -104,7 +116,7 @@ function LoadedThreadViewByTrace({
         <ThreadTrace.Rail turns={railTurns} />
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent />
+            <ThreadTraceRowContent withFeedback={withFeedback} />
           </ThreadTrace.Row>
         ))}
         <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
@@ -114,13 +126,12 @@ function LoadedThreadViewByTrace({
   );
 }
 
-function ThreadTraceRowContent() {
+function ThreadTraceRowContent({ withFeedback }: { withFeedback: boolean }) {
   const { traceId, highlightSpans } = useThreadTraceRow();
   const navigate = useNavigate();
   // First page only, for the tab badges; the Feedback and Scores bodies own their own pagination
   // and share these queries through the React Query cache.
-  const { enabled: feedbackEnabled } = useTraceQueryAvailable();
-  const { data: feedbackData } = useTraceFeedback({ traceId, enabled: feedbackEnabled });
+  const { data: feedbackData } = useTraceFeedback({ traceId, enabled: withFeedback });
   // Same query the span tree observes (passive: the tree drives refetches).
   const { data: traceData } = useTraceSpans(traceId, { passive: true });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
@@ -139,7 +150,7 @@ function ThreadTraceRowContent() {
               </Icon>
               Messages
             </ThreadTrace.Tab>
-            {feedbackEnabled && (
+            {withFeedback && (
               <ThreadTrace.Tab value="feedback">
                 <Icon size="xs">
                   <MessageSquareReplyIcon />
@@ -158,7 +169,7 @@ function ThreadTraceRowContent() {
         <ThreadTrace.TabContent value="messages" flush>
           <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
         </ThreadTrace.TabContent>
-        {feedbackEnabled && (
+        {withFeedback && (
           <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3 pl-2">
             <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
           </ThreadTrace.TabContent>

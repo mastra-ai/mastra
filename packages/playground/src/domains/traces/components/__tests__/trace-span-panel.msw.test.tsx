@@ -76,6 +76,8 @@ function Harness({
         onSpanSelect?.(spanId);
       }}
       onClose={() => {}}
+      withQueryTrace
+      withFeedback
       {...props}
     />
   );
