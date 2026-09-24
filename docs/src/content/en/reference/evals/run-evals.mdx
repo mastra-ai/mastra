@@ -35,7 +35,7 @@ console.log(`Average scores:`, result.scores)
 console.log(`Processed ${result.summary.totalItems} items`)
 ```
 
-Resolve the `target` from the `Mastra` instance with `mastra.getAgent()` or `mastra.getWorkflow()` rather than importing the agent or workflow directly. A directly imported target has no Mastra instance attached, so registry lookups made during execution (a step calling `mastra.getAgent()`, a child workflow, an `.agent('agent-id')` reference, a tool calling `mastra.getWorkflow()`) fail, scores are not persisted, and trace-based trajectory extraction is unavailable. `runEvals` logs a warning when the target is not registered.
+Resolve the `target` from the `Mastra` instance with `mastra.getAgent()` or `mastra.getWorkflow()` rather than importing the agent or workflow directly. A directly imported target has no Mastra instance attached, so registry lookups made during execution (a step calling `mastra.getAgent()`, a child workflow, an `.agent('agent-id')` reference, a tool calling `mastra.getWorkflow()`) fail, scores aren't persisted, and trace-based trajectory extraction is unavailable. `runEvals` logs a warning when the target isn't registered.
 
 ### Multi-turn evaluation
 
