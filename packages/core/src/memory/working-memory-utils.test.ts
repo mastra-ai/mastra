@@ -265,6 +265,19 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
     ).toEqual(next);
   });
 
+  it('drops a step left with only reasoning and working-memory tags', () => {
+    const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        { type: 'text', text: '<working_memory># User\n- Name: Jim</working_memory>\n' },
+        call('wm', 'updateWorkingMemory'),
+        ...next,
+      ]),
+    ).toEqual(next);
+  });
+
   it('keeps reasoning when another tool call shares the step', () => {
     expect(
       removeWorkingMemoryToolInvocationParts([

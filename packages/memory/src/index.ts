@@ -246,7 +246,9 @@ function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): Mas
     const remaining = step.filter(part => !isWorkingMemoryCall(part));
     const onlyReasoningLeft = remaining.every(
       part =>
-        part?.type === 'step-start' || part?.type === 'reasoning' || (part?.type === 'text' && !part.text?.trim()),
+        part?.type === 'step-start' ||
+        part?.type === 'reasoning' ||
+        (part?.type === 'text' && !removeWorkingMemoryTags(part.text ?? '').trim()),
     );
     return onlyReasoningLeft ? [] : remaining;
   });

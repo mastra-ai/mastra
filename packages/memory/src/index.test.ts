@@ -314,6 +314,26 @@ describe('Memory', () => {
         ]);
       });
 
+      it('drops a step left with only reasoning and working-memory tags', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '<working_memory># User\n- Name: Jim</working_memory>' },
+            toolInvocation('wm-1', 'updateWorkingMemory'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        );
+
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          reasoning('SIG_B'),
+          { type: 'text', text: 'Done' },
+        ]);
+      });
+
       it('keeps reasoning when the step has other content besides the working-memory call', () => {
         const result = memory.testUpdateMessageToHideWorkingMemoryV2(
           assistantMessage([
