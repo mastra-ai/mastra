@@ -55,6 +55,9 @@ import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
 
+/** Platforms whose chat-SDK adapters render interactive approval buttons. */
+const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -292,7 +295,7 @@ export class AgentChannels {
             memory,
             // Without approval-button rendering, auto-approve tools to
             // avoid getting stuck waiting for input we can't ask for.
-            autoResumeSuspendedTools,
+            ...(autoResumeSuspendedTools ? { autoResumeSuspendedTools } : {}),
           },
         },
       },
@@ -320,6 +323,12 @@ export class AgentChannels {
         // The run already started; the output processor reports its failure.
         this.log('debug', 'accepted consume failed', err);
       }
+    } else {
+      this.log(
+        accepted.action === 'deliver' ? 'debug' : 'warn',
+        `[dispatchInboundMessage] inbound message did not start a run (action: ${accepted.action}); the thread may be suspended awaiting tool approval`,
+        { threadId: memory.thread, resourceId: memory.resource },
+      );
     }
   }
 
@@ -1304,7 +1313,10 @@ export class AgentChannels {
       toolDisplay === 'cards' ||
       toolDisplay === 'timeline' ||
       toolDisplay === 'grouped' ||
-      toolDisplay === 'hidden';
+      // `'hidden'` still posts approval cards, but only adapters with
+      // interactive buttons can act on them. Button-less surfaces (SMS,
+      // iMessage, custom gateways) must auto-resume or the thread gets stuck.
+      (toolDisplay === 'hidden' && (adapterConfig?.approvalButtons ?? APPROVAL_BUTTON_PLATFORMS.has(platform)));
 
     this.log('info', '[processChatMessage] tool approval config', {
       platform,

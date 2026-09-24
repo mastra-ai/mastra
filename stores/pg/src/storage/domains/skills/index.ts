@@ -27,6 +27,7 @@ import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skil
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -611,15 +612,15 @@ export class SkillsPG extends SkillsStorage {
           input.description ?? null,
           input.instructions ?? null,
           input.license ?? null,
-          input.compatibility ? JSON.stringify(input.compatibility) : null,
-          input.source ? JSON.stringify(input.source) : null,
-          input.references ? JSON.stringify(input.references) : null,
-          input.scripts ? JSON.stringify(input.scripts) : null,
-          input.assets ? JSON.stringify(input.assets) : null,
-          input.files ? JSON.stringify(input.files) : null,
-          input.metadata ? JSON.stringify(input.metadata) : null,
-          input.tree ? JSON.stringify(input.tree) : null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.compatibility ? toPgJson(input.compatibility) : null,
+          input.source ? toPgJson(input.source) : null,
+          input.references ? toPgJson(input.references) : null,
+          input.scripts ? toPgJson(input.scripts) : null,
+          input.assets ? toPgJson(input.assets) : null,
+          input.files ? toPgJson(input.files) : null,
+          input.metadata ? toPgJson(input.metadata) : null,
+          input.tree ? toPgJson(input.tree) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

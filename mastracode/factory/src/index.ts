@@ -19,6 +19,7 @@ export type {
   WorkBoardPhase,
 } from './boards/index.js';
 export { MastraFactory } from './factory.js';
+export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type { MastraArgs, MastraFactoryConfig, MastraFactorySandboxConfig, FactorySandboxStart } from './factory.js';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.

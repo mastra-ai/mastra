@@ -116,6 +116,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'logs',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
@@ -127,6 +128,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'metrics',
         'logs',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
@@ -153,6 +155,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'logs',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
@@ -163,6 +166,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'metrics',
         'logs',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
@@ -374,6 +378,45 @@ describe('ObservabilityStorageDuckDB', () => {
 
   describe('span events', () => {
     const now = new Date();
+
+    it('trims, dedupes, and drops blank tags on write like the other stores', async () => {
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-tags',
+          spanId: 'span-tags',
+          parentSpanId: null,
+          name: 'agent-run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'agent-1',
+          entityName: 'myAgent',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'test',
+          source: null,
+          serviceName: 'test-service',
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: [' alpha ', '', '   ', 'alpha', 'beta'],
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt: now,
+          endedAt: now,
+        },
+      });
+
+      const result = await storage.getSpan({ traceId: 'trace-tags', spanId: 'span-tags' });
+      expect(result!.span.tags).toEqual(['alpha', 'beta']);
+    });
 
     it('creates and reconstructs a span from start event', async () => {
       await storage.createSpan({
