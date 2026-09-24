@@ -22,11 +22,27 @@ import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
 
 // Define necessary types and interfaces
-export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
+export interface MongoDBUpsertVectorParams extends Omit<UpsertVectorParams, 'vectors'> {
+  /**
+   * Precomputed embeddings. Required unless the index was created with `autoEmbed`, where
+   * MongoDB generates them from `documents` and passing vectors is an error.
+   */
+  vectors?: number[][];
   documents?: string[];
 }
 
 export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
+  /**
+   * Text for MongoDB to embed server-side at query time. autoEmbed indexes only, and
+   * mutually exclusive with `queryVector`. For BM25 matching see
+   * {@link MongoDBVector.textQuery}.
+   */
+  queryText?: string;
+  /**
+   * Embedding model for this query, overriding the index's. Requires `queryText`, and must
+   * be compatible with the index's model.
+   */
+  model?: string;
   /**
    * Condition applied to the `document` text field, independent of `filter`.
    * For example `{ $regex: /astronaut/ }`.
@@ -47,7 +63,54 @@ export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVecto
   metadataMode?: 'field' | 'document';
 }
 
-export interface MongoDBCreateIndexParams extends CreateIndexParams {
+/**
+ * Automated Embedding configuration. MongoDB embeds the text at `path` when documents are
+ * written, and embeds a `queryText` string at query time, using the same model.
+ *
+ * @see https://www.mongodb.com/docs/vector-search/crud-embeddings/automated-embedding/
+ */
+export interface MongoDBAutoEmbedConfig {
+  /**
+   * Voyage AI model to embed with, for example `voyage-4`. MongoDB rejects a name it does
+   * not support and lists the ones it does.
+   *
+   * @see https://www.mongodb.com/docs/vector-search/crud-embeddings/automated-embedding/models/
+   */
+  model: string;
+  /**
+   * Text field to embed. Defaults to the managed `document` field that `upsert({ documents })`
+   * writes. Point it at a field of your own to index an existing collection in place.
+   */
+  path?: string;
+  /** Vector similarity function. Defaults to MongoDB's own default when omitted. */
+  similarity?: 'cosine' | 'dotProduct' | 'euclidean' | (string & {});
+  /** Embedding length. Defaults to 1024 when omitted. */
+  numDimensions?: 256 | 512 | 1024 | 2048 | (number & {});
+  /** Storage format for the generated vectors. Defaults to `scalar` when omitted. */
+  quantization?: 'float' | 'scalar' | 'binary' | 'binaryNoRescore' | (string & {});
+  /** Index structure. Defaults to `hnsw` when omitted. */
+  indexingMethod?: 'hnsw' | 'flat' | (string & {});
+  /** HNSW graph tuning. */
+  hnswOptions?: { maxEdges?: number; numEdgeCandidates?: number };
+  /**
+   * Any other field the `autoEmbed` index definition accepts, forwarded to MongoDB as given.
+   *
+   * @see https://www.mongodb.com/docs/vector-search/indexes/vector-search-type/
+   */
+  [option: string]: unknown;
+}
+
+export interface MongoDBCreateIndexParams extends Omit<CreateIndexParams, 'dimension'> {
+  /**
+   * Number of dimensions for client-side embeddings. Required unless `autoEmbed` is set,
+   * in which case the embedding model determines the size and passing both is an error.
+   */
+  dimension?: number;
+  /**
+   * Enable Automated Embedding: MongoDB embeds the text at `autoEmbed.path` server-side
+   * rather than accepting precomputed vectors. Mutually exclusive with `dimension`.
+   */
+  autoEmbed?: MongoDBAutoEmbedConfig;
   /**
    * Metadata field names to declare as filter fields in the Atlas vectorSearch
    * index (registered as `metadata.<field>`). Queries whose metadata filter
@@ -127,6 +190,8 @@ interface IndexTarget {
    * createSearchIndex (or defaulted to `${collectionName}_search_index`).
    */
   textSearchIndexName?: string;
+  /** Automated Embedding config for this index, with `path` resolved to a concrete field. */
+  autoEmbed?: MongoDBAutoEmbedConfig & { path: string };
 }
 
 /** Shape of a registry document persisted in {@link MongoDBVector.REGISTRY_COLLECTION}. */
@@ -135,6 +200,11 @@ interface RegistryDoc extends IndexTarget {
   indexName: string;
   dimension?: number;
   metric?: string;
+}
+
+/** Name an index's embedding mode for a conflict message. */
+function describeEmbedding(config?: { path: string; model: string } | null): string {
+  return config ? `autoEmbed (path "${config.path}", model "${config.model}")` : 'client-side vectors';
 }
 
 // Define the document interface
@@ -261,6 +331,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // version of this store) is treated as read-only. Managed is always writable.
         allowWrites: isByo ? (persisted.allowWrites ?? false) : true,
         textSearchIndexName: persisted.textSearchIndexName,
+        autoEmbed: persisted.autoEmbed,
       };
       this.indexTargets.set(indexName, target);
       return { ...target, registered: true };
@@ -382,10 +453,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * Persist (upsert) a logical-index target so it survives a process restart. Idempotent
    * createIndex refreshes it; a partial update (e.g. only the text-search-index name) merges
    * into the existing entry.
+   *
+   * `claim` narrows the upsert to entries the caller considers compatible. Because the filter
+   * still pins `_id`, an incompatible entry matches nothing, the upsert attempts an insert, and
+   * the duplicate `_id` surfaces as a duplicate-key error (code 11000) instead of overwriting
+   * the entry someone else registered. Callers that only refresh part of an entry omit it.
    */
-  private async writeRegistryEntry(indexName: string, entry: Partial<RegistryDoc>): Promise<void> {
+  private async writeRegistryEntry(indexName: string, entry: Partial<RegistryDoc>, claim?: Document): Promise<void> {
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-    await registry.updateOne({ _id: indexName }, { $set: { indexName, ...entry } }, { upsert: true });
+    await registry.updateOne({ _id: indexName, ...claim }, { $set: { indexName, ...entry } }, { upsert: true });
   }
 
   /** Remove a logical-index target from the durable registry (called by deleteIndex). */
@@ -421,6 +497,52 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
+  /** Validates a text upsert: `documents` is present, and `metadata`/`ids` line up with it. */
+  private validateTextUpsertInput(
+    indexName: string,
+    documents: string[] | undefined,
+    vectors: number[][] | undefined,
+    metadata?: Record<string, any>[] | null,
+    ids?: string[] | null,
+  ): void {
+    // Typed `never` so TypeScript narrows `documents` after the emptiness check below.
+    const fail: (errorType: string, message: string, details?: Record<string, string | number>) => never = (
+      errorType,
+      message,
+      details = {},
+    ) => {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'UPSERT', errorType),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: message,
+        details: { indexName, ...details },
+      });
+    };
+
+    if (vectors?.length) {
+      fail(
+        'INVALID_ARGS',
+        `Index "${indexName}" was created with autoEmbed, so MongoDB generates the embeddings: pass documents only. The supplied vectors would be stored in a field no index reads.`,
+      );
+    }
+    if (!documents || documents.length === 0) {
+      fail('EMPTY_DOCUMENTS', 'documents array cannot be empty when upserting into an autoEmbed index');
+    }
+    if (metadata && metadata.length > 0 && metadata.length !== documents.length) {
+      fail('METADATA_LENGTH_MISMATCH', 'Metadata array length must match documents array length', {
+        documentsLength: documents.length,
+        metadataLength: metadata.length,
+      });
+    }
+    if (ids && ids.length !== documents.length) {
+      fail('IDS_LENGTH_MISMATCH', 'IDs array length must match documents array length', {
+        documentsLength: documents.length,
+        idsLength: ids.length,
+      });
+    }
+  }
+
   /**
    * Builds the projection pipeline stage(s) for query results based on metadata mode and
    * whether to include vectors. Shared across query, textQuery, and hybridQuery to keep
@@ -451,6 +573,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     metadataMode: 'field' | 'document',
     includeVector: boolean,
     scoreMeta: 'vectorSearchScore' | 'searchScore' | 'score',
+    /** Field holding the text, which an autoEmbed index may place outside `document`. */
+    documentPath: string = this.documentFieldName,
   ): Document[] {
     const score = { $meta: scoreMeta };
     if (metadataMode === 'document') {
@@ -469,7 +593,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           _id: 1,
           score,
           metadata: `$${this.metadataFieldName}`,
-          document: `$${this.documentFieldName}`,
+          document: `$${documentPath}`,
           ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
         },
       },
@@ -518,18 +642,33 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * queryable. Skipping that step on a real Atlas cluster may cause
    * "index not found" or "index not ready" errors on subsequent operations.
    */
-  async createIndex({
-    indexName,
-    dimension,
-    metric = 'cosine',
-    filterFields,
-    collectionName,
-    searchIndexName,
-    allowWrites,
-  }: MongoDBCreateIndexParams): Promise<void> {
+  async createIndex(params: MongoDBCreateIndexParams): Promise<void> {
+    const {
+      indexName,
+      dimension,
+      metric = 'cosine',
+      filterFields,
+      collectionName,
+      searchIndexName,
+      allowWrites,
+      autoEmbed,
+    } = params;
     let mongoMetric;
     try {
-      if (!Number.isInteger(dimension) || dimension <= 0) {
+      if (autoEmbed) {
+        if (dimension !== undefined) {
+          throw new Error(
+            'dimension cannot be combined with autoEmbed. The embedding model determines the vector size; use autoEmbed.numDimensions to override it.',
+          );
+        }
+        // Read from `params`, since `metric` above carries a default that hides whether the
+        // caller named it.
+        if (params.metric !== undefined) {
+          throw new Error(
+            'metric cannot be combined with autoEmbed. metric configures a client-side vector field; use autoEmbed.similarity instead.',
+          );
+        }
+      } else if (dimension === undefined || !Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
 
@@ -545,7 +684,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           category: ErrorCategory.USER,
           details: {
             indexName,
-            dimension,
+            ...(dimension !== undefined ? { dimension } : {}),
             metric,
           },
         },
@@ -639,21 +778,81 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const textSearchIndexName = effectiveIsByo
         ? existingEntry?.textSearchIndexName
         : (existingEntry?.textSearchIndexName ?? defaultTextSearchIndex);
-      await this.writeRegistryEntry(indexName, {
+      const resolvedAutoEmbed = autoEmbed
+        ? { ...autoEmbed, path: autoEmbed.path ?? this.documentFieldName }
+        : undefined;
+
+      // MongoDB leaves an existing index definition alone, so a re-create that changes how
+      // the index embeds would persist a config the physical index does not match: the store
+      // would read and write one field while Atlas embeds another. Refuse instead.
+      const existingAutoEmbed = existingEntry?.autoEmbed;
+      const embeddingChanged =
+        Boolean(existingAutoEmbed) !== Boolean(resolvedAutoEmbed) ||
+        (existingAutoEmbed &&
+          resolvedAutoEmbed &&
+          (existingAutoEmbed.path !== resolvedAutoEmbed.path || existingAutoEmbed.model !== resolvedAutoEmbed.model));
+      if (existingEntry && embeddingChanged) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Index "${indexName}" is already registered with ${describeEmbedding(existingAutoEmbed)}, but this createIndex call resolves to ${describeEmbedding(resolvedAutoEmbed)}. Call deleteIndex({ indexName: "${indexName}" }) first to rebuild it.`,
+        });
+      }
+      // The two guards above compare against a snapshot taken earlier in this method. Another
+      // process can register the same logical index in the gap, and since both calls then
+      // provision, Atlas keeps whichever definition landed first and treats the second as
+      // IndexAlreadyExists. Conditioning the write on the values those guards checked makes the
+      // registry the arbiter: exactly one concurrent createIndex claims the entry, and the rest
+      // fail here rather than persisting a target the physical index does not match.
+      //
+      // Equality-to-null, not $exists:false — the driver stores an undefined autoEmbed as null,
+      // and null also matches entries written before autoEmbed existed, which carry no such key.
+      const registryClaim: Document = {
         collectionName: targetCollection,
-        searchIndexName: targetSearchIndex,
-        isByo: effectiveIsByo,
-        allowWrites: effectiveWritable,
-        textSearchIndexName,
-        dimension,
-        metric,
-      });
+        ...(resolvedAutoEmbed
+          ? { 'autoEmbed.path': resolvedAutoEmbed.path, 'autoEmbed.model': resolvedAutoEmbed.model }
+          : { autoEmbed: null }),
+      };
+      try {
+        await this.writeRegistryEntry(
+          indexName,
+          {
+            collectionName: targetCollection,
+            searchIndexName: targetSearchIndex,
+            isByo: effectiveIsByo,
+            allowWrites: effectiveWritable,
+            textSearchIndexName,
+            dimension,
+            // An autoEmbed index has no client-side metric; its similarity lives in autoEmbed.
+            ...(resolvedAutoEmbed ? {} : { metric }),
+            autoEmbed: resolvedAutoEmbed,
+          },
+          registryClaim,
+        );
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        const winner = await this.readRegistryEntry(indexName);
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          // The winning entry can be gone again by the time it is read back (a concurrent
+          // deleteIndex), in which case there is nothing to describe and a retry will succeed.
+          text: winner
+            ? `Index "${indexName}" was registered concurrently against collection "${winner.collectionName}" with ${describeEmbedding(winner.autoEmbed)}, but this createIndex call resolves to collection "${targetCollection}" with ${describeEmbedding(resolvedAutoEmbed)}. Call deleteIndex({ indexName: "${indexName}" }) first to rebuild it.`
+            : `Index "${indexName}" was registered concurrently by another process and removed again before this call could read it. Retry createIndex.`,
+        });
+      }
       this.indexTargets.set(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
         isByo: effectiveIsByo,
         allowWrites: effectiveWritable,
         textSearchIndexName,
+        autoEmbed: resolvedAutoEmbed,
       });
 
       const embeddingField = this.embeddingFieldName;
@@ -671,21 +870,38 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // `metadata.<field>` filter fields so filtered queries skip the $match /
       // $in pre-filter. See https://github.com/mastra-ai/mastra/issues/18587.
       const declaredMetadataPaths = this.buildDeclaredMetadataPaths(filterFields);
-      const fields: Document[] = [
-        {
+      // An index declares either a `vector` field or an `autoEmbed` one, never both.
+      const autoEmbedPath = resolvedAutoEmbed?.path;
+      let searchField: Document;
+      if (autoEmbed) {
+        // `metric` applies to client-side vectors; set `autoEmbed.similarity` instead.
+        const { model, path: _path, ...indexOptions } = autoEmbed;
+        searchField = { type: 'autoEmbed', modality: 'text', path: autoEmbedPath, model, ...indexOptions };
+      } else {
+        searchField = {
           type: 'vector',
           path: embeddingField,
           numDimensions: numDimensions,
           similarity: mongoMetric,
-        },
+        };
+      }
+      // A path cannot be declared twice, so `document` stops being a filter field once it
+      // is the embedded text. documentFilter then uses the $match pre-filter instead.
+      const documentIsEmbedded = autoEmbedPath === this.documentFieldName;
+      const fields: Document[] = [
+        searchField,
         {
           type: 'filter',
           path: '_id',
         },
-        {
-          type: 'filter',
-          path: this.documentFieldName,
-        },
+        ...(documentIsEmbedded
+          ? []
+          : [
+              {
+                type: 'filter',
+                path: this.documentFieldName,
+              },
+            ]),
         ...declaredMetadataPaths.map(path => ({ type: 'filter', path })),
       ];
 
@@ -704,7 +920,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // declaration; queries hydrate the real one lazily via
       // getDeclaredFilterPaths().
       if (vectorIndexCreated) {
-        this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
+        this.declaredFilterPaths.set(
+          indexName,
+          new Set(documentIsEmbedded ? declaredMetadataPaths : [this.documentFieldName, ...declaredMetadataPaths]),
+        );
       }
 
       // Companion full-text index (dynamic mapping). Only auto-created for MANAGED
@@ -899,7 +1118,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     searchIndexName?: string;
   }): Promise<QueryResult[]> {
     const { indexName, query, paths, topK = 10, filter, metadataMode = 'field', searchIndexName } = params;
-    const { collectionName } = await this.resolveIndexTarget(indexName);
+    const { collectionName, autoEmbed } = await this.resolveIndexTarget(indexName);
     // The full-text search index name is resolved from the persisted registry entry (set by
     // createSearchIndex / createIndex), defaulting to `${collectionName}_search_index`. A
     // caller may override it per-call via `searchIndexName`.
@@ -913,7 +1132,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         { $limit: Math.min(10000, topK) },
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
-        ...this.buildProjection(metadataMode, false, 'searchScore'),
+        ...this.buildProjection(metadataMode, false, 'searchScore', autoEmbed?.path),
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
@@ -945,7 +1164,19 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   async hybridQuery(params: {
     indexName: string;
-    queryVector: number[];
+    /** Query embedding for the vector branch. Supply this or `queryText`, not both. */
+    queryVector?: number[];
+    /**
+     * Text for MongoDB to embed server-side for the vector branch. autoEmbed indexes only.
+     * Independent of `query`, so the two branches can search for different things.
+     */
+    queryText?: string;
+    /**
+     * Embedding model for the vector branch, overriding the index's. Requires `queryText`
+     * and must be compatible with the index's model.
+     */
+    model?: string;
+    /** Full-text (BM25) term for the text branch. */
     query: string;
     paths: string[];
     topK?: number;
@@ -959,6 +1190,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const {
       indexName,
       queryVector,
+      queryText,
+      model,
       query,
       paths,
       topK = 10,
@@ -968,8 +1201,44 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       metadataMode = 'field',
       textSearchIndexName,
     } = params;
+    if (model && !queryText) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'INVALID_ARGS'),
+        text: 'model only applies to queryText, which MongoDB embeds server-side for the vector branch.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+    if (queryVector && queryText) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'MUTUALLY_EXCLUSIVE'),
+        text: 'queryVector and queryText are mutually exclusive: the vector branch takes one or the other.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+    if (!queryVector && !queryText) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'MISSING_VECTOR'),
+        text: 'The vector branch needs queryVector (or queryText on an autoEmbed index).',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
     await this.assertRankFusionSupported();
-    const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
+    const { collectionName, searchIndexName, autoEmbed } = await this.resolveIndexTarget(indexName);
+    if (queryText && !autoEmbed) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'NOT_AUTO_EMBED'),
+        text: `Index "${indexName}" was not created with autoEmbed, so MongoDB cannot embed a query string for it. Pass queryVector instead.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
     const textIndex = textSearchIndexName ?? (await this.resolveTextSearchIndexName(indexName));
     try {
       const collection = await this.getCollection(collectionName, true);
@@ -985,8 +1254,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
       const vectorSearch: Document = {
         index: searchIndexName,
-        path: this.embeddingFieldName,
-        queryVector,
+        path: autoEmbed ? autoEmbed.path : this.embeddingFieldName,
+        ...(queryText ? { query: { text: queryText } } : { queryVector }),
+        ...(model ? { model } : {}),
         numCandidates: candidates,
         limit: perBranch,
       };
@@ -1034,7 +1304,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // (NOT `searchScore`, which is the text-branch score and is absent on vector-only hits).
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
-        ...this.buildProjection(metadataMode, false, 'score'),
+        ...this.buildProjection(metadataMode, false, 'score', autoEmbed?.path),
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
@@ -1140,9 +1410,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @returns The IDs of the upserted vectors in input order.
    */
   async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
+    // An autoEmbed index takes `documents`, any other index takes `vectors`.
+    const { collectionName, autoEmbed } = await this.resolveIndexTarget(indexName);
+
     // Validate input parameters
-    validateUpsertInput('MONGODB', vectors, metadata, ids);
-    validateVectorValues('MONGODB', vectors);
+    if (autoEmbed) {
+      this.validateTextUpsertInput(indexName, documents, vectors, metadata, ids);
+    } else {
+      // validateUpsertInput rejects a missing or empty array, so `vectors` is present below.
+      validateUpsertInput('MONGODB', vectors, metadata, ids);
+      validateVectorValues('MONGODB', vectors!);
+    }
 
     // Outside the try: these USER errors must not be re-wrapped as THIRD_PARTY.
     await this.assertWritable(indexName, 'UPSERT');
@@ -1151,19 +1429,24 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     if (metadata) this.assertNoCircularReferences(metadata, 'UPSERT');
 
     try {
-      const { collectionName } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName);
 
-      // Get index stats to check dimension
-      const stats = await this.describeIndex({ indexName });
+      if (!autoEmbed) {
+        // Get index stats to check dimension
+        const stats = await this.describeIndex({ indexName });
 
-      // Validate vector dimensions
-      await this.validateVectorDimensions(vectors, stats.dimension);
+        // Validate vector dimensions
+        await this.validateVectorDimensions(vectors!, stats.dimension);
+      }
+
+      // One operation per input: vectors when the caller embeds, documents when MongoDB does.
+      const rowCount = (autoEmbed ? documents : vectors)?.length ?? 0;
 
       // Generate IDs if not provided
-      const generatedIds = ids || vectors.map(() => uuidv4());
+      const generatedIds = ids || Array.from({ length: rowCount }, () => uuidv4());
 
-      const operations = vectors.map((vector, idx) => {
+      const operations = Array.from({ length: rowCount }, (_unused, idx) => {
+        const vector = vectors?.[idx];
         const id = generatedIds[idx];
         const meta = metadata?.[idx] || {};
         const doc = documents?.[idx];
@@ -1177,12 +1460,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           {} as Record<string, any>,
         );
 
+        // MongoDB stores the generated vectors itself, so the document carries text only.
         const updateDoc: Partial<MongoDBDocument> = {
-          [this.embeddingFieldName]: vector,
+          ...(autoEmbed ? {} : { [this.embeddingFieldName]: vector }),
           [this.metadataFieldName]: normalizedMeta,
         };
         if (doc !== undefined) {
-          updateDoc[this.documentFieldName] = doc;
+          // On an autoEmbed index the text must land on the field the index embeds.
+          updateDoc[autoEmbed ? autoEmbed.path : this.documentFieldName] = doc;
         }
 
         // Match both the raw string and (when the id is 24-hex) the ObjectId form, so an
@@ -1240,6 +1525,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   async query({
     indexName,
     queryVector,
+    queryText,
+    model,
     topK = 10,
     filter,
     includeVector = false,
@@ -1247,10 +1534,49 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     numCandidates,
     metadataMode = 'field',
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
-    if (!queryVector) {
+    if (model && !queryText) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'INVALID_ARGS'),
+        text: 'model only applies to queryText, which MongoDB embeds server-side. A precomputed queryVector has already been embedded.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+    if (queryVector && queryText) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'MUTUALLY_EXCLUSIVE'),
+        text: 'queryVector and queryText are mutually exclusive: pass a vector you embedded yourself, or a string for MongoDB to embed server-side.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+    if (!queryVector && !queryText) {
       throw new MastraError({
         id: createVectorErrorId('MONGODB', 'QUERY', 'MISSING_VECTOR'),
-        text: 'queryVector is required for MongoDB queries. Metadata-only queries are not supported by this vector store.',
+        text: 'queryVector (or queryText on an autoEmbed index) is required for MongoDB queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    // Outside the try: these USER errors must not be re-wrapped as THIRD_PARTY.
+    const { collectionName, searchIndexName, autoEmbed, isByo } = await this.resolveIndexTarget(indexName);
+    if (queryText && !autoEmbed) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'NOT_AUTO_EMBED'),
+        text: `Index "${indexName}" was not created with autoEmbed, so MongoDB cannot embed a query string for it. Pass queryVector instead, or use textQuery() for full-text search.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+    if (includeVector && autoEmbed) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'INVALID_ARGS'),
+        text: `includeVector is not supported on autoEmbed index "${indexName}": MongoDB keeps the generated embeddings in its own internal database, so they are not on the returned documents.`,
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -1258,7 +1584,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
 
     try {
-      const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
       const indexNameInternal = searchIndexName;
 
@@ -1269,51 +1594,70 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
       const vectorSearch: Document = {
         index: indexNameInternal,
-        queryVector: queryVector,
-        path: this.embeddingFieldName,
+        ...(queryText ? { query: { text: queryText } } : { queryVector }),
+        ...(model ? { model } : {}),
+        path: autoEmbed ? autoEmbed.path : this.embeddingFieldName,
         numCandidates: Math.min(10000, Math.max(topK, numCandidates ?? topK * 20)),
         limit: Math.min(10000, topK),
       };
 
-      if (hasMetadataFilter) {
+      // documentFilter applies to whichever field holds the text: `document` on a managed
+      // index, or the field an autoEmbed index embeds.
+      const documentTextField = autoEmbed ? autoEmbed.path : this.documentFieldName;
+      const documentFilterExpr = documentFilter ? { [documentTextField]: documentFilter } : undefined;
+      // Whether the text field can be filtered inside $vectorSearch depends on who built the
+      // index. createIndex always declares `document`, except on an autoEmbed index where the
+      // embedded path cannot also be a filter field. A BYO collection may carry an Atlas index
+      // Mastra never created, which need not declare it at all, and filtering an undeclared
+      // path fails with "Path 'document' needs to be indexed as filter". So trust the
+      // declaration for indexes we build and read it for the ones we do not.
+      const verifyDocumentPath = Boolean(documentFilterExpr) && !autoEmbed && isByo;
+
+      if (hasMetadataFilter || documentFilterExpr) {
         // Fast path: if every field the filter touches was declared via
         // `filterFields` at index creation, and every operator is one Atlas
         // Vector Search accepts inside `filter`, pass the metadata filter
         // straight to $vectorSearch — no $match, no _id materialisation, no
         // 16 MB BSON ceiling. See https://github.com/mastra-ai/mastra/issues/18587
-        let declaredPaths: Set<string>;
-        try {
-          declaredPaths = await this.getDeclaredFilterPaths(indexName);
-        } catch {
-          // If the declaration can't be read, assume nothing is declared and
-          // use the always-correct pre-filter below.
-          declaredPaths = new Set();
+        let declaredPaths = new Set<string>();
+        if (hasMetadataFilter || verifyDocumentPath) {
+          try {
+            declaredPaths = await this.getDeclaredFilterPaths(indexName);
+          } catch {
+            // If the declaration can't be read, assume nothing is declared and
+            // use the always-correct pre-filter below.
+            declaredPaths = new Set();
+          }
         }
 
-        if (this.canPushDownFilter(metadataFilter, declaredPaths)) {
-          vectorSearch.filter = documentFilter
-            ? { $and: [metadataFilter, { [this.documentFieldName]: documentFilter }] }
-            : metadataFilter;
-        } else {
-          // Fallback: metadata fields are not (all) declared as filter fields, or
-          // the filter uses an operator $vectorSearch doesn't support. Materialise
-          // matching _ids via $match first, then filter by _id inside $vectorSearch.
+        const pushMetadata = !hasMetadataFilter || this.canPushDownFilter(metadataFilter, declaredPaths);
+        const pushDocument =
+          !documentFilterExpr || (!autoEmbed && (!verifyDocumentPath || declaredPaths.has(documentTextField)));
+        const pushed: Document[] = [
+          ...(hasMetadataFilter && pushMetadata ? [metadataFilter] : []),
+          ...(documentFilterExpr && pushDocument ? [documentFilterExpr] : []),
+        ];
+
+        if (!pushMetadata || !pushDocument) {
+          // Whatever cannot be pushed down is materialised as candidate _ids via $match
+          // first, then filtered by _id inside $vectorSearch.
+          const preFilter: Document[] = [
+            ...(hasMetadataFilter && !pushMetadata ? [metadataFilter] : []),
+            ...(documentFilterExpr && !pushDocument ? [documentFilterExpr] : []),
+          ];
           const candidateIds = await collection
-            .aggregate([{ $match: metadataFilter }, { $project: { _id: 1 } }])
+            .aggregate([
+              { $match: preFilter.length > 1 ? { $and: preFilter } : preFilter[0]! },
+              { $project: { _id: 1 } },
+            ])
             .map(doc => doc._id)
             .toArray();
 
           if (candidateIds.length === 0) return [];
-
-          // 'document' is a declared filter field — combine directly when present.
-          vectorSearch.filter = documentFilter
-            ? { $and: [{ _id: { $in: candidateIds } }, { [this.documentFieldName]: documentFilter }] }
-            : { _id: { $in: candidateIds } };
+          pushed.unshift({ _id: { $in: candidateIds } });
         }
-      } else if (documentFilter) {
-        // 'document' is a declared filter field in the index — pass directly,
-        // no candidate materialisation needed.
-        vectorSearch.filter = { [this.documentFieldName]: documentFilter };
+
+        vectorSearch.filter = pushed.length > 1 ? { $and: pushed } : pushed[0];
       }
 
       // Build the aggregation pipeline. Score is projected via $meta inside buildProjection
@@ -1322,7 +1666,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         {
           $vectorSearch: vectorSearch,
         },
-        ...this.buildProjection(metadataMode, includeVector, 'vectorSearchScore'),
+        ...this.buildProjection(metadataMode, includeVector, 'vectorSearchScore', autoEmbed?.path),
       ];
 
       const results = await collection.aggregate(pipeline).toArray();
@@ -1416,14 +1760,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     try {
-      const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
+      const { collectionName, searchIndexName, autoEmbed } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
 
       // Count only documents that actually carry the embedding field (respecting a dot-path
       // embeddingFieldName). On a BYO operational collection this excludes documents that have
       // not been embedded, and it also excludes the legacy `__index_metadata__` sentinel. (FIX 8)
+      // An autoEmbed index keeps its vectors outside the collection, so the text field is
+      // what marks a document as embedded.
+      const embeddedFieldName = autoEmbed ? autoEmbed.path : this.embeddingFieldName;
       const count = await collection.countDocuments({
-        [this.embeddingFieldName]: { $exists: true },
+        [embeddedFieldName]: { $exists: true },
         _id: { $ne: '__index_metadata__' as any },
       });
 
@@ -1441,7 +1788,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         });
       }
 
-      const vectorField = indexData.latestDefinition?.fields?.find((f: any) => f.type === 'vector');
+      const vectorField = indexData.latestDefinition?.fields?.find(
+        (f: any) => f.type === 'vector' || f.type === 'autoEmbed',
+      );
       if (!vectorField) {
         throw new MastraError({
           id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'INVALID'),
@@ -1451,13 +1800,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           text: `Atlas Search index "${indexNameInternal}" exists but has no vector field. The index may have been created outside of Mastra or without vector configuration.`,
         });
       }
-      const dimension = vectorField.numDimensions;
+      // autoEmbed's numDimensions is optional; MongoDB defaults it to 1024.
+      const dimension =
+        vectorField.type === 'autoEmbed' ? (vectorField.numDimensions ?? 1024) : vectorField.numDimensions;
       const reverseMetricMap: Record<string, 'cosine' | 'euclidean' | 'dotproduct'> = {
         cosine: 'cosine',
         euclidean: 'euclidean',
         dotProduct: 'dotproduct',
       };
-      const metric = reverseMetricMap[vectorField.similarity] ?? 'cosine';
+      // `similarity` is optional on an autoEmbed field, and Atlas reports nothing for it when
+      // the index did not set one, so the function the server applies is not knowable from
+      // here. Report a metric only where the index declares one. `similarity` is required on a
+      // plain vector field, so that path always has a value.
+      const metric =
+        vectorField.type === 'autoEmbed' && vectorField.similarity === undefined
+          ? undefined
+          : (reverseMetricMap[vectorField.similarity] ?? 'cosine');
 
       return { dimension, count, metric };
     } catch (error) {
@@ -1601,9 +1959,19 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         throw new Error('No updates provided');
       }
 
-      const { collectionName } = await this.resolveIndexTarget(indexName);
+      const { collectionName, autoEmbed } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
       const updateDoc: Record<string, any> = {};
+
+      if (update.vector && autoEmbed) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Index "${indexName}" was created with autoEmbed, so MongoDB owns the embeddings and a vector cannot be written directly. Upsert the document with new text instead.`,
+        });
+      }
 
       if (update.vector) {
         const stats = await this.describeIndex({ indexName });
