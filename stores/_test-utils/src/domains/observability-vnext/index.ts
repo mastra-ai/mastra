@@ -1,3 +1,4 @@
+export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
 

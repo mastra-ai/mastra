@@ -15,7 +15,12 @@ import {
   type TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 
-import { selectTraceQueryRoots, type RawTraceQuerySpan, type TraceQueryFixtureData } from './trace-query';
+import {
+  makeTraceQuerySpan as span,
+  selectTraceQueryRoots,
+  type RawTraceQuerySpan,
+  type TraceQueryFixtureData,
+} from './trace-query';
 
 /**
  * In-memory reference evaluator for `TrustedTraceAggregatePlan` (Aggregate Query API Decision 5).
@@ -286,3 +291,579 @@ export function evaluateTraceAggregateRequest(
 ): TraceAggregateResponse {
   return evaluateTraceAggregate(data, planTraceAggregate(parseTraceAggregateRequest(request), { scope }));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Shared fixture and conformance cases for `aggregateTraces()`.
+//
+// Every expected response below is derived by hand from the table in the comment above the
+// fixture — never by running the evaluator — so the same cases can later prove PostgreSQL,
+// ClickHouse, and DuckDB compilers against an independent oracle.
+// ---------------------------------------------------------------------------------------------
+
+const aggregateRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+
+interface AggregateRootSpec {
+  cursorId: number;
+  traceId: string;
+  entityName: string | null;
+  startedAt: string;
+  durationMs: number;
+  error?: boolean;
+  threadId: string;
+  tenant?: unknown;
+  lookup?: boolean;
+  environment?: string;
+  organizationId?: string;
+}
+
+function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
+  const organizationId = spec.organizationId ?? 'org-a';
+  const root = span(spec.cursorId, spec.traceId, spec.traceId, {
+    entityName: spec.entityName,
+    environment: spec.environment ?? 'production',
+    organizationId,
+    threadId: spec.threadId,
+    startedAt: spec.startedAt,
+    endedAt: new Date(Date.parse(spec.startedAt) + spec.durationMs).toISOString(),
+    error: spec.error ? { message: 'failed' } : null,
+    metadata: spec.tenant === undefined ? null : { tenant: spec.tenant },
+  });
+  if (!spec.lookup) return [root];
+  return [
+    root,
+    span(spec.cursorId + 1, spec.traceId, `${spec.traceId}-lookup`, {
+      parentSpanId: spec.traceId,
+      name: 'medication_lookup',
+      spanType: 'tool_call',
+      entityType: 'tool',
+      entityName: 'Medication lookup',
+      organizationId,
+      threadId: spec.threadId,
+      startedAt: spec.startedAt,
+      endedAt: new Date(Date.parse(spec.startedAt) + 100).toISOString(),
+    }),
+  ];
+}
+
+/**
+ * Window `[2026-08-01, 2026-08-08)`; every root is `production` / `org-a` unless noted. Days 4 and
+ * 7 have no traces at all; other days are sparse per agent so bucket series have holes.
+ *
+ * | trace       | day | ms    | err | thread | tenant     | lookup | notes                     |
+ * |-------------|-----|-------|-----|--------|------------|--------|---------------------------|
+ * | triage-1    | 1   | 1000  |     | t-1    | acme       | yes    |                           |
+ * | triage-2    | 1   | 2000  | yes | t-1    | acme       | yes    |                           |
+ * | triage-3    | 2   | 3000  |     | t-2    | '  acme '  | yes    | padded → `acme`           |
+ * | triage-4    | 3   | 4000  |     | t-3    | globex     | yes    |                           |
+ * | triage-5    | 5   | 8000  | yes | t-3    | ''         | yes    | empty → `null`            |
+ * | triage-6    | 5   | 8000  |     | t-4    |            |        | superseded copy excluded  |
+ * | billing-1   | 1   | 500   |     | t-5    | acme       | yes    |                           |
+ * | billing-2   | 2   | 1500  |     | t-5    | globex     |        |                           |
+ * | billing-3   | 3   | 2500  | yes | t-6    |            | yes    |                           |
+ * | billing-4   | 6   | 2500  |     | t-6    | acme       | yes    |                           |
+ * | billing-5   | 6   | 2500  |     | t-9    | acme       | yes    | org-b                     |
+ * | support-1..4| 2   | 6000  | #3  | t-7/8  |            |        | all in one bucket         |
+ * | research-1  | 3   | 12000 |     | t-10   | acme       | yes    | staging, org-b            |
+ * | research-2  | 5   | 12000 | yes | t-10   | acme       | yes    | staging, org-b            |
+ * | scheduler-1 | 1   | 1000  |     | t-11   |            |        | percentiles interpolate   |
+ * | scheduler-2 | 3   | 3000  |     | t-11   |            |        |                           |
+ * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`        |
+ *
+ * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
+ * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
+ * (p95 2900), null 1. Total 20 traces, 5 errors.
+ *
+ * Excluded records: a superseded `triage-6` root (lower `cursorId`, error + 60 s duration), a
+ * pending `triage-pending` root, and a `triage-late` root starting exactly at `to`.
+ */
+export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    ...aggregateRoot({
+      cursorId: 100,
+      traceId: 'triage-1',
+      entityName: 'triage',
+      startedAt: '2026-08-01T10:00:00.000Z',
+      durationMs: 1000,
+      threadId: 't-1',
+      tenant: 'acme',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 110,
+      traceId: 'triage-2',
+      entityName: 'triage',
+      startedAt: '2026-08-01T11:00:00.000Z',
+      durationMs: 2000,
+      error: true,
+      threadId: 't-1',
+      tenant: 'acme',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 120,
+      traceId: 'triage-3',
+      entityName: 'triage',
+      startedAt: '2026-08-02T10:00:00.000Z',
+      durationMs: 3000,
+      threadId: 't-2',
+      tenant: '  acme ',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 130,
+      traceId: 'triage-4',
+      entityName: 'triage',
+      startedAt: '2026-08-03T10:00:00.000Z',
+      durationMs: 4000,
+      threadId: 't-3',
+      tenant: 'globex',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 140,
+      traceId: 'triage-5',
+      entityName: 'triage',
+      startedAt: '2026-08-05T10:00:00.000Z',
+      durationMs: 8000,
+      error: true,
+      threadId: 't-3',
+      tenant: '',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 150,
+      traceId: 'triage-6',
+      entityName: 'triage',
+      startedAt: '2026-08-05T11:00:00.000Z',
+      durationMs: 60_000,
+      error: true,
+      threadId: 't-4',
+    }),
+    ...aggregateRoot({
+      cursorId: 151,
+      traceId: 'triage-6',
+      entityName: 'triage',
+      startedAt: '2026-08-05T11:00:00.000Z',
+      durationMs: 8000,
+      threadId: 't-4',
+    }),
+    ...aggregateRoot({
+      cursorId: 200,
+      traceId: 'billing-1',
+      entityName: 'billing',
+      startedAt: '2026-08-01T10:00:00.000Z',
+      durationMs: 500,
+      threadId: 't-5',
+      tenant: 'acme',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 210,
+      traceId: 'billing-2',
+      entityName: 'billing',
+      startedAt: '2026-08-02T10:00:00.000Z',
+      durationMs: 1500,
+      threadId: 't-5',
+      tenant: 'globex',
+    }),
+    ...aggregateRoot({
+      cursorId: 220,
+      traceId: 'billing-3',
+      entityName: 'billing',
+      startedAt: '2026-08-03T10:00:00.000Z',
+      durationMs: 2500,
+      error: true,
+      threadId: 't-6',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 230,
+      traceId: 'billing-4',
+      entityName: 'billing',
+      startedAt: '2026-08-06T10:00:00.000Z',
+      durationMs: 2500,
+      threadId: 't-6',
+      tenant: 'acme',
+      lookup: true,
+    }),
+    ...aggregateRoot({
+      cursorId: 240,
+      traceId: 'billing-5',
+      entityName: 'billing',
+      startedAt: '2026-08-06T11:00:00.000Z',
+      durationMs: 2500,
+      threadId: 't-9',
+      tenant: 'acme',
+      lookup: true,
+      organizationId: 'org-b',
+    }),
+    ...aggregateRoot({
+      cursorId: 300,
+      traceId: 'support-1',
+      entityName: 'support',
+      startedAt: '2026-08-02T10:00:00.000Z',
+      durationMs: 6000,
+      threadId: 't-7',
+    }),
+    ...aggregateRoot({
+      cursorId: 310,
+      traceId: 'support-2',
+      entityName: 'support',
+      startedAt: '2026-08-02T11:00:00.000Z',
+      durationMs: 6000,
+      threadId: 't-7',
+    }),
+    ...aggregateRoot({
+      cursorId: 320,
+      traceId: 'support-3',
+      entityName: 'support',
+      startedAt: '2026-08-02T12:00:00.000Z',
+      durationMs: 6000,
+      error: true,
+      threadId: 't-8',
+    }),
+    ...aggregateRoot({
+      cursorId: 330,
+      traceId: 'support-4',
+      entityName: 'support',
+      startedAt: '2026-08-02T13:00:00.000Z',
+      durationMs: 6000,
+      threadId: 't-8',
+    }),
+    ...aggregateRoot({
+      cursorId: 400,
+      traceId: 'research-1',
+      entityName: 'research',
+      startedAt: '2026-08-03T10:00:00.000Z',
+      durationMs: 12_000,
+      threadId: 't-10',
+      tenant: 'acme',
+      lookup: true,
+      environment: 'staging',
+      organizationId: 'org-b',
+    }),
+    ...aggregateRoot({
+      cursorId: 410,
+      traceId: 'research-2',
+      entityName: 'research',
+      startedAt: '2026-08-05T10:00:00.000Z',
+      durationMs: 12_000,
+      error: true,
+      threadId: 't-10',
+      tenant: 'acme',
+      lookup: true,
+      environment: 'staging',
+      organizationId: 'org-b',
+    }),
+    ...aggregateRoot({
+      cursorId: 500,
+      traceId: 'scheduler-1',
+      entityName: 'scheduler',
+      startedAt: '2026-08-01T10:00:00.000Z',
+      durationMs: 1000,
+      threadId: 't-11',
+    }),
+    ...aggregateRoot({
+      cursorId: 510,
+      traceId: 'scheduler-2',
+      entityName: 'scheduler',
+      startedAt: '2026-08-03T10:00:00.000Z',
+      durationMs: 3000,
+      threadId: 't-11',
+    }),
+    ...aggregateRoot({
+      cursorId: 600,
+      traceId: 'unnamed-1',
+      entityName: null,
+      startedAt: '2026-08-02T10:00:00.000Z',
+      durationMs: 700,
+      threadId: 't-12',
+    }),
+    span(700, 'triage-pending', 'triage-pending', {
+      entityName: 'triage',
+      organizationId: 'org-a',
+      isPending: true,
+      startedAt: '2026-08-02T10:00:00.000Z',
+      endedAt: null,
+    }),
+    ...aggregateRoot({
+      cursorId: 710,
+      traceId: 'triage-late',
+      entityName: 'triage',
+      startedAt: '2026-08-08T00:00:00.000Z',
+      durationMs: 1000,
+      threadId: 't-1',
+    }),
+  ],
+  scores: [],
+  feedback: [],
+};
+
+/**
+ * Structural twin of `TraceAggregateResponse`. The zod-inferred `measures` record requires every
+ * measure key, which hand-written expectations (requested measures only) cannot satisfy; tests
+ * validate each `expected` against `traceAggregateResponseSchema` instead.
+ */
+export interface TraceAggregateExpectedResponse {
+  rows: Array<{
+    dimensions?: Record<string, string | null>;
+    bucket?: string;
+    measures: Record<string, number>;
+  }>;
+  truncated: boolean;
+}
+
+export interface TraceAggregateConformanceCase {
+  name: string;
+  request: TraceAggregateRequest;
+  scope?: TraceQueryTenantScope;
+  expected: TraceAggregateExpectedResponse;
+}
+
+const triage = { entityName: 'triage' };
+const billing = { entityName: 'billing' };
+const support = { entityName: 'support' };
+const research = { entityName: 'research' };
+const scheduler = { entityName: 'scheduler' };
+const unnamed = { entityName: null };
+
+const day = (d: number) => `2026-08-0${d}T00:00:00.000Z`;
+
+export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
+  {
+    name: 'example 1: daily count and errorRate per agent omit empty days and keep complete series',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'errorRate'],
+    },
+    expected: {
+      rows: [
+        { dimensions: triage, bucket: day(1), measures: { count: 2, errorRate: 0.5 } },
+        { dimensions: triage, bucket: day(2), measures: { count: 1, errorRate: 0 } },
+        { dimensions: triage, bucket: day(3), measures: { count: 1, errorRate: 0 } },
+        { dimensions: triage, bucket: day(5), measures: { count: 2, errorRate: 0.5 } },
+        { dimensions: billing, bucket: day(1), measures: { count: 1, errorRate: 0 } },
+        { dimensions: billing, bucket: day(2), measures: { count: 1, errorRate: 0 } },
+        { dimensions: billing, bucket: day(3), measures: { count: 1, errorRate: 1 } },
+        { dimensions: billing, bucket: day(6), measures: { count: 2, errorRate: 0 } },
+        { dimensions: support, bucket: day(2), measures: { count: 4, errorRate: 0.25 } },
+        { dimensions: scheduler, bucket: day(1), measures: { count: 1, errorRate: 0 } },
+        { dimensions: scheduler, bucket: day(3), measures: { count: 1, errorRate: 0 } },
+        { dimensions: unnamed, bucket: day(2), measures: { count: 1, errorRate: 0 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'example 2: slowest agents by p95 with a having threshold',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['count', 'duration.p95'],
+      having: { op: 'gt', left: { path: 'duration.p95' }, right: { literal: 5000 } },
+      orderBy: { field: 'duration.p95', direction: 'desc' },
+      limit: 10,
+    },
+    expected: {
+      rows: [
+        { dimensions: research, measures: { count: 2, 'duration.p95': 12_000 } },
+        { dimensions: triage, measures: { count: 6, 'duration.p95': 8000 } },
+        { dimensions: support, measures: { count: 4, 'duration.p95': 6000 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'example 3: traces that called a tool grouped by metadata tenant with a null tenant group',
+    request: {
+      timeRange: aggregateRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+      groupBy: ['metadata.tenant'],
+      measures: ['count', 'countDistinct.threadId'],
+    },
+    expected: {
+      rows: [
+        { dimensions: { 'metadata.tenant': 'acme' }, measures: { count: 8, 'countDistinct.threadId': 6 } },
+        { dimensions: { 'metadata.tenant': null }, measures: { count: 2, 'countDistinct.threadId': 2 } },
+        { dimensions: { 'metadata.tenant': 'globex' }, measures: { count: 1, 'countDistinct.threadId': 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'null dimension groups sort last when ordering by dimension ascending',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName', 'environment'],
+      measures: ['count'],
+      orderBy: { field: 'entityName', direction: 'asc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: { ...billing, environment: 'production' }, measures: { count: 5 } },
+        { dimensions: { ...research, environment: 'staging' }, measures: { count: 2 } },
+        { dimensions: { ...scheduler, environment: 'production' }, measures: { count: 2 } },
+        { dimensions: { ...support, environment: 'production' }, measures: { count: 4 } },
+        { dimensions: { ...triage, environment: 'production' }, measures: { count: 6 } },
+        { dimensions: { ...unnamed, environment: 'production' }, measures: { count: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'null dimension groups sort last when ordering by dimension descending',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName', 'environment'],
+      measures: ['count'],
+      orderBy: { field: 'entityName', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: { ...triage, environment: 'production' }, measures: { count: 6 } },
+        { dimensions: { ...support, environment: 'production' }, measures: { count: 4 } },
+        { dimensions: { ...scheduler, environment: 'production' }, measures: { count: 2 } },
+        { dimensions: { ...research, environment: 'staging' }, measures: { count: 2 } },
+        { dimensions: { ...billing, environment: 'production' }, measures: { count: 5 } },
+        { dimensions: { ...unnamed, environment: 'production' }, measures: { count: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'equal counts under the default ordering break ties on the dimension ascending',
+    request: { timeRange: aggregateRange, groupBy: ['entityName'], measures: ['count'] },
+    expected: {
+      rows: [
+        { dimensions: triage, measures: { count: 6 } },
+        { dimensions: billing, measures: { count: 5 } },
+        { dimensions: support, measures: { count: 4 } },
+        { dimensions: research, measures: { count: 2 } },
+        { dimensions: scheduler, measures: { count: 2 } },
+        { dimensions: unnamed, measures: { count: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'limit counts groups and reports truncation',
+    request: { timeRange: aggregateRange, groupBy: ['entityName'], measures: ['count'], limit: 2 },
+    expected: {
+      rows: [
+        { dimensions: triage, measures: { count: 6 } },
+        { dimensions: billing, measures: { count: 5 } },
+      ],
+      truncated: true,
+    },
+  },
+  {
+    name: 'interval with limit keeps complete series for the top groups and drops lower-ranked groups entirely',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count'],
+      orderBy: { field: 'count', direction: 'desc' },
+      limit: 2,
+    },
+    expected: {
+      rows: [
+        { dimensions: triage, bucket: day(1), measures: { count: 2 } },
+        { dimensions: triage, bucket: day(2), measures: { count: 1 } },
+        { dimensions: triage, bucket: day(3), measures: { count: 1 } },
+        { dimensions: triage, bucket: day(5), measures: { count: 2 } },
+        { dimensions: billing, bucket: day(1), measures: { count: 1 } },
+        { dimensions: billing, bucket: day(2), measures: { count: 1 } },
+        { dimensions: billing, bucket: day(3), measures: { count: 1 } },
+        { dimensions: billing, bucket: day(6), measures: { count: 2 } },
+      ],
+      truncated: true,
+    },
+  },
+  {
+    name: 'ungrouped request without interval returns a single row with measures only',
+    request: { timeRange: aggregateRange, measures: ['count', 'errorCount', 'errorRate'] },
+    expected: { rows: [{ measures: { count: 20, errorCount: 5, errorRate: 0.25 } }], truncated: false },
+  },
+  {
+    name: 'ungrouped request with interval returns bucket rows only',
+    request: { timeRange: aggregateRange, interval: '1d', measures: ['count'] },
+    expected: {
+      rows: [
+        { bucket: day(1), measures: { count: 4 } },
+        { bucket: day(2), measures: { count: 7 } },
+        { bucket: day(3), measures: { count: 4 } },
+        { bucket: day(5), measures: { count: 3 } },
+        { bucket: day(6), measures: { count: 2 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'count drives having and orderBy without being projected',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['errorRate'],
+      having: { op: 'gte', left: { path: 'count' }, right: { literal: 4 } },
+      orderBy: { field: 'count', direction: 'asc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: support, measures: { errorRate: 0.25 } },
+        { dimensions: billing, measures: { errorRate: 0.2 } },
+        { dimensions: triage, measures: { errorRate: 1 / 3 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'tenant scope restricts the aggregated population',
+    request: { timeRange: aggregateRange, groupBy: ['entityName'], measures: ['count', 'errorCount'] },
+    scope: { organizationId: 'org-b' },
+    expected: {
+      rows: [
+        { dimensions: research, measures: { count: 2, errorCount: 1 } },
+        { dimensions: billing, measures: { count: 1, errorCount: 0 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'duration measures interpolate percentiles linearly within a group',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'scheduler' } },
+      groupBy: ['entityName'],
+      measures: [
+        'duration.avg',
+        'duration.min',
+        'duration.max',
+        'duration.p50',
+        'duration.p90',
+        'duration.p95',
+        'duration.p99',
+      ],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: scheduler,
+          measures: {
+            'duration.avg': 2000,
+            'duration.min': 1000,
+            'duration.max': 3000,
+            'duration.p50': 2000,
+            'duration.p90': 2800,
+            'duration.p95': 2900,
+            'duration.p99': 2980,
+          },
+        },
+      ],
+      truncated: false,
+    },
+  },
+];

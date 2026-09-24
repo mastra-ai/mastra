@@ -1,7 +1,14 @@
-import { parseTraceQueryRequest, planTraceQuery, type TraceQueryPredicate } from '@mastra/core/storage';
+import {
+  parseTraceQueryRequest,
+  planTraceQuery,
+  traceAggregateResponseSchema,
+  type TraceQueryPredicate,
+} from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import {
   evaluateTraceAggregateRequest,
+  TRACE_AGGREGATE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_FIXTURE_DATA,
   traceAggregateDimensionValue,
   traceAggregatePercentile,
 } from './trace-aggregate';
@@ -174,5 +181,45 @@ describe('trace-aggregate reference evaluator', () => {
     expect(traceAggregateDimensionValue(span(2, 'u', 'u'), 'metadata.padded')).toBeNull();
     expect(traceAggregateDimensionValue(span(3, 'e', 'e', { error: { message: 'x' } }), 'status')).toBe('error');
     expect(traceAggregateDimensionValue(span(4, 's', 's'), 'status')).toBe('success');
+  });
+});
+
+describe('trace-aggregate conformance cases', () => {
+  it('uses unique case names', () => {
+    const names = TRACE_AGGREGATE_CONFORMANCE_CASES.map(testCase => testCase.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it.each(TRACE_AGGREGATE_CONFORMANCE_CASES)('$name', ({ request, scope, expected }) => {
+    expect(evaluateTraceAggregateRequest(TRACE_AGGREGATE_FIXTURE_DATA, request, scope)).toEqual(expected);
+  });
+
+  it('hand-written expectations satisfy the response contract and project exactly the requested measures', () => {
+    for (const testCase of TRACE_AGGREGATE_CONFORMANCE_CASES) {
+      expect(() => traceAggregateResponseSchema.parse(testCase.expected), testCase.name).not.toThrow();
+      const groupBy = testCase.request.groupBy ?? [];
+      for (const row of testCase.expected.rows) {
+        expect(Object.keys(row.measures), testCase.name).toEqual(testCase.request.measures);
+        expect(Object.keys(row.dimensions ?? {}), testCase.name).toEqual(groupBy);
+        expect('bucket' in row, testCase.name).toBe(testCase.request.interval !== undefined);
+      }
+    }
+  });
+
+  it('aggregates exactly the population evaluateTraceQuery selects for every case', () => {
+    for (const testCase of TRACE_AGGREGATE_CONFORMANCE_CASES) {
+      const { timeRange, where } = testCase.request;
+      const plan = planTraceQuery(parseTraceQueryRequest({ timeRange, where, page: { limit: 1000 } }), {
+        scope: testCase.scope,
+      });
+      const traces = evaluateTraceQuery(TRACE_AGGREGATE_FIXTURE_DATA, plan);
+      if (!('traces' in traces)) throw new Error('Expected traces');
+      const aggregate = evaluateTraceAggregateRequest(
+        TRACE_AGGREGATE_FIXTURE_DATA,
+        { timeRange, where, measures: ['count'] },
+        testCase.scope,
+      );
+      expect(aggregate.rows[0]!.measures.count, testCase.name).toBe(traces.traces.length);
+    }
   });
 });
