@@ -1644,7 +1644,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private renderBashToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
-    const { command, cdPath } = this.parseShellCommand();
+    const { command } = this.parseShellCommand();
     const timeout = argsObj?.timeout as number | undefined;
 
     if (this.isQuietCompactShell()) {
