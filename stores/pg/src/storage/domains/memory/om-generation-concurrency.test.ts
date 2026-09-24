@@ -121,6 +121,8 @@ describe('PostgreSQL observational memory generation creation under concurrency'
       isObserving: false,
       isBufferingObservation: false,
       isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
       config: {},
     });
     // Rows left behind by the race before it was fixed. The later-created row is
