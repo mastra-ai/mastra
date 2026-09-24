@@ -1,4 +1,5 @@
 import { Container } from '@earendil-works/pi-tui';
+import { SessionStartupCancelledError } from '@mastra/core/agent-controller';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -127,6 +128,47 @@ describe('MastraTUI queueing', () => {
     mocks.addUserMessage.mockReset();
     mocks.showInfo.mockReset();
     mocks.showError.mockReset();
+  });
+
+  it.each(['fireMessage', 'signalMessage', 'sendOptimisticSignal'] as const)(
+    'renders %s startup cancellation as an interruption and removes pending messages',
+    async method => {
+      const error = new SessionStartupCancelledError();
+      const state = createQueueState({
+        userInitiatedAbort: false,
+        session: {
+          stream: { isActive: () => true },
+          sendMessage: vi.fn().mockRejectedValue(error),
+          sendSignal: vi.fn(() => ({ id: 'cancelled-signal', accepted: Promise.reject(error) })),
+        } as any,
+        chatContainer: new Container(),
+      });
+      const tui = Object.create(MastraTUI.prototype);
+      tui.state = state;
+      if (method === 'sendOptimisticSignal') {
+        state.messageComponentsById.set('optimistic', {} as never);
+        tui[method]('cancelled prompt', undefined, 'optimistic', false);
+      } else {
+        tui[method]('cancelled prompt');
+      }
+      await Promise.resolve();
+      expect(mocks.showInfo).toHaveBeenCalledWith(state, 'Interrupted');
+      expect(mocks.showError).not.toHaveBeenCalled();
+      expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+      expect(state.messageComponentsById.size).toBe(0);
+      expect(state.userInitiatedAbort).toBe(false);
+    },
+  );
+
+  it('keeps unrelated transport AbortErrors visible', async () => {
+    const error = new DOMException('Transport aborted during startup', 'AbortError');
+    const state = createQueueState({ session: { sendMessage: vi.fn().mockRejectedValue(error) } as any });
+    const tui = Object.create(MastraTUI.prototype);
+    tui.state = state;
+    tui.fireMessage('prompt');
+    await Promise.resolve();
+    expect(mocks.showError).toHaveBeenCalledWith(state, error.message);
+    expect(mocks.showInfo).not.toHaveBeenCalled();
   });
 
   it('sends editor submissions as signals instead of resolving input while the controller is running', async () => {

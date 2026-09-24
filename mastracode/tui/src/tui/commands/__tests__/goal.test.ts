@@ -136,6 +136,7 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
+import { SessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -170,6 +171,51 @@ describe('goal reminder metadata', () => {
 });
 
 describe('handleGoalCommand', () => {
+  it.each(['start', 'resume'] as const)(
+    'pauses and saves a goal after interrupted %s without displaying an error',
+    async action => {
+      const goal = {
+        id: 'goal-1',
+        objective: 'finish the task',
+        status: action === 'resume' ? 'paused' : 'active',
+        maxTurns: 50,
+      };
+      const goalManager = {
+        getGoal: vi.fn(() => goal),
+        setGoal: vi.fn().mockResolvedValue(goal),
+        resume: vi.fn(() => {
+          goal.status = 'active';
+        }),
+        pause: vi.fn(() => {
+          goal.status = 'paused';
+        }),
+        saveToThread: vi.fn().mockResolvedValue(undefined),
+        persistOnNextThreadCreate: vi.fn(),
+      };
+      const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new SessionStartupCancelledError()) }));
+      const ctx = {
+        state: createMockState({
+          threadId: 'thread-1',
+          session: { sendSignal },
+          extra: { goalManager, pendingNewThread: false },
+        }),
+        showInfo: vi.fn(),
+        showError: vi.fn(),
+        updateStatusLine: vi.fn(),
+        addUserMessage: vi.fn(),
+      } as any;
+
+      if (action === 'resume') await handleGoalCommand(ctx, ['resume']);
+      else await startGoalWithDefaults(ctx, goal.objective, 'Goal cancelled.');
+
+      expect(goalManager.pause).toHaveBeenCalledOnce();
+      expect(goal.status).toBe('paused');
+      expect(goalManager.saveToThread).toHaveBeenCalledTimes(2);
+      expect(ctx.showInfo).toHaveBeenCalledWith('Interrupted');
+      expect(ctx.showError).not.toHaveBeenCalled();
+    },
+  );
+
   it('opens an action modal for /goal with no arguments', async () => {
     overlayMocks.showModalOverlay.mockClear();
     const ctx = {
