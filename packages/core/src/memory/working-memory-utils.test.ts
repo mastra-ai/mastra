@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import type { MastraMessagePart } from '../agent/message-list/state/types';
 import {
   extractWorkingMemoryTags,
   extractWorkingMemoryContent,
   removeWorkingMemoryTags,
+  removeWorkingMemoryToolInvocationParts,
+  removeWorkingMemoryToolInvocations,
   removeSystemReminderTags,
 } from './working-memory-utils';
 
@@ -227,5 +230,58 @@ describe('removeSystemReminderTags', () => {
     expect(removeSystemReminderTags('before <system-reminder>unclosed content')).toBe(
       'before <system-reminder>unclosed content',
     );
+  });
+});
+
+describe('removeWorkingMemoryToolInvocationParts', () => {
+  const reasoning = { type: 'reasoning' as const, reasoning: 'thinking', details: [] };
+  const call = (toolCallId: string, toolName: string): MastraMessagePart => ({
+    type: 'tool-invocation',
+    toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: 'ok' },
+  });
+
+  it('drops a step left with only reasoning', () => {
+    const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        call('wm', 'updateWorkingMemory'),
+        ...next,
+      ]),
+    ).toEqual(next);
+  });
+
+  it('keeps reasoning when another tool call shares the step', () => {
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        call('wm', 'updateWorkingMemory'),
+        call('other', 'lookupWeather'),
+      ]),
+    ).toEqual([{ type: 'step-start' }, reasoning, call('other', 'lookupWeather')]);
+  });
+
+  it('leaves state-signal setWorkingMemory calls alone', () => {
+    const parts: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, call('wm', 'setWorkingMemory')];
+    expect(removeWorkingMemoryToolInvocationParts(parts)).toBe(parts);
+  });
+});
+
+describe('removeWorkingMemoryToolInvocations', () => {
+  const invocation = (toolName: string) => ({
+    state: 'result' as const,
+    toolCallId: toolName,
+    toolName,
+    args: {},
+    result: 'ok',
+  });
+
+  it('removes updateWorkingMemory entries and drops an emptied array', () => {
+    expect(removeWorkingMemoryToolInvocations([invocation('updateWorkingMemory')])).toBeUndefined();
+    expect(
+      removeWorkingMemoryToolInvocations([invocation('updateWorkingMemory'), invocation('lookupWeather')]),
+    ).toEqual([invocation('lookupWeather')]);
   });
 });

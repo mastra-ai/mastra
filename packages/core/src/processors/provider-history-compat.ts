@@ -621,8 +621,7 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
       for (const part of dbMessage.content.parts ?? []) {
         if (part.type !== 'reasoning') continue;
         const anthropic = part.providerMetadata?.anthropic as
-          | { signature?: unknown; redactedData?: unknown }
-          | undefined;
+          { signature?: unknown; redactedData?: unknown } | undefined;
         for (const value of [anthropic?.signature, anthropic?.redactedData]) {
           if (typeof value === 'string' && value && !foreign.has(value)) foreign.set(value, origin);
         }
@@ -640,8 +639,7 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
       const content = message.content.filter(part => {
         if (part.type !== 'reasoning') return true;
         const anthropic = part.providerOptions?.anthropic as
-          | { signature?: unknown; redactedData?: unknown }
-          | undefined;
+          { signature?: unknown; redactedData?: unknown } | undefined;
         const signature = anthropic?.signature ?? anthropic?.redactedData;
         if (typeof signature === 'string' && foreign.has(signature)) {
           dropped++;
@@ -890,6 +888,53 @@ export const openaiOrphanItemId: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: Anthropic orphaned thinking step (reactive)
+// ---------------------------------------------------------------------------
+
+/**
+ * Removes steps that hold nothing but reasoning when more assistant content
+ * follows them. The step's other parts were lost (older `@mastra/memory`
+ * releases stripped an `updateWorkingMemory` call and kept its thinking), so
+ * `@ai-sdk/anthropic` merges the leftover signed thinking into the next
+ * assistant step — a shape Anthropic rejects on every later turn.
+ *
+ * Reactive (matches Anthropic's "cannot be modified" 400); a recovery seatbelt
+ * for history saved before the strip was fixed.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/22798
+ */
+export const anthropicOrphanedThinkingStep: CompatRule = {
+  name: 'anthropic-orphaned-thinking-step',
+  errorPatterns: [/thinking`? or `?redacted_thinking`? blocks in the latest assistant message cannot be modified/i],
+  fix(messages) {
+    let mutated = false;
+
+    messages.forEach((message, index) => {
+      const parts = message.content?.parts;
+      if (message.role !== 'assistant' || !parts?.length) return;
+
+      const followedByAssistant = messages[index + 1]?.role === 'assistant';
+      const stepStarts = parts.flatMap((part, i) => (part.type === 'step-start' ? [i] : []));
+      const steps = (stepStarts[0] === 0 ? stepStarts : [0, ...stepStarts]).map((start, i, starts) =>
+        parts.slice(start, starts[i + 1] ?? parts.length),
+      );
+
+      const kept = steps.filter((step, i) => {
+        const content = step.filter(part => part.type !== 'step-start');
+        const reasoningOnly = content.length > 0 && content.every(part => part.type === 'reasoning');
+        return !reasoningOnly || (i === steps.length - 1 && !followedByAssistant);
+      });
+
+      if (kept.length === steps.length) return;
+      parts.splice(0, parts.length, ...kept.flat());
+      mutated = true;
+    });
+
+    return mutated;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -906,6 +951,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
   openaiOrphanItemId,
+  anthropicOrphanedThinkingStep,
 ];
 
 // ---------------------------------------------------------------------------
@@ -947,6 +993,11 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   value instead of as an unsatisfiable `item_reference`. Reactive (matches
  *   the specific `of type 'message' … without its required 'reasoning' item`
  *   400); a recovery seatbelt for already-corrupted history.
+ * - **anthropic-orphaned-thinking-step** — drops steps left with only signed
+ *   reasoning when more assistant content follows them, so Anthropic doesn't
+ *   see that thinking merged into the next step. Reactive (matches the
+ *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
+ *   already-corrupted history.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
