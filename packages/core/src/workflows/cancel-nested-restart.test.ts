@@ -167,4 +167,40 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
     expect(await status('child', 'c-done')).toBe('success');
     expect(await status('child', 'other')).toBe('suspended');
   });
+
+  it.each([
+    ['running', 'canceled'],
+    ['success', 'success'],
+  ] as const)('retries when a descendant moves to %s before the cancel write', async (raceStatus, expected) => {
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const parent = createWorkflow({ id: 'parent', inputSchema: schema, outputSchema: schema })
+      .then(createStep({ id: 'child', inputSchema: schema, outputSchema: schema, execute: async () => ({}) }))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { parent } });
+
+    await store.persistWorkflowSnapshot({
+      workflowName: 'parent',
+      runId: 'p1',
+      snapshot: snapshot('p1', 'suspended', {
+        child: { status: 'suspended', payload: {}, startedAt: 1, metadata: { nestedRunId: ['c1'] } },
+      }),
+    });
+    await store.persistWorkflowSnapshot({ workflowName: 'child', runId: 'c1', snapshot: snapshot('c1', 'suspended') });
+
+    // Simulate another worker changing the child's status right before the first conditional write.
+    const original = store.updateWorkflowState.bind(store);
+    let raced = false;
+    store.updateWorkflowState = async args => {
+      if (args.workflowName === 'child' && !raced) {
+        raced = true;
+        await original({ workflowName: 'child', runId: 'c1', opts: { status: raceStatus } });
+      }
+      return original(args);
+    };
+
+    await (await parent.createRun({ runId: 'p1' })).cancel();
+
+    expect((await store.loadWorkflowSnapshot({ workflowName: 'child', runId: 'c1' }))?.status).toBe(expected);
+  });
 });

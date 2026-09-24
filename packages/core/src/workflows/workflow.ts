@@ -3811,14 +3811,27 @@ export class Run<
       if ((runId === this.runId && workflowName === this.workflowId) || TERMINAL_RUN_STATUSES.has(snapshot.status))
         continue;
       try {
-        // Guard against a descendant finishing between our read and this write.
-        await workflowsStore.updateWorkflowState({
-          workflowName,
-          runId,
-          opts: workflowsStore.supportsConcurrentUpdates()
-            ? { status: 'canceled', expectedStatus: snapshot.status }
-            : { status: 'canceled' },
-        });
+        if (!workflowsStore.supportsConcurrentUpdates()) {
+          await workflowsStore.updateWorkflowState({ workflowName, runId, opts: { status: 'canceled' } });
+          continue;
+        }
+        // Guard against a descendant changing status between our read and this write:
+        // on a rejected write, reload and retry while it is still non-terminal.
+        let expectedStatus = snapshot.status;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const updated = await workflowsStore.updateWorkflowState({
+            workflowName,
+            runId,
+            opts: { status: 'canceled', expectedStatus },
+          });
+          if (updated) break;
+          let current = (await workflowsStore.getWorkflowRunById({ runId, workflowName }))?.snapshot;
+          if (typeof current === 'string') current = JSON.parse(current) as WorkflowRunState;
+          if (!current) throw new Error(`Nested workflow run ${runId} disappeared during cancellation`);
+          if (TERMINAL_RUN_STATUSES.has(current.status)) break;
+          if (attempt === 2) throw new Error(`Cancellation of nested workflow run ${runId} kept being rejected`);
+          expectedStatus = current.status;
+        }
       } catch (error) {
         this.mastra?.getLogger()?.error(`Failed to cancel nested workflow run ${runId}`, { error });
       }
