@@ -3992,6 +3992,11 @@ export class AgentThreadStreamRuntime {
     // half's parts; a local run already records which stream it moved to.
     const isAnsweredHalf = (runId: string, streamId: string) => {
       if (answeredStreamIds.has(streamId)) return true;
+      // A run registers a later stream only after this one ended, so its
+      // prompts were answered even if `run-suspended` hasn't arrived yet.
+      const registered = registeredSeqsByRunId.get(runId);
+      const seq = registered?.get(streamId);
+      if (seq !== undefined && [...registered!.values()].some(other => other > seq)) return true;
       const current = state.threadRunsById.get(runId);
       return current !== undefined && current.streamId !== streamId && current.lifecycle !== 'suspended';
     };
@@ -4095,6 +4100,8 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
+            // A local run can be read before its `run-registered` event arrives.
+            noteRunHalf(run.runId, { streamId: run.streamId, streamSeq: run.streamSeq });
             // Local registered runs expose createSubscriberStream, while remote runs are
             // already per-subscription streams. Do not silently skip locked streams here:
             // a locked fallback stream means a caller is sharing a non-multicast stream.
