@@ -416,11 +416,11 @@ export interface ResolveAutoOMModelArgs {
 export interface AgentControllerOMConfig {
   /** Default observer model. Use `auto` to follow the active main model. */
   observerModel?: OMModel;
-  /** Default model ID for the observer agent. @deprecated Use `observerModel`. */
+  /** Concrete observer model used when `observerModel` is unset or auto cannot resolve. */
   defaultObserverModelId?: string;
   /** Default reflector model. Use `auto` to follow the active main model. */
   reflectorModel?: OMModel;
-  /** Default model ID for the reflector agent. @deprecated Use `reflectorModel`. */
+  /** Concrete reflector model used when `reflectorModel` is unset or auto cannot resolve. */
   defaultReflectorModelId?: string;
   /** Resolve an automatic selection to a concrete model ID. */
   resolveAutoModelId?: (args: ResolveAutoOMModelArgs) => string | undefined;
