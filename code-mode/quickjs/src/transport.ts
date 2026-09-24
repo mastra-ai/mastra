@@ -259,17 +259,19 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     const cleanup = (): void => {
       if (finished) return;
       finished = true;
-      // Teardown can itself need to allocate. If the runtime is still pinned at
-      // its heap limit (the OOM case), those allocations fail, objects survive,
-      // and JS_FreeRuntime aborts the whole WASM module instead of throwing.
-      runtime.setMemoryLimit(-1);
       for (const deferred of pendingDeferreds) deferred.dispose();
       pendingDeferreds.clear();
       abandonedGuestResult?.value?.dispose();
       abandonedGuestResult?.error?.dispose();
       abandonedGuestResult = undefined;
 
+      // Guest jobs still run here, so keep them under the heap limit.
       drainJobs();
+      // Freeing the runtime can itself need to allocate. If it is still pinned
+      // at its heap limit (the OOM case), those allocations fail, objects
+      // survive, and JS_FreeRuntime aborts the whole WASM module. No guest code
+      // runs past this point, so lifting the limit is safe.
+      runtime.setMemoryLimit(-1);
       context.dispose();
       runtime.dispose();
     };
