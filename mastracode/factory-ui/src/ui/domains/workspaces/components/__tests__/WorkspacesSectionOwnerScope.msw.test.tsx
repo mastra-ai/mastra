@@ -105,12 +105,12 @@ describe('Workspaces sidebar owner scope', () => {
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: 'Show all review sessions' })).toHaveAttribute(
+    expect(within(group).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
 
-    await user.click(within(group).getByRole('button', { name: 'Show all review sessions' }));
+    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
     expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
@@ -135,10 +135,10 @@ describe('Workspaces sidebar owner scope', () => {
     await waitForMutationsIdle(rendered.client);
 
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
-    expect(await within(group).findByText('No sessions of your own.')).toBeInTheDocument();
+    expect(await within(group).findByRole('status')).toHaveTextContent('No sessions of your own.');
     expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show all review sessions' }));
+    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).queryByText('No sessions of your own.')).not.toBeInTheDocument();
@@ -161,11 +161,11 @@ describe('Workspaces sidebar owner scope', () => {
     expect(await within(work).findByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
     expect(within(work).queryByRole('button', { name: 'factory/issue-20004' })).not.toBeInTheDocument();
 
-    await user.click(within(work).getByRole('button', { name: 'Show all work sessions' }));
+    await user.click(within(work).getByRole('button', { name: 'Show only my work sessions' }));
 
     expect(await within(work).findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
     expect(within(review).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    expect(within(review).getByRole('button', { name: 'Show all review sessions' })).toHaveAttribute(
+    expect(within(review).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );

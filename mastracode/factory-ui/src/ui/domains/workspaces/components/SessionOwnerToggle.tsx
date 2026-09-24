@@ -18,6 +18,7 @@ export function SessionOwnerToggle({
   mineOnly: boolean;
   onChange: (mineOnly: boolean) => void;
 }) {
+  // The name stays fixed and aria-pressed carries the state; only the tooltip names the next click.
   const actionLabel = mineOnly ? `Show all ${label}` : `Show only my ${label}`;
 
   return (
@@ -25,7 +26,7 @@ export function SessionOwnerToggle({
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label={actionLabel}
+      aria-label={`Show only my ${label}`}
       aria-pressed={mineOnly}
       tooltip={actionLabel}
       onClick={() => onChange(!mineOnly)}
