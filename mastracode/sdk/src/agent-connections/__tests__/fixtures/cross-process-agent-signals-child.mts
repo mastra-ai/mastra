@@ -50,11 +50,12 @@ async function readRun(iterator: AsyncIterator<any>) {
 
 const commandLines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 const commands = commandLines[Symbol.asyncIterator]();
-async function waitForCommand(expected: string) {
+async function waitForCommand<T extends string>(expected: T | readonly T[]): Promise<T> {
+  const accepted: readonly T[] = Array.isArray(expected) ? expected : [expected as T];
   while (true) {
     const next = await commands.next();
-    if (next.done) throw new Error(`stdin closed before ${expected}`);
-    if (next.value === expected) return;
+    if (next.done) throw new Error(`stdin closed before ${accepted.join('|')}`);
+    if (accepted.includes(next.value as T)) return next.value as T;
   }
 }
 
@@ -288,27 +289,57 @@ async function runYieldOnDemand() {
     return claim;
   });
 
-  if (role === 'owner') {
-    emit('claim-result', { threadId: ownerThreadId, claimed: await manager.claim(ownerThreadId) });
-    await waitForCommand('switch');
-    currentThreadId = 'owner-thread-2';
-    emit('claim-result', { threadId: currentThreadId, claimed: await manager.claim(currentThreadId) });
-    emit('switched', { threadId: currentThreadId });
-    await waitForCommand('probe');
+  const probe = async () => {
     const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
     emit('discovered', {
       threads: peers
         .map(peer => ({ threadId: peer.threadId, label: peer.label, selfAdvertised: peer.selfAdvertised === true }))
         .sort((a, b) => a.threadId.localeCompare(b.threadId)),
     });
+  };
+
+  if (role === 'owner') {
+    emit('claim-result', { threadId: ownerThreadId, claimed: await manager.claim(ownerThreadId) });
+    for (;;) {
+      const command = await waitForCommand(['switch', 'stall', 'probe', 'close']);
+      if (command === 'close') break;
+      if (command === 'probe') {
+        await probe();
+        continue;
+      }
+      if (command === 'stall') {
+        // A live owner whose event loop hitches — rendering, GC, a busy
+        // broker — stays on its thread the whole time. Block synchronously in
+        // bursts with tiny gaps so the socket still flushes between them.
+        const until = Date.now() + STALL_TOTAL_MS;
+        const buffer = new Int32Array(new SharedArrayBuffer(4));
+        while (Date.now() < until) {
+          Atomics.wait(buffer, 0, 0, STALL_BURST_MS);
+          await new Promise(resolve => setTimeout(resolve, STALL_GAP_MS));
+        }
+        emit('stalled', { threadId: currentThreadId });
+        continue;
+      }
+      currentThreadId = 'owner-thread-2';
+      emit('claim-result', { threadId: currentThreadId, claimed: await manager.claim(currentThreadId) });
+      emit('switched', { threadId: currentThreadId });
+    }
   } else {
     await waitForCommand('claim');
     emit('claim-result', { threadId: ownerThreadId, claimed: await manager.claim(ownerThreadId) });
+    for (;;) {
+      const command = await waitForCommand(['probe', 'close']);
+      if (command === 'close') break;
+      await probe();
+    }
   }
 
-  await waitForCommand('close');
   manager.close();
 }
+
+const STALL_TOTAL_MS = 6_000;
+const STALL_BURST_MS = 400;
+const STALL_GAP_MS = 20;
 
 async function main() {
   if (scenario === 'thread-transition') await runThreadTransition();
