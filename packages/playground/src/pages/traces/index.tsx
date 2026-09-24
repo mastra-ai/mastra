@@ -5,7 +5,7 @@ import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/Fi
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import {
@@ -142,8 +142,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Older servers without the capabilities endpoint fall back to the trace-query API.
   const traceQuery = useTraceQueryAvailable();
   const withQueryTrace = traceQuery.enabled;
-  // Feedback lives in the observability store behind the trace-query API.
-  const withFeedback = traceQuery.enabled;
+  const withFeedback = useFeedbackAvailable().enabled;
 
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.

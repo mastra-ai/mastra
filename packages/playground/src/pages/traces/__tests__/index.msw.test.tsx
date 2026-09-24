@@ -9,6 +9,7 @@ import TracesPage from '..';
 import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
+  noFeedbackCapabilities,
   traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
@@ -390,6 +391,35 @@ describe('Traces page list source', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(legacyTraceCapabilities)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: traceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => {
+          onFeedback();
+          return HttpResponse.json(emptyFeedback);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(screen.getAllByRole('tab', { name: /^scores/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+      expect(onFeedback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the server supports trace query but not feedback', () => {
+    it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
+      const onFeedback = vi.fn<() => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(noFeedbackCapabilities)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
           HttpResponse.json({ span: traceSpans.spans[0] }),
         ),

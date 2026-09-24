@@ -19,6 +19,15 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
+    feedback: true,
+  },
+};
+
+export const noFeedbackCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    feedback: false,
   },
 };
 
