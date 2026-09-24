@@ -202,12 +202,12 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     workspace,
     // The builder always passes its own error processors: the peer range
     // allows cores that predate the framework defaults, so relying on them
-    // would silently drop this stack on older cores. `maxProcessorRetries`
-    // is set alongside because newer cores warn when caller-configured error
-    // processors have no explicit retry budget; 3 matches the runtime's
-    // implicit safety cap, so this changes nothing but the warning.
+    // would silently drop this stack on older cores. Newer cores warn once
+    // per agent because this list has no explicit retry budget; that warning
+    // is accurate, and setting `maxProcessorRetries` just to silence it would
+    // also convert input/output processor `abort({ retry: true })` from abort
+    // into retry, so the warning stays.
     errorProcessors: DEFAULT_BUILDER_ERROR_PROCESSORS,
-    maxProcessorRetries: 3,
     ...(args || {}),
     id: 'builder-agent',
     name: 'Agent Builder Agent',
