@@ -4,7 +4,7 @@
 
 Added `runId`, `sessionId`, `userId`, and `organizationId` to advanced trace queries. Use them at trace scope and inside `spans.some` / `spans.none` with `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery does not return their recorded values because they are private, high-cardinality identifiers.
 
-`organizationId` compares recorded data and is ANDed with the trusted tenant scope, so it can only narrow a tenant's own traces. `projectId` stays rejected in predicates.
+`organizationId` compares recorded data and is ANDed with the trusted tenant scope, so it can only narrow a tenant's own traces. `projectId` stays rejected in predicates. Stores advertise support through the new `trace-query-context-ids` observability storage feature.
 
 ```ts
 const result = await observability.queryTraces(
