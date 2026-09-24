@@ -82,7 +82,7 @@ export function stripNullsFromOptional(value: unknown, schema: Record<string, un
     for (const [key, propertyValue] of Object.entries(value as Record<string, unknown>)) {
       // Only declared optional properties: an undeclared null key must still reach the schema validator, so strict
       // schemas can reject it and record-style schemas keep it.
-      if (propertyValue === null && key in properties && !required.includes(key)) {
+      if (propertyValue === null && Object.hasOwn(properties, key) && !required.includes(key)) {
         continue;
       }
 

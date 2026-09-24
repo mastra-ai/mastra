@@ -392,9 +392,11 @@ describe('updateWorkingMemoryTool schema validation (issue #17301)', () => {
       const recordTool = updateWorkingMemoryTool({
         workingMemory: { enabled: true, schema: z.record(z.string(), z.string().nullable()) },
       } as any);
-      const record = await (recordTool.inputSchema as any)['~standard'].validate({ memory: { city: null } });
+      const record = await (recordTool.inputSchema as any)['~standard'].validate({
+        memory: { city: null, toString: null },
+      });
       expect('issues' in record && record.issues).toBeFalsy();
-      expect(record.value).toEqual({ memory: { city: null } });
+      expect(record.value).toEqual({ memory: { city: null, toString: null } });
     });
   });
 });
