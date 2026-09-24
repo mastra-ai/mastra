@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
@@ -168,16 +169,20 @@ describe('Express auth middleware helper', () => {
     const mastra = createMastraWithSessionRefresh();
     const authMiddleware = createAuthMiddleware({ mastra });
     const app = express();
-    // A single handler (instead of chained app.use/app.get) keeps CodeQL's
-    // js/missing-rate-limiting from flagging this test-only server.
-    app.use((req, res, next) => {
+    // A plain node server with Express's request/response prototypes gives real
+    // Express cookie handling without an Express route, which CodeQL's
+    // js/missing-rate-limiting would flag on this test-only server.
+    const server: Server = createServer((rawReq, rawRes) => {
+      const req = Object.setPrototypeOf(rawReq, app.request) as Request;
+      const res = Object.setPrototypeOf(rawRes, app.response) as Response;
+      req.res = res;
+      res.req = req;
+      req.originalUrl = req.url;
+      res.locals = {};
       res.cookie('other', '1');
-      authMiddleware(req, res, () => res.json({ ok: true })).catch(next);
+      void authMiddleware(req, res, () => res.json({ ok: true }));
     });
-
-    const server: Server = await new Promise(resolve => {
-      const s = app.listen(0, '127.0.0.1', () => resolve(s));
-    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Failed to get server address');
