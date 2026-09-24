@@ -94,20 +94,20 @@ export const Completed: Story = {
   },
 };
 
-const statusByCode: Record<string, TaskListItem['status']> = { d: 'completed', a: 'in_progress', p: 'pending' };
-const liveFrames = ['pppppp', 'appppp', 'dapppp', 'ddappp', 'dddapp', 'ddpdap', 'dddpda', 'ddddda'];
+const statusAtStep = (index: number, step: number): TaskListItem['status'] => {
+  if (index < step) return 'completed';
+  if (index === step) return 'in_progress';
+  return 'pending';
+};
 
 export const Live: Story = {
   render: function LiveStory() {
-    const [frame, setFrame] = useState(0);
+    const tasks = LongList.args?.tasks ?? [];
+    const [step, setStep] = useState(0);
     useEffect(() => {
-      const interval = setInterval(() => setFrame(current => (current + 1) % liveFrames.length), 1800);
+      const interval = setInterval(() => setStep(current => (current + 1) % tasks.length), 1800);
       return () => clearInterval(interval);
-    }, []);
-    const tasks = (LongList.args?.tasks ?? []).map((task, index) => ({
-      ...task,
-      status: statusByCode[liveFrames[frame]?.[index] ?? 'p'] ?? 'pending',
-    }));
-    return <TaskList tasks={tasks} />;
+    }, [tasks.length]);
+    return <TaskList tasks={tasks.map((task, index) => ({ ...task, status: statusAtStep(index, step) }))} />;
   },
 };

@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { TaskGraphLines } from './task-graph';
 import { TASK_ROW_HEIGHT, taskGraphLaneShift, taskGraphMotion, taskGraphNodeClass } from './task-graph-node';
-import { useFocusedRowScroll } from './use-focused-row-scroll';
+import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -165,7 +165,6 @@ export const TaskListRow = ({ task, className, style, ...props }: TaskListRowPro
   </li>
 );
 
-const EXPANDED_VISIBLE_ROWS = 4.5;
 const LIST_INSET_Y = 10;
 
 /* A full layer minus one fade per edge; the fades are sized by mask-size, so their depth animates. */
@@ -201,14 +200,18 @@ export const TaskList = ({
   const completed = tasks.filter(task => task.status === 'completed').length;
   const total = tasks.length;
   const focusIndex = focusedTaskIndex(tasks);
-  const windowHeight = open ? Math.min(total, EXPANDED_VISIBLE_ROWS) * TASK_ROW_HEIGHT : TASK_ROW_HEIGHT;
-  const viewportRef = useFocusedRowScroll({
+  const windowHeight = taskWindowHeight(total, open);
+  const { viewportRef, glideForOpen } = useFocusedRowScroll({
     focusIndex,
     rowCount: total,
-    windowHeight,
     open,
     followFocus: scrollActiveIntoView,
   });
+
+  const changeOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    glideForOpen(nextOpen);
+  };
 
   if (total === 0 || (hideWhenComplete && completed === total)) return null;
 
@@ -217,7 +220,7 @@ export const TaskList = ({
       aria-label="Task list"
       data-testid="task-list"
       data-collapsed={open ? undefined : ''}
-      onClick={open ? undefined : () => setOpen(true)}
+      onClick={open ? undefined : () => changeOpen(true)}
       className={cn('group/task-list relative', !open && 'cursor-pointer', className)}
       {...props}
     >
@@ -266,7 +269,7 @@ export const TaskList = ({
           aria-controls={listId}
           onClick={event => {
             event.stopPropagation();
-            setOpen(current => !current);
+            changeOpen(!open);
           }}
           className={cn(
             'grid size-6 cursor-pointer place-items-center rounded-md text-muted-foreground hover:text-foreground',

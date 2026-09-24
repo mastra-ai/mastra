@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import { TASK_GRAPH_MOTION_MS, TASK_ROW_HEIGHT } from './task-graph-node';
 
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -32,18 +32,19 @@ const revealedScrollTop = (rowIndex: number, currentTop: number, windowHeight: n
   return currentTop;
 };
 
-interface FocusedRowScrollOptions {
+const EXPANDED_VISIBLE_ROWS = 4.5;
+
+export const taskWindowHeight = (rowCount: number, open: boolean) =>
+  open ? Math.min(rowCount, EXPANDED_VISIBLE_ROWS) * TASK_ROW_HEIGHT : TASK_ROW_HEIGHT;
+
+interface ScrollTarget {
   focusIndex: number;
-  rowCount: number;
   windowHeight: number;
   open: boolean;
   followFocus: boolean;
 }
 
-const wantedScrollTop = (
-  currentTop: number,
-  { focusIndex, windowHeight, open, followFocus }: Omit<FocusedRowScrollOptions, 'rowCount'>,
-) => {
+const wantedScrollTop = (currentTop: number, { focusIndex, windowHeight, open, followFocus }: ScrollTarget) => {
   if (!open) return focusIndex * TASK_ROW_HEIGHT;
   if (!followFocus) return currentTop;
   return revealedScrollTop(focusIndex, currentTop, windowHeight);
@@ -52,25 +53,39 @@ const wantedScrollTop = (
 const clampScrollTop = (top: number, contentHeight: number, windowHeight: number) =>
   Math.min(Math.max(top, 0), Math.max(contentHeight - windowHeight, 0));
 
-export const useFocusedRowScroll = (options: FocusedRowScrollOptions) => {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const placedOnce = useRef(false);
-  const { focusIndex, rowCount, windowHeight, open, followFocus } = options;
+interface FocusedRowScrollOptions {
+  focusIndex: number;
+  rowCount: number;
+  open: boolean;
+  followFocus: boolean;
+}
 
-  useEffect(() => {
+export const useFocusedRowScroll = ({ focusIndex, rowCount, open, followFocus }: FocusedRowScrollOptions) => {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const cancelGlide = useRef<() => void>(undefined);
+  const placedOnce = useRef(false);
+
+  const glideForOpen = (nextOpen: boolean) => {
     const viewport = viewportRef.current;
     if (!viewport || typeof viewport.scrollTo !== 'function') return;
-    const currentTop = viewport.scrollTop;
-    const contentHeight = rowCount * TASK_ROW_HEIGHT;
-    const wantedTop = wantedScrollTop(currentTop, { focusIndex, windowHeight, open, followFocus });
-    const top = clampScrollTop(wantedTop, contentHeight, windowHeight);
+    const windowHeight = taskWindowHeight(rowCount, nextOpen);
+    const wantedTop = wantedScrollTop(viewport.scrollTop, { focusIndex, windowHeight, open: nextOpen, followFocus });
+    const top = clampScrollTop(wantedTop, rowCount * TASK_ROW_HEIGHT, windowHeight);
+    cancelGlide.current?.();
     if (!placedOnce.current) {
       placedOnce.current = true;
       viewport.scrollTo({ top });
       return;
     }
-    if (top !== currentTop) return glideScrollTop(viewport, top);
-  }, [focusIndex, rowCount, windowHeight, open, followFocus]);
+    if (top !== viewport.scrollTop) cancelGlide.current = glideScrollTop(viewport, top);
+  };
 
-  return viewportRef;
+  const followFocusedRow = useEffectEvent(() => glideForOpen(open));
+
+  useEffect(() => {
+    followFocusedRow();
+    return () => cancelGlide.current?.();
+  }, [focusIndex]);
+
+  return { viewportRef, glideForOpen };
 };

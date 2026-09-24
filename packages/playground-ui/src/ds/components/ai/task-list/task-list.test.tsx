@@ -102,6 +102,13 @@ describe('TaskList', () => {
       expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 140 });
     });
 
+    it('slides the active task into the one-row window when collapsing', () => {
+      render(<TaskList tasks={longTasks} />);
+      toggle();
+
+      expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 140 });
+    });
+
     it('shows the next pending task when nothing is in progress', () => {
       render(<TaskList tasks={mixedTasks.map(task => ({ ...task, status: 'pending' }))} defaultOpen={false} />);
 
