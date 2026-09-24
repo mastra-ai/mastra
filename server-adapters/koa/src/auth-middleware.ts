@@ -70,7 +70,11 @@ export function createAuthMiddleware({ mastra, requiresAuth = true }: KoaAuthMid
     });
 
     for (const [key, value] of Object.entries(result.headers ?? {})) {
-      ctx.set(key, value);
+      if (key.toLowerCase() === 'set-cookie') {
+        ctx.append(key, value);
+      } else {
+        ctx.set(key, value);
+      }
     }
 
     if (result.action === 'next') {

@@ -48,7 +48,7 @@ export function createAuthMiddleware({ mastra, requiresAuth = true }: HonoAuthMi
     });
 
     for (const [key, value] of Object.entries(result.headers ?? {})) {
-      c.header(key, value);
+      c.header(key, value, key.toLowerCase() === 'set-cookie' ? { append: true } : undefined);
     }
 
     if (result.action === 'next') {

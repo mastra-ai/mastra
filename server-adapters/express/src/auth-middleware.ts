@@ -74,7 +74,11 @@ export function createAuthMiddleware({
     });
 
     for (const [key, value] of Object.entries(result.headers ?? {})) {
-      res.setHeader(key, value);
+      if (key.toLowerCase() === 'set-cookie') {
+        res.append(key, value);
+      } else {
+        res.setHeader(key, value);
+      }
     }
 
     if (result.action === 'next') {

@@ -104,4 +104,24 @@ describe('Hono auth middleware helper', () => {
     expect(denied.status).toBe(403);
     expect(denied.headers.get('set-cookie')).toBe(REFRESHED_COOKIE);
   });
+
+  it('keeps Set-Cookie headers set by earlier middleware when forwarding refresh headers', async () => {
+    const mastra = createMastraWithSessionRefresh();
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    adapter.registerContextMiddleware();
+
+    app.use('/custom/*', async (c, next) => {
+      c.header('Set-Cookie', 'other=1; Path=/', { append: true });
+      await next();
+    });
+    app.get('/custom/protected', createAuthMiddleware({ mastra }), c => c.json({ ok: true }));
+
+    const res = await app.request('http://localhost/custom/protected', {
+      headers: { Cookie: 'session=expired' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.getSetCookie()).toEqual(['other=1; Path=/', REFRESHED_COOKIE]);
+  });
 });

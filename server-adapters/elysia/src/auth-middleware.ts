@@ -57,7 +57,14 @@ export function createAuthMiddleware({
     }
 
     if (result.headers) {
-      ctx.set.headers = { ...ctx.set.headers, ...result.headers };
+      for (const [key, value] of Object.entries(result.headers)) {
+        if (key.toLowerCase() === 'set-cookie') {
+          const existing = ctx.set.headers['set-cookie'];
+          ctx.set.headers['set-cookie'] = existing === undefined ? value : [...[existing].flat(), value];
+        } else {
+          ctx.set.headers[key] = value;
+        }
+      }
     }
   };
 }

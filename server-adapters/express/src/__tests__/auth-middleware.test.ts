@@ -142,7 +142,7 @@ describe('Express auth middleware helper', () => {
       }) as unknown as Request;
     const createResponse = () => {
       const res = createMockResponse();
-      (res as any).setHeader = vi.fn();
+      (res as any).append = vi.fn();
       return res;
     };
 
@@ -150,14 +150,14 @@ describe('Express auth middleware helper', () => {
     const allowedRes = createResponse();
     await middleware(createRequest('/custom/protected'), allowedRes, next);
 
-    expect(allowedRes.setHeader).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
+    expect(allowedRes.append).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
     expect(next).toHaveBeenCalledTimes(1);
 
     const deniedNext = vi.fn<NextFunction>();
     const deniedRes = createResponse();
     await middleware(createRequest('/custom/forbidden'), deniedRes, deniedNext);
 
-    expect(deniedRes.setHeader).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
+    expect(deniedRes.append).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
     expect(deniedRes.status).toHaveBeenCalledWith(403);
     expect(deniedNext).not.toHaveBeenCalled();
   });
