@@ -40,6 +40,10 @@ const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'scalar' },
   threadId: { sql: 'r.threadId', parameterType: 'scalar' },
   resourceId: { sql: 'r.resourceId', parameterType: 'scalar' },
+  runId: { sql: 'r.runId', parameterType: 'scalar' },
+  sessionId: { sql: 'r.sessionId', parameterType: 'scalar' },
+  userId: { sql: 'r.userId', parameterType: 'scalar' },
+  organizationId: { sql: 'r.organizationId', parameterType: 'scalar' },
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
@@ -66,6 +70,10 @@ const SPAN_FIELDS = {
   entityVersionId: { sql: 's.entityVersionId', parameterType: 'scalar' },
   parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'scalar' },
   rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
+  runId: { sql: 's.runId', parameterType: 'scalar' },
+  sessionId: { sql: 's.sessionId', parameterType: 'scalar' },
+  userId: { sql: 's.userId', parameterType: 'scalar' },
+  organizationId: { sql: 's.organizationId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -427,7 +435,11 @@ function compileDuckDBTraceScope(
         entityName,
         entityVersionId,
         parentEntityVersionId,
-        rootEntityVersionId
+        rootEntityVersionId,
+        runId,
+        sessionId,
+        userId,
+        organizationId
       FROM current_span_rows
       WHERE currentRank = 1
     )`);
