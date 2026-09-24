@@ -194,7 +194,8 @@ export class CustomRouteService {
 
     const body: unknown = req.body;
     const bodyParsed = (req as Request & { _body?: boolean })._body === true;
-    if (!bodyParsed && body === undefined && req.readable) {
+    // Check stream state rather than `req.body`: body-parser 1.x sets `req.body = {}` even when it skips the request.
+    if (!bodyParsed && req.readable && !req.readableEnded) {
       // Body not consumed by a parser (multipart, text, binary, ...): stream the raw bytes through.
       init.body = Readable.toWeb(req) as ReadableStream<Uint8Array>;
       init.duplex = 'half';

@@ -31,13 +31,14 @@ describe('NestJS Adapter - auth parity with other adapters', () => {
     vi.restoreAllMocks();
   });
 
-  async function start(server: Record<string, unknown>) {
+  async function start(server: Record<string, unknown>, beforeInit?: (app: INestApplication) => void) {
     vi.spyOn(context.mastra, 'getServer').mockReturnValue(server as any);
     const moduleRef = await Test.createTestingModule({
       imports: [MastraModule.register({ mastra: context.mastra })],
     }).compile();
     app = moduleRef.createNestApplication();
     expressApp = app.getHttpAdapter().getInstance() as Application;
+    beforeInit?.(app);
     await app.init();
   }
 
@@ -140,6 +141,35 @@ describe('NestJS Adapter - auth parity with other adapters', () => {
       body: new URLSearchParams({ a: '1' }),
     });
     expect(await urlencoded.json()).toEqual({ a: '1' });
+  });
+
+  it('forwards unparsed bodies when a body-parser 1.x style parser sets req.body = {}', async () => {
+    await start(
+      {
+        apiRoutes: [
+          registerApiRoute('/echo-form', {
+            method: 'POST',
+            requiresAuth: false,
+            handler: async c => {
+              const form = await c.req.formData();
+              return c.json({ name: form.get('name') });
+            },
+          }),
+        ],
+      },
+      nestApp =>
+        nestApp.use((req: { body?: unknown }, _res: unknown, next: () => void) => {
+          req.body = req.body || {};
+          next();
+        }),
+    );
+    await app.listen(0);
+    const base = await app.getUrl();
+
+    const formData = new FormData();
+    formData.set('name', 'mastra');
+    const form = await fetch(`${base}/echo-form`, { method: 'POST', body: formData });
+    expect(await form.json()).toEqual({ name: 'mastra' });
   });
 
   it('authenticates custom routes matched by Hono-only patterns', async () => {
