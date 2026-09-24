@@ -12,10 +12,37 @@ export const observabilityRuntimeStrategySchema = z.enum([
   'event-sourced',
 ]);
 
+export const observabilityDiscoveryCapabilitiesSchema = z.object({
+  entityTypes: z.boolean().describe('GET /observability/discovery/entity-types'),
+  entityNames: z.boolean().describe('GET /observability/discovery/entity-names'),
+  serviceNames: z.boolean().describe('GET /observability/discovery/service-names'),
+  environments: z.boolean().describe('GET /observability/discovery/environments'),
+  tags: z.boolean().describe('GET /observability/discovery/tags'),
+  metrics: z.boolean().describe('GET /observability/discovery/metric-names, metric-label-keys and metric-label-values'),
+});
+
+/**
+ * Optional observability APIs the configured observability store can serve.
+ * Omitted when no observability store is configured.
+ */
 export const observabilityStorageCapabilitiesSchema = z.object({
-  metrics: z.boolean(),
-  logs: z.boolean(),
-  traceQueryDiscovery: z.boolean(),
+  metrics: z.boolean().describe('Metrics endpoints (/observability/metrics and /observability/metrics/*)'),
+  logs: z.boolean().describe('Logs endpoint (GET /observability/logs)'),
+  discovery: observabilityDiscoveryCapabilitiesSchema.describe(
+    'Filter discovery endpoints. Unsupported discovery routes return empty results.',
+  ),
+  deltaPolling: z.boolean().describe("Cursor-based `mode: 'delta'` polling on observability list endpoints"),
+  traceQuery: z
+    .boolean()
+    .describe(
+      'Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead.',
+    ),
+  traceQueryRootDuration: z.boolean().describe('`durationMs` predicates in trace and thread queries'),
+  traceQueryDiscovery: z
+    .boolean()
+    .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
+  traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
+  threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
 });
 
 export const editorSourceSchema = z.enum(['code', 'db']);

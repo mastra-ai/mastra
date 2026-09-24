@@ -39,6 +39,10 @@ const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(v
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
+const collectionMemberSchema = literalStringSchema.refine(
+  value => value.trim().length > 0,
+  'Collection predicates require a non-empty string value',
+);
 const timestampLiteralSchema = z.string().datetime({ offset: true });
 const predicatePathSchema = z
   .string()
@@ -67,6 +71,9 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
     z
+      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
+      .strict(),
+    z
       .object({
         op: z.enum(['and', 'or']),
         args: z.array(traceQueryScalarPredicateSchema).min(1),
@@ -93,6 +100,9 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
+    z
+      .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
+      .strict(),
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -146,8 +156,17 @@ export const traceQueryOperatorSchema = z.enum([
   'notIn',
   'exists',
   'notExists',
+  'includes',
+  'notIncludes',
 ]);
-export const traceQueryValueKindSchema = z.enum(['string', 'number', 'stringOrNumber', 'timestamp', 'presence']);
+export const traceQueryValueKindSchema = z.enum([
+  'string',
+  'number',
+  'stringOrNumber',
+  'timestamp',
+  'presence',
+  'array',
+]);
 
 const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine((timeRange, context) => {
   const from = new Date(timeRange.from);
@@ -179,7 +198,7 @@ export const getTraceQueryValuesArgsSchema = z
   .object({
     timeRange: traceQueryDiscoveryTimeRangeSchema,
     predicateScope: traceQueryPredicateScopeSchema,
-    path: predicatePathSchema.transform(path => normalizePath(path)),
+    path: predicatePathSchema.transform(path => normalizeTraceQueryPath(path)),
     search: traceQueryDiscoverySearchSchema,
     limit: traceQueryDiscoveryLimitSchema,
   })
@@ -419,6 +438,7 @@ export type TraceQueryScalarPredicate =
     }
   | { op: 'in' | 'notIn'; value: TraceQueryPathOrLiteral; set: TraceQueryLiteral[] }
   | { op: 'exists' | 'notExists'; path: string }
+  | { op: 'includes' | 'notIncludes'; path: string; value: string }
   | { op: 'and' | 'or'; args: TraceQueryScalarPredicate[] }
   | { op: 'not'; arg: TraceQueryScalarPredicate };
 
@@ -475,6 +495,8 @@ interface FieldRule {
 export const TRACE_QUERY_STRING_OPERATORS = ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'] as const;
 export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte'] as const;
 export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
+/** Stored string collections such as `tags`. `exists` means at least one member; `notExists` means none. */
+export const TRACE_QUERY_ARRAY_OPERATORS = ['includes', 'notIncludes', 'exists', 'notExists'] as const;
 
 const stringField = (valueSuggestions: boolean): FieldRule => ({
   valueKind: 'string',
@@ -491,6 +513,11 @@ const presenceField = (): FieldRule => ({
   operators: TRACE_QUERY_PRESENCE_OPERATORS,
   valueSuggestions: false,
 });
+const arrayField = (): FieldRule => ({
+  valueKind: 'array',
+  operators: TRACE_QUERY_ARRAY_OPERATORS,
+  valueSuggestions: true,
+});
 
 export const TRACE_QUERY_FIELD_REGISTRY = {
   trace: {
@@ -499,10 +526,12 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     resourceId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
+    durationMs: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
+    tags: arrayField(),
   },
   spans: {
     name: stringField(true),
@@ -568,6 +597,7 @@ export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMeta
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
+export type TraceQueryCollectionOperator = 'includes' | 'notIncludes' | 'empty' | 'notEmpty';
 
 export type GetTraceQueryFieldsArgs = z.input<typeof getTraceQueryFieldsArgsSchema>;
 export type NormalizedGetTraceQueryFieldsArgs = z.output<typeof getTraceQueryFieldsArgsSchema>;
@@ -592,6 +622,8 @@ export type TrustedTraceQueryScalarPredicate =
       values: Array<string | number>;
     }
   | { type: 'presence'; field: TraceQueryPredicateField; operator: TraceQueryPresenceOperator }
+  | { type: 'collection'; field: TraceQueryPredicateField; operator: 'includes' | 'notIncludes'; value: string }
+  | { type: 'collection'; field: TraceQueryPredicateField; operator: 'empty' | 'notEmpty' }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryScalarPredicate[] }
   | { type: 'not'; arg: TrustedTraceQueryScalarPredicate };
 
@@ -729,6 +761,8 @@ export type TraceQueryIssueCode =
   | 'operator_not_allowed'
   | 'invalid_operands'
   | 'invalid_literal'
+  | 'too_many_buckets'
+  | 'too_many_rows'
   | 'group_order_not_supported'
   | 'pagination_mode_conflict'
   | 'group_pagination_not_supported';
@@ -874,7 +908,7 @@ export function isTraceQueryMetadataPath(path: string): path is TraceQueryMetada
 }
 
 export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: string): boolean {
-  return getTraceQueryFieldRule(scope, normalizePath(path))?.valueSuggestions === true;
+  return getTraceQueryFieldRule(scope, normalizeTraceQueryPath(path))?.valueSuggestions === true;
 }
 
 export function getTraceQueryCanonicalFieldDescriptors(
@@ -936,7 +970,7 @@ export function planTraceQueryObservedFields(
     predicateScope: args.predicateScope,
     search: args.search,
     limit: args.limit,
-    scope: normalizeTenantScope(options.scope),
+    scope: normalizeTraceQueryTenantScope(options.scope),
   };
 }
 
@@ -947,8 +981,14 @@ export function planTraceQueryValues(
   return { ...planTraceQueryObservedFields(args, options), path: args.path };
 }
 
-/** Drops an absent `resourceId` so the plan and cursor binding are canonical. */
-function normalizeTenantScope(scope: TraceQueryTenantScope | undefined): TraceQueryTenantScope | undefined {
+/**
+ * Drops an absent `resourceId` so the plan and cursor binding are canonical.
+ *
+ * @internal Shared with the trace-aggregate planner.
+ */
+export function normalizeTraceQueryTenantScope(
+  scope: TraceQueryTenantScope | undefined,
+): TraceQueryTenantScope | undefined {
   if (!scope) return undefined;
   return scope.resourceId === undefined
     ? { organizationId: scope.organizationId }
@@ -1022,7 +1062,7 @@ export function planTraceQuery(
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
-  const scope = normalizeTenantScope(options.scope);
+  const scope = normalizeTraceQueryTenantScope(options.scope);
 
   if (request.group) {
     const result = 'groups' as const;
@@ -1149,7 +1189,7 @@ export function planThreadQuery(
     where: traceWhere,
   };
   const orderBy = { field: 'threadId', direction: 'asc' } as const;
-  const scope = normalizeTenantScope(options.scope);
+  const scope = normalizeTraceQueryTenantScope(options.scope);
   const binding = digestBinding({ traces, where, result, orderBy, authorization: options.authorizationBinding, scope });
   const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
 
@@ -1300,6 +1340,22 @@ function planThreadPredicate(
   return undefined;
 }
 
+/**
+ * Plans a trace-scope selection predicate with a fresh complexity budget, appending any
+ * problems to `issues`.
+ *
+ * @internal Shared with the trace-aggregate planner so both apply identical selection
+ * validation (Aggregate Query API Decision 2).
+ */
+export function planTraceQuerySelectionPredicate(
+  where: TraceQueryPredicate,
+  issues: TraceQueryIssue[],
+  path: Array<string | number> = ['where'],
+): TrustedTraceQueryPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  return planPredicate(where, 'trace', path, 1, state);
+}
+
 function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,
   context: PredicateContext,
@@ -1354,11 +1410,39 @@ function planPredicate(
 
   const rules = rulesForContext(context);
   if (predicate.op === 'exists' || predicate.op === 'notExists') {
-    const field = normalizePath(predicate.path);
+    const field = normalizeTraceQueryPath(predicate.path);
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    if (rule.valueKind === 'array') {
+      return {
+        type: 'collection',
+        field: field as TraceQueryPredicateField,
+        operator: predicate.op === 'exists' ? 'notEmpty' : 'empty',
+      };
+    }
     return { type: 'presence', field: field as TraceQueryPredicateField, operator: predicate.op };
+  }
+
+  if (predicate.op === 'includes' || predicate.op === 'notIncludes') {
+    state.literalUnits += 1;
+    if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
+      addPredicateComplexityIssue(
+        [...path, 'value'],
+        `Trace queries are limited to ${TRACE_QUERY_MAX_LITERAL_UNITS} literal units`,
+        state,
+      );
+    }
+    const field = normalizeTraceQueryPath(predicate.path);
+    const rule = getRule(field, context, rules, [...path, 'path'], state);
+    if (!rule) return undefined;
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    return {
+      type: 'collection',
+      field: field as TraceQueryPredicateField,
+      operator: predicate.op,
+      value: predicate.value,
+    };
   }
 
   if (predicate.op === 'in' || predicate.op === 'notIn') {
@@ -1378,7 +1462,7 @@ function planPredicate(
       });
       return undefined;
     }
-    const field = normalizePath(predicate.value.path);
+    const field = normalizeTraceQueryPath(predicate.value.path);
     const rule = getRule(field, context, rules, [...path, 'value', 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
@@ -1416,7 +1500,7 @@ function planPredicate(
     });
     return undefined;
   }
-  const field = normalizePath(comparison.left.path);
+  const field = normalizeTraceQueryPath(comparison.left.path);
   const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
   if (!rule) return undefined;
   if (!rule.operators.includes(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
@@ -1470,7 +1554,13 @@ function addOperatorIssue(operator: string, field: string, path: Array<string | 
   });
 }
 
-function normalizePath(path: string): string {
+/**
+ * Unwraps `${...}` templates and trims a caller-supplied field path.
+ *
+ * @internal Shared with the trace-aggregate planner so dimension, measure, and `having`
+ * paths are normalized exactly like predicate paths.
+ */
+export function normalizeTraceQueryPath(path: string): string {
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
   const unwrapped = match?.[1] ?? path;
   const normalized = unwrapped.trim();
@@ -1497,7 +1587,7 @@ function normalizeLiteral(
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.valueKind === 'string') {
+  if (rule.valueKind === 'string' || rule.valueKind === 'array') {
     return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
   }
   return undefined;

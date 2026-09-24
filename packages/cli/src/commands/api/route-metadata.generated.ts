@@ -208,6 +208,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "clearPendingSignals",
       "expectedRunId",
       "resourceId",
       "threadId"
@@ -216,6 +217,25 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/threads/signals/cancel": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/signals/cancel",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "signalIds",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "cancelledSignalIds"
     }
   },
   "POST /agents/:agentId/tools/:toolId/execute": {
@@ -2711,6 +2731,18 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "tags"
+    }
+  },
+  "GET /observability/capabilities": {
+    "method": "GET",
+    "path": "/observability/capabilities",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /logs/transports": {

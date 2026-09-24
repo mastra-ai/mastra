@@ -281,6 +281,7 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
+  mastra?: Mastra;
 };
 
 // Simplified AccumulatedResults - don't try to resolve Promise types here.
@@ -1250,7 +1251,9 @@ class MastraScorer<
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
-          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
+            mastra: this.#mastra,
+          });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
           const scorerRunSpan =
             currentSpan?.type === SpanType.SCORER_RUN
@@ -1411,13 +1414,14 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
+    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'mastra'>,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;
-      return { run, results: accumulatedResults, score };
+      return { run, results: accumulatedResults, score, ...executionContext };
     }
 
-    return { run, results: accumulatedResults };
+    return { run, results: accumulatedResults, ...executionContext };
   }
 
   private async executeFunctionStep(scorerStep: ScorerStepDefinition, context: any) {
@@ -2257,7 +2261,7 @@ function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions):
   });
 }
 
-// Export types and interfaces for use in test files
-export type { ScorerConfig, ScorerRun, PromptObject };
+// Export types and interfaces for adapters and test files
+export type { ScorerConfig, ScorerRun, ScorerTypeShortcuts, StepContext, PromptObject };
 
 export { MastraScorer };

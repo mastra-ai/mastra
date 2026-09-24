@@ -111,11 +111,22 @@ export interface MastraCodeState {
     headless?: boolean;
     viewport?: { width: number; height: number } | 'window';
     cdpUrl?: string;
+    profile?: string;
+    executablePath?: string;
+    scope?: 'shared' | 'thread';
     stagehand?: {
       env: 'LOCAL' | 'BROWSERBASE';
-      apiKey?: string;
       projectId?: string;
+      model?: string;
+      preserveUserDataDir?: boolean;
     };
+    agentBrowser?: {
+      storageState?: string;
+    };
+  };
+  activeBrowserModel?: {
+    modelName?: string;
+    source: 'settings' | 'codex-oauth' | 'stagehand-default';
   };
 }
 
@@ -233,13 +244,31 @@ export const stateSchema = z.object({
         ])
         .optional(),
       cdpUrl: z.string().optional(),
+      profile: z.string().optional(),
+      executablePath: z.string().optional(),
+      scope: z.enum(['shared', 'thread']).optional(),
       stagehand: z
         .object({
           env: z.enum(['LOCAL', 'BROWSERBASE']),
-          apiKey: z.string().optional(),
           projectId: z.string().optional(),
+          model: z.string().optional(),
+          preserveUserDataDir: z.boolean().optional(),
         })
         .optional(),
+      agentBrowser: z
+        .object({
+          storageState: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  // Model the active Stagehand browser was created with. Resolved once at
+  // launch so /browser status reports what is really running even if the
+  // user signs in/out of Codex afterwards.
+  activeBrowserModel: z
+    .object({
+      modelName: z.string().optional(),
+      source: z.enum(['settings', 'codex-oauth', 'stagehand-default']),
     })
     .optional(),
 });

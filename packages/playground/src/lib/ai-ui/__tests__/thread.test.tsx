@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
@@ -854,6 +854,79 @@ describe('Thread', () => {
     });
   });
 
+  describe.each(['file classification', 'URL inspection'])('when %s is pending', inspection => {
+    it('keeps the attachment until it can be included in the submitted message', async () => {
+      const captured: CapturedBody[] = [];
+      let release = () => {};
+      const pending = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const url = 'https://files.example.com/report.pdf';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, async () => {
+          await pending;
+          return new HttpResponse(null, { headers: { 'content-type': 'application/pdf' } });
+        }),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push(await captureBody(request));
+          return sseResponse();
+        }),
+      );
+      const read = FileReader.prototype.readAsArrayBuffer;
+      const probe = vi
+        .spyOn(FileReader.prototype, 'readAsArrayBuffer')
+        .mockImplementation(function (this: FileReader, blob) {
+          void pending.then(() => read.call(this, blob));
+        });
+      try {
+        await act(async () => {
+          renderThread([]);
+        });
+        const textarea = screen.getByPlaceholderText('Enter your message...');
+        fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+        if (inspection === 'file classification') {
+          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+          const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
+          if (!picker) throw new Error('File picker is missing');
+          const file = new File(['pending file contents'], 'notes.unknown');
+          Object.defineProperty(file, 'text', { value: async () => 'pending file contents' });
+          fireEvent.change(picker, { target: { files: [file] } });
+          expect(probe).toHaveBeenCalledOnce();
+        } else {
+          const input = await screen.findByLabelText('Public URL');
+          fireEvent.change(input, { target: { value: url } });
+          const form = input.closest('form');
+          if (!form) throw new Error('Attachment form is missing');
+          fireEvent.submit(form);
+        }
+        const composer = textarea.closest('form');
+        if (!composer) throw new Error('Composer form is missing');
+        await act(async () => {
+          fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' });
+          fireEvent.submit(composer);
+        });
+        expect(captured).toHaveLength(0);
+        expect(screen.getByRole('button', { name: 'Send', hidden: true }).hasAttribute('disabled')).toBe(true);
+        await act(async () => {
+          release();
+          await pending;
+        });
+        await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(captured).toHaveLength(1));
+        const messages = JSON.stringify(captured[0].messages);
+        expect(messages).toContain('Read my attachment');
+        expect(messages).toContain(inspection === 'file classification' ? 'pending file contents' : url);
+      } finally {
+        release();
+        probe.mockRestore();
+      }
+    });
+  });
+
   describe('when a text attachment is added by URL', () => {
     it('links to the original URL instead of offering an empty file preview', async () => {
       const url = 'https://files.example.com/leads.csv';
@@ -1064,12 +1137,14 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop, taskCook]);
 
     expect(await screen.findByTestId('task-panel')).toBeTruthy();
-    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
-    expect(progress.getAttribute('aria-valuenow')).toBe('0');
-    expect(progress.getAttribute('aria-valuemax')).toBe('3');
     expect(screen.getByText('Planning menu')).toBeTruthy();
     expect(screen.getByText('Create shopping list')).toBeTruthy();
     expect(screen.getByText('Cook meal')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuemax')).toBe('3');
 
     await close();
   });
@@ -1082,22 +1157,22 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop]);
     await pushTasks([completedPlan, activeShop], 'task-list-update');
 
-    await waitFor(() => {
-      const progress = screen.getByRole('progressbar', { name: 'Task completion' });
-      expect(progress.getAttribute('aria-valuenow')).toBe('1');
-      expect(progress.getAttribute('aria-valuemax')).toBe('2');
-    });
+    expect(await screen.findByText('Shopping for ingredients')).toBeTruthy();
     expect(screen.getByText('Plan menu')).toBeTruthy();
-    expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
-    expect(screen.queryByText('Planning menu')).toBeFalsy();
+    expect(screen.getByText('Planning menu').closest('[aria-hidden="true"]')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('1');
+    expect(progress.getAttribute('aria-valuemax')).toBe('2');
 
     await close();
   });
 
   it('scrolls the active task into view when task state updates', async () => {
-    const scrollIntoView = vi.fn();
-    const originalScrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
+    const scrollTo = vi.fn();
+    const originalScrollTo = Element.prototype.scrollTo;
+    Element.prototype.scrollTo = scrollTo;
 
     const { pushTasks, close } = await renderWithControlledSubscription();
 
@@ -1107,10 +1182,10 @@ describe('TaskPanel', () => {
       await pushTasks([taskPlanMenu, activeShop, taskCook], 'task-list-update');
 
       await waitFor(() => {
-        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+        expect(scrollTo).toHaveBeenCalled();
       });
     } finally {
-      Element.prototype.scrollIntoView = originalScrollIntoView;
+      Element.prototype.scrollTo = originalScrollTo;
       await close();
     }
   });

@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -195,7 +196,7 @@ export class MCPServersPG extends MCPServersStorage {
           'draft',
           null,
           mcpServer.authorId ?? null,
-          mcpServer.metadata ? JSON.stringify(mcpServer.metadata) : null,
+          mcpServer.metadata ? toPgJson(mcpServer.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
@@ -293,7 +294,7 @@ export class MCPServersPG extends MCPServersStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingServer.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -389,7 +390,7 @@ export class MCPServersPG extends MCPServersStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -476,14 +477,14 @@ export class MCPServersPG extends MCPServersStorage {
           input.version,
           input.description ?? null,
           input.instructions ?? null,
-          input.repository ? JSON.stringify(input.repository) : null,
+          input.repository ? toPgJson(input.repository) : null,
           input.releaseDate ?? null,
           input.isLatest ?? null,
           input.packageCanonical ?? null,
-          input.tools ? JSON.stringify(input.tools) : null,
-          input.agents ? JSON.stringify(input.agents) : null,
-          input.workflows ? JSON.stringify(input.workflows) : null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.tools ? toPgJson(input.tools) : null,
+          input.agents ? toPgJson(input.agents) : null,
+          input.workflows ? toPgJson(input.workflows) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

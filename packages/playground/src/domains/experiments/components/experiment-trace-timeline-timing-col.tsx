@@ -1,4 +1,5 @@
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import * as HoverCard from '@radix-ui/react-hover-card';
@@ -57,7 +58,9 @@ export function ExperimentTraceTimelineTimingCol({
         </div>
 
         <div className={cn('flex justify-end text-caption text-muted-foreground')}>
-          {(span.latency / 1000).toFixed(3)}&nbsp;s
+          <Txt as="span" variant="caption" font="mono">
+            {(span.latency / 1000).toFixed(3)}&nbsp;s
+          </Txt>
         </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
