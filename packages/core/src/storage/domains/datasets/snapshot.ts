@@ -70,8 +70,8 @@ export function datasetSnapshotRecordEntries(
   });
 }
 
-function definedFields(fields: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+function definedFields<T extends object>(fields: T): T {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as T;
 }
 
 function snapshotConfiguration(dataset: DatasetRecord): DatasetSnapshotContent['configuration'] {
@@ -81,7 +81,7 @@ function snapshotConfiguration(dataset: DatasetRecord): DatasetSnapshotContent['
   // dataset that was imported with `null` therefore yields a different digest by design.
   return {
     name: dataset.name,
-    ...definedFields({
+    ...definedFields<Record<string, unknown>>({
       description: dataset.description ?? undefined,
       metadata: dataset.metadata ?? undefined,
       inputSchema: dataset.inputSchema ?? undefined,
@@ -214,7 +214,7 @@ export function planDatasetSnapshotImport(prepared: PreparedDatasetSnapshotImpor
   const version = prepared.content.items.length ? 1 : 0;
   // Null settings mean "unset", which ordinary writes store as absent. Only authored item
   // data (input, groundTruth, expectedTrajectory) keeps JSON null.
-  const dataset: DatasetRecord = {
+  const dataset: DatasetRecord = definedFields({
     ...configuration,
     description: configuration.description ?? undefined,
     inputSchema: configuration.inputSchema ?? undefined,
@@ -229,7 +229,7 @@ export function planDatasetSnapshotImport(prepared: PreparedDatasetSnapshotImpor
     version,
     createdAt: now,
     updatedAt: now,
-  };
+  });
   const identities: DatasetSnapshotIdentityRecord[] = [
     {
       id: datasetSnapshotIdentityId(datasetId, null),
@@ -247,7 +247,7 @@ export function planDatasetSnapshotImport(prepared: PreparedDatasetSnapshotImpor
       portableId: item.itemIdentity,
     });
     const { payload } = item;
-    return {
+    return definedFields({
       ...payload,
       externalId: payload.externalId ?? undefined,
       toolMocks: payload.toolMocks ?? undefined,
@@ -265,7 +265,7 @@ export function planDatasetSnapshotImport(prepared: PreparedDatasetSnapshotImpor
       isDeleted: false,
       createdAt: new Date(item.createdAt),
       updatedAt: new Date(item.updatedAt),
-    };
+    });
   });
   const versionRecord: DatasetVersion | undefined = version
     ? { id: randomUUID(), datasetId, version, createdAt: now }
