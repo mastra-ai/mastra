@@ -49,6 +49,10 @@ const TRACE_FIELDS = {
   traceId: 'r."traceId"',
   threadId: 'r."threadId"',
   resourceId: 'r."resourceId"',
+  runId: 'r."runId"',
+  sessionId: 'r."sessionId"',
+  userId: 'r."userId"',
+  organizationId: 'r."organizationId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
@@ -75,6 +79,10 @@ const SPAN_FIELDS = {
   entityVersionId: 's."entityVersionId"',
   parentEntityVersionId: 's."parentEntityVersionId"',
   rootEntityVersionId: 's."rootEntityVersionId"',
+  runId: 's."runId"',
+  sessionId: 's."sessionId"',
+  userId: 's."userId"',
+  organizationId: 's."organizationId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -450,7 +458,11 @@ function compilePostgresTraceScope(
       s."entityName",
       s."entityVersionId",
       s."parentEntityVersionId",
-      s."rootEntityVersionId"
+      s."rootEntityVersionId",
+      s."runId",
+      s."sessionId",
+      s."userId",
+      s."organizationId"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)

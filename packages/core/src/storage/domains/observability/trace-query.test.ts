@@ -931,7 +931,7 @@ describe('planTraceQuery', () => {
   });
 
   it('keeps correlation fields queryable and does not infer authorization fields', () => {
-    for (const field of ['resourceId', 'threadId'] as const) {
+    for (const field of ['resourceId', 'threadId', 'runId', 'sessionId', 'userId', 'organizationId'] as const) {
       expect(
         planTraceQuery(
           parsed({
@@ -942,15 +942,51 @@ describe('planTraceQuery', () => {
       ).toMatchObject({ field });
     }
 
-    const organization = validationError(() =>
+    const project = validationError(() =>
       planTraceQuery(
         parsed({
           ...baseRequest,
-          where: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-1' } },
+          where: { op: 'eq', left: { path: 'projectId' }, right: { literal: 'project-1' } },
         }),
       ),
     );
-    expect(organization.issues[0]).toMatchObject({ code: 'field_not_allowed' });
+    expect(project.issues[0]).toMatchObject({ code: 'field_not_allowed' });
+  });
+
+  it('plans context identifier predicates on traces and related spans', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-123' } },
+            { op: 'in', value: { path: 'sessionId' }, set: ['session-123', 'session-456'] },
+            { op: 'notExists', path: 'userId' },
+            { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'organizationId', operator: 'eq', value: 'org-123' },
+        { type: 'membership', field: 'sessionId', operator: 'in', values: ['session-123', 'session-456'] },
+        { type: 'presence', field: 'userId', operator: 'notExists' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'runId', operator: 'eq', value: 'run-42' },
+        },
+      ],
+    });
+    for (const field of ['runId', 'sessionId', 'userId', 'organizationId']) {
+      expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
+      expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
+    }
   });
 
   it('rejects inherited predicate field names in every predicate context', () => {
@@ -1035,14 +1071,14 @@ describe('planTraceQuery', () => {
     }
   });
 
-  it('rejects tenant scope fields as predicates in every predicate context', () => {
+  it('rejects the project scope field as a predicate in every predicate context', () => {
     const contexts: Array<(field: string) => TraceQueryPredicate> = [
-      field => ({ op: 'eq', left: { path: field }, right: { literal: 'org-1' } }),
+      field => ({ op: 'eq', left: { path: field }, right: { literal: 'project-1' } }),
       field => ({ spans: { some: { op: 'exists', path: field } } }),
       field => ({ scores: { some: { op: 'exists', path: field } } }),
       field => ({ feedback: { some: { op: 'exists', path: field } } }),
     ];
-    for (const field of ['organizationId', 'projectId']) {
+    for (const field of ['projectId']) {
       for (const where of contexts) {
         const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where: where(field) })));
         expect(error.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
