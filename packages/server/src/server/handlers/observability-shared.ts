@@ -340,25 +340,6 @@ export async function withDiscoveryFallback<T>(run: () => Promise<T>, empty: T):
   }
 }
 
-/**
- * Surfaces the store's `*_NOT_IMPLEMENTED` error as a 501 so adapters log it
- * as an expected missing capability (warn) instead of a server error. The
- * store's message is preserved because clients match on it to detect
- * unsupported operations (e.g. "does not support listing feedback"). Clients
- * should check `observabilityStorageCapabilities.feedback` from
- * `GET /observability/capabilities` before calling these routes.
- */
-export async function withNotImplementedAs501<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    if (isObservabilityStorageNotImplementedError(error)) {
-      throw new HTTPException(501, { message: (error as Error).message, cause: error });
-    }
-    throw error;
-  }
-}
-
 export function assertObservabilityDeltaSupported(
   observabilityStore: ObservabilityStorage,
   endpoint: ObservabilityListEndpoint,

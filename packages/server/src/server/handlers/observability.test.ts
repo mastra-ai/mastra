@@ -1739,26 +1739,6 @@ describe('Observability Handlers', () => {
       },
     );
 
-    it('given a store without feedback support, when listing feedback, then surfaces a 501 with the original message', async () => {
-      const notImplemented = Object.assign(new Error('This storage provider does not support listing feedback'), {
-        id: 'OBSERVABILITY_STORAGE_LIST_FEEDBACK_NOT_IMPLEMENTED',
-      });
-      mockObservabilityStore.listFeedback.mockRejectedValue(notImplemented);
-
-      const error = await NEW_ROUTES.LIST_FEEDBACK.handler(createTestServerContext({ mastra: mockMastra })).then(
-        () => {
-          throw new Error('expected the handler to reject');
-        },
-        (caught: unknown) => caught,
-      );
-
-      expect(error).toBeInstanceOf(HTTPException);
-      expect(error).toMatchObject({
-        status: 501,
-        message: 'This storage provider does not support listing feedback',
-      });
-    });
-
     it('given separate Studio auth, when Studio lists feedback, then uses only the Studio directory', async () => {
       const getUser = vi.fn().mockResolvedValue({ id: 'user-1', name: 'Server' });
       const studioGetUser = vi.fn().mockResolvedValue({ id: 'user-1', name: 'Studio' });
