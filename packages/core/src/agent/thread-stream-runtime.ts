@@ -3847,6 +3847,14 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    // The resumed half's registration can still be queued behind the suspended
+    // half's parts; a local run already records which stream it moved to.
+    const isAnsweredHalf = (runId: string, streamId: string) => {
+      if (answeredStreamIds.has(streamId)) return true;
+      const current = state.threadRunsById.get(runId);
+      return current !== undefined && current.streamId !== streamId && current.lifecycle !== 'suspended';
+    };
+
     let eventTail = Promise.resolve();
     const onEvent: EventCallback = (event, ack) => {
       // Events are processed strictly in publish order, but each delivery is
@@ -3972,8 +3980,8 @@ export class AgentThreadStreamRuntime {
                   !isSignalChunkExcluded(partWithRunId, options.hideSignals) &&
                   !storedStreamIds.has(run.streamId) &&
                   !(
-                    answeredStreamIds.has(run.streamId) &&
-                    (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended')
+                    (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended') &&
+                    isAnsweredHalf(run.runId, run.streamId)
                   ) &&
                   (!historyFilter || historyFilter(typedPart, run.runId))
                 ) {
