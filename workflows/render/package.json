@@ -1,0 +1,70 @@
+{
+  "name": "@renderinc/mastra",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mastra workflow execution on Render Workflows",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "docs",
+    "examples/editorial-review/*.ts",
+    "examples/editorial-review/public",
+    "examples/editorial-review/README.md",
+    "examples/editorial-review/package.json",
+    "examples/editorial-review/.env.example"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "test:local": "tsx scripts/local-smoke.ts",
+    "test:lifecycle": "tsx scripts/lifecycle-smoke.ts",
+    "test:example": "tsx scripts/example-smoke.ts"
+  },
+  "dependencies": {
+    "@renderinc/sdk": "1.1.0",
+    "pg": "8.16.3",
+    "@types/pg": "8.15.5"
+  },
+  "peerDependencies": {
+    "@mastra/core": "1.67.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@mastra/core": "1.67.0",
+    "@mastra/pg": "1.25.0",
+    "@types/node": "24.5.2",
+    "tsx": "4.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4",
+    "zod": "3.25.76"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ojusave/mastra.git",
+    "directory": "workflows/render"
+  },
+  "license": "Apache-2.0"
+}

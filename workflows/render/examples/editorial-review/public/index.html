@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Editorial review | Mastra + Render</title>
+  <style>
+    :root {
+      font-family: system-ui, sans-serif;
+      color: #e8eaf0;
+      background: #111318;
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      max-width: 1000px;
+      margin: auto;
+      padding: 48px 24px;
+    }
+    h1 {
+      font-size: 36px;
+      letter-spacing: -1px;
+      margin: 10px 0;
+    }
+    p {
+      color: #afb6c5;
+      line-height: 1.6;
+    }
+    header {
+      margin-bottom: 30px;
+    }
+    .eyebrow {
+      color: #b8a7ff;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    section {
+      background: #1b1e26;
+      border: 1px solid #343948;
+      border-radius: 12px;
+      padding: 24px;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      margin: 16px 0 7px;
+    }
+    input,
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #495267;
+      border-radius: 7px;
+      background: #14171e;
+      color: inherit;
+      font: inherit;
+    }
+    textarea {
+      min-height: 230px;
+      resize: vertical;
+    }
+    button {
+      padding: 11px 18px;
+      border: 0;
+      border-radius: 7px;
+      background: #b8a7ff;
+      color: #161126;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #343948;
+      color: #fff;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 16px;
+    }
+    .check {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .check input {
+      width: auto;
+    }
+    .badge {
+      display: inline-block;
+      background: #343948;
+      padding: 5px 10px;
+      border-radius: 99px;
+      font-size: 13px;
+    }
+    #status[data-state='success'] {
+      background: #204b3c;
+      color: #b7f9dc;
+    }
+    #status[data-state='failed'],
+    #status[data-state='submission-unknown'] {
+      background: #582d32;
+      color: #ffccd4;
+    }
+    #result {
+      white-space: pre-wrap;
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    #findings {
+      padding-left: 20px;
+      line-height: 1.5;
+    }
+    #findings li {
+      margin: 10px 0;
+    }
+    .small {
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    #message {
+      min-height: 24px;
+      color: #f4c59e;
+    }
+    @media (max-width: 720px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      body {
+        padding: 24px 16px;
+      }
+    }
+  </style>
+  <header>
+    <div class="eyebrow">Mastra + Render Workflows</div>
+    <h1>Give your draft a second look.</h1>
+    <p>
+      Three reviews run in parallel, then an editor brings the feedback together. You can leave this page and return to
+      the same job.
+    </p>
+  </header>
+  <section>
+    <label for="token">Demo API token</label
+    ><input id="token" type="password" autocomplete="off" placeholder="Token configured on your local server" />
+    <p class="small">
+      Local demonstration authentication. The token is kept in this tab's session storage. Render credentials stay on
+      the server.
+    </p>
+    <div class="row">
+      <button id="connect" class="secondary">Connect</button><span id="mode" class="small">Not connected</span>
+    </div>
+  </section>
+  <p id="message" role="alert"></p>
+  <main class="grid">
+    <section>
+      <h2>Your draft</h2>
+      <form id="form">
+        <label for="draft">Draft</label
+        ><textarea id="draft" required maxlength="100000">
+Our team is building an editorial review workflow. It checks clarity, structure and consistency before preparing a revision. The review continues even when the browser closes.</textarea
+        ><label for="criteria">Review criteria</label
+        ><input id="criteria" value="Make this clear, coherent and easy to read." maxlength="2000" /><label
+          class="check"
+          ><input id="failure" type="checkbox" />Demonstrate a failed review</label
+        >
+        <div class="row"><button id="submit" type="submit" disabled>Start review</button></div>
+      </form>
+    </section>
+    <section aria-live="polite">
+      <div class="row">
+        <h2 style="margin: 0">Your review</h2>
+        <span id="status" class="badge">No job</span>
+      </div>
+      <p id="job-id" class="small"></p>
+      <p id="job-help">Submit a draft to begin.</p>
+      <div class="row">
+        <button id="cancel" class="secondary" disabled>Cancel job</button
+        ><button id="refresh" class="secondary" disabled>Refresh status</button>
+      </div>
+      <h3>Revised draft</h3>
+      <div id="result">Your result will appear here.</div>
+      <h3>Review findings</h3>
+      <ul id="findings"></ul>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</html>
