@@ -1083,6 +1083,27 @@ function getObserverMessageLabel(msg: MastraDBMessage): string {
   return msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
 }
 
+/**
+ * Attachment URLs the agent already found undownloadable. Core records them on the user
+ * message (`metadata.mastra.unavailableAttachments`) so they are not fetched again.
+ */
+function getUnavailableAttachmentUrls(msg: MastraDBMessage): Set<string> {
+  const mastra = msg.content?.metadata?.mastra;
+  const urls = isRecord(mastra) ? mastra.unavailableAttachments : undefined;
+  return new Set(Array.isArray(urls) ? urls.filter((url): url is string => typeof url === 'string') : []);
+}
+
+function getObserverAttachmentUrl(part: ObserverAttachmentPart): string | undefined {
+  const asset = part.type === 'image' ? part.image : (part.data ?? (part as { url?: unknown }).url);
+  if (asset instanceof URL) return asset.toString();
+  if (typeof asset !== 'string') return undefined;
+  try {
+    return new URL(asset).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -1095,6 +1116,7 @@ function formatObserverMessage(
   const role = getObserverMessageLabel(msg);
   const attachments: ObserverInputAttachmentPart[] = [];
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
+  const unavailableUrls = getUnavailableAttachmentUrls(msg);
 
   let lines: ObserverFormattedLine[] = [];
 
@@ -1222,7 +1244,9 @@ function formatObserverMessage(
 
       if (partType === 'image' || partType === 'file') {
         const attachment = part as ObserverAttachmentPart;
-        if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+        const attachmentUrl = unavailableUrls.size > 0 ? getObserverAttachmentUrl(attachment) : undefined;
+        const isUnavailable = attachmentUrl !== undefined && unavailableUrls.has(attachmentUrl);
+        if (!isUnavailable && shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
           const inputAttachment = toObserverInputAttachmentPart(attachment);
           if (inputAttachment) {
             attachments.push(inputAttachment);

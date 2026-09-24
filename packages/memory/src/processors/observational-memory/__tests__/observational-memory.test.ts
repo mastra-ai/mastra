@@ -2450,6 +2450,25 @@ describe('Observer Agent Helpers', () => {
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
     });
 
+    it('should not attach attachments the agent recorded as unavailable', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at these.' },
+          { type: 'file', data: 'https://example.com/deleted.png', mimeType: 'image/png', filename: 'deleted.png' },
+          { type: 'file', data: 'https://example.com/kept.png', mimeType: 'image/png', filename: 'kept.png' },
+        ],
+        metadata: { mastra: { unavailableAttachments: ['https://example.com/deleted.png'] } },
+      };
+
+      const content = buildObserverHistoryMessage([msg]).content as any[];
+      expect(content[1].text).toContain('[Image #1: deleted.png]');
+      expect(content[1].text).toContain('[Image #2: kept.png]');
+      const attachments = content.filter(part => part.type !== 'text');
+      expect(attachments).toEqual([expect.objectContaining({ type: 'image', image: 'https://example.com/kept.png' })]);
+    });
+
     it('should hoist image-data tool-result blocks into observer input attachments', () => {
       const base64 = 'B'.repeat(1500);
       const msg = createTestMessage('ignored', 'assistant');
