@@ -16,6 +16,7 @@ const DIRECT_URL = 'postgresql://postgres:postgres@localhost:5437/postgres';
  */
 describe('observational memory initialization through pgBouncer transaction pooling', () => {
   const schemaName = `om_gen_pooler_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+  let pools: Pool[];
   let stores: PostgresStore[];
 
   beforeAll(async () => {
@@ -34,16 +35,16 @@ describe('observational memory initialization through pgBouncer transaction pool
     if (!latency.ok) throw new Error(`toxiproxy toxic failed: ${latency.status} ${await latency.text()}`);
 
     // Two stores with separate pools stand in for two processes.
-    stores = [0, 1].map(
-      i =>
-        new PostgresStore({ id: `om-gen-pooler-${i}`, pool: new Pool({ connectionString: POOLER_URL }), schemaName }),
-    );
+    pools = [0, 1].map(() => new Pool({ connectionString: POOLER_URL }));
+    stores = pools.map((pool, i) => new PostgresStore({ id: `om-gen-pooler-${i}`, pool, schemaName }));
     await stores[0]!.init();
     await stores[1]!.init();
   });
 
   afterAll(async () => {
     await Promise.all(stores.map(store => store.close().catch(() => {})));
+    // The stores don't own caller-provided pools, so close() leaves them open.
+    await Promise.all(pools.map(pool => pool.end().catch(() => {})));
     const direct = new Pool({ connectionString: DIRECT_URL });
     await direct.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => {});
     await direct.end();
