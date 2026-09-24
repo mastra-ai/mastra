@@ -105,10 +105,10 @@ export function TokenUsageTimelineCardView({
                 <Tab value="tokens">Tokens</Tab>
                 <Tab value="cost">Cost</Tab>
               </TabList>
-              <TabContent value="tokens">
+              <TabContent value="tokens" className="pt-3">
                 <MetricsLineChart data={chartPoints} series={tokenSeries} />
               </TabContent>
-              <TabContent value="cost">
+              <TabContent value="cost" className="pt-3">
                 {hasCostData ? (
                   <MetricsLineChart data={costChartPoints} series={costSeries} />
                 ) : (

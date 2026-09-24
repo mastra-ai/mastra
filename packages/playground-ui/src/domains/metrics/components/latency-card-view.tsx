@@ -131,19 +131,19 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
                   Tools
                 </Tab>
               </TabList>
-              <TabContent value="agents">
+              <TabContent value="agents" className="pt-3">
                 <LatencyChart
                   data={data.agentData}
                   onPointClick={onPointClick ? p => onPointClick('agents', p) : undefined}
                 />
               </TabContent>
-              <TabContent value="workflows">
+              <TabContent value="workflows" className="pt-3">
                 <LatencyChart
                   data={data.workflowData}
                   onPointClick={onPointClick ? p => onPointClick('workflows', p) : undefined}
                 />
               </TabContent>
-              <TabContent value="tools">
+              <TabContent value="tools" className="pt-3">
                 <LatencyChart
                   data={data.toolData}
                   onPointClick={onPointClick ? p => onPointClick('tools', p) : undefined}

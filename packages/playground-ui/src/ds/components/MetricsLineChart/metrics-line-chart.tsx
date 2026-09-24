@@ -9,6 +9,27 @@ export type MetricsLineChartSeries = {
   aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
 };
 
+const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+// Positioned via transform so the hover line glides between points instead of jumping.
+function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
+  const [top, bottom] = points ?? [];
+  if (!top || !bottom) return null;
+  return (
+    <line
+      x1={0}
+      x2={0}
+      y1={top.y}
+      y2={bottom.y}
+      stroke="currentColor"
+      strokeOpacity={0.2}
+      strokeWidth={1}
+      className="pointer-events-none text-black transition-transform duration-150 ease-out dark:text-white"
+      style={{ transform: `translateX(${top.x}px)` }}
+    />
+  );
+}
+
 export type MetricsLineChartPointClickHandler = (point: Record<string, unknown>, seriesKey: string) => void;
 
 export function MetricsLineChart({
@@ -61,6 +82,7 @@ export function MetricsLineChart({
             <CartesianGrid
               stroke="currentColor"
               strokeOpacity={0.08}
+              strokeDasharray="4 4"
               vertical={false}
               className="text-black dark:text-white"
             />
@@ -76,10 +98,12 @@ export function MetricsLineChart({
               tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
-              width={30}
+              width="auto"
+              tickFormatter={(value: number) => compactNumber.format(value)}
               domain={yDomain}
+              tickCount={3}
             />
-            <Tooltip content={<MetricsLineChartTooltip />} />
+            <Tooltip content={<MetricsLineChartTooltip />} cursor={<SmoothCursor />} />
             {series.map(s => (
               <Line
                 key={s.dataKey}
@@ -92,13 +116,16 @@ export function MetricsLineChart({
                   isClickable
                     ? {
                         r: 4,
+                        stroke: s.color,
+                        strokeOpacity: 0.3,
+                        strokeWidth: 4,
                         style: { cursor: 'pointer' },
                         onClick: (_: unknown, payload: unknown) => {
                           const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
                           if (datum) onPointClick(datum, s.dataKey);
                         },
                       }
-                    : undefined
+                    : { r: 4, stroke: s.color, strokeOpacity: 0.3, strokeWidth: 4 }
                 }
                 name={s.label}
               />
