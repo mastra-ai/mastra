@@ -638,7 +638,7 @@ const workflow = createWorkflow({
 })
 ```
 
-`retries` defaults to `0`. Errors thrown by your step code are retried per step with `retryConfig` or the step's `retries` option, not at the function level. `createInngestAgent()` accepts the same `retries` option and applies it to every Inngest function the durable agent creates.
+`retries` defaults to `0`. Errors thrown by your step code are retried per step with `retryConfig` or the step's `retries` option, not at the function level. `createInngestAgent()` accepts the same `retries` option and applies it to every Inngest function the durable agent creates. All durable agents share these functions, so the `retries` value of the first agent registered with Mastra applies to every durable agent. Set the same value on each agent to avoid confusion.
 
 A nested workflow runs as its own Inngest function and uses its own `retries` setting. It doesn't inherit the parent's value, so set `retries` on each nested workflow that should recover from a failed request.
 

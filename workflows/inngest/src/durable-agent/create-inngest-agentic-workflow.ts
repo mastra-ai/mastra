@@ -345,7 +345,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           let finalText = lastStep?.text;
 
           // Run finish side effects directly. This mapping already executes inside the
-          // engine's durable boundary (`wrapDurableOperation` -> `inngestStep.run`), so
+          // engine's durable step boundary (`inngestStep.run`), so
           // wrapping this call in `params.engine.step.run(...)` would create a nested
           // Inngest step, which the Inngest protocol does not support: the nested step's
           // callback never executes and its promise never settles, hanging the run and

@@ -324,9 +324,10 @@ export class InngestWorkflow<
     }
 
     // Step-code errors are retried at the step level via executeStepWithRetry (step.retries or
-    // retryConfig.attempts) and are returned, not rethrown, so function-level retries never re-run
-    // failed step code. Function-level retries only re-invoke the function when an SDK request
-    // fails (process restart, OOM, 5xx/timeout); they default to 0 and are configurable via `retries`.
+    // retryConfig.attempts) and fail their step.run() as NonRetriableError, so function-level retries
+    // never re-run failed step code. Function-level retries cover failed SDK requests (process restart,
+    // OOM, 5xx/timeout) and transient errors in other durable operations such as spans and event
+    // publishing; they default to 0 and are configurable via `retries`.
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
