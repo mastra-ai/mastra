@@ -52,6 +52,24 @@ const unusedTransport: RenderTransport = {
 };
 
 describe('durable lifecycle contracts', () => {
+  it('keeps a native paused coordinator active and cancelable', async () => {
+    let status = 'paused';
+    const h = setup({
+      ...unusedTransport,
+      async get(id) {
+        return { id, status };
+      },
+    });
+    const run = await h.workflow.createRun();
+    await run.startAsync({ inputData: 1 });
+    expect((await h.provider.getRun(h.workflow.id, run.runId))?.status).toBe('running');
+    expect((await h.workflow.getWorkflowRunById(run.runId))?.status).toBe('running');
+    await h.provider.cancel(h.workflow.id, run.runId);
+    expect((await h.provider.getRun(h.workflow.id, run.runId))?.status).toBe('cancel-requested');
+    status = 'canceled';
+    expect((await h.provider.getRun(h.workflow.id, run.runId))?.status).toBe('canceled');
+  });
+
   it.each([false, true])(
     'reconciles after completion events, including a disconnected stream: %s',
     async disconnect => {

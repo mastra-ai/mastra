@@ -119,9 +119,12 @@ export class RenderProvider {
     const record = await this.store.get(workflowId, runId);
     if (!record || terminal(record.status) || !record.providerId) return record;
     const remote = await this.transport.get(record.providerId);
-    if (remote.status === 'pending' || remote.status === 'running') {
+    if (remote.status === 'pending' || remote.status === 'running' || remote.status === 'paused') {
+      // Render pauses a coordinating root while its children run. This is still
+      // an active Mastra execution, not user-directed suspend/resume.
+      const status = remote.status === 'pending' ? 'pending' : 'running';
       return updateRun(this.store, workflowId, runId, current => ({
-        status: current.status === 'cancel-requested' ? current.status : (remote.status as 'pending' | 'running'),
+        status: current.status === 'cancel-requested' ? current.status : status,
       }));
     }
     if (remote.status === 'completed' || remote.status === 'succeeded') {
