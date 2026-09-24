@@ -53,11 +53,12 @@ export function indexThreadHistory(messages: MastraDBMessage[]): ThreadHistoryIn
 /**
  * Decides, per streamed part, whether stored history already covers it. Parts
  * are attributed to the assistant message announced by the latest `start` /
- * `step-start` of their run; a part produced before history was loaded and no
- * later than that message's newest stored change is dropped. Pending approval
- * and suspension chunks always pass: controllers build their prompts from them.
+ * `step-start` of their run; a part no later than that message's newest
+ * stored change is dropped, including parts saved while history was being
+ * read. Pending approval and suspension chunks always pass: controllers build
+ * their prompts from them.
  */
-export function createThreadHistoryFilter(messages: MastraDBMessage[], loadedAt: number) {
+export function createThreadHistoryFilter(messages: MastraDBMessage[]) {
   const { stamps, pendingToolCallIds } = indexThreadHistory(messages);
   const messageIdByRun = new Map<string, string>();
 
@@ -77,8 +78,13 @@ export function createThreadHistoryFilter(messages: MastraDBMessage[], loadedAt:
     ) {
       return true;
     }
+    // Signals are stored as their own message under the signal's id.
+    if (typed.type === 'data-signal' || typed.type === 'data-user-message') {
+      const signalId = (part as { data?: { id?: unknown } }).data?.id;
+      return !(typeof signalId === 'string' && stamps.has(signalId));
+    }
     const producedAt = partProducedAt.get(part);
-    if (producedAt === undefined || producedAt > loadedAt) return true;
+    if (producedAt === undefined) return true;
     const messageId = messageIdByRun.get(runId);
     const stamp = messageId ? stamps.get(messageId) : undefined;
     if (stamp === undefined) return true;

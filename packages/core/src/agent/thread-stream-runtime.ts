@@ -3902,7 +3902,7 @@ export class AgentThreadStreamRuntime {
           from: ChunkFrom.AGENT,
           payload: history,
         };
-        historyFilter = createThreadHistoryFilter(history.messages, historyReadAt);
+        historyFilter = createThreadHistoryFilter(history.messages);
       } catch (error) {
         control.references--;
         control.observers--;
