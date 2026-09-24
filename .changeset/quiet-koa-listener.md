@@ -2,4 +2,4 @@
 '@mastra/koa': patch
 ---
 
-Handler errors with status 501 Not Implemented are no longer printed again by Koa's default error listener with `console.error`. Custom `app.on('error')` listeners still receive them.
+Fixed duplicate `console.error` output for handler errors with status 501 Not Implemented on Koa. Custom `app.on('error')` listeners still receive these errors.

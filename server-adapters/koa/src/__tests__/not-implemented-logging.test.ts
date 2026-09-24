@@ -17,7 +17,11 @@ describe('Koa 501 handler error logging', () => {
     }
   });
 
-  const requestFailingRoute = async (error: Error, configureApp?: (app: Koa) => void) => {
+  const requestFailingRoute = async (
+    error: Error,
+    configureApp?: (app: Koa) => void,
+    configureInsideBoundary?: (app: Koa) => void,
+  ) => {
     const mastra = new Mastra({});
     const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
     vi.spyOn(mastra, 'getLogger').mockReturnValue(logger as any);
@@ -27,6 +31,7 @@ describe('Koa 501 handler error logging', () => {
     const adapter = new MastraServer({ app, mastra });
     // Registers the final error boundary without loading every built-in route.
     (adapter as any).registerErrorMiddleware();
+    configureInsideBoundary?.(app);
 
     const failingRoute: ServerRoute<any, any, any> = {
       method: 'GET',
@@ -67,6 +72,26 @@ describe('Koa 501 handler error logging', () => {
 
     expect(response.status).toBe(501);
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({ status: 501 }), expect.anything());
+  });
+
+  it("passes a different 501 thrown by later middleware to Koa's default error listener", async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { response } = await requestFailingRoute(
+      new HTTPException(501, { message: 'Not supported' }),
+      undefined,
+      app =>
+        app.use(async (_ctx, next) => {
+          try {
+            await next();
+          } catch {
+            throw new HTTPException(501, { message: 'Replaced by middleware' });
+          }
+        }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(consoleError).toHaveBeenCalled();
   });
 
   it("still passes server errors to Koa's default error listener", async () => {
