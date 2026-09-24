@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
 import { basename, dirname, join } from 'node:path';
@@ -64,8 +64,13 @@ const DEFAULT_MEMBERSHIP_ACK_TIMEOUT_MS = 5_000;
 const NEWLINE_BYTE = 0x0a;
 const LEASE_LOCK_RETRY_MS = 10;
 const PROCESS_NONCE_KEY = Symbol.for('@mastra/core/unix-socket-pubsub/process-nonce');
-const processGlobals = globalThis as typeof globalThis & { [PROCESS_NONCE_KEY]?: string };
+const LEASE_RECOVERY_OWNERS_KEY = Symbol.for('@mastra/core/unix-socket-pubsub/lease-recovery-owners');
+const processGlobals = globalThis as typeof globalThis & {
+  [PROCESS_NONCE_KEY]?: string;
+  [LEASE_RECOVERY_OWNERS_KEY]?: Set<string>;
+};
 const PROCESS_NONCE = (processGlobals[PROCESS_NONCE_KEY] ??= randomUUID());
+const LIVE_LEASE_RECOVERY_OWNERS = (processGlobals[LEASE_RECOVERY_OWNERS_KEY] ??= new Set());
 
 type FileLeaseRecord = {
   owner: string;
@@ -81,6 +86,10 @@ type FileLeaseProcessMarker = {
 
 type FileLeaseMutationLock = FileLeaseProcessMarker & {
   token?: string;
+};
+
+type FileLeaseRecoveryOwner = FileLeaseProcessMarker & {
+  token: string;
 };
 
 function leaseFileName(key: string): string {
@@ -252,6 +261,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   readonly #leaseDirectory: string;
   readonly #leaseMutationDirectory: string;
   readonly #leaseProcessDirectory: string;
+  readonly #leaseRecoveryOwnerToken = randomUUID();
   #server?: net.Server;
   #clientSocket?: net.Socket;
   #isBroker = false;
@@ -270,6 +280,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #membershipAckTimeoutMs: number;
   #leaseDirectoriesReady?: Promise<void>;
   #pendingLeaseOperations = new Set<Promise<unknown>>();
+  #leaseRecoveryOwnershipPaths = new Set<string>();
 
   constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
@@ -277,6 +288,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     this.#leaseDirectory = join(dirname(socketPath), 'leases');
     this.#leaseMutationDirectory = join(this.#leaseDirectory, 'mutations');
     this.#leaseProcessDirectory = join(this.#leaseDirectory, 'processes');
+    LIVE_LEASE_RECOVERY_OWNERS.add(this.#leaseRecoveryOwnerToken);
     this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
 
     const maxInboundFrameBytes = options.maxInboundFrameBytes ?? DEFAULT_MAX_INBOUND_FRAME_BYTES;
@@ -543,7 +555,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     };
 
     while (true) {
+      this.#throwIfClosed();
       await this.#completeLeaseMutationRecoveries(lockPath);
+      this.#throwIfClosed();
       const candidatePath = `${lockPath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(candidatePath, JSON.stringify(lockRecord), { flag: 'wx' });
       let installed = false;
@@ -568,6 +582,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
       if (!installed) continue;
       await this.#completeLeaseMutationRecoveries(lockPath);
+      this.#throwIfClosed();
       const currentLock = await this.#readJson<FileLeaseMutationLock>(lockPath);
       if (this.#sameLeaseMutationLock(currentLock, lockRecord)) break;
     }
@@ -579,19 +594,25 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  /** Returns recovery markers for one lock, excluding isolated files left by interrupted recovery helpers. */
+  /** Returns the generation markers that block acquisition while stale-lock recovery is in progress. */
   async #leaseMutationRecoveryPaths(lockPath: string): Promise<string[]> {
     const recoveryDirectory = `${lockPath}.recoveries`;
     const names = await readdir(recoveryDirectory).catch(() => [] as string[]);
-    return names.filter(name => !name.endsWith('.isolated')).map(name => join(recoveryDirectory, name));
+    return names.filter(name => name.endsWith('.marker')).map(name => join(recoveryDirectory, name));
   }
 
   /** Completes any in-progress recovery before acquisition or release touches the canonical lock path. */
   async #completeLeaseMutationRecoveries(lockPath: string): Promise<void> {
     while (true) {
+      this.#throwIfClosed();
       const recoveryPaths = await this.#leaseMutationRecoveryPaths(lockPath);
       if (recoveryPaths.length === 0) return;
-      await Promise.all(recoveryPaths.map(recoveryPath => this.#completeLeaseMutationRecovery(lockPath, recoveryPath)));
+      for (const recoveryPath of recoveryPaths) {
+        await this.#completeLeaseMutationRecovery(lockPath, recoveryPath);
+      }
+      if ((await this.#leaseMutationRecoveryPaths(lockPath)).length > 0) {
+        await delay(LEASE_LOCK_RETRY_MS);
+      }
     }
   }
 
@@ -601,11 +622,81 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     return createHash('sha256').update(JSON.stringify(lock)).digest('hex');
   }
 
-  /** Starts recovery through a generation-specific hard link so contenders cannot reap a replacement lock. */
+  #leaseMutationRecoveryOwner(): FileLeaseRecoveryOwner {
+    return {
+      pid: process.pid,
+      processNonce: PROCESS_NONCE,
+      token: this.#leaseRecoveryOwnerToken,
+    };
+  }
+
+  async #isLeaseRecoveryOwnerLive(owner: FileLeaseRecoveryOwner): Promise<boolean> {
+    if (!Number.isInteger(owner.pid) || typeof owner.processNonce !== 'string' || typeof owner.token !== 'string') {
+      return false;
+    }
+    if (owner.pid === process.pid && owner.processNonce === PROCESS_NONCE) {
+      return LIVE_LEASE_RECOVERY_OWNERS.has(owner.token);
+    }
+    try {
+      process.kill(owner.pid, 0);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') return false;
+      if (code !== 'EPERM') throw error;
+    }
+    const marker = await this.#readJson<FileLeaseProcessMarker>(join(this.#leaseProcessDirectory, `${owner.pid}.json`));
+    return marker?.processNonce === owner.processNonce;
+  }
+
+  /** Elects one live provider to finish a recovery without replacing the original owner's record. */
+  async #ownsLeaseMutationRecovery(recoveryPath: string): Promise<boolean> {
+    const ownerPath = `${recoveryPath}.owner`;
+    const self = this.#leaseMutationRecoveryOwner();
+    try {
+      await writeFile(ownerPath, JSON.stringify(self), { flag: 'wx' });
+      this.#leaseRecoveryOwnershipPaths.add(ownerPath);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+
+    const owner = await this.#readJson<FileLeaseRecoveryOwner>(ownerPath);
+    if (owner && (await this.#isLeaseRecoveryOwnerLive(owner))) {
+      return owner.token === self.token && owner.processNonce === self.processNonce && owner.pid === self.pid;
+    }
+
+    const claimantDirectory = `${recoveryPath}.claimants`;
+    const claimantPath = join(claimantDirectory, `${self.token}.json`);
+    await mkdir(claimantDirectory, { recursive: true });
+    await writeFile(claimantPath, JSON.stringify(self), { flag: 'wx' }).catch(error => {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    });
+    this.#leaseRecoveryOwnershipPaths.add(claimantPath);
+    await delay(LEASE_LOCK_RETRY_MS);
+
+    const claimants = await readdir(claimantDirectory).catch(() => [] as string[]);
+    const liveClaimants: Array<{ path: string; owner: FileLeaseRecoveryOwner; createdAt: number }> = [];
+    for (const name of claimants) {
+      const path = join(claimantDirectory, name);
+      const candidate = await this.#readJson<FileLeaseRecoveryOwner>(path);
+      if (!candidate || !(await this.#isLeaseRecoveryOwnerLive(candidate))) continue;
+      const metadata = await stat(path).catch(() => undefined);
+      if (metadata) liveClaimants.push({ path, owner: candidate, createdAt: metadata.birthtimeMs });
+    }
+    liveClaimants.sort((first, second) => first.createdAt - second.createdAt || first.path.localeCompare(second.path));
+    const elected = liveClaimants[0]?.owner;
+    return elected?.token === self.token && elected.processNonce === self.processNonce && elected.pid === self.pid;
+  }
+
+  /** Starts recovery only after this provider wins the generation's immutable owner election. */
   async #startLeaseMutationRecovery(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
     const recoveryDirectory = `${lockPath}.recoveries`;
-    const recoveryPath = join(recoveryDirectory, this.#leaseMutationLockGeneration(expected));
+    const recoveryPath = join(recoveryDirectory, `${this.#leaseMutationLockGeneration(expected)}.marker`);
     await mkdir(recoveryDirectory, { recursive: true });
+    if (!(await this.#ownsLeaseMutationRecovery(recoveryPath))) return;
+
+    const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
+    if (!this.#sameLeaseMutationLock(current, expected)) return;
     try {
       await link(lockPath, recoveryPath);
     } catch (error) {
@@ -615,39 +706,52 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     await this.#completeLeaseMutationRecovery(lockPath, recoveryPath);
   }
 
-  /** Removes the lock generation named by a recovery marker while all acquisitions observe that marker. */
+  /** Removes one stale generation; every other contender waits while its marker remains. */
   async #completeLeaseMutationRecovery(lockPath: string, recoveryPath: string): Promise<void> {
-    const expectedGeneration = basename(recoveryPath);
+    if (!(await this.#ownsLeaseMutationRecovery(recoveryPath))) return;
+    const expectedGeneration = basename(recoveryPath, '.marker');
     const expected = await this.#readJson<FileLeaseMutationLock>(recoveryPath);
     if (
       !expected ||
       this.#leaseMutationLockGeneration(expected) !== expectedGeneration ||
       !(await this.#isLeaseMutationLockStale(expected))
     ) {
-      await unlink(recoveryPath).catch(() => {});
+      await this.#removeLeaseMutationRecovery(recoveryPath);
       return;
     }
 
     const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
     if (!this.#sameLeaseMutationLock(current, expected)) {
-      await unlink(recoveryPath).catch(() => {});
+      await this.#removeLeaseMutationRecovery(recoveryPath);
       return;
     }
 
-    const isolatedPath = `${recoveryPath}.isolated`;
+    const isolatedPath = `${recoveryPath}.${this.#leaseRecoveryOwnerToken}.isolated`;
     try {
       await rename(lockPath, isolatedPath);
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT' && code !== 'EEXIST') throw error;
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const isolated = await this.#readJson<FileLeaseMutationLock>(isolatedPath);
+    if (isolated && !this.#sameLeaseMutationLock(isolated, expected)) {
+      await link(isolatedPath, lockPath).catch(error => {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      });
+      throw new Error('UnixSocketPubSub lease recovery isolated an unexpected mutation lock');
     }
     await unlink(isolatedPath).catch(() => {});
+    await this.#removeLeaseMutationRecovery(recoveryPath);
+  }
+
+  async #removeLeaseMutationRecovery(recoveryPath: string): Promise<void> {
     await unlink(recoveryPath).catch(() => {});
+    await unlink(`${recoveryPath}.owner`).catch(() => {});
+    await rm(`${recoveryPath}.claimants`, { recursive: true, force: true });
   }
 
   /** Releases this holder's immutable lock generation after any earlier recovery has completed. */
   async #releaseLeaseMutationLock(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
-    await this.#completeLeaseMutationRecoveries(lockPath);
+    if (!this.#closed) await this.#completeLeaseMutationRecoveries(lockPath);
     const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
     if (this.#sameLeaseMutationLock(current, expected)) {
       await unlink(lockPath).catch(() => {});
@@ -785,6 +889,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
 
     await Promise.allSettled([...this.#pendingLeaseOperations]);
+    await Promise.allSettled([...this.#leaseRecoveryOwnershipPaths].map(path => unlink(path)));
+    this.#leaseRecoveryOwnershipPaths.clear();
+    LIVE_LEASE_RECOVERY_OWNERS.delete(this.#leaseRecoveryOwnerToken);
 
     if (this.#isBroker) {
       await unlink(this.socketPath).catch(() => {});
