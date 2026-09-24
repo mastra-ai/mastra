@@ -1,3 +1,4 @@
+import { datasetSnapshotIdentityId } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetsSpanner } from './datasets';
@@ -31,7 +32,10 @@ describe('Spanner dataset purge barrier', () => {
     expect(barrier.sql).toContain('UPDATE `mastra_datasets`');
     expect(barrier.sql).toContain('SET `version` = `version`');
     expect(barrier.params).toEqual({ datasetId: 'dataset-1' });
-    expect(transaction.runUpdate).toHaveBeenCalledTimes(3);
+    const identityDelete = transaction.runUpdate.mock.calls[2]?.[0];
+    expect(identityDelete.sql).toContain('DELETE FROM `mastra_dataset_snapshot_identities`');
+    expect(identityDelete.params).toEqual({ id: datasetSnapshotIdentityId('dataset-1', 'item-1') });
+    expect(transaction.runUpdate).toHaveBeenCalledTimes(4);
   });
 
   it('mutates the same dataset row before checking whether result content must remain redacted', async () => {

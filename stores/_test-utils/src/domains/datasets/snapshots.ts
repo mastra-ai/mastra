@@ -120,7 +120,9 @@ export function createDatasetSnapshotTransferTests(
     for (const key of ['tags', 'targetType', 'targetIds', 'scorerIds', 'inputSchema', 'groundTruthSchema'] as const) {
       expect(dataset?.[key], key).toBeUndefined();
     }
-    const [item] = (await store.listItems({ datasetId: imported.receipt.datasetId, pagination: { page: 0, perPage: false } })).items;
+    const [item] = (
+      await store.listItems({ datasetId: imported.receipt.datasetId, pagination: { page: 0, perPage: false } })
+    ).items;
     expect(item).toMatchObject({ input: null, groundTruth: null });
     // Adapters already differ on how an unset externalId reads (declared as string | null).
     expect(item?.externalId ?? undefined).toBeUndefined();

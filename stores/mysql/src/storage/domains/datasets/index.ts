@@ -128,7 +128,11 @@ export class DatasetsMySQL extends DatasetsStorage {
       await connection.commit();
       return result;
     } catch (error) {
-      await connection.rollback();
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+      }
       throw error;
     } finally {
       connection.release();

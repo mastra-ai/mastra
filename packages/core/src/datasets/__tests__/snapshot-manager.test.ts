@@ -245,7 +245,11 @@ describe('public dataset snapshot transfer', () => {
     const { digest: _digest, ...content } = fixture();
     content.configuration.inputSchema = { anyOf: [branch('a'), branch('b')] };
     content.items[0]!.payload.input = { [key]: 'b' };
-    const request = { snapshot: JSON.stringify(createDatasetSnapshot(content)), idempotencyKey: 'injection', ...mappings };
+    const request = {
+      snapshot: JSON.stringify(createDatasetSnapshot(content)),
+      idempotencyKey: 'injection',
+      ...mappings,
+    };
     const { mastra } = destination();
     expect(await mastra.datasets.preflightSnapshot(request)).toMatchObject({ canImport: true });
     await mastra.datasets.importSnapshot(request);

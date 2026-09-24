@@ -98,7 +98,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
         await tx.commit();
         return result;
       } catch (error) {
-        if (!tx.closed) await tx.rollback();
+        if (!tx.closed) {
+          await tx.rollback().catch(rollbackError => {
+            throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+          });
+        }
         throw error;
       } finally {
         tx.close();

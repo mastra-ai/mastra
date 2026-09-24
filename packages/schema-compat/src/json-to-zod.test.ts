@@ -459,6 +459,27 @@ describe('jsonSchemaToZod', () => {
     });
 
     describe('PatternProperties', () => {
+      it('should treat patternProperties keys and matching item keys as data, not executable code', () => {
+        const hostileKeys = [
+          '`+(globalThis.__jsonToZodPatternKey=1)+`',
+          '${globalThis.__jsonToZodPatternKey=1}',
+          '"));globalThis.__jsonToZodPatternKey=1;(("',
+        ];
+        for (const key of hostileKeys) {
+          const result = jsonSchemaToZod({ type: 'object', patternProperties: { [key]: { type: 'string' } } });
+          expect(result).toContain(`new RegExp(${JSON.stringify(key)})`);
+
+          const schema = Function('z', `"use strict";return (${result});`)(z);
+          // Keys that are not valid regular expressions fail as data when matched.
+          try {
+            schema.safeParse({ [key]: 1, globalThis: 1 });
+          } catch (error) {
+            expect(error).toBeInstanceOf(SyntaxError);
+          }
+          expect((globalThis as Record<string, unknown>).__jsonToZodPatternKey).toBeUndefined();
+        }
+      });
+
       it('should handle patternProperties with single pattern', () => {
         const schema: JsonSchema = {
           type: 'object',
