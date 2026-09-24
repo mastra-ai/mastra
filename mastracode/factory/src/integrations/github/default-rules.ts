@@ -50,8 +50,8 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
   // Everything arrives on the routed board's initial phase (Work › Intake when
-  // no label route selects another board); arrival only stamps whether
-  // `onArrival` may suggest this card's run without a person.
+  // no label route selects another board). Trust/timing stamps remain available
+  // to custom board rules.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -100,7 +100,7 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  { idempotencyKey, autoStartCandidate }: { idempotencyKey: string; autoStartCandidate: boolean },
+  { idempotencyKey, autoStartCandidate, stage = 'intake' }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -111,7 +111,7 @@ function materializePullRequestIntake(
     sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage: 'intake',
+    stage,
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
@@ -307,6 +307,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
     return materializePullRequestIntake(context, {
       idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
       autoStartCandidate: true,
+      stage: 'review',
     });
   }
   // Already in Reviewing: a review pass is pending or running; re-entering

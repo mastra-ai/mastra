@@ -7,11 +7,18 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { buildTraceListFilters } from '../../trace-filters';
+import { useTraceMetadataFilterFields } from '../use-trace-metadata-filter-fields';
 import { getTraceQueryNextPageParam, useTraceQuery } from '../use-trace-query';
 import type { TraceQueryArgs } from '../use-trace-query';
 import { firstTraceQueryPage, lastTraceQueryPage } from './fixtures/trace-query';
+import { firstLegacyTracePage, lastLegacyTracePage } from './fixtures/trace-query-legacy';
 
 const BASE_URL = 'http://localhost:4111';
+const QUERY_URL = `${BASE_URL}/api/observability/traces/query`;
+const LEGACY_URL = `${BASE_URL}/api/observability/traces/light`;
+const FIELDS_URL = `${BASE_URL}/api/observability/traces/query/fields`;
+const VALUES_URL = `${BASE_URL}/api/observability/traces/query/values`;
 const server = setupServer();
 const query: TraceQueryArgs = {
   timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-02T00:00:00Z' },
@@ -257,6 +264,153 @@ describe('useTraceQuery', () => {
       expect(getTraceQueryNextPageParam(undefined)).toBeUndefined();
       expect(getTraceQueryNextPageParam(lastTraceQueryPage)).toBeUndefined();
       expect(getTraceQueryNextPageParam(firstTraceQueryPage)).toBe('cursor-a');
+    });
+  });
+
+  describe('when withQueryTrace is true', () => {
+    it('never calls the legacy light endpoint', async () => {
+      const onLegacyRequest = vi.fn();
+      server.use(
+        http.post(QUERY_URL, () => HttpResponse.json(lastTraceQueryPage)),
+        http.get(LEGACY_URL, () => {
+          onLegacyRequest();
+          throw new Error('legacy endpoint must not be called when withQueryTrace is true');
+        }),
+      );
+      const { result } = renderHook(() => useTraceQuery({ query, withQueryTrace: true }), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.data).toEqual(lastTraceQueryPage.traces));
+      expect(onLegacyRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when withQueryTrace is false', () => {
+    const legacyFilters = buildTraceListFilters({ rootEntityType: 'agent', status: 'error', tokens: [] });
+
+    it('lists traces through the light endpoint and never calls the trace-query API', async () => {
+      const onQueryRequest = vi.fn();
+      const urls: URL[] = [];
+      server.use(
+        http.post(QUERY_URL, () => {
+          onQueryRequest();
+          throw new Error('trace-query endpoint must not be called when withQueryTrace is false');
+        }),
+        http.get(LEGACY_URL, ({ request }) => {
+          urls.push(new URL(request.url));
+          return HttpResponse.json(lastLegacyTracePage);
+        }),
+      );
+      const { result } = renderHook(() => useTraceQuery({ query, withQueryTrace: false, legacyFilters, limit: 10 }), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.data).toHaveLength(1));
+      expect(onQueryRequest).not.toHaveBeenCalled();
+      expect(urls.length).toBeGreaterThan(0);
+      for (const url of urls) {
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+          page: '0',
+          perPage: '10',
+          field: 'startedAt',
+          direction: 'DESC',
+          entityType: 'agent',
+          status: 'error',
+        });
+      }
+    });
+
+    it('maps light root spans into trace-query rows', async () => {
+      server.use(
+        http.get(LEGACY_URL, ({ request }) => {
+          const page = new URL(request.url).searchParams.get('page');
+          return HttpResponse.json(page === '0' ? firstLegacyTracePage : lastLegacyTracePage);
+        }),
+      );
+      const { result } = renderHook(() => useTraceQuery({ query, withQueryTrace: false }), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+      expect(result.current.data).toEqual([
+        {
+          traceId: 'trace-legacy-a',
+          rootSpanId: 'span-legacy-a',
+          name: 'Agent run',
+          entityId: 'assistant',
+          parentSpanId: null,
+          createdAt: '2026-09-01T10:00:00.000Z',
+          metadata: { region: 'eu-west' },
+          inputPreview: 'Hello',
+          threadId: null,
+          resourceId: null,
+          startedAt: '2026-09-01T10:00:00.000Z',
+          endedAt: '2026-09-01T10:01:00.000Z',
+          entityName: 'assistant',
+          entityType: 'agent',
+          environment: null,
+          status: 'success',
+        },
+        expect.objectContaining({
+          traceId: 'trace-legacy-b',
+          rootSpanId: 'span-legacy-b',
+          endedAt: null,
+          status: 'running',
+          metadata: null,
+          inputPreview: null,
+        }),
+      ]);
+    });
+
+    it('lists traces without touching any trace-query endpoint when composed like the platform page', async () => {
+      const forbidden = vi.fn();
+      const fail = (path: string) => () => {
+        forbidden(path);
+        throw new Error(`${path} must not be called when withQueryTrace is false`);
+      };
+      server.use(
+        http.post(QUERY_URL, fail('query')),
+        http.post(FIELDS_URL, fail('fields')),
+        http.post(VALUES_URL, fail('values')),
+        http.get(LEGACY_URL, () => HttpResponse.json(lastLegacyTracePage)),
+      );
+      const withQueryTrace = false;
+      const { result } = renderHook(
+        () => ({
+          traces: useTraceQuery({ query, withQueryTrace, legacyFilters }),
+          metadata: useTraceMetadataFilterFields({
+            timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-02T00:00:00.000Z' },
+            enabled: withQueryTrace,
+          }),
+        }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.traces.data).toHaveLength(1));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(result.current.metadata.fields).toEqual([]);
+      expect(forbidden).not.toHaveBeenCalled();
+    });
+
+    it('requests ascending order when the query asks for it', async () => {
+      const orders: unknown[] = [];
+      server.use(
+        http.get(LEGACY_URL, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          orders.push({ field: params.get('field'), direction: params.get('direction') });
+          return HttpResponse.json(lastLegacyTracePage);
+        }),
+      );
+      const { result } = renderHook(
+        () =>
+          useTraceQuery({
+            query: { ...query, orderBy: [{ field: 'startedAt', direction: 'asc' }] },
+            withQueryTrace: false,
+          }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.data).toHaveLength(1));
+      expect(orders.length).toBeGreaterThan(0);
+      for (const order of orders) expect(order).toEqual({ field: 'startedAt', direction: 'ASC' });
     });
   });
 });

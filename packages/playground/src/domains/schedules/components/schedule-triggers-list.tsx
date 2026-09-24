@@ -91,15 +91,15 @@ export function ScheduleTriggersList({
         const isLinked = isTriggerLinked(t);
         if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
-          <span
-            className={
-              isLinked
-                ? 'font-mono text-caption whitespace-nowrap text-accent1'
-                : 'font-mono text-caption whitespace-nowrap text-muted-foreground'
-            }
+          <Txt
+            as="span"
+            variant="caption"
+            font="mono"
+            tone={isLinked ? undefined : 'muted'}
+            className={isLinked ? 'whitespace-nowrap text-accent1' : 'whitespace-nowrap'}
           >
             {t.runId}
-          </span>
+          </Txt>
         );
 
         const cells = (
@@ -151,7 +151,9 @@ export function ScheduleTriggersList({
 
             <DataList.Cell>
               {t.run ? (
-                <span>{formatDuration(t.run.durationMs)}</span>
+                <Txt as="span" variant="body-sm" font="mono">
+                  {formatDuration(t.run.durationMs)}
+                </Txt>
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}

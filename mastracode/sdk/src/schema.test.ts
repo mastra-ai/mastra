@@ -60,4 +60,53 @@ describe('stateSchema', () => {
     // schema is silently discarded and the memory seam falls back to ownerId.
     expect(parsed.factoryOrgId).toBe('FOdo4tqL98ibdYH8uhLXs0mZrDDE5Uiw');
   });
+
+  // Regression: /browser status compares the persisted active snapshot against the
+  // settings file to detect drift. Any BrowserSettings field missing here is
+  // stripped on parse, so the snapshot never matches the file and status reports
+  // "Pending changes (not yet applied)" forever.
+  it('preserves every BrowserSettings field in activeBrowserSettings', () => {
+    const active = {
+      enabled: true,
+      provider: 'stagehand' as const,
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      cdpUrl: 'http://127.0.0.1:9222',
+      profile: '/tmp/profile',
+      executablePath: '/usr/bin/chromium',
+      scope: 'thread' as const,
+      stagehand: {
+        env: 'LOCAL' as const,
+        projectId: 'proj',
+        model: 'anthropic/claude-sonnet-4-5',
+        preserveUserDataDir: true,
+      },
+      agentBrowser: { storageState: '/tmp/state.json' },
+    };
+
+    const parsed = stateSchema.parse({ activeBrowserSettings: active });
+
+    expect(parsed.activeBrowserSettings).toEqual(active);
+  });
+
+  it('strips the Browserbase API key from activeBrowserSettings', () => {
+    // Session state is readable by session clients; credentials must not leak into it.
+    const parsed = stateSchema.parse({
+      activeBrowserSettings: {
+        enabled: true,
+        provider: 'stagehand',
+        stagehand: { env: 'BROWSERBASE', apiKey: 'bb-key', projectId: 'proj' },
+      },
+    });
+
+    expect(parsed.activeBrowserSettings?.stagehand).toEqual({ env: 'BROWSERBASE', projectId: 'proj' });
+  });
+
+  it('preserves activeBrowserModel so status reports the model the browser launched with', () => {
+    const activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' as const };
+
+    const parsed = stateSchema.parse({ activeBrowserModel });
+
+    expect(parsed.activeBrowserModel).toEqual(activeBrowserModel);
+  });
 });

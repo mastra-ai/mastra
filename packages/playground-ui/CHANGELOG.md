@@ -1,5 +1,35 @@
 # @mastra/playground-ui
 
+## 58.1.0-alpha.0
+
+### Minor Changes
+
+- `TaskList` no longer shows a spinner for the task in progress, which read as something loading. The active task now steps out onto its own lane of a small graph drawn beside the list, and its label fades into a warm gradient. A completed task's strike draws in from the left and erases cleanly if the task reopens. Every change between states is animated, and nothing moves when reduced motion is on. ([#24947](https://github.com/mastra-ai/mastra/pull/24947))
+
+  Collapsed, the list is a one-row window on the current task, with the progress bars beside it. Expanding grows that window: the current task slides into place while the tasks around it come into view, and the progress bars fold away. The whole collapsed card expands on click.
+
+  When the active task changes, the list scrolls itself smoothly to keep that task visible, instead of also scrolling the page or chat around it.
+
+  **Breaking**
+
+  - `title` is removed, since the list no longer has a header. Drop the prop.
+  - `TaskListHeader` is removed. `TaskList` now renders its own toggle.
+  - `hideWhenEmpty` is removed. An empty `TaskList` always renders nothing. Drop the prop:
+
+    ```diff
+    - <TaskList tasks={tasks} hideWhenEmpty={false} />
+    + <TaskList tasks={tasks} />
+    ```
+
+### Patch Changes
+
+- `PageHeader.Meta` now renders plain text as muted meta text, so metadata next to a page title no longer competes with the title. Badges and other components that set their own text style are unchanged. The medium `Badge` now sets its own letter spacing, so it looks the same inside styled text as anywhere else. ([#24985](https://github.com/mastra-ai/mastra/pull/24985))
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+  - @mastra/client-js@1.49.1-alpha.0
+  - @mastra/react@1.6.3-alpha.0
+
 ## 58.0.0
 
 ### Minor Changes

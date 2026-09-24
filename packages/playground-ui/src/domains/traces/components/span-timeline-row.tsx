@@ -5,6 +5,7 @@ import type { SpanRowContext } from './span-rows';
 import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
 
 export type SpanTimelineRowProps = {
@@ -132,9 +133,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className="w-12 text-right text-meta text-muted-foreground tabular-nums">
+          <Txt as="div" variant="meta" tone="muted" font="mono" className="w-12 text-right">
             {formatDuration(span.latency)}
-          </div>
+          </Txt>
         </HoverCardTrigger>
         <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
       </HoverCard>
