@@ -29,6 +29,7 @@ import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hook
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import {
+  buildTraceListFilters,
   createTraceFilterBarFields,
   filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
@@ -189,8 +190,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ),
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
+  // Set to false for servers without the trace-query API: lists through `listTracesLight` instead.
+  const withQueryTrace = true;
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
+    enabled: withQueryTrace,
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
@@ -207,10 +211,18 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
-        valueSuggestions,
+        valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
+        withQueryTrace,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
+    [
+      rootEntityNameSuggestions,
+      discoveredEnvironments,
+      hiddenFieldIds,
+      metadataFields,
+      valueSuggestions,
+      withQueryTrace,
+    ],
   );
   // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
   const availableMetadataKeys = useMemo(() => {
@@ -246,6 +258,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     },
     [allFilterBarItems, scopedFieldIds, url],
   );
+  // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs in flat mode, which never offers
+  // "Advanced filter".
+  const flatFilterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
+  const handleFlatFilterBarChange = useCallback(
+    (items: FilterBarItem[]) => handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items }),
+    [handleFilterBarChange],
+  );
   const handleFilterByField = useCallback(
     (fieldId: string, value: string) => {
       const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
@@ -278,6 +297,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
+    withQueryTrace,
+    legacyFilters: buildTraceListFilters({
+      rootEntityType: url.selectedEntityOption?.entityType,
+      status: url.selectedStatus,
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      tokens: url.filterTokens,
+    }),
   });
   const traceColumns = useTraceColumnPreferences();
   const observabilityCapabilities = useObservabilityStorageCapabilities();
@@ -337,8 +364,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         <FilterBar
           fields={filterBarFields}
           operators={TRACE_FILTER_BAR_OPERATORS}
-          value={filterBarValue}
-          onValueChange={handleFilterBarChange}
+          {...(withQueryTrace
+            ? { value: filterBarValue, onValueChange: handleFilterBarChange }
+            : { value: flatFilterBarValue, onValueChange: handleFlatFilterBarChange })}
           // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
           // draft that id so the chip survives the round trip without remounting.
           createItemId={fieldId => fieldId}
@@ -372,6 +400,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           preferences={traceColumns.preferences}
           availableMetadataKeys={availableMetadataKeys}
           usageDisabledReason={usageDisabledReason}
+          withQueryTrace={withQueryTrace}
           onToggleColumn={traceColumns.toggleColumn}
           onAddCustomColumn={traceColumns.addCustomColumn}
           onRemoveCustomColumn={traceColumns.removeCustomColumn}

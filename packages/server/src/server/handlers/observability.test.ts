@@ -25,6 +25,7 @@ import {
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
 import { LIST_METRICS, NEW_ROUTES } from './observability-new-endpoints';
+import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from './observability-shared';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -3407,6 +3408,89 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
+    });
+  });
+
+  describe('discovery routes on stores without discovery support', () => {
+    const createLegacyMastra = async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyObservabilityStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyObservabilityStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      return createMockMastra(storage);
+    };
+
+    it.each([
+      ['GET_ENTITY_TYPES', {}, { entityTypes: [] }],
+      ['GET_ENTITY_NAMES', {}, { names: [] }],
+      ['GET_SERVICE_NAMES', {}, { serviceNames: [] }],
+      ['GET_ENVIRONMENTS', {}, { environments: [] }],
+      ['GET_TAGS', {}, { tags: [] }],
+      ['GET_METRIC_NAMES', {}, { names: [] }],
+      ['GET_METRIC_LABEL_KEYS', { metricName: 'mastra_agent_duration_ms' }, { keys: [] }],
+      ['GET_METRIC_LABEL_VALUES', { metricName: 'mastra_agent_duration_ms', labelKey: 'agent' }, { values: [] }],
+    ] as const)('%s returns an empty result instead of an error', async (routeKey, params, expected) => {
+      const mastra = await createLegacyMastra();
+      const route = NEW_ROUTES[routeKey] as { handler: (args: unknown) => Promise<unknown> };
+
+      const result = await route.handler({ ...createTestServerContext({ mastra }), ...params });
+
+      expect(result).toEqual(expected);
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET_CAPABILITIES', () => {
+    it('reports every flag as unsupported when no storage is configured', async () => {
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(undefined) }),
+      });
+
+      expect(result).toEqual({
+        observabilityStorageType: null,
+        capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      });
+    });
+
+    it('reports the configured store and its declared capabilities', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class DeclaredStore extends ObservabilityStorage {
+        override getFeatures() {
+          return ['metrics', 'tag-discovery', 'trace-query'] as const;
+        }
+      }
+      const storage = createMockStorage(
+        new DeclaredStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(storage) }),
+      });
+
+      expect(result.observabilityStorageType).toBe('DeclaredStore');
+      expect(result.capabilities).toMatchObject({ metrics: true, logs: false, traceQuery: true });
+      expect(result.capabilities.discovery.tags).toBe(true);
+    });
+
+    it('reports legacy stores without feature declarations as unsupported', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(storage) }),
+      });
+
+      expect(result).toEqual({
+        observabilityStorageType: 'LegacyStore',
+        capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      });
     });
   });
 });

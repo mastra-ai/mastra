@@ -121,6 +121,26 @@ describe('useTraceMetadataFilterFields', () => {
     });
   });
 
+  describe('when disabled', () => {
+    it('never requests the discovery endpoint and exposes no fields', async () => {
+      let requests = 0;
+      server.use(
+        http.post(FIELDS_URL, () => {
+          requests++;
+          return HttpResponse.json(traceQueryFieldsFixture);
+        }),
+      );
+
+      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange, enabled: false }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(requests).toBe(0);
+      expect(result.current.fields).toEqual([]);
+    });
+  });
+
   describe('when the server does not support trace query discovery', () => {
     it('resolves to an empty field list instead of erroring', async () => {
       server.use(
