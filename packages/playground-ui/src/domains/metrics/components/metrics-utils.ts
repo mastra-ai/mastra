@@ -1,13 +1,6 @@
 import type { DataListRootProps } from '@/ds/components/DataList';
 
-const compactNumberFormatter = new Intl.NumberFormat('en-US', {
-  notation: 'compact',
-  maximumSignificantDigits: 3,
-});
-
-export function formatCompact(n: number): string {
-  return compactNumberFormatter.format(n).replace('K', 'k');
-}
+export { formatCompactNumber as formatCompact } from '@/ds/components/CompactNumber';
 
 export function formatCost(value: number, unit?: string | null): string {
   if (unit?.toLowerCase() === 'usd' || !unit) {

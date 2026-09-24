@@ -1,5 +1,5 @@
+import { CompactNumber, formatFullNumber } from '@mastra/playground-ui/components/CompactNumber';
 import { KpiCardView } from '@mastra/playground-ui/domains/metrics/components/kpi-card-view';
-import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { useActiveResourcesKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-active-resources-kpi-metrics';
 import { useActiveThreadsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-active-threads-kpi-metrics';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
@@ -11,8 +11,8 @@ export function AgentRunsKpiCard() {
   return (
     <KpiCardView
       label="Total Agent Runs"
-      value={data?.value != null ? formatCompact(data.value) : null}
-      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
+      value={data?.value != null ? <CompactNumber value={data.value} /> : null}
+      prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}
@@ -22,11 +22,12 @@ export function AgentRunsKpiCard() {
 
 export function ModelCostKpiCard() {
   const { data, isLoading, isError } = useModelCostKpiMetrics();
+  const currency = data?.costUnit ?? 'USD';
   return (
     <KpiCardView
       label="Total Model Cost"
-      value={data?.cost != null ? formatCost(data.cost, data.costUnit) : null}
-      prevValue={data?.previousCost != null ? formatCost(data.previousCost, data.costUnit) : undefined}
+      value={data?.cost != null ? <CompactNumber value={data.cost} currency={currency} /> : null}
+      prevValue={data?.previousCost != null ? formatFullNumber(data.previousCost, { currency }) : undefined}
       changePct={data?.costChangePercent ?? null}
       lowerIsBetter
       isLoading={isLoading}
@@ -40,8 +41,8 @@ export function TotalTokensKpiCard() {
   return (
     <KpiCardView
       label="Total Tokens"
-      value={data?.value != null ? formatCompact(data.value) : null}
-      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
+      value={data?.value != null ? <CompactNumber value={data.value} /> : null}
+      prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}
@@ -54,8 +55,8 @@ export function ActiveThreadsKpiCard() {
   return (
     <KpiCardView
       label="Total Threads"
-      value={data?.value != null ? formatCompact(data.value) : null}
-      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
+      value={data?.value != null ? <CompactNumber value={data.value} /> : null}
+      prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}
@@ -68,8 +69,8 @@ export function ActiveResourcesKpiCard() {
   return (
     <KpiCardView
       label="Total Resources"
-      value={data?.value != null ? formatCompact(data.value) : null}
-      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
+      value={data?.value != null ? <CompactNumber value={data.value} /> : null}
+      prevValue={data?.previousValue != null ? formatFullNumber(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}
