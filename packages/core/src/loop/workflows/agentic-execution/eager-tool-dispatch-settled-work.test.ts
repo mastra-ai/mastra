@@ -1,5 +1,5 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { Mastra } from '../../../mastra';
@@ -66,7 +66,11 @@ function textOnly() {
   };
 }
 
-function createAgent(model: MockLanguageModelV2, executions: string[], opts: { delayMs?: number; retry?: boolean }) {
+function createAgent(
+  model: MockLanguageModelV2,
+  executions: string[],
+  opts: { delayMs?: number; retry?: boolean; gate?: ReturnType<typeof inFlightGate> },
+) {
   return new Agent({
     id: 'eager-settled-work-agent',
     name: 'Eager settled work agent',
@@ -90,12 +94,58 @@ function createAgent(model: MockLanguageModelV2, executions: string[], opts: { d
         outputSchema: z.object({ answer: z.string() }),
         execute: async ({ value }) => {
           executions.push(value);
+          if (opts.gate) return opts.gate.hold(() => ({ answer: `answered-${value}` }));
           if (opts.delayMs) await new Promise(resolve => setTimeout(resolve, opts.delayMs));
           return { answer: `answered-${value}` };
         },
       }),
     },
   });
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(r => (resolve = r));
+  return { promise, resolve };
+}
+
+/**
+ * Holds a tool body open until its attempt has failed, so in-flight scenarios need no
+ * wall-clock sleeps. `started` lets the model fail only once the tool is running; the
+ * body is released when the pipeline starts waiting out running work (a build that
+ * cancels instead never waits, and the test releases it after the run); `settled`
+ * resolves once the body has returned or thrown.
+ */
+function inFlightGate() {
+  const started = deferred();
+  const release = deferred();
+  const settled = deferred();
+  const settleRunning = EagerToolExecutionCoordinator.prototype.settleRunning as
+    | ((this: EagerToolExecutionCoordinator, signal?: AbortSignal) => Promise<void>)
+    | undefined;
+  if (settleRunning) {
+    vi.spyOn(EagerToolExecutionCoordinator.prototype, 'settleRunning').mockImplementation(function (
+      this: EagerToolExecutionCoordinator,
+      signal?: AbortSignal,
+    ) {
+      release.resolve();
+      return settleRunning.call(this, signal);
+    });
+  }
+  return {
+    started: started.promise,
+    settled: settled.promise,
+    release: release.resolve,
+    async hold<T>(body: () => T): Promise<Awaited<T>> {
+      started.resolve();
+      try {
+        await release.promise;
+        return await body();
+      } finally {
+        settled.resolve();
+      }
+    },
+  };
 }
 
 async function drain(stream: { fullStream: AsyncIterable<unknown> }) {
@@ -113,6 +163,8 @@ function recordedResults(stream: { messageList: { get: { all: { db: () => unknow
 }
 
 describe('eager tool dispatch — finished work survives every early exit', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('runs an in-flight call once when the last model dies mid-stream with no retry', async () => {
     // Terminal error: no retry and no fallback, so the pipeline still runs this attempt's
     // calls. Cancelling the eager execution there only makes the foreach start it again.
@@ -288,25 +340,27 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // The tool is still running when the first attempt errors and is retried. Cancelling
     // it would let the replacement attempt call it a second time.
     const executions: string[] = [];
+    const gate = inFlightGate();
     let attempts = 0;
     const model = new MockLanguageModelV2({
       doStream: async () => {
         attempts += 1;
         if (attempts > 1) return textOnly();
         return toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await gate.started;
           controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
           controller.close();
         });
       },
     });
 
-    const stream = await createAgent(model, executions, { delayMs: 80, retry: true }).stream('go', {
+    const stream = await createAgent(model, executions, { retry: true, gate }).stream('go', {
       maxSteps: 3,
       eagerToolExecution: true,
     });
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    gate.release();
+    await gate.settled;
 
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('answered-a');
@@ -316,16 +370,17 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // Falling over to the next model throws out of the stream rather than returning a retry,
     // so it reaches a different early exit than the retry case above.
     const executions: string[] = [];
+    const gate = inFlightGate();
     const failing = new MockLanguageModelV2({
       modelId: 'failing-model',
       doStream: async () =>
         toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await gate.started;
           controller.error(new Error('provider died mid-stream'));
         }),
     });
     const fallback = new MockLanguageModelV2({ modelId: 'fallback-model', doStream: async () => textOnly() });
-    const agent = createAgent(failing, executions, { delayMs: 80 });
+    const agent = createAgent(failing, executions, { gate });
     agent.__updateModel({
       model: [
         { model: failing, maxRetries: 0 },
@@ -335,7 +390,8 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
     const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    gate.release();
+    await gate.settled;
 
     expect(fallback.doStreamCalls.length).toBe(1);
     expect(executions).toEqual(['a']);
@@ -344,13 +400,14 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
   it('keeps the error of an in-flight call that throws while its attempt is retried', async () => {
     const executions: string[] = [];
+    const gate = inFlightGate();
     let attempts = 0;
     const model = new MockLanguageModelV2({
       doStream: async () => {
         attempts += 1;
         if (attempts > 1) return textOnly();
         return toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await gate.started;
           controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
           controller.close();
         });
@@ -374,8 +431,9 @@ describe('eager tool dispatch — finished work survives every early exit', () =
           inputSchema: z.object({ value: z.string() }),
           execute: async ({ value }) => {
             executions.push(value);
-            await new Promise(resolve => setTimeout(resolve, 80));
-            throw new Error(`tool-a exploded on ${value}`);
+            return gate.hold(() => {
+              throw new Error(`tool-a exploded on ${value}`);
+            });
           },
         }),
       },
@@ -383,7 +441,8 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
     const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    gate.release();
+    await gate.settled;
 
     expect(attempts).toBe(2);
     expect(executions).toEqual(['a']);

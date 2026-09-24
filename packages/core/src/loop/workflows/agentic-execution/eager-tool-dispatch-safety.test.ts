@@ -1497,12 +1497,13 @@ describe('EagerToolExecutionCoordinator', () => {
     coordinator.stop();
 
     const controller = new AbortController();
-    const settled = coordinator.settleRunning(controller.signal).then(() => 'settled');
+    let settled = false;
+    void coordinator.settleRunning(controller.signal).then(() => (settled = true));
     controller.abort();
+    // One macrotask turn drains every pending microtask; the running work never settles.
+    await new Promise(resolve => setImmediate(resolve));
 
-    await expect(Promise.race([settled, new Promise(resolve => setTimeout(() => resolve('hung'), 50))])).resolves.toBe(
-      'settled',
-    );
+    expect(settled).toBe(true);
   });
 
   it('aborts and forgets running work when the caller aborts, not just queued work', async () => {
