@@ -48,6 +48,11 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
+// Claim requests run off the hot path (boot claim is already time-boxed by the
+// caller; retries are background), so give a busy owner time to answer. A
+// silent 100ms window reads as "no owner" and lets two processes claim a
+// thread the user has open in both.
+const AGENT_THREAD_CLAIM_DISCOVERY_TIMEOUT_MS = 1_000;
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
@@ -1591,8 +1596,10 @@ export class AgentThreadStreamRuntime {
         }
       });
       // Absolute deadline carried on the request; see discoverThreadPeers.
-      const expiresAt = Date.now() + AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
-      const timeout = setTimeout(() => finish(), AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS);
+      const timeoutMs =
+        options?.intent === 'claim' ? AGENT_THREAD_CLAIM_DISCOVERY_TIMEOUT_MS : AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
+      const expiresAt = Date.now() + timeoutMs;
+      const timeout = setTimeout(() => finish(), timeoutMs);
 
       void pubsub
         .subscribe(replyTopic, onReply)
