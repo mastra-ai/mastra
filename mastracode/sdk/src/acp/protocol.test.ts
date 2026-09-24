@@ -1,4 +1,10 @@
-import { AgentSideConnection, ClientSideConnection, PROTOCOL_VERSION, ndJsonStream } from '@agentclientprotocol/sdk';
+import {
+  AgentSideConnection,
+  ClientSideConnection,
+  PROTOCOL_VERSION,
+  RequestError,
+  ndJsonStream,
+} from '@agentclientprotocol/sdk';
 import type { RequestPermissionResponse, SessionNotification } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
@@ -28,6 +34,8 @@ async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
   const clientOutput = new WritableStream<Uint8Array>({ write: chunk => toAgent.enqueue(chunk) });
   let emit: (event: AgentControllerEvent) => void = () => {};
   const sendMessage = vi.fn().mockResolvedValue(undefined);
+  const createThread = vi.fn(async () => ({ id: 'thread-1' }));
+  const cleanup = vi.fn().mockResolvedValue(undefined);
   const resume = vi.fn().mockResolvedValue(undefined);
   const abort = vi.fn(() => emit({ type: 'agent_end', reason: 'aborted' }));
   const deny = vi.fn(async () => {
@@ -38,7 +46,7 @@ async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
       emit = listener;
       return () => {};
     },
-    thread: { create: async () => ({ id: 'thread-1' }), switch: async () => {} },
+    thread: { create: createThread, switch: async () => {} },
     mode: { get: () => 'build' },
     model: { get: () => 'test-model' },
     sendMessage,
@@ -54,6 +62,7 @@ async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
         session,
         modes: [],
         getSkills,
+        cleanup,
       }));
       return agent;
     },
@@ -94,6 +103,8 @@ async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
     permission,
     updates,
     dropped,
+    createThread,
+    cleanup,
   };
 }
 
@@ -113,6 +124,18 @@ function assistant(text: string): AgentControllerEvent[] {
 }
 
 describe('ACP JSON-RPC conversation', () => {
+  it('keeps the original creation error on the wire when cleanup also fails', async () => {
+    const { client, createThread, cleanup } = await connect();
+    const error = RequestError.invalidParams({ thread: 'broken' }, 'thread creation failed');
+    createThread.mockRejectedValueOnce(error);
+    cleanup.mockRejectedValueOnce(new Error('storage close failed'));
+    await expect(client.newSession({ cwd: '/tmp', mcpServers: [] })).rejects.toMatchObject({
+      code: error.code,
+      message: error.message,
+      data: error.data,
+    });
+  });
+
   it('advertises skills after the client registers the new session, before any prompt', async () => {
     const getSkills = async () =>
       ({

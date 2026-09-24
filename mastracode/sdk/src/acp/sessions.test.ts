@@ -1,3 +1,4 @@
+import { RequestError } from '@agentclientprotocol/sdk';
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
@@ -41,6 +42,21 @@ function runtime(id: string) {
 const connection = () => ({ sessionUpdate: vi.fn().mockResolvedValue(undefined) }) as unknown as AgentSideConnection;
 
 describe('ACP session isolation', () => {
+  it('preserves the creation error and its prior cause when cleanup fails', async () => {
+    const state = runtime('broken');
+    const originalCause = new Error('database unavailable');
+    const creationError = RequestError.internalError(undefined, 'thread creation failed');
+    creationError.cause = originalCause;
+    state.session.thread.create = vi.fn().mockRejectedValueOnce(creationError);
+    const cleanupError = new Error('storage close failed');
+    state.cleanup.mockRejectedValueOnce(cleanupError);
+    const agent = new MastraCodeAcpAgent(connection(), async () => state);
+    await expect(agent.newSession({ cwd: '/one', mcpServers: [] })).rejects.toBe(creationError);
+    expect(creationError.cause).toMatchObject({ errors: [originalCause, cleanupError] });
+    expect(creationError.toResult()).toMatchObject({ error: { code: -32603, message: creationError.message } });
+    await agent.dispose();
+  });
+
   it.each(['factory', 'model discovery'])(
     'bounds shutdown during stalled %s and cleans up a late runtime',
     async phase => {
@@ -93,7 +109,11 @@ describe('ACP session isolation', () => {
       return startup.promise;
     });
     const creating = agent.newSession({ cwd: '/one', mcpServers: [] });
-    const rejected = expect(creating).rejects.toBe(failure);
+    const rejected = expect(creating).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringContaining('ACP connection is closed'),
+      cause: expect.objectContaining({ errors: [failure] }),
+    });
     await entered.promise;
     const disposal = agent.dispose();
     const failed = expect(disposal).rejects.toMatchObject({ errors: [failure] });

@@ -20,6 +20,7 @@ import type { AgentController, AgentControllerMode, Session } from '@mastra/core
 import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { getCurrentVersion } from '../utils/update-check.js';
+import { withCleanupFailure } from './errors.js';
 import { handleAgentControllerEvent } from './event-mapper.js';
 import type { PromptState } from './event-mapper.js';
 import { expandSkillCommand, listSkillCommands } from './skills.js';
@@ -219,7 +220,7 @@ export class MastraCodeAcpAgent implements Agent {
         await runtime.cleanup?.();
       } catch (cleanupError) {
         if (this.disposed) this.startupCleanupFailures.push(cleanupError);
-        throw cleanupError;
+        throw withCleanupFailure(error, cleanupError);
       }
       throw error;
     }
