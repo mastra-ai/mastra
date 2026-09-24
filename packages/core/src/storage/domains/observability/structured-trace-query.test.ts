@@ -120,6 +120,21 @@ describe('structured trace-query planning', () => {
     expect(plan.where).toMatchObject({ field: ['metadata', 'customer.plan'], value: 'legacy' });
   });
 
+  it('keeps deprecated grouped requests supported', () => {
+    const plan = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({
+        timeRange: baseTimeRange,
+        group: { by: ['threadId'] },
+      }),
+    );
+
+    expect(plan).toMatchObject({
+      result: 'groups',
+      paginationMode: 'keyset',
+      orderBy: { field: 'threadId', direction: 'asc' },
+    });
+  });
+
   it('keeps canonical field and collection operator semantics', () => {
     const plan = planStructuredTraceQuery(
       parseStructuredTraceQueryRequest({

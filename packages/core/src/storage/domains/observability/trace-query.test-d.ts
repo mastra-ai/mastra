@@ -13,6 +13,7 @@ import type {
   StructuredTraceQueryDiscoveryStorage,
   StructuredTraceQueryExecutionStorage,
   StructuredTraceQueryPath,
+  StructuredTraceQueryRequest,
   TrustedStructuredThreadQueryPlan,
   TrustedStructuredTraceQueryObservedFieldsPlan,
   TrustedStructuredTraceQueryPlan,
@@ -83,9 +84,13 @@ test('legacy thread queries and storage features retain their released types', (
   >();
 });
 
-test('structured paths and discovery values retain their distinct types', () => {
+test('structured paths, grouping, and discovery values retain their distinct types', () => {
   const canonical: StructuredTraceQueryPath = 'metadata.customer.plan';
   const exact: StructuredTraceQueryPath = ['metadata', 'customer.plan'];
+  const groupedRequest = {
+    timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    group: { by: ['threadId'] as ['threadId'] },
+  } satisfies StructuredTraceQueryRequest;
   // @ts-expect-error Structured tuples only support the metadata root.
   const invalidRoot: StructuredTraceQueryPath = ['attributes', 'customer.plan'];
   // @ts-expect-error Structured tuples require at least one post-root segment.
@@ -93,6 +98,7 @@ test('structured paths and discovery values retain their distinct types', () => 
 
   expectTypeOf(canonical).toExtend<StructuredTraceQueryPath>();
   expectTypeOf(exact).toExtend<StructuredTraceQueryPath>();
+  expectTypeOf(groupedRequest).toExtend<StructuredTraceQueryRequest>();
   expectTypeOf(invalidRoot).toExtend<StructuredTraceQueryPath>();
   expectTypeOf(emptyTuple).toExtend<StructuredTraceQueryPath>();
   expectTypeOf<GetStructuredTraceQueryValuesResponse['values'][number]['value']>().toEqualTypeOf<

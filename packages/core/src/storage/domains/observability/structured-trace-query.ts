@@ -256,6 +256,9 @@ const structuredTraceQueryRequestObjectSchema = z
   .object({
     timeRange: traceQueryTimeRangeSchema,
     where: structuredTraceQueryPredicateSchema.optional(),
+    /**
+     * @deprecated Use `queryStructuredThreads()` instead. Grouped structured trace queries remain supported until the next major release.
+     */
     group: z
       .object({ by: z.tuple([z.literal('threadId')]) })
       .strict()
@@ -407,7 +410,13 @@ export const getStructuredTraceQueryValuesResponseSchema = z
   })
   .strict();
 
-export type StructuredTraceQueryRequest = z.input<typeof structuredTraceQueryRequestObjectSchema>;
+type StructuredTraceQueryRequestInput = z.input<typeof structuredTraceQueryRequestObjectSchema>;
+export type StructuredTraceQueryRequest = Omit<StructuredTraceQueryRequestInput, 'group'> & {
+  /**
+   * @deprecated Use `queryStructuredThreads()` instead. Grouped structured trace queries remain supported until the next major release.
+   */
+  group?: StructuredTraceQueryRequestInput['group'];
+};
 export type NormalizedStructuredTraceQueryRequest = z.output<typeof structuredTraceQueryRequestObjectSchema>;
 export type StructuredQueryThreadsInput = z.input<typeof structuredQueryThreadsInputObjectSchema>;
 export type NormalizedStructuredQueryThreadsInput = z.output<typeof structuredQueryThreadsInputObjectSchema>;
@@ -505,6 +514,9 @@ export type TrustedStructuredTraceQueryTracesPlan =
   | TrustedStructuredTraceQueryKeysetTracesPlan
   | TrustedStructuredTraceQueryPaginatedTracesPlan
   | TrustedStructuredTraceQueryDeltaTracesPlan;
+/**
+ * @deprecated Use `TrustedStructuredThreadQueryPlan` instead. Grouped structured trace queries remain supported until the next major release.
+ */
 export type TrustedStructuredTraceQueryGroupsPlan = TrustedStructuredTraceQueryBasePlan & {
   result: 'groups';
   orderBy: { field: 'threadId'; direction: 'asc' };
