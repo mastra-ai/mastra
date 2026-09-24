@@ -6,4 +6,4 @@
 '@mastra/elysia': patch
 ---
 
-Handler errors with status 501 Not Implemented are now logged as warnings instead of errors, so unsupported optional features no longer produce error-level logs.
+Handler errors with status 501 Not Implemented are now logged as warnings instead of errors. A 501 means the configured storage does not support an optional feature, not a server failure.
