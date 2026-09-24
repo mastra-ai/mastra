@@ -40,6 +40,25 @@ describe('ObservationalMemory resource scope deprecation', () => {
     expect(deprecationCalls()).toHaveLength(1);
   });
 
+  it('still warns for a valid resource-scoped instance after an invalid one throws', async () => {
+    const mod = await loadFreshModule();
+
+    expect(
+      () =>
+        new mod.ObservationalMemory({
+          storage: new InMemoryMemory({ db: new InMemoryDB() }),
+          scope: 'resource',
+          model: 'openai/gpt-5-mini',
+          observation: { bufferTokens: 1000 },
+        }),
+    ).toThrow(/Async buffering is not yet supported/);
+    expect(deprecationCalls()).toHaveLength(0);
+
+    create(mod, 'resource');
+
+    expect(deprecationCalls()).toHaveLength(1);
+  });
+
   it('does not warn for thread scope or the default scope', async () => {
     const mod = await loadFreshModule();
 

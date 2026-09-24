@@ -843,10 +843,11 @@ export interface ObservationalMemoryOptions {
    * - 'thread': Observations are per-thread (default)
    *
    * @default 'thread'
-   * @deprecated `scope: 'resource'` is deprecated and will be removed in a future release. It works much
-   * worse than thread scope for prompt caching and agent understanding. Omit this option to use the default
-   * thread scope. For cross-thread recall, enable `retrieval`; for durable facts across threads, use
-   * resource-scoped working memory. A new knowledge and subconscious memory primitive will replace it.
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -1409,8 +1410,8 @@ export type SerializedObservationalMemoryConfig = {
 
   /**
    * Memory scope: 'resource' or 'thread'
-   * @deprecated `scope: 'resource'` is deprecated and will be removed in a future release.
-   * Omit this option to use the default thread scope.
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release, leaving
+   * `'thread'` (already the default) as the only scope. Omit this option to use thread scope.
    */
   scope?: 'resource' | 'thread';
 

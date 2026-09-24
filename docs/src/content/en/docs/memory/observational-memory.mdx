@@ -651,6 +651,8 @@ A new knowledge and subconscious memory primitive for cross-thread memory is com
 
 #### Cross-thread continuity without resource scope
 
+Switching from resource scope to thread scope doesn't migrate existing observations. Each thread starts a new, empty thread-scoped observation record, and messages already observed under resource scope aren't observed again. Keep facts that must carry over in resource-scoped working memory.
+
 Use thread scope with one or both of these features instead:
 
 - [Retrieval mode](#retrieval-mode): The agent gets a `recall` tool that can list and browse other threads for the same resource, and optionally search them semantically. The agent looks up earlier conversations only when it needs them.
