@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useEffect, useState } from 'react';
 import { TaskList } from './task-list';
+import type { TaskListItem } from './task-list';
 
 const meta: Meta<typeof TaskList> = {
   title: 'AI/Task List',
@@ -82,10 +84,6 @@ export const LongList: Story = {
   },
 };
 
-export const Empty: Story = {
-  args: { tasks: [], hideWhenEmpty: false },
-};
-
 export const Completed: Story = {
   args: {
     hideWhenComplete: false,
@@ -93,5 +91,23 @@ export const Completed: Story = {
       { id: 'tests', content: 'Run tests', status: 'completed', activeForm: 'Running tests' },
       { id: 'build', content: 'Build package', status: 'completed', activeForm: 'Building package' },
     ],
+  },
+};
+
+const statusByCode: Record<string, TaskListItem['status']> = { d: 'completed', a: 'in_progress', p: 'pending' };
+const liveFrames = ['pppppp', 'appppp', 'dapppp', 'ddappp', 'dddapp', 'ddpdap', 'dddpda', 'ddddda'];
+
+export const Live: Story = {
+  render: function LiveStory() {
+    const [frame, setFrame] = useState(0);
+    useEffect(() => {
+      const interval = setInterval(() => setFrame(current => (current + 1) % liveFrames.length), 1800);
+      return () => clearInterval(interval);
+    }, []);
+    const tasks = (LongList.args?.tasks ?? []).map((task, index) => ({
+      ...task,
+      status: statusByCode[liveFrames[frame]?.[index] ?? 'p'] ?? 'pending',
+    }));
+    return <TaskList tasks={tasks} />;
   },
 };
