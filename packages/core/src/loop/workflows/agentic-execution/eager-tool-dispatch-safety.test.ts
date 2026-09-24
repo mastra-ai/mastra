@@ -1264,7 +1264,11 @@ describe('eager tool dispatch — unsafe terminations', () => {
    * when, and no bookkeeping at the bail can repair that. Unlike a runtime `suspend()`,
    * this hook is declared on the processor, so it can be excluded up front.
    */
-  async function runToolResultProcessorScenario(eagerToolExecution: boolean, trippingToolName: string) {
+  async function runToolResultProcessorScenario(
+    eagerToolExecution: boolean,
+    trippingToolName: string,
+    { withProviderTool = true }: { withProviderTool?: boolean } = {},
+  ) {
     const { events, record } = createRecorder();
     const effects: string[] = [];
 
@@ -1337,6 +1341,9 @@ describe('eager tool dispatch — unsafe terminations', () => {
             return { value };
           },
         }),
+        ...(withProviderTool
+          ? { web_search: { type: 'provider-defined', id: 'openai.web_search', args: {} } as any }
+          : {}),
       },
       outputProcessors: [new TripwireOnToolResult() as any],
     });
@@ -1364,16 +1371,23 @@ describe('eager tool dispatch — unsafe terminations', () => {
     expect(on.types).toEqual(off.types);
   });
 
-  it('leaves a processToolResult run to the post-stream pass even when nothing trips', async () => {
-    // The exclusion is decided from the declared hook, not from whether it aborts, so a
-    // processor that never trips is still left to the post-stream pass. This is what
-    // makes the guard predictable — and it is the cost of it.
+  it('leaves a processToolResult run to the post-stream pass when a provider tool is configured', async () => {
+    // With a provider tool in the step the hook can fire mid-stream, and which result
+    // reaches it is not knowable at dispatch, so the run stays on the post-stream pass.
     const on = await runToolResultProcessorScenario(true, 'nothing-trips');
 
     expect(on.events).not.toContain('tripwire');
     expect(on.effects).toEqual(['local']);
-    // Ran, but on the post-stream pass: the body entered after the model stream finished.
     expect(on.events.indexOf('execute-local')).toBeGreaterThan(on.events.indexOf('finish'));
+  });
+
+  it('still dispatches early with a processToolResult hook when no provider tool is configured', async () => {
+    // The exclusion is the conjunction: the hook alone only ever sees results after
+    // adoption, so it cannot bail before the foreach and costs nothing to overlap.
+    const on = await runToolResultProcessorScenario(true, 'nothing-trips', { withProviderTool: false });
+
+    expect(on.effects).toEqual(['local']);
+    expect(on.events.indexOf('execute-local')).toBeLessThan(on.events.indexOf('finish'));
   });
 
   it('still dispatches early when an output processor declares no tool-result hook', async () => {

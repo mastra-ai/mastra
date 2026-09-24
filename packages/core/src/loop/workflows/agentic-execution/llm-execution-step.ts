@@ -1270,6 +1270,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
   let currentIteration = 0;
   let eagerAbortListenerRegistered = false;
+  // Points at the live iteration's committer: the abort listener is registered once per
+  // run, so it must not close over the first iteration's message id.
+  let commitSettledEagerWorkOnAbort: (() => void) | undefined;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1308,13 +1311,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const discardAttemptEagerWork = () => {
         const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
-        // Held rather than written here: cancelling has to happen the moment the attempt
-        // dies, but writing is only correct once a replacement attempt demonstrably
-        // exists. Requesting a retry is not that proof — the loop may be out of steps, or
-        // bail before it runs again — so the buffer lives on the coordinator and is
-        // written by whichever attempt actually starts next. An attempt that dies for
-        // good leaves no trace of a turn the caller never saw streamed.
+        // Written the moment the attempt dies, not when a replacement starts: a retry that
+        // never runs (out of steps, a bail) would otherwise lose the only record of a
+        // side effect that happened.
         if (completed?.length) eagerCoordinator?.carryDiscardedWork(completed);
+        commitCarriedEagerWork(currentMessageId);
       };
 
       const commitCarriedEagerWork = (messageId: string) => {
@@ -1362,11 +1363,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // before any foreach, so nothing would ever adopt or release the work otherwise.
         // Registered once for the whole run rather than per iteration, so long loops do
         // not pile up listeners.
+        commitSettledEagerWorkOnAbort = () => {
+          // Settled work is committed before teardown; only in-flight work is cancelled.
+          const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
+          if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
+          commitCarriedEagerWork(currentMessageId);
+        };
         if (!eagerAbortListenerRegistered) {
           eagerAbortListenerRegistered = true;
           options?.abortSignal?.addEventListener(
             'abort',
-            () => eagerCoordinator.stop({ permanent: true, cancelRunning: true }),
+            () => commitSettledEagerWorkOnAbort?.(),
             { once: true },
           );
         }
@@ -2116,16 +2123,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                               : 'processLLMResponse' in processor || 'processOutputStep' in processor,
                           ),
                         ),
-                        // `processToolResult` is a separate exclusion: reached from a
-                        // provider-executed result in the stream, its abort bails the
-                        // attempt before the post-stream pass ever starts the call.
-                        hasToolResultProcessor: Boolean(
-                          outputProcessors?.some(processor =>
-                            isProcessorWorkflow(processor)
-                              ? processor.__processToolResult !== false
-                              : 'processToolResult' in processor,
+                        // `processToolResult` only matters in conjunction with a
+                        // provider-executed tool: that is the one result reaching the hook
+                        // mid-stream, where an abort bails the attempt before the foreach
+                        // would ever start the call. Local results reach the hook after
+                        // adoption, so a hook alone is no reason to hold dispatch back.
+                        hasToolResultProcessor:
+                          Object.values(currentStep.tools ?? {}).some(stepTool => isProviderTool(stepTool)) &&
+                          Boolean(
+                            outputProcessors?.some(processor =>
+                              isProcessorWorkflow(processor)
+                                ? processor.__processToolResult !== false
+                                : 'processToolResult' in processor,
+                            ),
                           ),
-                        ),
                         isProviderTool,
                         getNeedsApprovalFn,
                         backgroundTaskManager: readScoped(
@@ -2330,7 +2341,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // before abort/error/fallback handling can return or throw.
           cleanupProviderToolSpans(true);
 
-          discardAttemptEagerWork();
+          // Stop dispatching, but do not cancel yet: whether this attempt is discarded is
+          // only known below. A last model with no retry keeps its tool calls, and the
+          // foreach adopts the running work — cancelling it would run the body twice.
+          eagerCoordinator?.stop();
 
           const provider = model?.provider;
           const modelIdStr = model?.modelId;
@@ -2433,6 +2447,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 return currentMessageId;
               },
             });
+
+            // Retried or failed over: this attempt's calls are dropped either way.
+            discardAttemptEagerWork();
 
             if (errorResult.retry && canRetryError) {
               // Signal retry - store on runState so it's handled after the callback returns
