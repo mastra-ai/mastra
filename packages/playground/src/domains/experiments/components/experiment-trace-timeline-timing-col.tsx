@@ -2,8 +2,9 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
+import { formatDurationPrecise } from '@mastra/playground-ui/utils/duration';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { format } from 'date-fns/format';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
 import type { ExperimentUISpan } from '../types';
 
@@ -59,7 +60,7 @@ export function ExperimentTraceTimelineTimingCol({
 
         <div className={cn('flex justify-end text-caption text-muted-foreground')}>
           <Txt as="span" variant="caption" font="mono">
-            {(span.latency / 1000).toFixed(3)}&nbsp;s
+            {formatDurationPrecise(span.latency)}
           </Txt>
         </div>
       </HoverCard.Trigger>
@@ -83,25 +84,25 @@ export function ExperimentTraceTimelineTimingCol({
               {
                 key: 'Latency',
                 label: 'Latency',
-                value: `${span.latency} ms`,
+                value: formatDurationPrecise(span.latency) ?? '-',
                 icon: <ChevronsLeftRightIcon />,
               },
               {
                 key: 'startTime',
                 label: 'Started at',
-                value: span.startTime ? format(new Date(span.startTime), 'hh:mm:ss:SSS a') : '-',
+                value: formatTimestampPrecise(span.startTime) ?? '-',
                 icon: <ChevronFirstIcon />,
               },
               {
                 key: 'endTime',
                 label: 'Ended at',
-                value: span.endTime ? format(new Date(span.endTime), 'hh:mm:ss:SSS a') : '-',
+                value: formatTimestampPrecise(span.endTime) ?? '-',
                 icon: <ChevronLastIcon />,
               },
               {
                 key: 'startShift',
                 label: 'Start Shift',
-                value: `${spanStartTimeShift}ms`,
+                value: formatDurationPrecise(spanStartTimeShift) ?? '-',
                 icon: <ChevronsRightIcon />,
               },
             ]}

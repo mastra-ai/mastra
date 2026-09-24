@@ -7,8 +7,8 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { format } from 'date-fns/format';
 import {
   HashIcon,
   FileInputIcon,
@@ -333,7 +333,7 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           data={[
             {
               label: 'Created',
-              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
+              value: formatDate(item.createdAt, 'date-time') ?? '',
               key: 'createdAt',
             },
             ...(item.datasetVersion != null

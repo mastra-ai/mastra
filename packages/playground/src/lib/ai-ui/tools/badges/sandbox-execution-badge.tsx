@@ -6,8 +6,10 @@ import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/cha
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDuration, formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
@@ -60,29 +62,6 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   toolCalled?: boolean;
   dataParts?: ReadonlyArray<DataMessagePart>;
 }
-
-// Hook for live elapsed time while running
-const useElapsedTime = (isRunning: boolean, startTime?: number) => {
-  const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (isRunning) {
-      setElapsed(0);
-      startRef.current = startTime || Date.now();
-      const interval = setInterval(() => {
-        if (startRef.current) {
-          setElapsed(Date.now() - startRef.current);
-        }
-      }, 100);
-      return () => clearInterval(interval);
-    } else {
-      startRef.current = null;
-    }
-  }, [isRunning, startTime]);
-
-  return elapsed;
-};
 
 interface TerminalBlockProps {
   command?: string;
@@ -283,7 +262,7 @@ export const SandboxExecutionBadge = ({
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent6" />
                 <span className="animate-pulse">running</span>
               </span>
-              <span className="text-caption text-foreground tabular-nums">{elapsedTime}ms</span>
+              <span className="text-caption text-foreground tabular-nums">{formatElapsed(elapsedTime)}</span>
             </>
           ) : (
             <>
@@ -295,7 +274,9 @@ export const SandboxExecutionBadge = ({
                 ) : (
                   <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-meta text-red-400">exit {exitCode}</span>
                 ))}
-              {executionTime !== undefined && <span className="text-caption text-foreground">{executionTime}ms</span>}
+              {executionTime !== undefined && (
+                <span className="text-caption text-foreground">{formatDuration(executionTime)}</span>
+              )}
             </>
           )}
         </div>

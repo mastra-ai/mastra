@@ -1,6 +1,6 @@
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 
 export interface DatasetCompareVersionToolbarProps {
@@ -13,7 +13,7 @@ export interface DatasetCompareVersionToolbarProps {
 function formatVersionLabel(version: number, createdAt?: Date | string): string {
   if (createdAt) {
     const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    return `v${version}  ${format(d, "MMM dd 'at' H:mm:ss a")}`;
+    return `v${version}  ${formatDate(d, 'date-time')}`;
   }
   return `v${version}`;
 }

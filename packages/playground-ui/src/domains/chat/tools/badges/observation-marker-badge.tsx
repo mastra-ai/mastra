@@ -6,6 +6,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/utils/cn';
+import { formatDuration } from '@/utils/duration';
 
 export interface OmMarkerData {
   observedAt?: string;
@@ -319,7 +320,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                   <span>
                     Duration:{' '}
                     <Txt as="span" variant="caption" font="mono">
-                      {(durationMs / 1000).toFixed(2)}s
+                      {formatDuration(durationMs)}
                     </Txt>
                   </span>
                 )}

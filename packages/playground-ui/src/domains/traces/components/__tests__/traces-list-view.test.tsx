@@ -451,7 +451,16 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       expect(screen.getByText('End')).toBeTruthy();
-      expect(screen.getByText('Jun 10 13:07:47')).toBeTruthy();
+      const endedAt = new Date(2026, 5, 10, 13, 7, 47);
+      const title = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(endedAt);
+      expect(screen.getByTitle(title).textContent).toBe(title);
     });
   });
 });

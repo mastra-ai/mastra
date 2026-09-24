@@ -9,7 +9,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -141,9 +141,7 @@ function ExperimentResultPanelBody({
           {result.createdAt && (
             <>
               <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>
-                {format(new Date(result.createdAt), "MMM d, yyyy 'at' h:mm a")}
-              </DataKeysAndValues.Value>
+              <DataKeysAndValues.Value>{formatDate(result.createdAt, 'date-time')}</DataKeysAndValues.Value>
             </>
           )}
           {result.status && (

@@ -2,8 +2,10 @@ import type { ScheduleTriggerResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { AlertTriangleIcon } from 'lucide-react';
-import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -17,24 +19,6 @@ export interface ScheduleTriggersListProps {
 }
 
 const COLUMNS = 'auto auto auto auto 1fr';
-
-function formatDuration(durationMs?: number): string {
-  if (durationMs === undefined) return '—';
-  if (durationMs < 1000) return `${durationMs}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.floor((durationMs % 60_000) / 1000);
-  return `${minutes}m ${seconds}s`;
-}
-
-function formatDriftValue(driftMs: number): string {
-  const abs = Math.abs(driftMs);
-  const sign = driftMs < 0 ? '-' : '';
-  if (abs < 1000) return `${sign}${abs}ms`;
-  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(1)}s`;
-  if (abs < 3_600_000) return `${sign}${(abs / 60_000).toFixed(1)}m`;
-  return `${sign}${(abs / 3_600_000).toFixed(1)}h`;
-}
 
 // Warn when the scheduler published noticeably late (>30s) but skip cases where
 // the row is almost certainly stale (paused schedule, long downtime, clock skew).
@@ -80,8 +64,8 @@ export function ScheduleTriggersList({
 
       {triggers.map(t => {
         const driftMs = t.actualFireAt - t.scheduledFireAt;
-        const driftValue = formatDriftValue(driftMs);
-        const startedTooltip = `Scheduled ${formatScheduleTimestamp(t.scheduledFireAt)} — published ${formatScheduleTimestamp(t.actualFireAt)} (drift ${driftValue})`;
+        const driftValue = formatDuration(driftMs, { signed: true });
+        const startedTooltip = `Scheduled ${t.scheduledFireAt ? formatDate(t.scheduledFireAt, 'date-time') : '—'} — published ${t.actualFireAt ? formatDate(t.actualFireAt, 'date-time') : '—'} (drift ${driftValue})`;
         const isPublishFailure = t.outcome === 'failed';
         const errorMessage = isPublishFailure ? t.error : t.run?.error;
         const absDrift = Math.abs(driftMs);
@@ -135,7 +119,7 @@ export function ScheduleTriggersList({
 
             <DataList.Cell>
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                <span title={startedTooltip}>{formatRelativeTime(t.actualFireAt)}</span>
+                <span title={startedTooltip}>{t.actualFireAt ? formatRelativeTime(t.actualFireAt) : '—'}</span>
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -152,7 +136,7 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               {t.run ? (
                 <Txt as="span" variant="body-sm" font="mono">
-                  {formatDuration(t.run.durationMs)}
+                  {formatDuration(t.run.durationMs) || '—'}
                 </Txt>
               ) : (
                 <span className="text-muted-foreground">—</span>
