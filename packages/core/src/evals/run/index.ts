@@ -8,6 +8,7 @@ import type {
 } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
+import { ConsoleLogger, LogLevel } from '../../logger';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
 import { EntityType, resolveObservabilityContext } from '../../observability';
@@ -58,28 +59,27 @@ export type EvalTurn = {
 };
 
 type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
-  ?
-      | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
-      | (RunEvalsDataItemBase & {
-          input?: AgentInputType;
-          /**
-           * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
-           * on the same thread. Scorers see the accumulated output from all turns.
-           * Only supported for Agent targets (not Workflows).
-           */
-          inputs: AgentInputType[];
-          turns?: never;
-        })
-      | (RunEvalsDataItemBase & {
-          input?: never;
-          inputs?: never;
-          /**
-           * Multi-turn conversation with per-turn assertions. Each turn is sent sequentially
-           * on the same thread; its `gates`/`scorers` evaluate only that turn's output.
-           * Only supported for Agent targets (not Workflows).
-           */
-          turns: EvalTurn[];
-        })
+  ? | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
+    | (RunEvalsDataItemBase & {
+        input?: AgentInputType;
+        /**
+         * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
+         * on the same thread. Scorers see the accumulated output from all turns.
+         * Only supported for Agent targets (not Workflows).
+         */
+        inputs: AgentInputType[];
+        turns?: never;
+      })
+    | (RunEvalsDataItemBase & {
+        input?: never;
+        inputs?: never;
+        /**
+         * Multi-turn conversation with per-turn assertions. Each turn is sent sequentially
+         * on the same thread; its `gates`/`scorers` evaluate only that turn's output.
+         * Only supported for Agent targets (not Workflows).
+         */
+        turns: EvalTurn[];
+      })
   : TTarget extends Workflow<any, any>
     ? RunEvalsDataItemBase & { input: any; inputs?: never; turns?: never }
     : RunEvalsDataItemBase & { input: unknown; inputs?: never; turns?: never };
@@ -352,6 +352,14 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   // Agent uses getMastraInstance(), Workflow uses .mastra getter
   const mastra = (target as any).getMastraInstance?.() || (target as any).mastra;
   const storage = mastra?.getStorage();
+
+  if (!mastra) {
+    new ConsoleLogger({ name: 'runEvals', level: LogLevel.WARN }).warn(
+      `Target "${target.id}" is not registered with a Mastra instance. ` +
+        'Registry lookups (mastra.getAgent(), mastra.getWorkflow(), .agent("id")), score persistence, and trace-based trajectories are unavailable. ' +
+        'Pass mastra.getAgent("id") or mastra.getWorkflow("id") as the target instead of importing it directly.',
+    );
+  }
 
   const pMap = (await import('p-map')).default;
   await pMap(
@@ -1272,8 +1280,9 @@ async function runScorers(
         );
       }
     }
-  } else if (isAgentScorerConfig(scorers)) {
-    // Handle agent scorer config (agent-level + trajectory scorers)
+  } else if (targetEntityType !== EntityType.WORKFLOW_RUN && isAgentScorerConfig(scorers)) {
+    // Handle agent scorer config (agent-level + trajectory scorers).
+    // A trajectory-only config matches both agent and workflow shapes, so workflow targets always take the workflow path.
     if (scorers.agent) {
       const agentScorerResults: Record<string, any> = {};
       for (const scorer of scorers.agent) {
@@ -1358,9 +1367,10 @@ async function runScorers(
     }
   } else {
     // Handle workflow scorer config
-    if (scorers.workflow) {
+    const workflowScorers = scorers as WorkflowScorerConfig;
+    if (workflowScorers.workflow) {
       const workflowScorerResults: Record<string, any> = {};
-      for (const scorer of scorers.workflow) {
+      for (const scorer of workflowScorers.workflow) {
         const score = await scorer.run({
           input: targetResult.scoringData.input,
           output: targetResult.scoringData.output,
@@ -1379,9 +1389,9 @@ async function runScorers(
       }
     }
 
-    if (scorers.steps) {
+    if (workflowScorers.steps) {
       const stepScorerResults: Record<string, any> = {};
-      for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
+      for (const [stepId, stepScorers] of Object.entries(workflowScorers.steps)) {
         const stepResult = targetResult.scoringData.stepResults?.[stepId];
         // TODO : Ideally this would run on the trace.WORKFLOW_STEP span...
         // then we could directly add the score to that span
