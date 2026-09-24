@@ -92,7 +92,7 @@ describe('Settings', () => {
         </SettingsRow>,
       );
 
-      expect(screen.getByRole('textbox', { name: 'Model (required)' })).toBeTruthy();
+      expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
     });
   });
 
