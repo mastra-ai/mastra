@@ -5,6 +5,7 @@ import { unsupported } from './errors.js';
 import { RenderRun } from './run.js';
 import { type RenderProvider, type WorkflowBinding } from './provider.js';
 import type { TaskPolicy } from './policy.js';
+import { isActiveWorkerRun } from './runtime-internal.js';
 
 export class RenderWorkflow<
   TId extends string,
@@ -82,7 +83,11 @@ export class RenderWorkflow<
     options?: Parameters<Workflow['getWorkflowRunById']>[1],
   ): Promise<WorkflowState | null> {
     const snapshot = await super.getWorkflowRunById(runId, options);
-    const record = await this.binding.provider.getRun(this.id, runId);
+    // Core createRun calls this method while hydrating the worker's own run.
+    // That handler already owns the root claim; native child dispatch needs no API key.
+    const record = isActiveWorkerRun(this.id, runId)
+      ? await this.binding.provider.store.get(this.id, runId)
+      : await this.binding.provider.getRun(this.id, runId);
     if (!record) return snapshot;
     const status =
       record.status === 'submitting' || record.status === 'submission-unknown'

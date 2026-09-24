@@ -59,7 +59,7 @@ export function registerRenderTasks({
           const envelope = parseEnvelope(stepEnvelopeSchema, raw);
           check(binding, envelope);
           if (envelope.stepKey !== registered.key) throw new RenderProtocolError('Step identity mismatch');
-          return withTaskRuntime({ context, tasks: definitions }, () =>
+          return withTaskRuntime({ context, tasks: definitions, run: envelope }, () =>
             executeRemoteStep(registered.step, envelope, mastra, binding.provider.contextKeys),
           );
         }),
@@ -94,6 +94,7 @@ export function registerRenderTasks({
             {
               context,
               tasks: definitions,
+              run: envelope,
               dispatch: createDispatchLimiter(binding.provider.options.maxConcurrentSteps ?? 16),
             },
             async () => {

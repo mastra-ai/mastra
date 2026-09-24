@@ -5,11 +5,18 @@ import { unsupported } from './errors.js';
 interface Runtime {
   context: TaskContext;
   tasks: ReadonlyMap<string, TaskDefinition<[unknown], unknown>>;
+  run?: { workflowId: string; runId: string };
   dispatch?: <T>(execute: () => Promise<T>) => Promise<T>;
 }
 const runtime = new AsyncLocalStorage<Runtime>();
 export function withTaskRuntime<T>(value: Runtime, execute: () => Promise<T>): Promise<T> {
   return runtime.run(value, execute);
+}
+
+/** Hydrating this handler's own run must not call the external management API. */
+export function isActiveWorkerRun(workflowId: string, runId: string): boolean {
+  const active = runtime.getStore()?.run;
+  return active?.workflowId === workflowId && active.runId === runId;
 }
 
 /** Available only inside a Render worker handler; native chained tasks retain their parent relationship. */

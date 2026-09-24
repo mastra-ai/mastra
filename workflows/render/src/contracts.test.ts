@@ -170,6 +170,36 @@ describe('durable lifecycle contracts', () => {
 });
 
 describe('capability and worker contracts', () => {
+  it('hydrates the active worker run without calling the management API', async () => {
+    const h = setup({
+      ...unusedTransport,
+      async get() {
+        throw new Error('Worker must not require a management API token to hydrate its own run');
+      },
+    });
+    const tasks = registerRenderTasks({ mastra: new Mastra({ workflows: { workflow: h.workflow }, logger: false }) });
+    const manifest = h.provider.workflows.get(h.workflow.id)!.manifest();
+    const initial = { ...record(), workflowId: h.workflow.id, manifest: manifest.hash };
+    await h.store.create(initial);
+    const context: TaskContext = {
+      async run(definition, ...args) {
+        return definition.func(context, ...args);
+      },
+    };
+    await expect(tasks.get(manifest.rootName)!.func(context, {
+      version: 1,
+      workflowId: h.workflow.id,
+      runId: initial.runId,
+      buildId: 'v1',
+      manifest: manifest.hash,
+      input: 1,
+      state: {},
+      requestContext: {},
+    })).resolves.toMatchObject({ status: 'success', result: 1 });
+    // External reads still reconcile authoritative provider status.
+    await expect(h.workflow.getWorkflowRunById(initial.runId)).rejects.toThrow('management API token');
+  });
+
   it('keeps coordinator names distinct from a step named root and bounds long names', () => {
     const h = init({
       workflowSlug: 'tests',
