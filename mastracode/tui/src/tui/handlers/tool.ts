@@ -625,6 +625,9 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     );
     component.setExpanded(state.toolOutputExpanded);
     applyQuietDisplayForNewTool(ctx, component);
+    // Its args are about to stream in; until they do it has none, so it must not render as if complete
+    // (a quiet shell call would open a box for the project directory, then leave it).
+    component.setArgsStreaming(true);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);

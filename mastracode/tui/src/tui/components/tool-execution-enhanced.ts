@@ -240,6 +240,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private quietShellTicker?: ReturnType<typeof setInterval>;
   private quietShellGroupWidth?: number;
   private quietShellGroupPreview?: string[];
+  private quietShellHeld = false;
   /** Rows the shell box preview has used so far; it never shrinks, so rows below don't jump. */
   private quietShellPreviewRowFloor = 0;
   private quietDisplayMode: QuietToolDisplayMode;
@@ -366,20 +367,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (this.quietDisplayMode === 'quiet') this.rebuild();
   }
 
-  getChatSpacingKind(): ChatSpacingKind {
+  getChatSpacingKind(): ChatSpacingKind | undefined {
     if (this.quietDisplayMode === 'quiet') {
       if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'quiet-compact-tool';
-      return this.isQuietCompactShell() ? 'quiet-compact-tool' : 'quiet-shell-tool';
+      if (this.isQuietCompactShell()) return this.quietShellHeld ? undefined : 'quiet-compact-tool';
+      return 'quiet-shell-tool';
     }
     return 'normal-tool';
   }
 
   getCompactToolGroupKey(): string | undefined {
-    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
     // Shell calls only share a box when they run in the same directory, so each box has one header.
-    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) {
-      return this.argsStreaming && !this.result ? PENDING_SHELL_GROUP_KEY : `$ ${this.getShellHeaderPath()}`;
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND && this.isQuietCompactShell()) {
+      return this.isShellDirectoryPending() ? PENDING_SHELL_GROUP_KEY : `$ ${this.getShellHeaderPath()}`;
     }
+    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
     return this.getCompactToolLabel();
   }
 
@@ -415,6 +417,31 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return shortenPath(resolved);
   }
 
+  /**
+   * While args stream, the directory is unknown until a complete `cd <dir> &&` prefix arrives. A
+   * streaming `cwd` may still be partial, and without either the call may yet get one.
+   */
+  private isShellDirectoryPending(): boolean {
+    if (!this.argsStreaming || this.result) return false;
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    if (argsObj?.cwd !== undefined) return true;
+    if (typeof argsObj?.command !== 'string') return true;
+    if (this.parseShellCommand().cdPath) return false;
+    // Still undecided while the command could be the start of a `cd <dir> &&` prefix.
+    return /^\s*(?:c|cd|cd\s[\s\S]*)?$/.test(argsObj.command);
+  }
+
+  /**
+   * Held while its directory is unknown and a shell box sits right above it: drawing the row in
+   * that box, then moving it to its own directory's box, would make the chat jump. Rendered once
+   * the directory is known, the row only ever adds lines.
+   */
+  setQuietShellHeld(held: boolean): void {
+    if (this.quietShellHeld === held) return;
+    this.quietShellHeld = held;
+    if (this.isQuietCompactShell()) this.rebuild();
+  }
+
   private getShellDescription(): string {
     const description = (this.args as Record<string, unknown> | undefined)?.description;
     return typeof description === 'string' ? description.replace(/\s+/g, ' ').trim() : '';
@@ -433,7 +460,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
    * it printed nothing and `undefined` when previews are off.
    */
   getQuietShellPreviewLines(): string[] | undefined {
-    if (!this.isQuietCompactShell() || this.quietPreviewLineLimit <= 0) return undefined;
+    if (!this.isQuietCompactShell() || this.quietShellHeld || this.quietPreviewLineLimit <= 0) return undefined;
     const output = this.streamingOutput.trim() ? this.streamingOutput : this.getFormattedOutput();
     const lines = output.split('\n').filter(line => !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line.trim()));
     while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
@@ -450,18 +477,25 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * Text for a grouped quiet shell row: the description, `...` while it may still stream in, or the
-   * command's first line when the call has none (e.g. it was rejected for a missing description).
+   * Text for a grouped quiet shell row: the description; while it may still stream in, `...` or how
+   * much of the command has arrived (some models write a long command first); or the command's
+   * first line when the call has none (e.g. it was rejected for a missing description).
+   * Muted text is not the description, and truncates rather than widening the box.
    */
-  private getQuietShellRowText(): { text: string; isCommand: boolean } {
+  private getQuietShellRowText(): { text: string; muted: boolean } {
     const description = this.getShellDescription();
-    if (description) return { text: description, isCommand: false };
-    if (this.argsStreaming && !this.result) return { text: '...', isCommand: false };
+    if (description) return { text: description, muted: false };
+    const command = (this.args as Record<string, unknown> | undefined)?.command;
+    if (this.argsStreaming && !this.result) {
+      if (typeof command !== 'string' || !command) return { text: '...', muted: false };
+      const size = command.length < 1000 ? `${command.length}` : `${(command.length / 1000).toFixed(1)}k`;
+      return { text: `writing command (${size} chars)`, muted: true };
+    }
     const firstLine =
       this.parseShellCommand()
         .command.split('\n')
         .find(line => line.trim()) ?? '...';
-    return { text: firstLine.trim(), isCommand: true };
+    return { text: firstLine.trim(), muted: true };
   }
 
   hasQuietStreamingPreview(): boolean {
@@ -1584,7 +1618,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const timeout = argsObj?.timeout as number | undefined;
 
     if (this.isQuietCompactShell()) {
-      this.renderQuietShellGroupRow();
+      if (this.quietShellHeld) this.syncQuietShellTicker(false);
+      else this.renderQuietShellGroupRow();
       return;
     }
 
@@ -1737,7 +1772,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
 
     const rowText = this.getQuietShellRowText();
-    const description = rowText.isCommand ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);
+    const description = rowText.muted ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);
     const isBackground =
       !!this.backgroundTaskId || (this.args as Record<string, unknown> | undefined)?.background === true;
     const running = !this.result || this.isPartial;
@@ -1824,11 +1859,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   /** Content width this call's rows need; reconciliation gives the whole group the widest one. */
   getQuietShellNaturalWidth(): number | undefined {
-    if (!this.isQuietCompactShell()) return undefined;
+    if (!this.isQuietCompactShell() || this.quietShellHeld) return undefined;
     const header = 2 + visibleWidth(this.getShellHeaderPath());
     const rowText = this.getQuietShellRowText();
-    // Raw commands truncate rather than widen the shared box.
-    const textWidth = rowText.isCommand ? 0 : visibleWidth(rowText.text);
+    const textWidth = rowText.muted ? 0 : visibleWidth(rowText.text);
     const row = 2 + textWidth + 1 + QUIET_SHELL_TIME_WIDTH;
     return Math.max(header, row);
   }

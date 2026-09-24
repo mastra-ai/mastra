@@ -11,6 +11,7 @@ import {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolInputStart,
+  handleShellOutput,
   handleToolStart,
 } from './tool.js';
 import type { EventHandlerContext } from './types.js';
@@ -264,7 +265,7 @@ describe('quiet shell description streaming', () => {
     handleToolInputDelta(ctx, 'call-1', '{"command":"gh run view 123 --log-failed | grep FAIL"');
     await flushParser();
     expect(render()).not.toContain('gh run view');
-    expect(render()).toMatch(/│ \S \.\.\. /);
+    expect(render()).toMatch(/│ \S writing command \(40 chars\) /);
 
     handleToolInputDelta(ctx, 'call-1', ',"description":"Drilling into the failed CI job"}');
     await flushParser();
@@ -319,6 +320,51 @@ describe('quiet shell description streaming', () => {
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/│ \S git status /);
     ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
+
+  it('only ever adds lines as quiet shell calls stream in, run, and finish', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    ctx.state.quietModeMaxToolPreviewLines = 2;
+    const buffers = new Map<string, { toolName: string; text: string }>();
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const frames: string[][] = [];
+    const snap = () => frames.push(ctx.state.chatContainer.render(100));
+    const call = async (id: string, argChunks: string[], output: string[]) => {
+      const args = JSON.parse(argChunks.join(''));
+      buffers.set(id, { toolName: 'execute_command', text: '' });
+      handleToolInputStart(ctx, id, 'execute_command');
+      snap();
+      for (const chunk of argChunks) {
+        handleToolInputDelta(ctx, id, chunk);
+        await flushParser();
+        snap();
+      }
+      handleToolInputEnd(ctx, id);
+      handleToolStart(ctx, id, 'execute_command', args);
+      snap();
+      for (const chunk of output) {
+        handleShellOutput(ctx, id, chunk, 'stdout');
+        await flushParser();
+        snap();
+      }
+      handleToolEnd(ctx, id, { content: [{ type: 'text', text: output.join('') }], isError: false }, false);
+      snap();
+      ctx.state.pendingTools.get(id)?.stopLiveUpdates?.();
+    };
+
+    // Command-first and description-first calls, joining a box, switching directory, and back
+    await call('c1', ['{"command":"cd /tmp && ls', '","description":"Listing tmp"}'], ['a\n', 'b\nc\n']);
+    await call('c2', ['{"command":"cd /tmp && cat x', '","description":"Reading x"}'], ['one\n']);
+    await call('c3', ['{"description":"Reading y","command":"cd /tmp', ' && cat y"}'], ['1\n', '2\n']);
+    await call('c4', ['{"command":"sed -n 1,5p', ' f.ts","description":"Reading f"}'], ['x\n']);
+    await call('c5', ['{"description":"Listing opt","com', 'mand":"cd /opt && ls"}'], ['y\n', 'z\n']);
+
+    for (let i = 1; i < frames.length; i++) {
+      expect(frames[i]!.length, `frame ${i}`).toBeGreaterThanOrEqual(frames[i - 1]!.length);
+    }
+    const final = stripAnsi(frames.at(-1)!.join('\n'));
+    expect(final.match(/╭/g)).toHaveLength(3);
+  }, 20_000);
 
   it('marks a call rejected by input validation as failed', () => {
     const ctx = createToolHandlerContext();

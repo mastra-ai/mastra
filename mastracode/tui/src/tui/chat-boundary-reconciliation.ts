@@ -14,6 +14,7 @@ interface CompactToolGroupingParticipant {
   setQuietShellGroupWidth?(width: number | undefined): void;
   getQuietShellPreviewLines?(): string[] | undefined;
   setQuietShellGroupPreview?(lines: string[] | undefined): void;
+  setQuietShellHeld?(held: boolean): void;
 }
 
 /**
@@ -53,13 +54,17 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   const spacerPool = children.filter(isChatBoundarySpacer);
   let poolIndex = 0;
 
-  // A shell call still streaming its directory joins the shell box right above it, if any.
+  // A shell call still streaming its directory stays hidden below a shell box until it knows which
+  // box it belongs in. With no shell box above, it opens its own and fills in the directory later.
   const compactToolGroupKeys = new Array<string | undefined>(components.length);
   let previousSpacingGroupKey: string | undefined;
   for (let i = 0; i < components.length; i++) {
     const component = components[i]!;
-    let key = (component as CompactToolGroupingParticipant).getCompactToolGroupKey?.();
-    if (key === PENDING_SHELL_GROUP_KEY && previousSpacingGroupKey?.startsWith('$ ')) key = previousSpacingGroupKey;
+    const participant = component as CompactToolGroupingParticipant;
+    let key = participant.getCompactToolGroupKey?.();
+    const held = key === PENDING_SHELL_GROUP_KEY && !!previousSpacingGroupKey?.startsWith('$ ');
+    participant.setQuietShellHeld?.(held);
+    if (held) key = undefined;
     compactToolGroupKeys[i] = key;
     if (getChatSpacingKind(component)) previousSpacingGroupKey = key;
   }

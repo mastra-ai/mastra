@@ -322,7 +322,7 @@ describe('ChatBoundarySpacer', () => {
     expect(widths.size).toBe(1);
   });
 
-  it('keeps a streaming shell call in the box above until its directory arrives, so no lines flash', () => {
+  it('holds a streaming shell call below a shell box until its directory arrives, so lines are only added', () => {
     const make = (args: Record<string, unknown>) =>
       new ToolExecutionComponentEnhanced(
         'execute_command',
@@ -343,19 +343,24 @@ describe('ChatBoundarySpacer', () => {
       return container.render(120).map(line => stripAnsi(line).trimEnd());
     };
 
+    const beforeCall = render();
     // The description streams in before the "cd /tmp &&" that sets the directory
     streaming.updateArgs({ description: 'Listing unresolved threads' }, false);
-    const whileStreaming = render();
-    expect(whileStreaming.filter(line => line.includes('$ /tmp'))).toHaveLength(1);
-    expect(whileStreaming.some(line => line.startsWith('╭'))).toBe(true);
-    expect(whileStreaming.filter(line => line.startsWith('╰'))).toHaveLength(1);
+    expect(render()).toEqual(beforeCall);
+    streaming.updateArgs({ description: 'Listing unresolved threads', command: 'cd /t' }, false);
+    expect(render()).toEqual(beforeCall);
 
     streaming.updateArgs(
       { description: 'Listing unresolved threads', command: 'cd /tmp && gh api graphql -f query=x' },
       false,
     );
+    const joined = render();
+    expect(joined).toHaveLength(beforeCall.length + 1);
+    expect(joined.slice(0, -2)).toEqual(beforeCall.slice(0, -1));
+    expect(joined.filter(line => line.includes('$ /tmp'))).toHaveLength(1);
+    expect(joined.some(line => line.includes('Listing unresolved threads'))).toBe(true);
     streaming.setArgsStreaming(false);
-    expect(render()).toHaveLength(whileStreaming.length);
+    expect(render()).toHaveLength(joined.length);
 
     // Without a shell box above, it opens its own box and fills in the directory later
     const alone = new Container();
@@ -370,5 +375,67 @@ describe('ChatBoundarySpacer', () => {
     const after = alone.render(120).map(line => stripAnsi(line).trimEnd());
     expect(after).toHaveLength(before);
     expect(after.some(line => line.includes('$ /tmp'))).toBe(true);
+  });
+
+  it('opens a command-first call in its own directory box once the cd prefix arrives, never moving it', () => {
+    const make = (args: Record<string, unknown>) =>
+      new ToolExecutionComponentEnhanced(
+        'execute_command',
+        args,
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+    const root = make({ command: 'sed -n 1,5p file.ts', description: 'Reading the processor block' });
+    root.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+    const streaming = make({});
+    streaming.setArgsStreaming(true);
+    const container = new Container();
+    container.addChild(root);
+    container.addChild(streaming);
+    const render = () => {
+      reconcileChatBoundarySpacers(container);
+      return container.render(120).map(line => stripAnsi(line).trimEnd());
+    };
+
+    const beforeCall = render();
+    // Some models write a long command before its description
+    streaming.updateArgs({ command: 'cd /tm' }, false);
+    expect(render()).toEqual(beforeCall);
+    streaming.updateArgs({ command: "cd /tmp && python3 - <<'PYEOF'\n" + 'x = 1\n'.repeat(400) }, false);
+    const whileStreaming = render();
+    // The root box stays exactly as it was; the new box is only added below it
+    expect(whileStreaming.slice(0, beforeCall.length)).toEqual(beforeCall);
+    expect(whileStreaming.filter(line => line.startsWith('╭'))).toHaveLength(2);
+    expect(whileStreaming.some(line => line.includes('$ /tmp'))).toBe(true);
+    expect(whileStreaming.some(line => /writing command \(2\.4k chars\)/.test(line))).toBe(true);
+    expect(whileStreaming.join('\n')).not.toMatch(/python3|\.\.\./);
+
+    streaming.updateArgs(
+      { command: "cd /tmp && python3 - <<'PYEOF'\n" + 'x = 1\n'.repeat(400), description: 'Rewriting the PR body' },
+      false,
+    );
+    const described = render();
+    expect(described).toHaveLength(whileStreaming.length);
+    expect(described.some(line => line.includes('Rewriting the PR body'))).toBe(true);
+    streaming.stopLiveUpdates();
+
+    // A command that doesn't start with cd joins the box above as soon as that is clear
+    const plain = make({});
+    plain.setArgsStreaming(true);
+    const rootOnly = new Container();
+    rootOnly.addChild(root);
+    rootOnly.addChild(plain);
+    const renderRoot = () => {
+      reconcileChatBoundarySpacers(rootOnly);
+      return rootOnly.render(120).map(line => stripAnsi(line).trimEnd());
+    };
+    const beforePlain = renderRoot();
+    plain.updateArgs({ command: 'c' }, false);
+    expect(renderRoot()).toEqual(beforePlain);
+    plain.updateArgs({ command: 'cat file.ts' }, false);
+    const withPlain = renderRoot();
+    expect(withPlain).toHaveLength(beforePlain.length + 1);
+    expect(withPlain.filter(line => line.startsWith('╭'))).toHaveLength(1);
+    plain.stopLiveUpdates();
   });
 });
