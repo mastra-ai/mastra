@@ -132,6 +132,10 @@ Do not hedge between the two — pick the verdict the evidence supports. When ge
 
 ## Phase 7: Handoff & Transition
 
+Before composing the handoff, call `factory_review_source` (no arguments) once. It returns the Factory session URL that produced this re-review, the GitHub author of the PR under review, and any Linear or Jira issue linked as the upstream source of this work. Every field is derived server-side from the bound work item — the session URL always points at this session — so the values are the ground-truth routing facts for this run. If the tool call fails or returns an unexpected shape, record that as a blocking security finding and switch the verdict to request changes: without provenance, a misattributed re-review has no way to be traced back to its run.
+
+Before drafting the handoff, sanity-check the `triggeredBy` value from `factory_review_source` against the `author` you read from `gh pr view` in Phase 1. If they disagree, you are almost certainly re-reviewing a different PR than the one your session was bound to. Stop, record the mismatch as a blocking security finding with both values verbatim, and set the verdict to request changes; do not publish the re-review until the mismatch is either resolved by re-fetching Phase 1 or explicitly explained in the handoff.
+
 First, compose the **re-review handoff** — don't send it to the conversation yet; it must be published on the PR and the transition requested before your final message. It **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
 
 - **Prior pass disposition** — every substantive item from your previous review, classified: addressed, partially addressed, still open, refuted by the push, or invalidated by the push. Cite the commit or `file:line` proving each addressed/refuted/invalidated call. A prior blocking finding still open is called out plainly at the top of this section.
@@ -144,6 +148,7 @@ First, compose the **re-review handoff** — don't send it to the conversation y
 - **Requested changes** — one entry per change (for a request-changes verdict), imperative and present tense: the file and line, the change, and the consequence or evidence in one or two sentences. Prior-pass changes that remain open reappear here so the author has one current list, not two. Put the change that most affects correctness first; group changes that must land together or state their dependencies. No softened requests ("consider", "you might want to"), no optional or follow-up tiers, no pleasantries, nothing about the author. Preserve qualifications that express real limits of evidence — "the contract does not guarantee this field" must not become "servers never return this field".
 - **Assumptions** — every recorded judgment call from this run.
 - **Open questions** — any decision that genuinely needs a human.
+- **Factory Session** — the fields returned by `factory_review_source`, verbatim: the session URL as a link, the PR author reported by the tool, and any linked Linear or Jira issue URLs. This section is required for every verdict and every fallback (approve, request changes, comment fallback) so a suspicious re-review can always be traced back to the run that produced it.
 
 End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
 
