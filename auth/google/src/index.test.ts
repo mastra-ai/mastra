@@ -337,16 +337,17 @@ describe('MastraAuthGoogle', () => {
             exp: Math.floor(Date.now() / 1000) + 3600,
           },
         });
+        const sessionCreatedAt = Date.now();
         const callbackResult = await auth.handleCallback('code', parsed.searchParams.get('state')!);
         const cookie = callbackResult.cookies![0]!.split(';')[0]!;
         const request = () => new Request('http://localhost', { headers: { Cookie: cookie } });
 
-        vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+        vi.setSystemTime(sessionCreatedAt + cookieMaxAge * 1000 - 1000);
         const user = await auth.getCurrentUser(request());
         expect(user?.id).toBe('google-user-123');
         expect(auth.authorizeUser(user!)).toBe(true);
 
-        vi.setSystemTime(Date.now() + cookieMaxAge * 1000);
+        vi.setSystemTime(sessionCreatedAt + cookieMaxAge * 1000 + 1000);
         await expect(auth.getCurrentUser(request())).resolves.toBeNull();
       } finally {
         vi.useRealTimers();
