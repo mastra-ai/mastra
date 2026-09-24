@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
+import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -160,5 +162,33 @@ describe('Express auth middleware helper', () => {
     expect(deniedRes.append).toHaveBeenCalledWith('Set-Cookie', REFRESHED_COOKIE);
     expect(deniedRes.status).toHaveBeenCalledWith(403);
     expect(deniedNext).not.toHaveBeenCalled();
+  });
+
+  it('keeps cookies set by earlier middleware when forwarding refresh headers', async () => {
+    const mastra = createMastraWithSessionRefresh();
+    const app = express();
+    app.use((_req, res, next) => {
+      res.cookie('other', '1');
+      next();
+    });
+    app.use(createAuthMiddleware({ mastra }));
+    app.get('/custom/protected', (_req, res) => {
+      res.json({ ok: true });
+    });
+
+    const server: Server = await new Promise(resolve => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Failed to get server address');
+      const res = await fetch(`http://127.0.0.1:${address.port}/custom/protected`, {
+        headers: { Cookie: 'session=expired' },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.getSetCookie()).toEqual(['other=1; Path=/', REFRESHED_COOKIE]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
   });
 });

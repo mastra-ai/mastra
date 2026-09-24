@@ -22,6 +22,8 @@ function createMastraWithAuth() {
 }
 
 const REFRESHED_COOKIE = 'session=valid; HttpOnly; Path=/';
+// Elysia re-serializes cookies from its jar, which normalizes attribute order.
+const SERIALIZED_REFRESHED_COOKIE = 'session=valid; Path=/; HttpOnly';
 
 function createMastraWithSessionRefresh() {
   const mastra = new Mastra({ logger: false });
@@ -104,12 +106,62 @@ describe('Elysia auth middleware helper', () => {
       new Request('http://localhost/custom/protected', { headers: { Cookie: 'session=expired' } }),
     );
     expect(allowed.status).toBe(200);
-    expect(allowed.headers.get('set-cookie')).toBe(REFRESHED_COOKIE);
+    expect(allowed.headers.get('set-cookie')).toBe(SERIALIZED_REFRESHED_COOKIE);
 
     const denied = await app.fetch(
       new Request('http://localhost/custom/forbidden', { headers: { Cookie: 'session=expired' } }),
     );
     expect(denied.status).toBe(403);
     expect(denied.headers.get('set-cookie')).toBe(REFRESHED_COOKIE);
+  });
+
+  it('keeps cookies set by earlier hooks when forwarding refresh headers', async () => {
+    const mastra = createMastraWithSessionRefresh();
+    const app = new Elysia();
+    const adapter = new MastraServer({ app, mastra });
+
+    adapter.registerContextMiddleware();
+
+    const middleware = createAuthMiddleware({ mastra });
+    app.get('/custom/jar', () => ({ ok: true }), {
+      beforeHandle: [
+        (ctx: any) => {
+          ctx.cookie.other.value = '1';
+          ctx.cookie.other.path = '/';
+        },
+        middleware,
+      ],
+    });
+    app.get('/custom/raw', () => ({ ok: true }), {
+      beforeHandle: [
+        (ctx: any) => {
+          ctx.set.headers['set-cookie'] = 'raw=1; Path=/';
+        },
+        middleware,
+      ],
+    });
+    app.get(
+      '/custom/late',
+      ({ cookie }: any) => {
+        cookie.late.value = '1';
+        return { ok: true };
+      },
+      { beforeHandle: middleware },
+    );
+
+    const request = (path: string) =>
+      app.fetch(new Request(`http://localhost${path}`, { headers: { Cookie: 'session=expired' } }));
+
+    const jar = await request('/custom/jar');
+    expect(jar.status).toBe(200);
+    expect(jar.headers.getSetCookie().sort()).toEqual(['other=1; Path=/', SERIALIZED_REFRESHED_COOKIE].sort());
+
+    const raw = await request('/custom/raw');
+    expect(raw.status).toBe(200);
+    expect(raw.headers.getSetCookie().sort()).toEqual(['raw=1; Path=/', SERIALIZED_REFRESHED_COOKIE].sort());
+
+    const late = await request('/custom/late');
+    expect(late.status).toBe(200);
+    expect(late.headers.getSetCookie()).toContain(SERIALIZED_REFRESHED_COOKIE);
   });
 });

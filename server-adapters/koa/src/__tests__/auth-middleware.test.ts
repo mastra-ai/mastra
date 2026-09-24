@@ -140,4 +140,30 @@ describe('Koa auth middleware helper', () => {
     expect(denied.status).toBe(403);
     expect(denied.headers.get('set-cookie')).toBe(REFRESHED_COOKIE);
   });
+
+  it('keeps cookies set by earlier middleware when forwarding refresh headers', async () => {
+    const mastra = createMastraWithSessionRefresh();
+    const app = new Koa();
+    const adapter = new MastraServer({ app, mastra });
+
+    app.use(adapter.createContextMiddleware());
+    app.use(async (ctx, next) => {
+      ctx.cookies.set('other', '1', { httpOnly: false });
+      await next();
+    });
+    app.use(createAuthMiddleware({ mastra }));
+    app.use(async ctx => {
+      ctx.body = { ok: true };
+    });
+
+    server = await listen(app);
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Failed to get server address');
+
+    const res = await fetch(`http://127.0.0.1:${address.port}/custom/protected`, {
+      headers: { Cookie: 'session=expired' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.getSetCookie()).toEqual(['other=1; path=/', REFRESHED_COOKIE]);
+  });
 });
