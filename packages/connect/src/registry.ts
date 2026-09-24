@@ -27,8 +27,14 @@ export type ProviderRegistration = ProxyProviderRegistration | McpProviderRegist
  * Providers with checked-in HTTP toolsets. MCP-backed providers are discovered
  * from the Platform integration catalog at runtime.
  */
-export const PROVIDERS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
+export const TOOLS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
+
+/**
+ * @deprecated Use `TOOLS`. This alias is retained for one release cycle so
+ * downstream consumers keep working; it will be removed in the next minor.
+ */
+export const PROVIDERS: readonly ProviderRegistration[] = TOOLS;
 
 export function findRegistration(integrationId: string): ProviderRegistration | undefined {
-  return PROVIDERS.find(p => p.integrationId === integrationId);
+  return TOOLS.find(p => p.integrationId === integrationId);
 }
