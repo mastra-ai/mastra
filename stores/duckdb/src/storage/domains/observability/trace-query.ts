@@ -32,12 +32,17 @@ type RelatedCollection = 'spans' | 'scores' | 'feedback';
 
 const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `date_diff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'scalar' },
   threadId: { sql: 'r.threadId', parameterType: 'scalar' },
   resourceId: { sql: 'r.resourceId', parameterType: 'scalar' },
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
+  durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
@@ -414,7 +419,7 @@ function compileDuckDBTraceScope(
         END AS provider,
         startedAt,
         endedAt,
-        date_diff('millisecond', startedAt, endedAt) AS durationMs,
+        ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
         CASE WHEN error IS NOT NULL THEN 'error' ELSE 'success' END AS status,
         error,
         entityType,

@@ -41,12 +41,17 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'String' },
   threadId: { sql: 'r.threadId', parameterType: 'String' },
   resourceId: { sql: 'r.resourceId', parameterType: 'String' },
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
@@ -352,7 +357,7 @@ function compileClickHouseTraceScope(
       if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
       startedAt,
       endedAt,
-      dateDiff('millisecond', startedAt, endedAt) AS durationMs,
+      ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
       if(isNotNull(error), 'error', 'success') AS status,
       error,
       entityType,

@@ -20,7 +20,13 @@ import {
   createSuggestedResponseExtractor,
   createThreadTitleExtractor,
 } from '../built-in-extractors';
-import { OBSERVATIONAL_MEMORY_DEFAULTS, getRetrievalInstructions } from '../constants';
+import {
+  OBSERVATIONAL_MEMORY_DEFAULTS,
+  OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_PROMPT_THREAD,
+  getObservationContextPrompt,
+  getRetrievalInstructions,
+} from '../constants';
 import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
@@ -4925,6 +4931,38 @@ describe('ObservationalMemory Integration', () => {
           observationTokens: 1000,
         },
       });
+    });
+
+    it('should describe thread-scoped observations as the current conversation', () => {
+      const threadOm = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: { messageTokens: 500, model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
+      });
+
+      const [preamble] = (threadOm as any).formatObservationsForContext('- 🔴 Artifact ID art-123 created');
+      expect(preamble).toContain(OBSERVATION_CONTEXT_PROMPT_THREAD);
+      expect(preamble).not.toContain('past conversations with this user');
+    });
+
+    it('should describe resource-scoped observations as past conversations with this user', () => {
+      const resourceOm = new ObservationalMemory({
+        storage,
+        scope: 'resource',
+        observation: { messageTokens: 500, model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
+      });
+
+      const [preamble] = (resourceOm as any).formatObservationsForContext('- 🔴 Artifact ID art-123 created');
+      expect(preamble).toContain(OBSERVATION_CONTEXT_PROMPT);
+      expect(preamble).not.toContain(OBSERVATION_CONTEXT_PROMPT_THREAD);
+    });
+
+    it('getObservationContextPrompt picks wording by scope', () => {
+      expect(getObservationContextPrompt('thread')).toBe(OBSERVATION_CONTEXT_PROMPT_THREAD);
+      expect(getObservationContextPrompt('resource')).toBe(OBSERVATION_CONTEXT_PROMPT);
+      expect(getObservationContextPrompt()).toBe(OBSERVATION_CONTEXT_PROMPT_THREAD);
     });
 
     it('should preserve observation group ranges in actor context when retrieval mode is enabled', () => {

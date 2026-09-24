@@ -722,7 +722,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-1',
       resourceId: 'resource-2',
       startedAt: '2026-08-05T10:00:00.000Z',
-      endedAt: '2026-08-05T10:00:03.000Z',
+      endedAt: '2026-08-05T10:00:06.000Z',
       environment: 'staging',
       tags: [],
     }),
@@ -1500,6 +1500,30 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     name: 'returns one current completed root per trace in default order',
     request: { timeRange: fullRange },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'filters by the current root duration without matching long child spans',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'uses exact millisecond boundaries for root duration',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gte', left: { path: 'durationMs' }, right: { literal: 6000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not expose incomplete roots through missing duration predicates',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'notExists', path: 'durationMs' },
+    },
+    expected: [],
   },
   {
     name: 'evaluates recursive trace predicates',
@@ -2695,6 +2719,10 @@ function evaluateScalarPredicate(
   }
 }
 
+function durationMsBetween(startedAt: string, endedAt: string | null): number | null {
+  return endedAt === null ? null : new Date(endedAt).getTime() - new Date(startedAt).getTime();
+}
+
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
   const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
@@ -2705,7 +2733,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     provider,
     startedAt: span.startedAt,
     endedAt: span.endedAt,
-    durationMs: span.endedAt === null ? null : new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime(),
+    durationMs: durationMsBetween(span.startedAt, span.endedAt),
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -2730,6 +2758,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     resourceId: root.resourceId,
     startedAt: root.startedAt,
     endedAt: root.endedAt,
+    durationMs: durationMsBetween(root.startedAt, root.endedAt),
     entityName: root.entityName,
     entityType: root.entityType,
     environment: root.environment,
