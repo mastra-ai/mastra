@@ -526,6 +526,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     resourceId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
+    durationMs: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
     environment: stringField(true),

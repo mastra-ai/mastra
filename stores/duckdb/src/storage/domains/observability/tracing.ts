@@ -802,12 +802,13 @@ async function listTraceRows<TSpan>(
   if (!hasPostAggFilters) {
     // Fast path: order + paginate in the prefilter, reconstruct only the page.
     // Only `startedAt` reaches here (per SAFE_PREFILTER_ORDER_FIELDS), and on
-    // start rows it lives in the `timestamp` column.
-    const prefilterOrderBy = `ORDER BY timestamp ${orderDir}`;
+    // start rows it lives in the `timestamp` column. A span can have more than
+    // one start row (the end event is also written as a create), so group first.
+    const prefilterOrderBy = `ORDER BY anchorStartedAt ${orderDir}, traceId, spanId`;
     const offset = page * perPage;
 
     const countSql = `
-      SELECT COUNT(*) as total
+      SELECT COUNT(DISTINCT (traceId, spanId)) as total
       FROM span_events AS ${outerAlias}
       ${prefilterWhere}
     `;
@@ -816,14 +817,15 @@ async function listTraceRows<TSpan>(
 
     const pageSql = `
       WITH page_roots AS (
-        SELECT traceId, spanId, timestamp AS anchorStartedAt
+        SELECT traceId, spanId, min(timestamp) AS anchorStartedAt
         FROM span_events AS ${outerAlias}
         ${prefilterWhere}
+        GROUP BY traceId, spanId
         ${prefilterOrderBy}
         LIMIT ? OFFSET ?
       )
       ${reconstructForAnchors(reconstructSelect, 'page_roots')}
-      ${buildOrderByClause(orderBy)}
+      ${buildOrderByClause(orderBy)}, traceId, spanId
     `;
     const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
     const spans = rows.map(row => mapRow(row as Record<string, unknown>));
@@ -938,9 +940,10 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
 
     const dataSql = `
       WITH candidate_roots AS (
-        SELECT traceId, spanId, cursorId
+        SELECT traceId, spanId, max(cursorId) AS cursorId
         FROM span_events AS ${outerAlias}
         ${prefilterWhere}
+        GROUP BY traceId, spanId
       ),
       root_spans AS (
         SELECT reconstructed.*, candidate_roots.cursorId AS anchorCursorId
@@ -1139,9 +1142,10 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
 
     const dataSql = `
       WITH candidate_anchors AS (
-        SELECT traceId, spanId, cursorId
+        SELECT traceId, spanId, max(cursorId) AS cursorId
         FROM span_events AS ${outerAlias}
         ${prefilterWhere}
+        GROUP BY traceId, spanId
       ),
       branch_anchors AS (
         SELECT reconstructed.*, candidate_anchors.cursorId AS anchorCursorId
@@ -1210,12 +1214,13 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   if (!hasPostAggFilters) {
     // Fast path: order + paginate in the prefilter, reconstruct only the page.
     // Only `startedAt` reaches here (per SAFE_PREFILTER_ORDER_FIELDS), and on
-    // start rows it lives in the `timestamp` column.
-    const prefilterOrderBy = `ORDER BY timestamp ${orderDir}`;
+    // start rows it lives in the `timestamp` column. A span can have more than
+    // one start row (the end event is also written as a create), so group first.
+    const prefilterOrderBy = `ORDER BY anchorStartedAt ${orderDir}, traceId, spanId`;
     const offset = page * perPage;
 
     const countSql = `
-      SELECT COUNT(*) as total
+      SELECT COUNT(DISTINCT (traceId, spanId)) as total
       FROM span_events AS ${outerAlias}
       ${prefilterWhere}
     `;
@@ -1232,14 +1237,15 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
 
     const pageSql = `
       WITH page_anchors AS (
-        SELECT traceId, spanId, timestamp AS anchorStartedAt
+        SELECT traceId, spanId, min(timestamp) AS anchorStartedAt
         FROM span_events AS ${outerAlias}
         ${prefilterWhere}
+        GROUP BY traceId, spanId
         ${prefilterOrderBy}
         LIMIT ? OFFSET ?
       )
       ${reconstructForAnchors(SPAN_RECONSTRUCT_SELECT, 'page_anchors')}
-      ${buildOrderByClause(orderBy)}
+      ${buildOrderByClause(orderBy)}, traceId, spanId
     `;
     const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
     const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));

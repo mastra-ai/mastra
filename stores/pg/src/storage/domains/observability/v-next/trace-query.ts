@@ -41,12 +41,17 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
+}
+
 const TRACE_FIELDS = {
   traceId: 'r."traceId"',
   threadId: 'r."threadId"',
   resourceId: 'r."resourceId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
+  durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   environment: 'r."environment"',
@@ -436,7 +441,7 @@ function compilePostgresTraceScope(
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
         WHEN s."isPending" THEN NULL
-        ELSE EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000
+        ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",

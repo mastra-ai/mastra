@@ -1,6 +1,6 @@
 {
   "name": "@internal/auth",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Internal Mastra auth primitives and utilities",
   "private": true,
   "type": "module",

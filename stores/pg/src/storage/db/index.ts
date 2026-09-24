@@ -22,6 +22,7 @@ import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
+import { toPgJson } from './sanitize-json';
 import { getSchemaSnapshot } from './schema-snapshot';
 import type { SchemaSnapshot } from './schema-snapshot';
 
@@ -684,7 +685,7 @@ export class PgDB extends MastraBase {
       const columnSchema = schema?.[key];
 
       if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
-        return JSON.stringify(value);
+        return toPgJson(value);
       }
       return value;
     });
@@ -721,11 +722,11 @@ export class PgDB extends MastraBase {
     const columnSchema = schema?.[columnName];
 
     if (columnSchema?.type === 'jsonb') {
-      return JSON.stringify(value);
+      return toPgJson(value);
     }
 
     if (typeof value === 'object') {
-      return JSON.stringify(value);
+      return toPgJson(value);
     }
 
     return value;

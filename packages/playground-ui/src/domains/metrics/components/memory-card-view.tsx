@@ -100,7 +100,7 @@ export function MemoryCardView({
               <Tab value="threads">Threads</Tab>
               <Tab value="resources">Resources</Tab>
             </TabList>
-            <TabContent value="threads">
+            <TabContent value="threads" className="pt-3">
               {hasThreadData ? (
                 <DataList columns="auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
                   <DataList.Top>
@@ -139,7 +139,7 @@ export function MemoryCardView({
                 <MetricsCard.NoData message="No thread activity yet" />
               )}
             </TabContent>
-            <TabContent value="resources">
+            <TabContent value="resources" className="pt-3">
               {hasResourceData ? (
                 <DataList columns="auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
                   <DataList.Top>
