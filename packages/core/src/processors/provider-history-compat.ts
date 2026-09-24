@@ -265,19 +265,20 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
   /**
-   * @deprecated The preemptive `applyToPrompt` hook repairs the outbound
-   * prompt, so Anthropic no longer rejects these ids and this pattern normally
-   * never matches. Retained as a dormant fallback for placements where the
-   * prompt lane cannot see the request (for example compat configured outside
-   * the agent's prompt path). Will be removed in a future major release.
+   * Matches Anthropic's tool_use.id rejection. The preemptive
+   * `applyToPrompt` hook repairs the outbound prompt first, so this pattern
+   * only fires when that hook cannot see the request: Anthropic served
+   * through a provider `isMaybeAnthropic` does not recognize (for example
+   * Vertex- or Bedrock-hosted Claude), or compat configured outside the
+   * agent's prompt path.
    */
   errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
   /**
-   * @deprecated The preemptive `applyToPrompt` hook repairs the outbound
-   * prompt, so this reactive repair is dormant. Retained as a fallback for
-   * placements where the prompt lane cannot see the request, and because it is
-   * the only repair available once an API call has already been rejected. Will
-   * be removed in a future major release.
+   * Rewrites invalid tool-call ids in place after a provider rejection.
+   * This is the fallback repair for Anthropic served through a provider the
+   * preemptive `applyToPrompt` check does not recognize (for example Vertex-
+   * or Bedrock-hosted Claude), and the only repair available once an API
+   * call has already been rejected.
    */
   fix(messages) {
     const idMap = buildToolIdMap(messages);
@@ -1044,8 +1045,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   message list keeps its original IDs. Both the call and its paired result
  *   are rewritten together, and a sanitized ID that would collide with an ID
  *   already in the prompt gets a `_2`/`_3`… suffix. The reactive fallback
- *   (matching a 400 response body and retrying with sanitized IDs) is
- *   deprecated.
+ *   (matching a 400 response body and retrying with sanitized IDs) covers
+ *   providers the preemptive check doesn't recognize, such as Vertex-hosted
+ *   Claude.
  * - **cerebras-strip-reasoning-content** — strips `reasoning` parts from
  *   assistant messages in the outbound prompt when the resolved model is
  *   Cerebras, to avoid the `@ai-sdk/openai-compatible@>=1.0.32` regression

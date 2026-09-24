@@ -2102,7 +2102,7 @@ describe('anthropicToolIdFormat.applyToPrompt', () => {
     expect(idsIn((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual(['call_abc_1', 'call_abc_1']);
   });
 
-  it('keeps the deprecated reactive fix working for direct callers', () => {
+  it('keeps the reactive fix working for direct callers', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
     messageList.add([createAssistantMessageWithToolCall('call:abc.123', 'searchTool', { query: 'test' })], 'response');
 
