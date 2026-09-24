@@ -760,7 +760,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // Run the woken notification as the session that owns the target
     // resource so it uses that session's model/mode/state. Fall back to
     // the current session only when no session owns the resource yet.
-    const session = (await controller.getSessionByResource(resourceId)) ?? activeSession;
+    const owningSession = await controller.getSessionByResource(resourceId);
+    const session = owningSession ?? activeSession;
     // No session owns the resource and none is active yet (e.g. a deferred
     // notification comes due before any session boots). Nothing to resolve a
     // model from; return undefined so the dispatcher sends a bare wake
@@ -860,12 +861,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       },
     };
     requestContext.set('controller', agentControllerContext);
-    await config?.prepareNotificationRequestContext?.({
-      requestContext,
-      session: { ownerId: session.identity.getOwnerId(), state: getNotificationState() },
-      resourceId,
-      threadId,
-    });
+    // Tenant identity/credentials must come from the session that owns the
+    // resource; the active-session fallback is only safe for model selection.
+    if (owningSession) {
+      await config?.prepareNotificationRequestContext?.({
+        requestContext,
+        session: { ownerId: owningSession.identity.getOwnerId(), state: getNotificationState() },
+        resourceId,
+        threadId,
+      });
+    }
 
     return {
       memory: { thread: threadId, resource: resourceId },
