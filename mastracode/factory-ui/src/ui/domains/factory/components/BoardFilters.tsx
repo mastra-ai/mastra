@@ -51,7 +51,7 @@ export function BoardFilters({
         strict: true,
         suggestions: [
           ...(hasIdentityClaims
-            ? [{ value: '@me', label: '@me (across integrations)', start: <AtSign className="size-3.5" /> }]
+            ? [{ value: '@me', label: '@me', start: <AtSign className="size-3.5" /> }]
             : []),
           ...participants.map(participant => ({
             value: participant.id,
