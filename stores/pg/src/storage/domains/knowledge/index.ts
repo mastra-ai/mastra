@@ -48,6 +48,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
@@ -124,7 +125,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     return transformed;
   });
   if (schemaName) {
-    const quotedSchema = `"${parseSqlIdentifier(schemaName, 'schema name')}"`;
+    const quotedSchema = `"${parseSchemaName(schemaName)}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
       for (const table of [
@@ -263,7 +264,7 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: string }> {
   const table = (name: string) => {
     const quotedName = `"${parseSqlIdentifier(name, 'table name')}"`;
-    return schemaName ? `"${parseSqlIdentifier(schemaName, 'schema name')}".${quotedName}` : quotedName;
+    return schemaName ? `"${parseSchemaName(schemaName)}".${quotedName}` : quotedName;
   };
   return [
     {
