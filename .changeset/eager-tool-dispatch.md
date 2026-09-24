@@ -16,6 +16,6 @@ const deferred = await agent.stream('Compare the weather in Paris and Rome', {
 
 These calls still wait for the model to finish: tools that need approval, declare a suspend schema, run on the provider or client, or run in the background, and runs that use the `called` concurrency strategy or output processors that run after the stream. A tool that already finished is never run again and its result is always kept, including on retry, fallback, and abort.
 
-A tool still running when an attempt is retried or falls back finishes first, and its result is kept. Aborting the run cancels running tools; set `eagerToolExecution: false` if a partly-run tool is unsafe to abort.
+A tool still running when an attempt is retried, falls back, or is aborted finishes first, and its result is kept.
 
 A tool that calls `suspend()` at runtime also runs once: the run suspends instead of retrying the model. See the `stream()` reference for the full rules.

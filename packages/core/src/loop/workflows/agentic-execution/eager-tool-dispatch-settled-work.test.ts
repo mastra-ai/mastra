@@ -274,6 +274,65 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     expect(recordedResults(stream)).toContain('answered-a');
   });
 
+  it('waits out a running call when the caller aborts mid-stream, then keeps its result', async () => {
+    // Same order as the post-stream pass: a started tool is waited for whether or not it
+    // observes its signal, its result is streamed and recorded, and only then `abort`.
+    const executions: string[] = [];
+    const abortController = new AbortController();
+    const started = deferred();
+    const release = deferred();
+    const agent = new Agent({
+      id: 'eager-abort-agent',
+      name: 'Eager abort agent',
+      instructions: 'Call tool-a.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ abortSignal }) =>
+          toolCallThen(async controller => {
+            await started.promise;
+            abortController.abort();
+            await new Promise<void>(resolve => {
+              if (abortSignal?.aborted) return resolve();
+              abortSignal?.addEventListener('abort', () => resolve(), { once: true });
+            });
+            controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+            // Still running, ignoring its signal, when the stream dies; finishes after.
+            release.resolve();
+          }),
+      }),
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Ignores its abort signal',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async ({ value }) => {
+            executions.push(value);
+            started.resolve();
+            await release.promise;
+            return { answer: `answered-${value}` };
+          },
+        }),
+      },
+    });
+
+    const stream = await agent.stream('go', {
+      maxSteps: 2,
+      eagerToolExecution: true,
+      abortSignal: abortController.signal,
+    });
+    const types: string[] = [];
+    try {
+      for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
+    } catch {
+      // abort ends the stream
+    }
+
+    expect(executions).toEqual(['a']);
+    expect(types).toContain('tool-result');
+    expect(types.indexOf('tool-result')).toBeLessThan(types.indexOf('abort'));
+    expect(recordedResults(stream)).toContain('answered-a');
+  });
+
   it('does not leave abort listeners on a caller signal reused across runs', async () => {
     const executions: string[] = [];
     let turn = 0;
@@ -374,7 +433,10 @@ describe('eager tool dispatch — finished work survives every early exit', () =
   it('does not run error processing when the run is aborted while waiting out an in-flight call', async () => {
     const executions: string[] = [];
     const caller = new AbortController();
-    const gate = inFlightGate({ onWait: () => caller.abort() });
+    // First wait: the caller aborts. Second wait is the abort exit waiting the call out.
+    const gate: ReturnType<typeof inFlightGate> = inFlightGate({
+      onWait: () => (caller.signal.aborted ? gate.release() : caller.abort()),
+    });
     let attempts = 0;
     let apiErrorCalls = 0;
     const model = new MockLanguageModelV2({
@@ -408,6 +470,8 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // The abort ends the wait, so no error processor may act on the dead attempt.
     expect(apiErrorCalls).toBe(0);
     expect(types).toContain('abort');
+    expect(types.indexOf('tool-result')).toBeGreaterThan(-1);
+    expect(types.indexOf('tool-result')).toBeLessThan(types.indexOf('abort'));
     expect(attempts).toBe(1);
     expect(executions).toEqual(['a']);
   });

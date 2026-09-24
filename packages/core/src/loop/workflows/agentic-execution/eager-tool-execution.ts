@@ -339,7 +339,7 @@ export class EagerToolExecutionCoordinator {
    * A discarded attempt waits here instead of cancelling: a running tool may already have
    * done its side effect, and cancelling it would leave the replacement attempt free to
    * call it again. Settled, its outcome is committed and the replacement sees it as done.
-   * An abort of the run stops the wait so abort cleanup can cancel what is still running.
+   * An abort of the run stops the wait; the abort exit then waits the work out itself.
    */
   async settleRunning(signal?: AbortSignal) {
     if (signal?.aborted) return;

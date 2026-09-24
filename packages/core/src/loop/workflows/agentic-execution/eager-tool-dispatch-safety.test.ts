@@ -856,8 +856,10 @@ describe('eager tool dispatch — unsafe terminations', () => {
   });
 
   /**
-   * A `processToolResult` processor is excluded from early dispatch entirely, and the
-   * reason is stronger than the post-stream exclusion next to it.
+   * A `processToolResult` processor excludes early dispatch when a provider-executed
+   * tool is also configured (`llm-execution-step.ts` computes that conjunction), and the
+   * reason is stronger than the post-stream exclusion next to it. Without a provider
+   * tool the hook only sees results after the post-stream pass, so dispatch stays on.
    *
    * The hook runs *inside* the model stream. When it aborts, `llm-execution-step.ts`
    * builds a bail response and returns before the post-stream pass ever runs — so

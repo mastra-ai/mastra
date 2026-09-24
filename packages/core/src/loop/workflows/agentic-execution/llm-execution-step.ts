@@ -1271,9 +1271,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
   let currentIteration = 0;
   let eagerAbortListenerRegistered = false;
-  // Points at the live iteration's committer: the abort listener is registered once per
-  // run, so it must not close over the first iteration's message id.
-  let commitSettledEagerWorkOnAbort: (() => void) | undefined;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1317,6 +1314,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const discardAttemptEagerWork = async () => {
         eagerCoordinator?.stop();
         await eagerCoordinator?.settleRunning(runAbortSignal);
+        // An abort ended the wait: the abort exit settles and commits instead.
+        if (runAbortSignal?.aborted) return;
         const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
         // Written the moment the attempt dies, not when a replacement starts: a retry that
@@ -1328,7 +1327,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       const commitCarriedEagerWork = async (messageId: string) => {
         const completed = eagerCoordinator?.takeCarriedWork() ?? [];
-        if (!completed.length) return;
+        if (!completed.length) return [];
         // Recorded before the awaits below so a concurrent rollback can still recarry it.
         eagerCoordinator?.recordCommittedWork(messageId, completed);
 
@@ -1385,30 +1384,39 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         for (const message of messages) {
           messageList.add(message, 'response');
         }
+        return chunks;
+      };
+
+      /**
+       * The run was aborted. Like the default pipeline, which waits for a started tool
+       * before it emits `abort`, every eager call that has started is waited out,
+       * whether or not it observes its signal: abort is cooperative, and a tool that
+       * ignores it still does its side effect. Each outcome is then committed and
+       * streamed, so the aborted run records it. Work that never started is dropped.
+       */
+      const settleEagerWorkOnAbort = async (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
+        if (!eagerCoordinator) return;
+        eagerCoordinator.stop({ permanent: true });
+        await eagerCoordinator.settleRunning();
+        const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
+        if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
+        for (const chunk of await commitCarriedEagerWork(currentMessageId)) {
+          if (chunk.type === 'tool-call') continue;
+          safeEnqueue(controller, { ...chunk, runId, from: ChunkFrom.AGENT } as ChunkType<OUTPUT>);
+        }
       };
 
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
-        // A caller abort stops further eager dispatch permanently and cancels what is
-        // already running. `cancelRunning` is what makes that hold rather than hope: the
-        // run signal alone only reaches tools that observe it, and the aborted run bails
-        // before any foreach, so nothing would ever adopt or release the work otherwise.
-        // Registered once for the whole run rather than per iteration, so long loops do
-        // not pile up listeners.
-        commitSettledEagerWorkOnAbort = () => {
-          // Settled work is committed before teardown; only in-flight work is cancelled.
-          const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
-          if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
-          void commitCarriedEagerWork(currentMessageId).catch(error =>
-            logger?.error('Failed to commit settled eager tool work on abort', { error }),
-          );
-        };
+        // A caller abort stops further eager dispatch permanently. Work already running is
+        // left to finish: the abort exit waits it out and commits it. Registered once for
+        // the whole run rather than per iteration, so long loops do not pile up listeners.
         if (!eagerAbortListenerRegistered && runAbortSignal) {
           eagerAbortListenerRegistered = true;
           // `runAbortSignal` is owned by this run (see `workflows/stream.ts`), which unlinks
           // it from the caller's signal when the run ends, so this listener cannot outlive
           // the run even when the caller reuses one signal across many runs.
-          runAbortSignal.addEventListener('abort', () => commitSettledEagerWorkOnAbort?.(), { once: true });
+          runAbortSignal.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), { once: true });
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.
@@ -2403,6 +2411,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               text: runState.state.partialText,
             });
 
+            await settleEagerWorkOnAbort(controller);
+
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
@@ -2410,7 +2420,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           // Settled before deciding, so a call that suspends while still running is seen
           // by the retry gates below rather than after the attempt was already retried.
-          // After the abort branch: an abort cancels running work instead of waiting.
+          // After the abort branch, which waits running work out itself.
           await eagerCoordinator?.settleRunning(runAbortSignal);
           // The wait ends early when the run aborts; that abort wins over any retry or fallback.
           if (runAbortSignal?.aborted) {
@@ -2418,6 +2428,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               steps: inputData?.output?.steps ?? [],
               text: runState.state.partialText,
             });
+            await settleEagerWorkOnAbort(controller);
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
@@ -2513,6 +2524,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 steps: inputData?.output?.steps ?? [],
                 text: runState.state.partialText,
               });
+              await settleEagerWorkOnAbort(controller);
               safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
               return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
             }
@@ -2551,6 +2563,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: inputData?.output?.steps ?? [],
             text: runState.state.partialText,
           });
+
+          await settleEagerWorkOnAbort(controller);
 
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
@@ -2637,6 +2651,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: inputData?.output?.steps ?? [],
             text: runState.state.partialText,
           });
+          await settleEagerWorkOnAbort(controller);
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
           return bailFromExecution();
         }
@@ -2700,6 +2715,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           steps: inputData?.output?.steps ?? [],
           text: runState.state.partialText,
         });
+        await settleEagerWorkOnAbort(controller);
         safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
         return bailFromExecution();
       }
@@ -2715,6 +2731,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: inputData?.output?.steps ?? [],
             text: runState.state.partialText,
           });
+          await settleEagerWorkOnAbort(controller);
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
           return bailFromExecution();
         }
@@ -3045,6 +3062,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: inputData?.output?.steps ?? [],
             text: runState.state.partialText,
           });
+          await settleEagerWorkOnAbort(controller);
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
           return bailFromExecution();
         }
