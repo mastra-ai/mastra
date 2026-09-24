@@ -84,7 +84,7 @@ export function TokenUsageByAgentCardView({
                 <Tab value="tokens">Tokens</Tab>
                 <Tab value="cost">Cost</Tab>
               </TabList>
-              <TabContent value="tokens">
+              <TabContent value="tokens" className="pt-3">
                 <HorizontalBars
                   LinkComponent={LinkComponent}
                   data={rows.map(d => ({
@@ -100,7 +100,7 @@ export function TokenUsageByAgentCardView({
                   fmt={formatCompact}
                 />
               </TabContent>
-              <TabContent value="cost">
+              <TabContent value="cost" className="pt-3">
                 {hasCostData ? (
                   <HorizontalBars
                     LinkComponent={LinkComponent}

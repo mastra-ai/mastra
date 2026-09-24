@@ -64,7 +64,7 @@ console.log(`Status: ${experiment.status}`)
 
 ### Delete experiment
 
-Deletes an experiment directly by ID, including experiments orphaned by dataset deletion. The experiment's results are deleted, and Mastra also attempts to delete its observability traces. Unsupported observability storage leaves the traces in place and logs a warning.
+Deletes an experiment directly by ID, including experiments orphaned by dataset deletion. Mastra deletes the experiment's observability traces first, then the experiment and its result records. Unsupported observability storage leaves the traces in place and logs a warning.
 
 ```typescript
 await mastra.datasets.deleteExperiment({
