@@ -88,11 +88,11 @@ export function SettingsRowLayout({
             {description}
           </DescriptionElement>
         )}
-        {errorMsg != null && (
+        {errorMsg ? (
           <FieldBlockErrorMsg name={htmlFor} className={cn(isSectionLayout && 'mt-1')}>
             {errorMsg}
           </FieldBlockErrorMsg>
-        )}
+        ) : null}
       </div>
       {children != null &&
         (isSectionLayout || viewOnly ? (

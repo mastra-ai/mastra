@@ -92,6 +92,7 @@ describe('Settings', () => {
         </SettingsRow>,
       );
 
+      expect(screen.getByText('*', { selector: '[aria-hidden]' })).toBeTruthy();
       expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
     });
   });
@@ -108,6 +109,16 @@ describe('Settings', () => {
       expect(screen.getByRole('textbox', { name: 'Model' }).getAttribute('aria-describedby')).toBe(
         screen.getByRole('alert').id,
       );
+    });
+
+    it.each([false, ''])('renders no alert when the message is %j', errorMsg => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" errorMsg={errorMsg}>
+          <input id="model" />
+        </SettingsRow>,
+      );
+
+      expect(screen.queryByRole('alert')).toBeNull();
     });
   });
 
