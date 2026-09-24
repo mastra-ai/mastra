@@ -132,7 +132,7 @@ describe('/settings quiet mode callbacks', () => {
     expect(rendered).toContain('line three…');
     expect(rendered).not.toContain('line four');
   });
-  it('hides superseded Thinking placeholders in rendered assistant messages', async () => {
+  it('moves Thinking placeholders out of rendered assistant messages', async () => {
     const { ctx } = createCtx();
     const thinking = (id: string) =>
       new AssistantMessageComponent(
@@ -153,7 +153,7 @@ describe('/settings quiet mode callbacks', () => {
 
     expect(countThinking()).toBe(2);
     mocks.callbacks.onQuietModeChange(true);
-    expect(countThinking()).toBe(1);
+    expect(countThinking()).toBe(0);
     mocks.callbacks.onQuietModeChange(false);
     expect(countThinking()).toBe(2);
   });

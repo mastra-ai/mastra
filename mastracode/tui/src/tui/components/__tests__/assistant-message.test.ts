@@ -219,7 +219,7 @@ describe('AssistantMessageComponent (DB-native)', () => {
         .split('\n')
         .filter(line => line.includes('Thinking...'));
 
-    it('drops Thinking placeholders once text follows them, keeping the trailing live one', () => {
+    it('leaves every Thinking placeholder out of the chat, even after the segment is finalized', () => {
       const component = new AssistantMessageComponent(
         assistantMessage([
           { type: 'reasoning', reasoning: 'before' } as never,
@@ -231,31 +231,24 @@ describe('AssistantMessageComponent (DB-native)', () => {
       expect(thinkingLines(component)).toHaveLength(2);
 
       component.setQuietModeDisplay('quiet');
-      expect(thinkingLines(component)).toHaveLength(1);
+      expect(thinkingLines(component)).toHaveLength(0);
       expect(collectText(component)).toContain('visible answer');
       expect(countSpacers(component)).toBe(0);
 
+      component.finalizeRenderState();
       component.setQuietModeDisplay('normal');
       expect(thinkingLines(component)).toHaveLength(2);
     });
 
-    it('hides the trailing Thinking placeholder once later chat content supersedes it', () => {
+    it('takes no chat space when it only holds thinking', () => {
       const component = new AssistantMessageComponent(
         assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as never]),
         true,
       );
-      component.setQuietModeDisplay('quiet');
-      expect(thinkingLines(component)).toHaveLength(1);
       expect(component.getChatSpacingKind()).toBe('assistant-message');
-
-      component.setSupersededByLaterContent(true);
+      component.setQuietModeDisplay('quiet');
       expect(thinkingLines(component)).toHaveLength(0);
       expect(component.getChatSpacingKind()).toBeUndefined();
-
-      // The hiding survives the segment being finalized
-      component.finalizeRenderState();
-      component.setSupersededByLaterContent(false);
-      expect(thinkingLines(component)).toHaveLength(1);
     });
   });
 });

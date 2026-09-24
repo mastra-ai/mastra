@@ -60,6 +60,6 @@ export function getSpacingBetween(prev: ChatSpacingKind | undefined, next: ChatS
   return 1;
 }
 
-export function isToolSpacingKind(kind: ChatSpacingKind | undefined): boolean {
+function isToolSpacingKind(kind: ChatSpacingKind | undefined): boolean {
   return kind === 'quiet-compact-tool' || kind === 'quiet-shell-tool' || kind === 'normal-tool';
 }

@@ -12,12 +12,15 @@ import type { TUIState } from './state.js';
  * `/settings` overlay route through here so the two paths cannot drift.
  */
 export function applyQuietModeToRenderedComponents(
-  state: Pick<TUIState, 'allToolComponents'> & Partial<Pick<TUIState, 'messageComponentsById' | 'chatContainer'>>,
+  state: Pick<TUIState, 'allToolComponents'> &
+    Partial<Pick<TUIState, 'messageComponentsById' | 'chatContainer' | 'idleCounter'>>,
   enabled: boolean,
   previewLineLimit: number,
   modeColor: string | undefined,
 ): void {
   const mode = enabled ? 'quiet' : 'normal';
+  // Normal mode shows "Thinking..." in the chat again; the next message update re-syncs quiet mode.
+  if (!enabled) state.idleCounter?.setThinking(false);
   const tools = state.allToolComponents.filter(
     (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
   );

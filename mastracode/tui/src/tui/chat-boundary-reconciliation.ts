@@ -1,6 +1,6 @@
 import type { Component, Container } from '@earendil-works/pi-tui';
 import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
-import { getChatSpacingKind, getSpacingBetweenComponents, isToolSpacingKind } from './components/chat-spacing.js';
+import { getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
 import type { CompactToolLabelColor } from './components/tool-execution-interface.js';
 
 interface CompactToolGroupingParticipant {
@@ -12,10 +12,6 @@ interface CompactToolGroupingParticipant {
   setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
   getQuietShellNaturalWidth?(): number | undefined;
   setQuietShellGroupWidth?(width: number | undefined): void;
-}
-
-interface SupersedableParticipant {
-  setSupersededByLaterContent?(superseded: boolean): void;
 }
 
 /**
@@ -49,16 +45,6 @@ export function insertChatComponentWithBoundarySpacing(
 export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   const children = chatContainer.children as Component[];
   const components = children.filter(child => !isChatBoundarySpacer(child));
-
-  // Tell each entry whether an assistant message or tool follows it, before spacing is measured:
-  // quiet assistant messages drop stale "Thinking..." placeholders and may render nothing at all.
-  let hasLaterContent = false;
-  for (let i = components.length - 1; i >= 0; i--) {
-    const component = components[i]!;
-    (component as SupersedableParticipant).setSupersededByLaterContent?.(hasLaterContent);
-    const kind = getChatSpacingKind(component);
-    if (kind === 'assistant-message' || isToolSpacingKind(kind)) hasLaterContent = true;
-  }
 
   // Pool existing spacers for reuse so we keep the same object identity
   // where possible, reducing object churn.

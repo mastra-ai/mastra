@@ -13,6 +13,7 @@ import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
+import { formatStatusDuration } from '../status-duration.js';
 import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -128,13 +129,6 @@ function parseErrorMessage(output: string): string | undefined {
   }
 }
 
-/** `42s`, `2m 4s`, `1h 3m`. */
-function formatMinutes(totalSeconds: number): string {
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  if (minutes < 60) return `${minutes}m ${totalSeconds % 60}s`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-}
 /** Room kept for the right-aligned time so a ticking counter never changes the box width. */
 const QUIET_SHELL_TIME_WIDTH = 'started'.length;
 
@@ -1767,7 +1761,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       time = 'stopped';
     } else if (running) {
       mark = theme.fg('warning', SPINNER_FRAMES[Math.floor(Date.now() / 100) % SPINNER_FRAMES.length]!);
-      time = formatMinutes(Math.floor((Date.now() - this.startTime) / 1000));
+      const elapsed = Date.now() - this.startTime;
+      time =
+        elapsed < 60_000 ? `${Math.floor(elapsed / 1000)}s` : formatStatusDuration(elapsed, { includeSeconds: true });
     } else {
       errorLine = this.getShellFailureLine();
       mark = errorLine !== undefined ? theme.fg('error', '✗') : theme.fg('success', '✓');
@@ -2967,7 +2963,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const ms = (this.endTime ?? Date.now()) - this.startTime;
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-    return formatMinutes(Math.round(ms / 1000));
+    return formatStatusDuration(ms, { includeSeconds: true });
   }
 
   private getFormattedOutput(): string {

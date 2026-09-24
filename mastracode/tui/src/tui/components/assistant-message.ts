@@ -49,7 +49,6 @@ export class AssistantMessageComponent extends Container {
   private renderNodes = new Map<string, OwnedRenderNode>();
   private renderOrder: string[] = [];
   private quiet = false;
-  private supersededByLaterContent = false;
 
   constructor(message?: MastraDBMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
     super();
@@ -77,13 +76,6 @@ export class AssistantMessageComponent extends Container {
     const quiet = mode === 'quiet';
     if (this.quiet === quiet) return;
     this.quiet = quiet;
-    this.syncVisibleChildren();
-  }
-
-  /** Set by chat reconciliation when a later assistant message or tool follows this one. */
-  setSupersededByLaterContent(superseded: boolean): void {
-    if (this.supersededByLaterContent === superseded) return;
-    this.supersededByLaterContent = superseded;
     this.syncVisibleChildren();
   }
 
@@ -144,17 +136,13 @@ export class AssistantMessageComponent extends Container {
   }
 
   /**
-   * Quiet mode keeps only the live "Thinking..." placeholder: once text or a later chat entry
-   * follows it, it is dropped. Works from the owned render nodes so it still applies after
-   * finalizeRenderState() has released the source parts.
+   * Quiet mode leaves "Thinking..." placeholders out of the chat entirely; the live one is shown in
+   * the status line above the input instead, so hiding it never shifts the layout. Works from the
+   * owned render nodes so it still applies after finalizeRenderState() has released the source parts.
    */
   private syncVisibleChildren(): void {
-    const lastMarkdownIndex = this.renderOrder.findLastIndex(key => this.renderNodes.get(key)?.kind === 'markdown');
     const visible = this.renderOrder
-      .filter((key, index) => {
-        if (!this.quiet || !key.includes(':hidden-thinking')) return true;
-        return !this.supersededByLaterContent && index > lastMarkdownIndex;
-      })
+      .filter(key => !this.quiet || !key.includes(':hidden-thinking'))
       .map(key => this.renderNodes.get(key)!.component);
 
     const current = this.contentContainer.children;

@@ -208,7 +208,7 @@ describe('ChatBoundarySpacer', () => {
     expect(lines.join('\n')).toContain('.mastracode/plans/test-plan.md');
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
-  it('keeps only the latest Thinking placeholder and groups described shell calls into one box in quiet mode', () => {
+  it('leaves Thinking out of the chat and groups described shell calls into one box in quiet mode', () => {
     const thinking = () => {
       const component = new AssistantMessageComponent(
         {
@@ -250,8 +250,6 @@ describe('ChatBoundarySpacer', () => {
       expect.stringMatching(/^│ ✓ Searching for stdin changes +\d+ms │$/),
       expect.stringMatching(/^│ ✓ Reading changesets +\d+ms │$/),
       expect.stringMatching(/^╰─+╯$/),
-      '',
-      expect.stringContaining('Thinking...'),
     ]);
   });
   it('sizes a quiet shell box to its widest row, between a narrow default and the full width', () => {
