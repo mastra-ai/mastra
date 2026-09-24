@@ -247,6 +247,7 @@
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
+                      "processorPhase": "llmRequest",
                       "processorExecutor": "legacy",
                       "processorIndex": 0
                     },
@@ -580,6 +581,7 @@
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
+                      "processorPhase": "llmRequest",
                       "processorExecutor": "legacy",
                       "processorIndex": 0
                     },
