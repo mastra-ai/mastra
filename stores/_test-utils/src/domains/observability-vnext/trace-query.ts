@@ -53,6 +53,11 @@ export interface RawTraceQuerySpan {
   environment: string | null;
   organizationId: string | null;
   tags: string[] | null;
+  serviceName?: string | null;
+  executionSource?: string | null;
+  userId?: string | null;
+  sessionId?: string | null;
+  experimentId?: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -125,8 +130,15 @@ const span = (
   environment: 'production',
   organizationId: null,
   tags: null,
+  serviceName: null,
+  executionSource: null,
+  userId: null,
+  sessionId: null,
+  experimentId: null,
   ...overrides,
 });
+
+export { span as makeTraceQuerySpan };
 
 const scoreRecord = (
   cursorId: number,
@@ -2393,15 +2405,32 @@ function matchesScope(
   return scope.resourceId === undefined || record.resourceId === scope.resourceId;
 }
 
-export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
-  const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
-  const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
-  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
-  const roots = currentRoots(data.spans)
-    .filter(root => matchesScope(root, plan.scope))
+export interface TraceQueryRootSelection {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryPredicate;
+  scope?: TraceQueryTenantScope;
+}
+
+/**
+ * The candidate population shared by every trace-scoped read (Decision 2): current, completed,
+ * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
+ */
+export function selectTraceQueryRoots(
+  data: TraceQueryFixtureData,
+  selection: TraceQueryRootSelection,
+): RawTraceQuerySpan[] {
+  const spans = currentSpans(data.spans).filter(span => matchesScope(span, selection.scope));
+  const scores = currentScores(data.scores).filter(score => matchesScope(score, selection.scope));
+  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, selection.scope));
+  return currentRoots(data.spans)
+    .filter(root => matchesScope(root, selection.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
-    .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
-    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
+    .filter(root => root.startedAt >= selection.timeRange.from && root.startedAt < selection.timeRange.to)
+    .filter(root => !selection.where || evaluateTracePredicate(selection.where, root, spans, scores, feedback));
+}
+
+export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
+  const roots = selectTraceQueryRoots(data, plan);
 
   if (plan.result === 'groups') {
     let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
@@ -2472,11 +2501,11 @@ export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedTh
   const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
   const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
   const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
-  const eligibleRoots = currentRoots(data.spans)
-    .filter(root => matchesScope(root, plan.scope))
-    .filter(root => !root.isPending && root.endedAt !== null)
-    .filter(root => root.startedAt >= plan.traces.timeRange.from && root.startedAt < plan.traces.timeRange.to)
-    .filter(root => !plan.traces.where || evaluateTracePredicate(plan.traces.where, root, spans, scores, feedback));
+  const eligibleRoots = selectTraceQueryRoots(data, {
+    timeRange: plan.traces.timeRange,
+    where: plan.traces.where,
+    scope: plan.scope,
+  });
 
   const rootsByThread = new Map<string, RawTraceQuerySpan[]>();
   for (const root of eligibleRoots) {
