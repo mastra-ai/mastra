@@ -18,7 +18,12 @@ function requestBody(init?: RequestInit): Record<string, unknown> {
   throw new Error(`Unexpected MCP request body: ${String(init?.body)}`);
 }
 
-function createGatewayFetch(options: { connections?: Array<Record<string, unknown>> } = {}) {
+function createGatewayFetch(
+  options: {
+    connections?: Array<Record<string, unknown>>;
+    matchAnyConnectionMcpPath?: boolean;
+  } = {},
+) {
   const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string }> = [];
   let initializeCount = 0;
   const connections = options.connections ?? [
@@ -45,7 +50,10 @@ function createGatewayFetch(options: { connections?: Array<Record<string, unknow
     if (url.pathname === '/v2/projects/project-1/connections') {
       return Response.json({ connections });
     }
-    if (url.pathname !== MCP_PATH) return new Response('not found', { status: 404 });
+    const isMcpPath = options.matchAnyConnectionMcpPath
+      ? /^\/v2\/connections\/[^/]+\/mcp$/.test(url.pathname)
+      : url.pathname === MCP_PATH;
+    if (!isMcpPath) return new Response('not found', { status: 404 });
     if (init?.method === 'DELETE') return new Response(null, { status: 204 });
 
     const body = requestBody(init);
@@ -55,6 +63,11 @@ function createGatewayFetch(options: { connections?: Array<Record<string, unknow
     if (method === 'initialize') {
       initializeCount += 1;
       const params = body.params as { protocolVersion?: string };
+      // Derive the session id from the connection segment so multiple
+      // simultaneous MCP clients (one per connection) don't collide on the
+      // SDK's session bookkeeping.
+      const match = url.pathname.match(/\/v2\/connections\/([^/]+)\/mcp/);
+      const sessionId = match ? `catalog-session-${match[1]}` : 'catalog-session-1';
       return Response.json(
         {
           jsonrpc: '2.0',
@@ -65,7 +78,7 @@ function createGatewayFetch(options: { connections?: Array<Record<string, unknow
             serverInfo: { name: 'Catalog MCP Server', version: '1.0.0' },
           },
         },
-        { headers: { 'mcp-session-id': 'catalog-session-1' } },
+        { headers: { 'mcp-session-id': sessionId } },
       );
     }
     if (method === 'notifications/initialized') return new Response(null, { status: 202 });
@@ -159,7 +172,9 @@ describe('catalog-backed MCP providers', () => {
       expect(request.headers.get('accept')).toContain('application/json');
     }
     expect(
-      gateway.protocolRequests.some(request => request.headers.get('mcp-session-id') === 'catalog-session-1'),
+      gateway.protocolRequests.some(request =>
+        (request.headers.get('mcp-session-id') ?? '').startsWith('catalog-session-'),
+      ),
     ).toBe(true);
   });
 
@@ -290,5 +305,81 @@ describe('MCP tool approval', () => {
     expect(discovered).toEqual({});
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('autoApproveTools'));
     warnSpy.mockRestore();
+  });
+});
+
+describe('MCP tool approval — multi-connection wrappers', () => {
+  type ApprovalTool = {
+    requireApproval?: boolean;
+    needsApprovalFn?: (args: unknown, ctx?: unknown) => unknown;
+  };
+  const TWO_CONNECTIONS = [
+    {
+      id: CONNECTION_ID,
+      integrationId: INTEGRATION_ID,
+      status: 'active',
+      connectedByUserId: 'user-1',
+      connectedAt: '2026-09-13T00:00:00.000Z',
+      createdAt: '2026-09-13T00:00:00.000Z',
+      accountLabel: 'Acme',
+    },
+    {
+      id: 'mcp_01K2E7Q11BCDEFGHJKMNPQRSTW',
+      integrationId: INTEGRATION_ID,
+      status: 'active',
+      connectedByUserId: 'user-1',
+      connectedAt: '2026-09-13T00:00:00.000Z',
+      createdAt: '2026-09-13T00:00:00.000Z',
+      accountLabel: 'Globex',
+    },
+  ];
+
+  const discover = async (integrations?: Record<string, { autoApproveTools?: string[] }>) => {
+    const gateway = createGatewayFetch({ connections: TWO_CONNECTIONS, matchAnyConnectionMcpPath: true });
+    const tools = connect({
+      projectId: 'project-1',
+      integrations,
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(tools);
+    return (await tools()) as Record<string, ApprovalTool>;
+  };
+
+  it('preserves requireApproval and needsApprovalFn on wrapped multi-connection MCP tools', async () => {
+    const discovered = await discover();
+    for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
+      expect(discovered[key]!.requireApproval).toBe(true);
+      // Fail-closed on missing connection_name so the approval prompt is
+      // still triggered even when the caller has not selected a connection.
+      expect(await discovered[key]!.needsApprovalFn!({}, {})).toBe(true);
+      // The resolved inner connection still says approval is required.
+      expect(await discovered[key]!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(true);
+    }
+    // The list_connections helper is auto-generated and must never gate the
+    // agent behind an approval prompt.
+    expect(discovered['catalog-mcp_list_connections']!.requireApproval).toBeFalsy();
+  });
+
+  it('does not require approval for a tool the caller placed in autoApproveTools, even through the wrapper', async () => {
+    const discovered = await discover({
+      [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] },
+    });
+    // list_records is auto-approved on every connection: the wrapper's
+    // needsApprovalFn resolves to Acme's inner tool, which returns false.
+    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(false);
+    // update_record still requires approval on every connection.
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(true);
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Globex' }, {})).toBe(
+      true,
+    );
+  });
+
+  it('fails closed when connection_name resolves to an unknown connection', async () => {
+    const discovered = await discover();
+    // Unknown / missing connection_name should require approval regardless of
+    // the inner policy — a caller must never bypass approval by omitting the
+    // routing input.
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Nope' }, {})).toBe(true);
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
   });
 });

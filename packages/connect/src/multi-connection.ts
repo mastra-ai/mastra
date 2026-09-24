@@ -110,11 +110,48 @@ function wrapToolForConnection(input: {
     description?: string;
     inputSchema?: unknown;
     outputSchema?: unknown;
+    requireApproval?: boolean;
+    needsApprovalFn?: (input: unknown, ctx?: unknown) => boolean | Promise<boolean>;
   };
 
   const wrappedInputSchema = extendInputSchemaWithConnectionName(template.inputSchema);
 
-  return createTool({
+  // Preserve the inner tool's approval contract. The MCP client attaches
+  // `requireApproval` and (when the server-level policy is a function)
+  // `needsApprovalFn` to every discovered tool; dropping them here would let
+  // the agent invoke wrapped multi-connection tools without the user prompt
+  // the single-connection path enforces.
+  //
+  // At least one inner connection carries the metadata; check them all in
+  // case a caller-provided allow/disallow filter leaves an empty toolset on
+  // some connections. `requireApproval: true` on ANY inner tool poisons the
+  // wrapper (fail-closed): different connections should never disagree in
+  // practice since they share the same server policy, but we take the
+  // stricter answer if they do.
+  let anyRequireApproval = false;
+  const perConnectionNeedsApprovalFn = new Map<string, (input: unknown, ctx?: unknown) => boolean | Promise<boolean>>();
+  for (const [connectionId, inner] of innerToolsByConnectionId) {
+    const candidate = inner[toolKey] as
+      | {
+          requireApproval?: boolean;
+          needsApprovalFn?: (input: unknown, ctx?: unknown) => boolean | Promise<boolean>;
+        }
+      | undefined;
+    if (!candidate) continue;
+    if (candidate.requireApproval) anyRequireApproval = true;
+    if (typeof candidate.needsApprovalFn === 'function') {
+      perConnectionNeedsApprovalFn.set(connectionId, candidate.needsApprovalFn);
+    }
+  }
+
+  const stripConnectionName = (raw: Record<string, unknown>) => {
+    const connectionName = typeof raw.connection_name === 'string' ? raw.connection_name : '';
+    const { connection_name: _drop, ...rest } = raw;
+    void _drop;
+    return { connectionName, rest };
+  };
+
+  const wrapper = createTool({
     id: template.id ?? toolKey,
     description:
       template.description !== undefined
@@ -122,11 +159,13 @@ function wrapToolForConnection(input: {
         : `Requires connection_name; call ${integrationId}_list_connections to discover valid names.`,
     inputSchema: wrappedInputSchema as never,
     ...(template.outputSchema ? { outputSchema: template.outputSchema as never } : {}),
+    // `requireApproval: true` triggers the agent's approval check; when a
+    // `needsApprovalFn` is attached below the runtime consults that for the
+    // per-call decision.
+    ...(anyRequireApproval ? { requireApproval: true as const } : {}),
     execute: async (inputData, executeContext) => {
-      const rawInput = (inputData ?? {}) as Record<string, unknown>;
-      const connectionName = typeof rawInput.connection_name === 'string' ? rawInput.connection_name : '';
-      const { connection_name: _connectionName, ...rest } = rawInput;
-      void _connectionName;
+      const raw = (inputData ?? {}) as Record<string, unknown>;
+      const { connectionName, rest } = stripConnectionName(raw);
       const connectionId = resolveConnectionName(integrationId, connections, connectionName);
       const inner = innerToolsByConnectionId.get(connectionId);
       const innerTool = inner?.[toolKey] as
@@ -141,6 +180,39 @@ function wrapToolForConnection(input: {
       return (await innerTool.execute(rest, executeContext)) as never;
     },
   });
+
+  // Attach `needsApprovalFn` after construction so the wrapper delegates the
+  // per-call decision to the resolved inner connection. `createTool` does not
+  // expose this as an option — MCPClient and the tool-builder both set it on
+  // the instance directly, so we mirror that pattern here.
+  if (perConnectionNeedsApprovalFn.size > 0) {
+    (wrapper as { needsApprovalFn?: (input: unknown, ctx?: unknown) => boolean | Promise<boolean> }).needsApprovalFn =
+      async (input: unknown, ctx?: unknown) => {
+        const raw = (input ?? {}) as Record<string, unknown>;
+        const { connectionName, rest } = stripConnectionName(raw);
+        // Fail closed on resolution failure: an ambiguous or missing
+        // connection_name should not skip approval.
+        let connectionId: string;
+        try {
+          connectionId = resolveConnectionName(integrationId, connections, connectionName);
+        } catch {
+          return true;
+        }
+        const innerFn = perConnectionNeedsApprovalFn.get(connectionId);
+        // If the resolved connection's inner tool has no per-call predicate,
+        // fall back to the boolean requireApproval on that connection's
+        // inner tool. `anyRequireApproval` gates whether we're here at all.
+        if (!innerFn) {
+          const innerTool = innerToolsByConnectionId.get(connectionId)?.[toolKey] as
+            | { requireApproval?: boolean }
+            | undefined;
+          return !!innerTool?.requireApproval;
+        }
+        return await innerFn(rest, ctx);
+      };
+  }
+
+  return wrapper;
 }
 
 /**

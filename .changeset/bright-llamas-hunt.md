@@ -4,7 +4,7 @@
 
 Added multi-connection support and a string-array shorthand to `@mastra/connect`.
 
-**Multi-connection support:** when a provider has more than one active connection, tools are wrapped with a required `connection_name` input and a new `<provider>_list_connections` tool is exposed so agents can discover and select which connection to use. Single-connection behavior and explicit `connectionId` pins are unchanged.
+**Multi-connection support:** when a provider has more than one active connection, tools are wrapped with a required `connection_name` input and a new `<provider>_list_connections` tool is exposed so agents can discover and select which connection to use. Single-connection behavior and explicit `connectionId` pins are unchanged. The wrapper preserves each inner tool's approval contract (`requireApproval` and, when the MCP server-level policy is a function, `needsApprovalFn`) so approval prompts still fire for multi-connection MCP tools; missing or unknown `connection_name` fails closed and requires approval.
 
 Previously, multi-active provider connections were skipped with a warning.
 
