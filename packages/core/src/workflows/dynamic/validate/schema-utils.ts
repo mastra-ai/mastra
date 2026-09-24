@@ -56,11 +56,13 @@ export function schemaCompatibility(source: unknown, destination: unknown): Sche
   const required = Array.isArray(destination.required)
     ? destination.required.filter((key): key is string => typeof key === 'string')
     : [];
+  // `properties` is data, so only own keys count: `in` would match `constructor`,
+  // `toString` and friends on every source schema.
   for (const key of required) {
-    if (!(key in sourceProperties)) return 'incompatible';
+    if (!Object.hasOwn(sourceProperties, key)) return 'incompatible';
   }
   for (const [key, destinationProperty] of Object.entries(destinationProperties)) {
-    if (!(key in sourceProperties)) continue;
+    if (!Object.hasOwn(sourceProperties, key)) continue;
     if (schemaCompatibility(sourceProperties[key], destinationProperty) === 'incompatible') return 'incompatible';
   }
   return 'compatible';
@@ -71,8 +73,10 @@ export function schemaAtPath(schema: JsonSchema | undefined, path: string): Json
   if (!schema || path === '' || path === '.') return schema;
   let current: unknown = schema;
   for (const segment of path.split('.')) {
-    if (!isRecord(current) || !isRecord(current.properties) || !isRecord(current.properties[segment])) return undefined;
-    current = current.properties[segment];
+    if (!isRecord(current) || !isRecord(current.properties)) return undefined;
+    const next = Object.hasOwn(current.properties, segment) ? current.properties[segment] : undefined;
+    if (!isRecord(next)) return undefined;
+    current = next;
   }
   return current as JsonSchema;
 }
