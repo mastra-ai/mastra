@@ -53,8 +53,8 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
-import { CachingPubSub } from '@mastra/core/events';
-import type { Event, PubSub } from '@mastra/core/events';
+import { CachingPubSub, PubSub } from '@mastra/core/events';
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
@@ -71,17 +71,64 @@ import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
-class InngestWorkflowCachingPubSub extends CachingPubSub {
-  override publish(
-    topic: string,
-    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
-    options?: { localOnly?: boolean },
-  ): Promise<void> {
-    if (topic.startsWith('workflow.events.v2.')) {
-      return super.publish(topic, event, { ...options, localOnly: true });
-    }
+class InngestAgentPubSubRouter extends PubSub {
+  constructor(
+    private readonly defaultPubsub: PubSub,
+    private readonly getAgentPubsub: () => PubSub,
+  ) {
+    super();
+  }
 
-    return super.publish(topic, event, options);
+  private resolve(topic: string): PubSub {
+    if (topic.startsWith('agent.stream.') || topic.startsWith('agent.control.')) {
+      return this.getAgentPubsub();
+    }
+    return this.defaultPubsub;
+  }
+
+  publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
+    return this.resolve(topic).publish(topic, event, options);
+  }
+
+  subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    return this.resolve(topic).subscribe(topic, cb, options);
+  }
+
+  unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).unsubscribe(topic, cb);
+  }
+
+  flush(): Promise<void> {
+    return Promise.all([this.defaultPubsub.flush(), this.getAgentPubsub().flush()]).then(() => undefined);
+  }
+
+  clearTopic(topic: string): Promise<void> {
+    return this.resolve(topic).clearTopic(topic);
+  }
+
+  get supportedModes() {
+    const agentModes = this.getAgentPubsub().supportedModes;
+    return this.defaultPubsub.supportedModes.filter(mode => agentModes.includes(mode));
+  }
+
+  get supportsNativeBatching(): boolean {
+    return this.defaultPubsub.supportsNativeBatching && this.getAgentPubsub().supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
+  }
+
+  getHistory(topic: string, offset?: number): Promise<Event[]> {
+    return this.resolve(topic).getHistory(topic, offset);
+  }
+
+  subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).subscribeWithReplay(topic, cb);
+  }
+
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).subscribeFromOffset(topic, offset, cb);
   }
 }
 
@@ -147,6 +194,9 @@ export interface CreateInngestAgentOptions {
    * Inngest function-level retries for the durable agent loop function. Inngest
    * re-invokes the function when an SDK request fails (e.g. the process restarts
    * mid-run), replaying memoized steps. Defaults to 0.
+   *
+   * All durable agents share the same loop functions, so the value from the first
+   * agent registered with Mastra applies to every durable agent.
    */
   retries?: InngestFlowControlConfig['retries'];
 }
@@ -667,21 +717,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     return history.length;
   }
 
-  // Route workflow event publishes through a CachingPubSub backed by the same cache
-  // as the agent's pubsub. Each InngestWorkflow function (including nested ones)
-  // passes its own workflow-local InngestPubSub as `defaultPubsub`, which we wrap.
-  // This keeps per-workflow event channels (`workflow:<workflowId>:<runId>`)
-  // workflow-local while sharing the cache that `observe()` reads from for
-  // agent-stream replay.
+  // Route agent stream and control events through the exact PubSub exposed to
+  // durable-agent consumers. All other topics keep using each workflow's local
+  // InngestPubSub so ordinary workflow channel isolation is preserved.
   // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
-  (workflow as unknown as InngestWorkflow).__setPubsubFactory(defaultPubsub => {
-    // If the caller already supplied a CachingPubSub upstream, defer to it.
-    if (defaultPubsub instanceof CachingPubSub) return defaultPubsub;
-    // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
-    // events and agent.stream events share the same history backend.
-    getPubsub();
-    return new InngestWorkflowCachingPubSub(defaultPubsub, resolveCache());
-  });
+  const inngestWorkflow = workflow as unknown as InngestWorkflow;
+  inngestWorkflow.__setPubsubFactory(defaultPubsub => new InngestAgentPubSubRouter(defaultPubsub, getPubsub));
+  inngestWorkflow.__setEmitWorkflowEvents(false);
 
   // Lazily resolve cache
   function getCache(): MastraServerCache | undefined {
