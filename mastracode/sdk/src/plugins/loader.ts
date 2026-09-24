@@ -163,6 +163,7 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   const url = pathToFileURL(entryPath);
   const contentHash = createHash('sha1').update(fs.readFileSync(entryPath)).digest('hex');
   url.searchParams.set('contentHash', contentHash);
+  url.searchParams.set('mtimeNs', fs.statSync(entryPath, { bigint: true }).mtimeNs.toString());
   const mod = (await import(url.href)) as { default?: unknown; plugin?: unknown };
   return validatePluginExport(mod.default ?? mod.plugin);
 }
