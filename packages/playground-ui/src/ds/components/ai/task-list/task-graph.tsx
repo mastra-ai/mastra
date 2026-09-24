@@ -17,13 +17,13 @@ const ink: Record<TaskStatus, string> = {
   pending: 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)',
 };
 
-const connectorPath = (upper: TaskStatus, lower: TaskStatus, index: number, singleLane: boolean) => {
+const connectorPathData = (upper: TaskStatus, lower: TaskStatus, index: number, singleLane: boolean) => {
   const fromY = rowCenter(index);
   const toY = rowCenter(index + 1);
   const midY = (fromY + toY) / 2;
   const fromX = laneX(upper, singleLane);
   const toX = laneX(lower, singleLane);
-  return `path("M ${fromX} ${fromY} C ${fromX} ${midY} ${toX} ${midY} ${toX} ${toY}")`;
+  return `M ${fromX} ${fromY} C ${fromX} ${midY} ${toX} ${midY} ${toX} ${toY}`;
 };
 
 interface TaskGraphSegmentProps {
@@ -35,13 +35,15 @@ interface TaskGraphSegmentProps {
 }
 
 const TaskGraphSegment = ({ upper, lower, index, graphId, singleLane }: TaskGraphSegmentProps) => {
-  const d = connectorPath(upper, lower, index, singleLane);
+  const pathData = connectorPathData(upper, lower, index, singleLane);
+  const d = `path("${pathData}")`;
   const reached = upper !== 'pending' && lower !== 'pending';
   const touchesActive = upper === 'in_progress' || lower === 'in_progress';
 
   return (
     <g>
       <path
+        d={pathData}
         fill="none"
         strokeWidth={1}
         mask={`url(#${graphId}-future)`}
@@ -49,6 +51,7 @@ const TaskGraphSegment = ({ upper, lower, index, graphId, singleLane }: TaskGrap
         style={{ d, stroke: ink.pending }}
       />
       <path
+        d={pathData}
         fill="none"
         strokeWidth={1}
         pathLength={1}
