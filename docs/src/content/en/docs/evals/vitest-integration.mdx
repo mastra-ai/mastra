@@ -33,27 +33,45 @@ export default defineConfig({
 
 The setup file registers the custom matchers on `expect`. Alternatively, call `registerEvalMatchers()` from `@mastra/evals/vitest` in your own setup file.
 
+## Resolving targets from the Mastra instance
+
+Get the `target` (and any registered scorers) from your `Mastra` instance with `mastra.getAgent()`, `mastra.getWorkflow()`, and `mastra.getScorer()` instead of importing the agent or workflow file directly. A directly imported agent or workflow has no Mastra instance attached, so anything that reaches into the registry at runtime fails. For example, a workflow step that calls `mastra.getAgent('weatherAgent')` throws because `mastra` is `undefined`, and the same applies to child workflows, `.agent('agent-id')` references by string, and tools that call `mastra.getWorkflow()`. Registered targets also attach the configured `storage`, which is what lets scores persist and trace-based trajectory scoring work. `runEvals` logs a warning when the target isn't registered.
+
+The examples below look up `answerRelevancyScorer` and `trajectoryAccuracyScorer` with `mastra.getScorer()`, so register them on the `Mastra` instance first:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import {
+  createAnswerRelevancyScorer,
+  createTrajectoryAccuracyScorerCode,
+} from '@mastra/evals/scorers/prebuilt'
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  workflows: { weatherWorkflow },
+  scorers: {
+    answerRelevancyScorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+    trajectoryAccuracyScorer: createTrajectoryAccuracyScorerCode(),
+  },
+})
+```
+
 ## Asserting on a dataset with `expectEvals`
 
 `expectEvals` runs a `runEvals` evaluation inside a regular `test()` and asserts a minimum pass rate. It accepts the same configuration as `runEvals`: a `target` agent or workflow, `data` items, and `scorers`, `gates`, or thresholds. Gates score each item pass/fail, so `toPass(0.8)` requires at least 80% of items to pass every gate. Scorer thresholds still compare the average score across items and must pass regardless of the rate:
 
-```typescript title="src/mastra/agents/capitals.eval.test.ts"
+```typescript title="tests/weather-agent.eval.test.ts"
 import { test } from 'vitest'
 import { expectEvals } from '@mastra/evals/vitest'
-import { capitalsAgent } from './capitals-agent'
-import { containsGroundTruth } from '../scorers'
-import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt'
+import { checks } from '@mastra/evals/checks'
+import { mastra } from '../src/mastra'
 
-test('capitals agent answers with the expected city', { timeout: 60_000 }, async () => {
+test('weather agent calls the tool and answers relevantly', { timeout: 60_000 }, async () => {
   await expectEvals({
-    target: capitalsAgent,
-    data: [
-      { input: 'What is the capital of France?', groundTruth: 'Paris' },
-      { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
-      { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
-    ],
-    gates: [containsGroundTruth],
-    scorers: [{ scorer: createKeywordCoverageScorer(), threshold: 0.4 }],
+    target: mastra.getAgent('weatherAgent'),
+    data: [{ input: "What's the weather in London?" }],
+    gates: [checks.calledTool('weatherTool'), checks.noToolErrors(), checks.includes('London')],
+    scorers: [{ scorer: mastra.getScorer('answerRelevancyScorer'), threshold: 0.7 }],
   }).toPass(0.8)
 })
 ```
@@ -66,21 +84,21 @@ LLM-backed evals are far slower than Vitest's default 5-second timeout, so pass 
 
 `expectEval` is the single-item variant: `data` is one item instead of an array. Combine it with `test.for` (or `test.each`) to get one test (and one reporter entry) per data item instead of one aggregated result per dataset:
 
-```typescript title="src/mastra/agents/capitals.matrix.eval.test.ts"
+```typescript title="tests/weather-agent.matrix.eval.test.ts"
 import { test } from 'vitest'
 import { expectEval } from '@mastra/evals/vitest'
-import { capitalsAgent } from './capitals-agent'
-import { containsGroundTruth } from '../scorers'
+import { checks } from '@mastra/evals/checks'
+import { mastra } from '../src/mastra'
 
 test.for([
-  { input: 'What is the capital of France?', groundTruth: 'Paris' },
-  { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
-  { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
-])('capitals agent: $input', { timeout: 60_000 }, async item => {
+  { input: "What's the weather in London?", groundTruth: 'London' },
+  { input: "What's the weather in Tokyo?", groundTruth: 'Tokyo' },
+  { input: "What's the weather in Sydney?", groundTruth: 'Sydney' },
+])('weather agent: $input', { timeout: 60_000 }, async item => {
   await expectEval({
-    target: capitalsAgent,
+    target: mastra.getAgent('weatherAgent'),
     data: item,
-    gates: [containsGroundTruth],
+    gates: [checks.calledTool('weatherTool'), checks.includes(item.groundTruth)],
   }).toPass()
 })
 ```
@@ -91,23 +109,23 @@ Each item passes or fails independently, so a single regression shows up as one 
 
 For finer-grained control, call `runEvals` directly inside a regular `test()` and use the custom matchers on the result:
 
-```typescript title="src/mastra/agents/support-agent.eval.test.ts"
+```typescript title="tests/weather-agent.matchers.eval.test.ts"
 import { test, expect } from 'vitest'
 import { runEvals } from '@mastra/core/evals'
-import { supportAgent } from './support-agent'
-import { relevancyScorer, noRefusalScorer } from '../scorers'
+import { checks } from '@mastra/evals/checks'
+import { mastra } from '../src/mastra'
 
-test('support agent quality', { timeout: 60_000 }, async () => {
+test('weather agent quality', { timeout: 60_000 }, async () => {
   const result = await runEvals({
-    target: supportAgent,
-    data: [{ input: 'How do I update my payment method?' }],
-    scorers: [relevancyScorer],
-    gates: [noRefusalScorer],
+    target: mastra.getAgent('weatherAgent'),
+    data: [{ input: "What's the weather in London?" }],
+    scorers: [mastra.getScorer('answerRelevancyScorer')],
+    gates: [checks.noToolErrors()],
   })
 
   expect(result).toHaveVerdict('passed')
   expect(result).toPassGates()
-  expect(result).toHaveScoreAbove('relevancy', 0.7)
+  expect(result).toHaveScoreAbove('answer-relevancy-scorer', 0.7)
 })
 ```
 
@@ -118,6 +136,49 @@ Available matchers:
 - `toPassGates()`: asserts all gates passed. Fails when no gates were configured.
 - `toPassThresholds()`: asserts all scorer thresholds passed. Fails when no thresholds were configured.
 
+## Evaluating a workflow
+
+Workflows are valid targets too. Use a `WorkflowScorerConfig` object for `scorers` to score the workflow output, individual steps, or the step execution trajectory, and reference nested scores with dot-paths in the matchers:
+
+```typescript title="tests/weather-workflow.eval.test.ts"
+import { test, expect } from 'vitest'
+import { runEvals } from '@mastra/core/evals'
+import { mastra } from '../src/mastra'
+
+test('weather workflow runs fetch-weather then plan-activities', { timeout: 60_000 }, async () => {
+  const result = await runEvals({
+    target: mastra.getWorkflow('weatherWorkflow'),
+    data: [
+      {
+        input: { city: 'London' },
+        expectedTrajectory: {
+          steps: [
+            { stepType: 'workflow_step', name: 'fetch-weather' },
+            { stepType: 'workflow_step', name: 'plan-activities' },
+          ],
+        },
+      },
+      {
+        input: { city: 'Tokyo' },
+        expectedTrajectory: {
+          steps: [
+            { stepType: 'workflow_step', name: 'fetch-weather' },
+            { stepType: 'workflow_step', name: 'plan-activities' },
+          ],
+        },
+      },
+    ],
+    scorers: {
+      trajectory: [mastra.getScorer('trajectoryAccuracyScorer')],
+    },
+  })
+
+  expect(result).toHaveScoreAbove('trajectory.code-trajectory-accuracy-scorer', 0.9)
+})
+```
+
+The `plan-activities` step in this workflow calls `mastra.getAgent('weatherAgent')` at runtime, which only works because the target was resolved with `mastra.getWorkflow()`. See the [`runEvals` reference](/reference/evals/run-evals#workflow-evaluation) for the full `WorkflowScorerConfig` shape.
+
 ## Reading the reporter output
 
 `MastraEvalsReporter` prints a score table for every eval test after the run completes:
@@ -125,9 +186,11 @@ Available matchers:
 ```text
  Mastra Evals
 
-✓ capitals agent answers with the expected city (3 items)
-   contains-ground-truth (gate)                    1.0  ✓
-   keyword-coverage-scorer (threshold: min 0.4)    1.0  ✓
+✓ weather agent calls the tool and answers relevantly (1 item)
+   check-called-tool (gate)                        1.0  ✓
+   check-no-tool-errors (gate)                     1.0  ✓
+   check-includes (gate)                           1.0  ✓
+   answer-relevancy-scorer (threshold: min 0.7)    0.9  ✓
 
  Eval runs: 1 (1 passed)
 ```
