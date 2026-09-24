@@ -61,7 +61,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'scope',
     type: "'resource' | 'thread'",
     description:
-      "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` (experimental) shares observations across all threads for a resource, enabling cross-conversation memory.",
+      "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` is deprecated and will be removed in a future release. It shares observations across all threads for a resource and works much worse than thread scope for prompt caching and agent understanding. For cross-thread continuity, use thread scope with `retrieval` or resource-scoped working memory. See [resource scope (deprecated)](/docs/memory/observational-memory#resource-scope-deprecated).",
     isOptional: true,
     defaultValue: "'thread'",
   },
@@ -185,7 +185,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'maxTokensPerBatch',
             type: 'number',
             description:
-              'Maximum tokens per batch when observing multiple threads in resource scope. Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.',
+              'Maximum tokens per batch when observing multiple threads in resource scope (deprecated). Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.',
             isOptional: true,
             defaultValue: '10000',
           },
@@ -543,7 +543,7 @@ const memory = new Memory({
 
 Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
 
-### Resource scope with custom thresholds (experimental)
+### Custom thresholds
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
@@ -558,7 +558,6 @@ export const agent = new Agent({
     options: {
       observationalMemory: {
         model: 'google/gemini-2.5-flash',
-        scope: 'resource',
         observation: {
           messageTokens: 20_000,
         },
@@ -752,7 +751,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering isn't supported with `scope: 'resource'` and is automatically disabled in resource scope.
+Async buffering isn't supported with the deprecated `scope: 'resource'` and is automatically disabled in resource scope.
 
 :::
 
@@ -1122,7 +1121,6 @@ const om = new ObservationalMemory({
   storage: storage.stores.memory!,
   memory,
   model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
-  scope: 'resource',
   observation: {
     messageTokens: 20_000,
   },

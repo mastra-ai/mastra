@@ -1,5 +1,93 @@
 # @mastra/core
 
+## 1.71.0
+
+### Minor Changes
+
+- Added per-endpoint discovery features that observability storage can declare from `getFeatures()`: `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`, `environment-discovery`, `tag-discovery` and `metric-discovery`. The in-memory observability store now declares `metrics`, `logs` and discovery support. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  Custom observability stores can declare what they support so Studio only calls those APIs:
+
+  ```ts
+  import { ObservabilityStorage } from '@mastra/core/storage';
+
+  class MyObservabilityStore extends ObservabilityStorage {
+    override getFeatures() {
+      return ['logs', 'entity-name-discovery', 'tag-discovery'] as const;
+    }
+  }
+  ```
+
+- Added `planTraceAggregate()`. It checks a parsed `aggregateTraces()` request and returns a `TrustedTraceAggregatePlan` that any storage backend can execute without re-validating the request. ([#24868](https://github.com/mastra-ai/mastra/pull/24868))
+
+  ```ts
+  import { parseTraceAggregateRequest, planTraceAggregate } from '@mastra/core/storage';
+
+  const plan = planTraceAggregate(parseTraceAggregateRequest(request), {
+    scope: { organizationId: 'org_123' },
+  });
+  // plan.dimensions, plan.measures, plan.having, plan.orderBy, plan.limit, plan.where
+  ```
+
+  **Validation rules**
+
+  - `timeRange` and `where` are validated exactly like `queryTraces()`.
+  - `groupBy` accepts only supported dimensions.
+  - `countDistinct` accepts `traceId` or any field that `groupBy` accepts.
+  - `having` can reference a requested measure or `count`.
+  - `orderBy` can reference a requested measure, a requested dimension, or `count`. `bucket` is not an ordering target.
+  - The time range can be at most 365 days.
+  - An `interval` can touch at most 1000 UTC-aligned buckets, and `limit × buckets` can be at most 10,000 rows.
+
+  `having`, `orderBy`, and `limit` apply to groups using measures computed over the whole time range; with an `interval`, each returned group is a complete series in bucket order. The plan's JSDoc spells this out for backends.
+
+  Invalid requests throw `TraceQueryValidationError` with the same issue codes and JSON paths as `planTraceQuery()`. The new `too_many_buckets` code names the smallest permitted interval; `too_many_rows` asks the caller to lower `limit` or widen `interval`.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363))
+
+- Tools now start as soon as their own arguments are complete, instead of waiting for the model to finish streaming the whole step. This is on by default and removes seconds of idle time from steps that call several tools. ([#25005](https://github.com/mastra-ai/mastra/pull/25005))
+
+  ```ts
+  // Default: each tool starts as soon as its call is complete.
+  const eager = await agent.stream('Compare the weather in Paris and Rome');
+
+  // Opt out to restore the previous scheduling.
+  const deferred = await agent.stream('Compare the weather in Paris and Rome', {
+    eagerToolExecution: false,
+  });
+  ```
+
+  These calls still wait for the model to finish: tools that need approval, declare a suspend schema, run on the provider or client, or run in the background, and runs that use the `called` concurrency strategy or output processors that run after the stream. A tool that already finished is never run again and its result is always kept, including on retry, fallback, and abort.
+
+  A tool still running when an attempt is retried, falls back, or is aborted finishes first, and its result is kept.
+
+  A tool that calls `suspend()` at runtime also runs once: the run suspends instead of retrying the model. See the `stream()` reference for the full rules.
+
+- Added a `feedback` observability storage feature so clients can identify whether a store supports the feedback APIs. Storage adapters that implement the feedback methods declare the feature to advertise support. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  import { ObservabilityStorage } from '@mastra/core/storage';
+
+  class MyObservabilityStore extends ObservabilityStorage {
+    public getFeatures() {
+      return ['feedback'] as const;
+    }
+  }
+  ```
+
+- Fixed the Workspace example to use current providers and distinguish local paths from cloud mount paths. ([#24988](https://github.com/mastra-ai/mastra/pull/24988))
+
+- Fixed a denial-of-service risk in dataset schema validation. Regex `pattern` and `patternProperties` in dataset input and ground truth schemas now run on a linear-time (RE2) engine, so a crafted pattern can no longer freeze the server. Fixes #24981. ([#25044](https://github.com/mastra-ai/mastra/pull/25044))
+
+  **Behavior changes**
+
+  - Patterns using syntax RE2 cannot run, such as lookarounds (`(?=...)`, `(?<!...)`) and backreferences (`\1`), are rejected with a `DATASET_SCHEMA_PATTERN_UNSUPPORTED` error when the dataset is created or its schema is updated. Escapes such as `\uXXXX` and `\cX` keep working.
+  - Matching is Unicode-aware: `.` matches a whole code point (so `^.$` matches `😀`), and `\p{L}` is a Unicode class even without the `u` flag.
+
+  To migrate, rewrite affected patterns without lookarounds or backreferences, for example replace `pattern: '^(?=.*\\d).+$'` with `pattern: '\\d'`, then update the dataset schema.
+
 ## 1.71.0-alpha.1
 
 ### Minor Changes
