@@ -1,3 +1,4 @@
+import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { handleBrowserCommand } from '../browser.js';
@@ -440,6 +441,19 @@ describe('handleBrowserCommand', () => {
       const out = statusOutput(ctx);
       expect(out).not.toContain('Pending changes');
       expect(out).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+    });
+
+    it('never stores the Browserbase API key in session state', async () => {
+      const { ctx, settings, setState } = createContext();
+      settings.browser.enabled = true;
+      settings.browser.stagehand = { env: 'BROWSERBASE', apiKey: 'bb-secret', projectId: 'proj' };
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['on']);
+
+      const stored = setState.mock.calls.at(-1)?.[0] as { activeBrowserSettings?: BrowserSettings };
+      expect(stored.activeBrowserSettings?.stagehand).toEqual({ env: 'BROWSERBASE', projectId: 'proj' });
+      expect(JSON.stringify(stored)).not.toContain('bb-secret');
     });
 
     it('accepts info as an alias for status', async () => {

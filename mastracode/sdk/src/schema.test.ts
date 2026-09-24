@@ -77,7 +77,6 @@ describe('stateSchema', () => {
       scope: 'thread' as const,
       stagehand: {
         env: 'LOCAL' as const,
-        apiKey: 'bb-key',
         projectId: 'proj',
         model: 'anthropic/claude-sonnet-4-5',
         preserveUserDataDir: true,
@@ -88,6 +87,19 @@ describe('stateSchema', () => {
     const parsed = stateSchema.parse({ activeBrowserSettings: active });
 
     expect(parsed.activeBrowserSettings).toEqual(active);
+  });
+
+  it('strips the Browserbase API key from activeBrowserSettings', () => {
+    // Session state is readable by session clients; credentials must not leak into it.
+    const parsed = stateSchema.parse({
+      activeBrowserSettings: {
+        enabled: true,
+        provider: 'stagehand',
+        stagehand: { env: 'BROWSERBASE', apiKey: 'bb-key', projectId: 'proj' },
+      },
+    });
+
+    expect(parsed.activeBrowserSettings?.stagehand).toEqual({ env: 'BROWSERBASE', projectId: 'proj' });
   });
 
   it('preserves activeBrowserModel so status reports the model the browser launched with', () => {

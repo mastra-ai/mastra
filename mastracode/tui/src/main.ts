@@ -8,7 +8,12 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
-import { createBrowserFromSettings, loadSettings, resolveStagehandModel } from '@mastra/code-sdk/onboarding/settings';
+import {
+  createBrowserFromSettings,
+  loadSettings,
+  resolveStagehandModel,
+  toActiveBrowserSettings,
+} from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import {
   stopProcessMemoryDiagnosticsWithTimeout,
@@ -175,7 +180,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
         controller.setBrowser(browser);
         void session.state
           .set({
-            activeBrowserSettings: settings.browser,
+            activeBrowserSettings: toActiveBrowserSettings(settings.browser),
             activeBrowserModel: resolveStagehandModel(settings.browser),
           } as any)
           .catch(() => {});

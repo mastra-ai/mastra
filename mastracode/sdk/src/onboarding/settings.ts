@@ -1486,6 +1486,16 @@ export interface ResolvedStagehandModel {
  * Resolve which model Stagehand will use and why, without creating a browser.
  * Mirrors the selection in `createBrowserFromSettings` so the UI can show it.
  */
+/**
+ * Snapshot of browser settings safe to store in session state (which session clients can read).
+ * Strips credentials; keeps everything `/browser status` needs for drift detection.
+ */
+export function toActiveBrowserSettings(settings: BrowserSettings): BrowserSettings {
+  if (!settings.stagehand) return { ...settings };
+  const { apiKey: _apiKey, ...stagehand } = settings.stagehand;
+  return { ...settings, stagehand };
+}
+
 export function resolveStagehandModel(
   settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
   authStorage: AuthStorage = new AuthStorage(),

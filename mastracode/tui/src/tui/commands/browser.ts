@@ -14,6 +14,7 @@ import {
   resolveStagehandModel,
   saveSettings,
   setProfileProvider,
+  toActiveBrowserSettings,
   VIEWPORT_PRESETS,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -299,7 +300,7 @@ function applyBrowserToAgents(
   // Track the active browser settings in controller state, plus the model the
   // browser was actually created with (credentials may change afterwards).
   void ctx.state.session.state.set({
-    [ACTIVE_BROWSER_KEY]: browserSettings,
+    [ACTIVE_BROWSER_KEY]: browserSettings ? toActiveBrowserSettings(browserSettings) : undefined,
     [ACTIVE_BROWSER_MODEL_KEY]: browserSettings?.enabled ? resolveStagehandModel(browserSettings) : undefined,
   } as any);
 }

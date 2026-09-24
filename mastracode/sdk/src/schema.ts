@@ -116,7 +116,6 @@ export interface MastraCodeState {
     scope?: 'shared' | 'thread';
     stagehand?: {
       env: 'LOCAL' | 'BROWSERBASE';
-      apiKey?: string;
       projectId?: string;
       model?: string;
       preserveUserDataDir?: boolean;
@@ -251,7 +250,6 @@ export const stateSchema = z.object({
       stagehand: z
         .object({
           env: z.enum(['LOCAL', 'BROWSERBASE']),
-          apiKey: z.string().optional(),
           projectId: z.string().optional(),
           model: z.string().optional(),
           preserveUserDataDir: z.boolean().optional(),

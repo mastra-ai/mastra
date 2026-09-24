@@ -8,7 +8,12 @@ vi.mock('../../auth/storage.js', () => ({
   },
 }));
 
-import { createBrowserFromSettings, resolveStagehandModel, STAGEHAND_CODEX_FALLBACK_MODEL } from '../settings.js';
+import {
+  createBrowserFromSettings,
+  resolveStagehandModel,
+  STAGEHAND_CODEX_FALLBACK_MODEL,
+  toActiveBrowserSettings,
+} from '../settings.js';
 import type { BrowserSettings } from '../settings.js';
 
 function stagehandSettings(stagehand: Record<string, unknown>): BrowserSettings {
@@ -101,5 +106,24 @@ describe('resolveStagehandModel', () => {
       modelName: undefined,
       source: 'stagehand-default',
     });
+  });
+});
+
+describe('toActiveBrowserSettings', () => {
+  it('drops the Browserbase API key but keeps everything drift detection needs', () => {
+    const settings: BrowserSettings = {
+      enabled: true,
+      provider: 'stagehand',
+      profile: '/tmp/profile',
+      stagehand: { env: 'BROWSERBASE', apiKey: 'bb-key', projectId: 'proj', model: 'openai/gpt-5.5' },
+    };
+
+    expect(toActiveBrowserSettings(settings)).toEqual({
+      enabled: true,
+      provider: 'stagehand',
+      profile: '/tmp/profile',
+      stagehand: { env: 'BROWSERBASE', projectId: 'proj', model: 'openai/gpt-5.5' },
+    });
+    expect(settings.stagehand?.apiKey).toBe('bb-key');
   });
 });
