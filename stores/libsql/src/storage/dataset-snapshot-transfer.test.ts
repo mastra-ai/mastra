@@ -124,18 +124,32 @@ async function raceWorkerImports(
   const results = workers.map(worker => {
     let markReady!: () => void;
     ready.push(new Promise<void>(resolve => (markReady = resolve)));
-    return new Promise<DatasetSnapshotImportResult>((resolve, reject) => {
+    const result = new Promise<DatasetSnapshotImportResult>((resolve, reject) => {
+      // Release the ready barrier on every terminal event so a worker that fails during
+      // setup surfaces its error instead of stalling the barrier until the test timeout.
+      const fail = (error: Error) => {
+        markReady();
+        reject(error);
+      };
       worker.on('message', (message: WorkerMessage) => {
         if ('ready' in message) markReady();
         else if (message.ok) resolve(message.result);
-        else reject(new Error(message.error));
+        else fail(new Error(message.error));
       });
-      worker.once('error', reject);
+      worker.once('error', fail);
+      worker.once('exit', code => fail(new Error(`Worker exited with code ${code} before reporting a result`)));
     });
+    // Observed through Promise.all below; this only prevents an unhandled rejection meanwhile.
+    result.catch(() => {});
+    return result;
   });
-  await Promise.all(ready);
-  for (const worker of workers) worker.postMessage('start');
-  return Promise.all(results);
+  try {
+    await Promise.all(ready);
+    for (const worker of workers) worker.postMessage('start');
+    return await Promise.all(results);
+  } finally {
+    await Promise.all(workers.map(worker => worker.terminate()));
+  }
 }
 
 // Independent stores stand in for separate processes sharing one database file. They
