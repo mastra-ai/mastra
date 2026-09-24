@@ -106,7 +106,9 @@ describe.skipIf(!process.env.MONGODB_REPLICA_SET_URL)('MongoDB dataset snapshot 
   });
 });
 
-describe('MongoDB standalone snapshot rejection', () => {
+// `test:fidelity` runs this file against the replica set only; the plain `vitest run` pass
+// covers standalone rejection against the default server.
+describe.skipIf(!!process.env.MONGODB_REPLICA_SET_URL)('MongoDB standalone snapshot rejection', () => {
   const dbName = `snapshot_standalone_${randomUUID().replaceAll('-', '')}`;
   const client = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017');
   const connector = new MongoDBConnector({ client, dbName, handler: undefined });
