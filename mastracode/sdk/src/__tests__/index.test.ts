@@ -1709,6 +1709,33 @@ describe('createMastraCode', () => {
     expect(controllerEmitMock).not.toHaveBeenCalled();
   });
 
+  it('lets the host prepare the request context of a notification wake', async () => {
+    controllerStateMock = { factoryOrgId: 'org-1' };
+    const prepareNotificationRequestContext = vi.fn(({ requestContext, session }) => {
+      requestContext.set('user', { workosId: session.ownerId, organizationId: session.state.factoryOrgId });
+    });
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ prepareNotificationRequestContext });
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+
+    const decision = await decide({
+      record: { priority: 'medium', source: 'github', resourceId: 'project-resource', threadId: 'notification-thread' },
+      threadState: 'idle',
+      now: new Date('2026-09-15T00:00:00.000Z'),
+    });
+
+    expect(prepareNotificationRequestContext).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: 'project-resource', threadId: 'notification-thread' }),
+    );
+    const { session } = prepareNotificationRequestContext.mock.calls[0]![0];
+    expect(decision.streamOptions.requestContext.get('user')).toEqual({
+      workosId: session.ownerId,
+      organizationId: 'org-1',
+    });
+  });
+
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),

@@ -68,6 +68,7 @@ import { TelemetryRoutes } from './routes/telemetry.js';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
+  primeTenantCredentialsForRequestContext,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
 import { resolveFactorySessionAddress } from './rules/binding-context.js';
@@ -91,6 +92,7 @@ import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { hasResolvedOrg } from './session/org-seed.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -918,6 +920,15 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // A notification wake has no signed-in request, so tenant credential
+        // resolution would fail closed. Run it as the session's owner in the
+        // session's org, the same identity subscription deliveries use.
+        prepareNotificationRequestContext: async ({ requestContext, session }) => {
+          const orgId = session.state.factoryOrgId;
+          if (!session.ownerId || !hasResolvedOrg(orgId) || requestContext.get('user')) return;
+          requestContext.set('user', { workosId: session.ownerId, organizationId: orgId });
+          await primeTenantCredentialsForRequestContext(requestContext);
+        },
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,

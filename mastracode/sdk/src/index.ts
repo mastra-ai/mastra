@@ -359,6 +359,17 @@ export interface MastraCodeConfig {
    * uses the configured PubSub when enabled.
    */
   crossAgentSignals?: boolean;
+  /**
+   * Prepare the request context a notification wake runs under. A wake has no
+   * inbound request, so hosts that resolve credentials per tenant use this to
+   * attach the owning session's identity before the run starts.
+   */
+  prepareNotificationRequestContext?: (args: {
+    requestContext: RequestContext;
+    session: { ownerId: string | undefined; state: Partial<MastraCodeState> };
+    resourceId: string;
+    threadId: string;
+  }) => void | Promise<void>;
 }
 
 export function createAuthStorage() {
@@ -849,6 +860,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       },
     };
     requestContext.set('controller', agentControllerContext);
+    await config?.prepareNotificationRequestContext?.({
+      requestContext,
+      session: { ownerId: session.identity.getOwnerId(), state: getNotificationState() },
+      resourceId,
+      threadId,
+    });
 
     return {
       memory: { thread: threadId, resource: resourceId },
