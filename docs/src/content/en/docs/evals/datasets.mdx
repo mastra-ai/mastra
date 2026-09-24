@@ -174,7 +174,9 @@ if (!result.datasetExists) {
 }
 
 const copy = await destination.datasets.get({ id: result.receipt.datasetId })
-console.log((await copy.listItems()).items.length) // 1
+const listed = await copy.listItems({ page: 0 })
+const items = Array.isArray(listed) ? listed : listed.items
+console.log(items.length) // 1
 ```
 
 ### Choose the captured version
