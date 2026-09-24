@@ -346,6 +346,36 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect((snapshotAfterStartReturned?.snapshot as any)?.status).not.toBe('pending');
     });
 
+    it('preserves null input in the durable dispatch snapshot', async () => {
+      const workflow = createWorkflow({
+        id: 'null-input-startAsync-workflow',
+        inputSchema: z.null(),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.null(),
+            outputSchema: z.object({}),
+            execute: vi.fn().mockResolvedValue({}),
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'null-input-startAsync-workflow': workflow } });
+
+      const run = await workflow.createRun();
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      await run.startAsync({ inputData: null });
+
+      const dispatchSnapshot = persistSnapshot.mock.calls.find(
+        ([args]) => (args.snapshot as any).status === 'waiting',
+      )?.[0].snapshot as any;
+      expect(dispatchSnapshot.context).toEqual({ input: null });
+    });
+
     it('rejects without executing when onStart fails', async () => {
       const execute = vi.fn().mockResolvedValue({});
       const workflow = createWorkflow({

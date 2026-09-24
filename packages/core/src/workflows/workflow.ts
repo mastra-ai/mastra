@@ -3932,7 +3932,7 @@ export class Run<
           runId: this.runId,
           status: 'waiting',
           value: initialStateToUse as Record<string, any>,
-          context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+          context: inputDataToUse !== undefined ? ({ input: inputDataToUse } as any) : ({} as any),
           requestContext: (requestContext ?? new RequestContext()).toJSON(),
           activePaths: [0],
           activeStepsPath: {},
