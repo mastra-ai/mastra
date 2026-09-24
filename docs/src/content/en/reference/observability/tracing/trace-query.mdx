@@ -251,7 +251,7 @@ Both routes require `observability:read` and use the configured observability st
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
 | `group` | No | **Deprecated.** Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. Use `queryTraceThreads()` for new code. |
-| `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group` or in delta mode. |
+| `orderBy` | No | One item ordering ungrouped results by `startedAt`, `endedAt`, or `modelCost`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group` or in delta mode. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
 | `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
 | `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
@@ -298,7 +298,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | - | - | - |
 | Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
-| Trace | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Trace | `startedAt`, `endedAt`, `durationMs`, `modelCost` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
 | Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
@@ -312,7 +312,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags).
 
-String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score`, `durationMs`, and `modelCost`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
 ### Filter by root duration
 
@@ -329,6 +329,30 @@ const slowRootTraces = {
 This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines the current root span and current child spans, so a long child can satisfy that clause even when its root is shorter.
 
 Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
+
+### Filter and order by model cost
+
+At trace scope, `modelCost` is the complete cost, in USD, of every model call in the trace. The store calculates it from the trace's model-usage metric events before filtering, ordering, and pagination, so a page never contains a partial figure:
+
+```typescript
+const expensiveLowFactuality = {
+  timeRange,
+  where: {
+    op: 'and',
+    args: [
+      { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+      { op: 'gt', left: { path: 'modelCost' }, right: { literal: 1 } },
+    ],
+  },
+  orderBy: [{ field: 'modelCost', direction: 'desc' }],
+}
+```
+
+Each model call contributes the cost recorded on its total-token metrics, `mastra_model_total_input_tokens` and `mastra_model_total_output_tokens`. Detail metrics such as cache or reasoning tokens price the same tokens again, so they don't count. Retried exports of the same metric event count once. A gateway-reported cost counts once through its carrier metric.
+
+The cost is unavailable when any model call in the trace is unpriced, records a cost error such as a missing model price or a partial cost, reports a negative or non-finite value, or is priced in a unit other than USD. A trace without model metrics also has no cost. An unavailable cost never becomes `0`: it satisfies `notExists`, `ne`, and `notIn`, fails every other operator, and sorts after every priced trace in both `asc` and `desc` order. Ties break on `traceId`.
+
+Stores advertise support through the `trace-query-model-cost` feature. Requests that filter or order by `modelCost` against a store without it return `501`.
 
 ### Filter by span properties
 
@@ -630,6 +654,7 @@ const result = await mastraClient.queryTraces({
     "errorCounts": { "total": 2, "llm": 1, "tool": 1 },
     "promptCacheReadTokens": 1200,
     "promptCacheCreationTokens": 300,
+    "modelCost": 0.0421,
     "feedback": [
       {
         "feedbackId": "feedback-1",
@@ -665,6 +690,7 @@ const result = await mastraClient.queryTraces({
 | `timeToFirstTokenMs` | Milliseconds from that model span's start to its recorded first-token time. `null` when the span has no first-token time. |
 | `errorCounts` | Current spans with an error: `total` counts every span including the root, `llm` counts model spans, and `tool` counts tool-call spans. |
 | `promptCacheReadTokens`, `promptCacheCreationTokens` | Sums of the auto-extracted `mastra_model_input_cache_read_tokens` and `mastra_model_input_cache_write_tokens` metrics recorded on the trace's current spans. `null` when no metric row exists. `0` is a recorded value. |
+| `modelCost` | The complete model cost in USD, calculated as described in [Filter and order by model cost](#filter-and-order-by-model-cost). `null` when the cost is unavailable. `0` is a recorded value. |
 | `feedback`, `feedbackTruncated` | Up to 10 current feedback records, newest first with `feedbackId` as the tie-breaker. `feedbackTruncated` is `true` when the trace has more. |
 | `scores`, `scoresTruncated` | Up to 10 current score records, newest first with `scoreId` as the tie-breaker. Each `scoreId` contributes its latest write only. `scoresTruncated` is `true` when the trace has more. |
 

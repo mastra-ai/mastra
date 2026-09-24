@@ -111,6 +111,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-root-duration',
           'trace-query-discovery',
           'trace-query-table-summary',
+          'trace-query-model-cost',
           'thread-query',
           'trace-query-tenant-scope',
         ]);
@@ -123,6 +124,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-root-duration',
           'trace-query-discovery',
           'trace-query-table-summary',
+          'trace-query-model-cost',
           'thread-query',
           'trace-query-tenant-scope',
         ]);

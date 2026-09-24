@@ -716,6 +716,59 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).toHaveBeenCalledWith(expect.objectContaining({ tableSummary: true }));
   });
 
+  it('returns 501 before calling an older store for model cost predicates or ordering', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-table-summary']);
+    for (const request of [
+      { timeRange: TIME_RANGE, where: { op: 'gt', left: { path: 'modelCost' }, right: { literal: 1 } } },
+      {
+        timeRange: TIME_RANGE,
+        where: { op: 'not', arg: { op: 'or', args: [{ op: 'exists', path: 'modelCost' }] } },
+      },
+      { timeRange: TIME_RANGE, orderBy: [{ field: 'modelCost', direction: 'desc' }] },
+    ]) {
+      const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, request)));
+      expect(error.status, JSON.stringify(request)).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Model cost predicates and ordering are not supported by the configured observability store',
+      });
+    }
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('passes model cost plans to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-model-cost']);
+
+    await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'gte', left: { path: 'modelCost' }, right: { literal: 0.5 } },
+        orderBy: [{ field: 'modelCost', direction: 'asc' }],
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'modelCost', operator: 'gte', value: 0.5 },
+        orderBy: { field: 'modelCost', direction: 'asc' },
+      }),
+    );
+  });
+
+  it('does not require the model cost capability for other numeric predicates', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-root-duration']);
+
+    await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+        orderBy: [{ field: 'endedAt', direction: 'asc' }],
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledOnce();
+  });
+
   it('does not require the table summary capability for plain requests', async () => {
     const { mastra, observabilityStore } = createHarness(['trace-query']);
 

@@ -43,6 +43,7 @@ const TRACE_FIELDS = {
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
+  modelCost: { sql: 'r.modelCost', parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
@@ -111,9 +112,54 @@ const TRACE_SELECT = `
 
 /** The table summary needs the root output and tags; other queries leave the blobs off the read path. */
 function traceSelect(plan: TrustedTraceQueryPlan): string {
-  return plan.result === 'traces' && plan.tableSummary
-    ? `${TRACE_SELECT},\n  r.output AS output,\n  r.tags AS tags`
-    : TRACE_SELECT;
+  let select = TRACE_SELECT;
+  if (plan.result === 'traces' && plan.tableSummary) select += `,\n  r.output AS output,\n  r.tags AS tags`;
+  if (coreStorage.traceQueryUsesModelCost(plan)) select += `,\n  r.modelCost AS modelCost`;
+  return select;
+}
+
+/**
+ * Complete model cost per trace from the current total-token metric rows, mirroring
+ * `traceQueryModelCost` in core: sum per model call, then per trace, unavailable (NULL) when
+ * any call is unpriced, errored, negative, non-finite, or priced in a unit other than USD.
+ * `metricId` is the primary key, so retried exports never produce a second row.
+ *
+ * Positional parameters: the cost unit, the metric names, then `traceScope.values`.
+ */
+function traceCostsSql(traceScope: { sql: string; values: unknown[] }): SqlFragment {
+  const names = coreStorage.TRACE_QUERY_MODEL_COST_METRICS.map(() => '?').join(', ');
+  return {
+    sql: `SELECT
+      traceId,
+      CASE WHEN bool_and(priced) AND NOT bool_or(invalid) THEN sum(cost) END AS modelCost
+    FROM (
+      SELECT
+        m.traceId,
+        sum(m.estimatedCost) AS cost,
+        bool_or(m.estimatedCost IS NOT NULL) AS priced,
+        bool_or(
+          json_extract_string(m.costMetadata, '$.error') IS NOT NULL
+          OR (
+            m.estimatedCost IS NOT NULL
+            AND (
+              NOT (isfinite(m.estimatedCost) AND m.estimatedCost >= 0)
+              OR m.costUnit IS NULL
+              OR upper(m.costUnit) <> ?
+            )
+          )
+        ) AS invalid
+      FROM metric_events m
+      WHERE m.name IN (${names})
+        AND ${traceScope.sql}
+      GROUP BY m.traceId, m.spanId
+    ) calls
+    GROUP BY traceId`,
+    values: [
+      coreStorage.TRACE_QUERY_MODEL_COST_UNIT,
+      ...coreStorage.TRACE_QUERY_MODEL_COST_METRICS,
+      ...traceScope.values,
+    ],
+  };
 }
 
 function fieldDefinition<TField extends string>(
@@ -351,6 +397,7 @@ export interface CompiledDuckDBTraceQuery {
 function compileDuckDBTraceScope(
   relatedCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
+  usesModelCost = false,
 ): { ctes: string[]; values: unknown[] } {
   // Rows with a NULL organizationId never match a scope: `NULL = ?` is not true.
   const tenantConditions = (alias: string): string[] =>
@@ -386,7 +433,7 @@ function compileDuckDBTraceScope(
       )
       WHERE rootRank = 1
     )`,
-    `root_scope AS (
+    `${usesModelCost ? 'root_scope_base' : 'root_scope'} AS (
       SELECT *
       FROM current_roots r
       WHERE ${[
@@ -397,6 +444,25 @@ function compileDuckDBTraceScope(
       ].join('\n        AND ')}
     )`,
   ];
+  if (usesModelCost) {
+    // Cost is rolled up once for the roots in scope and joined as a plain column, so
+    // predicates, ordering, and keyset cursors treat it like any other root field.
+    const costs = traceCostsSql({
+      sql: ['m.traceId IN (SELECT traceId FROM root_scope_base)', ...tenantConditions('m')].join('\n        AND '),
+      values: tenantValues,
+    });
+    ctes.push(
+      `trace_costs AS (
+      ${costs.sql}
+    )`,
+      `root_scope AS (
+      SELECT b.*, tc.modelCost AS modelCost
+      FROM root_scope_base b
+      LEFT JOIN trace_costs tc ON tc.traceId = b.traceId
+    )`,
+    );
+    values.push(...costs.values);
+  }
 
   if (relatedCollections.has('spans')) {
     ctes.push(`current_span_rows AS (
@@ -464,7 +530,11 @@ function compileDuckDBTraceScope(
 
 export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.where);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(
+    relatedCollections,
+    plan.scope,
+    coreStorage.traceQueryUsesModelCost(plan),
+  );
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   const conditions = [
     `r.endedAt IS NOT NULL`,
@@ -526,7 +596,8 @@ ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
   }
 
   const orderField = plan.orderBy.field;
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  // Unavailable costs sort last in both directions so they never rank as cheapest or dearest.
+  const direction = `${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}${orderField === 'modelCost' ? ' NULLS LAST' : ''}`;
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
@@ -552,8 +623,15 @@ ORDER BY page_rows.__row_position ASC NULLS LAST`,
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    pageCondition = `WHERE (${orderField} ${comparison} CAST(? AS TIMESTAMP) OR (${orderField} = CAST(? AS TIMESTAMP) AND traceId > ?))`;
-    values.push(plan.cursor.sortValue, plan.cursor.sortValue, plan.cursor.traceId);
+    if (plan.cursor.sortValue === null) {
+      // The cursor sits inside the trailing unavailable block, where only traceId advances.
+      pageCondition = `WHERE ${orderField} IS NULL AND traceId > ?`;
+      values.push(plan.cursor.traceId);
+    } else {
+      const sortParameter = orderField === 'modelCost' ? '?' : 'CAST(? AS TIMESTAMP)';
+      pageCondition = `WHERE (${orderField} ${comparison} ${sortParameter} OR (${orderField} = ${sortParameter} AND traceId > ?)${orderField === 'modelCost' ? ` OR ${orderField} IS NULL` : ''})`;
+      values.push(plan.cursor.sortValue, plan.cursor.sortValue, plan.cursor.traceId);
+    }
   }
   values.push(plan.limit + 1);
 
@@ -571,7 +649,11 @@ LIMIT ?`,
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(
+    relatedCollections,
+    plan.scope,
+    coreStorage.traceQueryUsesModelCost(plan),
+  );
   const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to, ...scopeValues];
 
   let eligibilitySql = 'TRUE';
@@ -753,6 +835,7 @@ interface TableSummaryRows {
   rollups: Map<string, TableSummaryRollup>;
   feedback: Map<string, coreStorage.TraceQueryFeedbackSummary[]>;
   scores: Map<string, coreStorage.TraceQueryScoreSummary[]>;
+  costs: Map<string, number | null>;
 }
 
 /**
@@ -763,7 +846,12 @@ interface TableSummaryRows {
 export function compileDuckDBTableSummaryQueries(
   scope: TraceQueryTenantScope | undefined,
   traceIds: string[],
-): { rollups: CompiledDuckDBTraceQuery; feedback: CompiledDuckDBTraceQuery; scores: CompiledDuckDBTraceQuery } {
+): {
+  rollups: CompiledDuckDBTraceQuery;
+  feedback: CompiledDuckDBTraceQuery;
+  scores: CompiledDuckDBTraceQuery;
+  costs: CompiledDuckDBTraceQuery;
+} {
   const ids = traceIds.map(() => '?').join(', ');
   const tenantConditions = (alias: string): string[] =>
     scope
@@ -876,7 +964,9 @@ ORDER BY traceId ASC, relatedRank ASC`,
     values: [...scoreWhere.values, relatedLimit],
   };
 
-  return { rollups, feedback, scores };
+  const costs = traceCostsSql(where('m'));
+
+  return { rollups, feedback, scores, costs };
 }
 
 function nullableNumber(value: unknown): number | null {
@@ -888,14 +978,16 @@ async function loadTableSummaryRows(
   scope: TraceQueryTenantScope | undefined,
   traceIds: string[],
 ): Promise<TableSummaryRows> {
-  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map() };
+  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map(), costs: new Map() };
   if (traceIds.length === 0) return result;
   const queries = compileDuckDBTableSummaryQueries(scope, traceIds);
-  const [rollupRows, feedbackRows, scoreRows] = await Promise.all([
+  const [rollupRows, feedbackRows, scoreRows, costRows] = await Promise.all([
     db.query<Record<string, unknown>>(queries.rollups.sql, queries.rollups.values),
     db.query<Record<string, unknown>>(queries.feedback.sql, queries.feedback.values),
     db.query<Record<string, unknown>>(queries.scores.sql, queries.scores.values),
+    db.query<Record<string, unknown>>(queries.costs.sql, queries.costs.values),
   ]);
+  for (const row of costRows) result.costs.set(String(row.traceId), nullableNumber(row.modelCost));
   for (const row of rollupRows) {
     result.rollups.set(String(row.traceId), {
       errorTotal: Number(row.errorTotal ?? 0),
@@ -967,6 +1059,7 @@ function traceRowToResult(row: Record<string, unknown>, summaries?: TableSummary
             scores: summaries.scores.get(traceId) ?? [],
             promptCacheReadTokens: rollup?.promptCacheReadTokens ?? null,
             promptCacheCreationTokens: rollup?.promptCacheCreationTokens ?? null,
+            modelCost: summaries.costs.get(traceId) ?? null,
           }),
         }
       : {}),
@@ -1053,12 +1146,22 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: keysetSortValue(plan, visibleRows.at(-1)!, last),
               traceId: last.traceId,
             })
           : null,
     },
   });
+}
+
+/** Sort value for the next keyset cursor: the ordered timestamp, or the cost column (null when unavailable). */
+function keysetSortValue(
+  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
+  row: Record<string, unknown>,
+  trace: { startedAt: string; endedAt: string },
+): coreStorage.TraceQueryCursorSortValue {
+  if (plan.orderBy.field === 'modelCost') return nullableNumber(row.modelCost);
+  return trace[plan.orderBy.field];
 }
 
 export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {

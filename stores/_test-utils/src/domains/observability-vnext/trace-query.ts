@@ -10,6 +10,8 @@ import {
   TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES,
   TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT,
   TRACE_QUERY_TABLE_SUMMARY_TOOL_SPAN_TYPES,
+  TRACE_QUERY_MODEL_COST_METRICS,
+  traceQueryModelCost,
   getTraceQueryDeltaWatermark,
   TraceQueryCursorError,
   parseQueryThreadsInput,
@@ -25,6 +27,8 @@ import {
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
+  type TraceQueryCursorSortValue,
+  type TraceQueryOrderField,
   type TraceQueryTableSummary,
   type TraceQueryTrace,
   type TraceQueryTraceResponse,
@@ -71,6 +75,9 @@ export interface RawTraceQueryMetric {
   name: string;
   value: number;
   timestamp: string;
+  estimatedCost?: number | null;
+  costUnit?: string | null;
+  costMetadata?: Record<string, unknown> | null;
 }
 
 export interface RawTraceQueryScore {
@@ -1222,6 +1229,318 @@ export const TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA: TraceQueryFixtureData = {
     },
   ],
 };
+
+const modelCostRange = { from: '2026-08-22T00:00:00Z', to: '2026-08-23T00:00:00Z' };
+const modelCostStartedAt = (offsetMs: number) =>
+  new Date(Date.parse('2026-08-22T10:00:00.000Z') + offsetMs).toISOString();
+
+export const TRACE_QUERY_MODEL_COST_TIME_RANGE = modelCostRange;
+
+const costMetric = (
+  metricId: string,
+  traceId: string,
+  spanId: string,
+  name: string,
+  cost: Partial<Pick<RawTraceQueryMetric, 'estimatedCost' | 'costUnit' | 'costMetadata'>> = {},
+): RawTraceQueryMetric => ({
+  metricId,
+  traceId,
+  spanId,
+  name,
+  value: 100,
+  timestamp: modelCostStartedAt(500),
+  estimatedCost: null,
+  costUnit: null,
+  costMetadata: { pricing_id: 'test' },
+  ...cost,
+});
+
+const costRoot = (cursorId: number, traceId: string, offsetMs: number, overrides: Partial<RawTraceQuerySpan> = {}) =>
+  span(cursorId, traceId, `root-${traceId}`, {
+    startedAt: modelCostStartedAt(offsetMs),
+    endedAt: modelCostStartedAt(offsetMs + 1000),
+    ...overrides,
+  });
+
+/**
+ * Model-cost fixture. Every trace is a completed root with metric rows only; roots start in
+ * the order listed so `startedAt` ordering differs from cost ordering.
+ *
+ * - `cost-estimated`: two priced model calls (0.5 + 0.25 and 0.125 + 0.0625 = 0.9375) plus detail
+ *   rows that also carry cost and must be ignored.
+ * - `cost-tie`: one call priced 0.9375 so ordering ties break on `traceId`.
+ * - `cost-reported`: gateway-reported cost on one carrier row; the other total row is bare.
+ * - `cost-zero`: a free model priced at exactly 0.
+ * - `cost-unpriced`: no matching model, so both total rows carry an error and no cost.
+ * - `cost-partial`: one priced call and one call flagged `partial_cost`.
+ * - `cost-mixed-unit`: one USD call and one EUR call.
+ * - `cost-negative`: a negative reported cost.
+ * - `cost-bare-call`: one priced call and one call whose rows carry neither cost nor error.
+ * - `cost-none`: no model metrics at all.
+ * - `cost-retried`: the same three metric rows exported twice with identical IDs.
+ */
+export const TRACE_QUERY_MODEL_COST_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    costRoot(1, 'cost-estimated', 0, { threadId: 'thread-cost', error: { message: 'boom' } }),
+    costRoot(2, 'cost-tie', 10_000),
+    costRoot(3, 'cost-reported', 20_000),
+    costRoot(4, 'cost-zero', 30_000),
+    costRoot(5, 'cost-unpriced', 40_000),
+    costRoot(6, 'cost-partial', 50_000),
+    costRoot(7, 'cost-mixed-unit', 60_000),
+    costRoot(8, 'cost-negative', 70_000),
+    costRoot(9, 'cost-bare-call', 80_000),
+    costRoot(10, 'cost-none', 90_000),
+    costRoot(11, 'cost-retried', 100_000, { threadId: 'thread-cost' }),
+  ],
+  scores: [
+    scoreRecord(100, 'score-cost-estimated', 'cost-estimated', 'factuality', 0.4, {
+      timestamp: modelCostStartedAt(2000),
+    }),
+    scoreRecord(101, 'score-cost-reported', 'cost-reported', 'factuality', 0.9, {
+      timestamp: modelCostStartedAt(22_000),
+    }),
+    scoreRecord(102, 'score-cost-unpriced', 'cost-unpriced', 'factuality', 0.3, {
+      timestamp: modelCostStartedAt(42_000),
+    }),
+  ],
+  feedback: [],
+  metrics: [
+    costMetric('m-est-1-in', 'cost-estimated', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.5,
+      costUnit: 'USD',
+    }),
+    costMetric('m-est-1-out', 'cost-estimated', 'call-1', 'mastra_model_total_output_tokens', {
+      estimatedCost: 0.25,
+      costUnit: 'USD',
+    }),
+    costMetric('m-est-1-text', 'cost-estimated', 'call-1', 'mastra_model_input_text_tokens', {
+      estimatedCost: 0.5,
+      costUnit: 'USD',
+    }),
+    costMetric('m-est-1-cache', 'cost-estimated', 'call-1', 'mastra_model_input_cache_read_tokens', {
+      estimatedCost: 0.0625,
+      costUnit: 'USD',
+    }),
+    costMetric('m-est-2-in', 'cost-estimated', 'call-2', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.125,
+      costUnit: 'USD',
+    }),
+    costMetric('m-est-2-out', 'cost-estimated', 'call-2', 'mastra_model_total_output_tokens', {
+      estimatedCost: 0.0625,
+      costUnit: 'USD',
+    }),
+    costMetric('m-tie-in', 'cost-tie', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.75,
+      costUnit: 'usd',
+    }),
+    costMetric('m-tie-out', 'cost-tie', 'call-1', 'mastra_model_total_output_tokens', {
+      estimatedCost: 0.1875,
+      costUnit: 'USD',
+    }),
+    costMetric('m-rep-in', 'cost-reported', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 2,
+      costUnit: 'USD',
+      costMetadata: { allocation: 'query_total' },
+    }),
+    costMetric('m-rep-out', 'cost-reported', 'call-1', 'mastra_model_total_output_tokens', { costMetadata: null }),
+    costMetric('m-zero-in', 'cost-zero', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0,
+      costUnit: 'USD',
+    }),
+    costMetric('m-zero-out', 'cost-zero', 'call-1', 'mastra_model_total_output_tokens', {
+      estimatedCost: 0,
+      costUnit: 'USD',
+    }),
+    costMetric('m-unp-in', 'cost-unpriced', 'call-1', 'mastra_model_total_input_tokens', {
+      costMetadata: { error: 'no_matching_model' },
+    }),
+    costMetric('m-unp-out', 'cost-unpriced', 'call-1', 'mastra_model_total_output_tokens', {
+      costMetadata: { error: 'no_matching_model' },
+    }),
+    costMetric('m-part-1-in', 'cost-partial', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.375,
+      costUnit: 'USD',
+    }),
+    costMetric('m-part-1-out', 'cost-partial', 'call-1', 'mastra_model_total_output_tokens', {
+      estimatedCost: 0.125,
+      costUnit: 'USD',
+    }),
+    costMetric('m-part-2-in', 'cost-partial', 'call-2', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.25,
+      costUnit: 'USD',
+      costMetadata: { pricing_id: 'test', error: 'partial_cost' },
+    }),
+    costMetric('m-part-2-out', 'cost-partial', 'call-2', 'mastra_model_total_output_tokens', {
+      estimatedCost: 0.125,
+      costUnit: 'USD',
+    }),
+    costMetric('m-mix-1-in', 'cost-mixed-unit', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.5,
+      costUnit: 'USD',
+    }),
+    costMetric('m-mix-2-in', 'cost-mixed-unit', 'call-2', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.5,
+      costUnit: 'EUR',
+    }),
+    costMetric('m-neg-in', 'cost-negative', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: -0.25,
+      costUnit: 'USD',
+    }),
+    costMetric('m-bare-1-in', 'cost-bare-call', 'call-1', 'mastra_model_total_input_tokens', {
+      estimatedCost: 0.75,
+      costUnit: 'USD',
+    }),
+    costMetric('m-bare-2-in', 'cost-bare-call', 'call-2', 'mastra_model_total_input_tokens'),
+    costMetric('m-bare-2-out', 'cost-bare-call', 'call-2', 'mastra_model_total_output_tokens'),
+    ...[0, 1].flatMap(() => [
+      costMetric('m-retry-in', 'cost-retried', 'call-1', 'mastra_model_total_input_tokens', {
+        estimatedCost: 1.5,
+        costUnit: 'USD',
+      }),
+      costMetric('m-retry-out', 'cost-retried', 'call-1', 'mastra_model_total_output_tokens', {
+        estimatedCost: 0.5,
+        costUnit: 'USD',
+      }),
+      costMetric('m-retry-text', 'cost-retried', 'call-1', 'mastra_model_output_text_tokens', {
+        estimatedCost: 0.5,
+        costUnit: 'USD',
+      }),
+    ]),
+  ],
+};
+
+/** Complete costs the model-cost fixture must produce, keyed by trace. `null` means unavailable. */
+export const TRACE_QUERY_MODEL_COST_EXPECTED: Record<string, number | null> = {
+  'cost-estimated': 0.9375,
+  'cost-tie': 0.9375,
+  'cost-reported': 2,
+  'cost-zero': 0,
+  'cost-unpriced': null,
+  'cost-partial': null,
+  'cost-mixed-unit': null,
+  'cost-negative': null,
+  'cost-bare-call': null,
+  'cost-none': null,
+  'cost-retried': 2,
+};
+
+const modelCostPredicate = (op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte', literal: number): TraceQueryPredicate => ({
+  op,
+  left: { path: 'modelCost' },
+  right: { literal },
+});
+
+/**
+ * Model-cost conformance cases: every expected list is in response order, so ordering,
+ * tie-breaking, and unavailable-last placement are all asserted.
+ */
+export const TRACE_QUERY_MODEL_COST_CASES: TraceQueryConformanceCase[] = [
+  {
+    name: 'orders by complete model cost descending with unavailable costs last',
+    request: { timeRange: modelCostRange, orderBy: [{ field: 'modelCost', direction: 'desc' }] },
+    expected: [
+      { traceId: 'cost-reported' },
+      { traceId: 'cost-retried' },
+      { traceId: 'cost-estimated' },
+      { traceId: 'cost-tie' },
+      { traceId: 'cost-zero' },
+      { traceId: 'cost-bare-call' },
+      { traceId: 'cost-mixed-unit' },
+      { traceId: 'cost-negative' },
+      { traceId: 'cost-none' },
+      { traceId: 'cost-partial' },
+      { traceId: 'cost-unpriced' },
+    ],
+  },
+  {
+    name: 'orders by complete model cost ascending with unavailable costs last',
+    request: { timeRange: modelCostRange, orderBy: [{ field: 'modelCost', direction: 'asc' }] },
+    expected: [
+      { traceId: 'cost-zero' },
+      { traceId: 'cost-estimated' },
+      { traceId: 'cost-tie' },
+      { traceId: 'cost-reported' },
+      { traceId: 'cost-retried' },
+      { traceId: 'cost-bare-call' },
+      { traceId: 'cost-mixed-unit' },
+      { traceId: 'cost-negative' },
+      { traceId: 'cost-none' },
+      { traceId: 'cost-partial' },
+      { traceId: 'cost-unpriced' },
+    ],
+  },
+  {
+    name: 'filters traces above a cost threshold without counting detail or retried rows',
+    request: { timeRange: modelCostRange, where: modelCostPredicate('gt', 1) },
+    expected: [{ traceId: 'cost-retried' }, { traceId: 'cost-reported' }],
+  },
+  {
+    name: 'filters cheap traces and keeps a recorded zero cost',
+    request: { timeRange: modelCostRange, where: modelCostPredicate('lt', 1) },
+    expected: [{ traceId: 'cost-zero' }, { traceId: 'cost-tie' }, { traceId: 'cost-estimated' }],
+  },
+  {
+    name: 'matches an exact complete cost',
+    request: { timeRange: modelCostRange, where: modelCostPredicate('eq', 0.9375) },
+    expected: [{ traceId: 'cost-tie' }, { traceId: 'cost-estimated' }],
+  },
+  {
+    name: 'treats unavailable cost as present for negative operators unless exists is required',
+    request: {
+      timeRange: modelCostRange,
+      where: { op: 'and', args: [modelCostPredicate('ne', 0.9375), { op: 'exists', path: 'modelCost' }] },
+    },
+    expected: [{ traceId: 'cost-retried' }, { traceId: 'cost-zero' }, { traceId: 'cost-reported' }],
+  },
+  {
+    name: 'finds traces whose complete cost is unavailable',
+    request: { timeRange: modelCostRange, where: { op: 'notExists', path: 'modelCost' } },
+    expected: [
+      { traceId: 'cost-none' },
+      { traceId: 'cost-bare-call' },
+      { traceId: 'cost-negative' },
+      { traceId: 'cost-mixed-unit' },
+      { traceId: 'cost-partial' },
+      { traceId: 'cost-unpriced' },
+    ],
+  },
+  {
+    name: 'matches cost membership sets',
+    request: { timeRange: modelCostRange, where: { op: 'in', value: { path: 'modelCost' }, set: [2, 0] } },
+    expected: [{ traceId: 'cost-retried' }, { traceId: 'cost-zero' }, { traceId: 'cost-reported' }],
+  },
+  {
+    name: 'composes cost predicates with score and trace predicates and cost ordering',
+    request: {
+      timeRange: modelCostRange,
+      where: {
+        op: 'or',
+        args: [
+          {
+            op: 'and',
+            args: [
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.5 } } } },
+              modelCostPredicate('gte', 0.5),
+            ],
+          },
+          { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-cost' } },
+        ],
+      },
+      orderBy: [{ field: 'modelCost', direction: 'asc' }],
+    },
+    expected: [{ traceId: 'cost-estimated' }, { traceId: 'cost-retried' }],
+  },
+  {
+    name: 'ignores cost ordering direction for the traceId tie-breaker',
+    request: {
+      timeRange: modelCostRange,
+      where: modelCostPredicate('eq', 0.9375),
+      orderBy: [{ field: 'modelCost', direction: 'desc' }],
+    },
+    expected: [{ traceId: 'cost-estimated' }, { traceId: 'cost-tie' }],
+  },
+];
 
 export const THREAD_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [...TRACE_QUERY_FIXTURE_DATA.spans],
@@ -2605,11 +2924,12 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
   const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
   const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
   const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
+  const costOf = modelCostResolver(data.metrics);
   const roots = currentRoots(data.spans)
     .filter(root => matchesScope(root, plan.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
-    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
+    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback, costOf));
 
   if (plan.result === 'groups') {
     let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
@@ -2626,7 +2946,10 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
   const head = data.spans.reduce((max, row) => (row.parentSpanId === null ? Math.max(max, row.cursorId) : max), 0);
   const toTrace = (root: RawTraceQuerySpan): TraceQueryTrace =>
     plan.tableSummary
-      ? { ...toTraceQueryTrace(root), tableSummary: evaluateTableSummary(root, spans, scores, feedback, data.metrics) }
+      ? {
+          ...toTraceQueryTrace(root),
+          tableSummary: evaluateTableSummary(root, spans, scores, feedback, data.metrics, costOf(root)),
+        }
       : toTraceQueryTrace(root);
   if (plan.paginationMode === 'delta') {
     const watermark = getTraceQueryDeltaWatermark(plan, 'reference');
@@ -2646,12 +2969,14 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
       ),
     };
   }
-  let traces = roots.map(toTrace).sort((left, right) => compareTraces(left, right, plan));
+  let ordered = roots
+    .map(root => ({ trace: toTrace(root), sortValue: sortValueOf(root, plan.orderBy.field, costOf) }))
+    .sort((left, right) => compareTraces(left, right, plan));
   if (plan.paginationMode === 'page') {
-    const total = traces.length;
+    const total = ordered.length;
     const start = plan.page * plan.perPage;
     return {
-      traces: traces.slice(start, start + plan.perPage),
+      traces: ordered.slice(start, start + plan.perPage).map(entry => entry.trace),
       pagination: {
         total,
         page: plan.page,
@@ -2664,31 +2989,30 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     } satisfies TraceQueryPaginatedTraceResponse;
   }
 
-  if (plan.cursor) traces = traces.filter(trace => isTraceAfterCursor(trace, plan));
-  const visible = traces.slice(0, plan.limit + 1);
+  if (plan.cursor) ordered = ordered.filter(entry => isTraceAfterCursor(entry, plan));
+  const visible = ordered.slice(0, plan.limit + 1);
   const hasNext = visible.length > plan.limit;
   const page = visible.slice(0, plan.limit);
   const last = page[page.length - 1];
   const next =
     hasNext && last
-      ? encodeTraceQueryCursor(plan, {
-          result: 'traces',
-          sortValue: last[plan.orderBy.field],
-          traceId: last.traceId,
-        })
+      ? encodeTraceQueryCursor(plan, { result: 'traces', sortValue: last.sortValue, traceId: last.trace.traceId })
       : null;
-  return { traces: page, page: { next } } satisfies TraceQueryTraceResponse;
+  return { traces: page.map(entry => entry.trace), page: { next } } satisfies TraceQueryTraceResponse;
 }
 
 export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedThreadQueryPlan): QueryThreadsResult {
   const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
   const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
   const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
+  const costOf = modelCostResolver(data.metrics);
   const eligibleRoots = currentRoots(data.spans)
     .filter(root => matchesScope(root, plan.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.traces.timeRange.from && root.startedAt < plan.traces.timeRange.to)
-    .filter(root => !plan.traces.where || evaluateTracePredicate(plan.traces.where, root, spans, scores, feedback));
+    .filter(
+      root => !plan.traces.where || evaluateTracePredicate(plan.traces.where, root, spans, scores, feedback, costOf),
+    );
 
   const rootsByThread = new Map<string, RawTraceQuerySpan[]>();
   for (const root of eligibleRoots) {
@@ -2699,7 +3023,7 @@ export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedTh
   }
 
   let threadIds = [...rootsByThread]
-    .filter(([, roots]) => !plan.where || evaluateThreadPredicate(plan.where, roots, spans, scores, feedback))
+    .filter(([, roots]) => !plan.where || evaluateThreadPredicate(plan.where, roots, spans, scores, feedback, costOf))
     .map(([threadId]) => threadId)
     .sort(compareTraceQueryStrings);
   if (plan.cursor) {
@@ -2840,23 +3164,53 @@ function currentFeedback(feedback: RawTraceQueryFeedback[]): RawTraceQueryFeedba
   return [...records.values()];
 }
 
+type ModelCostResolver = (root: RawTraceQuerySpan) => number | null;
+
+/** Complete model cost per trace from the current total-token metric rows. */
+function modelCostResolver(metrics: RawTraceQueryMetric[] = []): ModelCostResolver {
+  const current = currentMetrics(metrics).filter(metric => TRACE_QUERY_MODEL_COST_METRICS.includes(metric.name));
+  const costs = new Map<string, number | null>();
+  return root => {
+    if (root.traceId === null) return null;
+    if (!costs.has(root.traceId)) {
+      costs.set(
+        root.traceId,
+        traceQueryModelCost(
+          current
+            .filter(metric => metric.traceId === root.traceId)
+            .map(metric => ({
+              spanId: metric.spanId,
+              estimatedCost: metric.estimatedCost ?? null,
+              costUnit: metric.costUnit ?? null,
+              costMetadata: metric.costMetadata ?? null,
+            })),
+        ),
+      );
+    }
+    return costs.get(root.traceId)!;
+  };
+}
+
 function evaluateThreadPredicate(
   predicate: TrustedThreadPredicate,
   roots: RawTraceQuerySpan[],
   spans: RawTraceQuerySpan[],
   scores: RawTraceQueryScore[],
   feedback: RawTraceQueryFeedback[],
+  costOf: ModelCostResolver,
 ): boolean {
   if (predicate.type === 'relation') {
-    const matched = roots.some(root => evaluateTracePredicate(predicate.predicate, root, spans, scores, feedback));
+    const matched = roots.some(root =>
+      evaluateTracePredicate(predicate.predicate, root, spans, scores, feedback, costOf),
+    );
     return predicate.quantifier === 'some' ? matched : !matched;
   }
   if (predicate.type === 'boolean') {
     return predicate.operator === 'and'
-      ? predicate.args.every(arg => evaluateThreadPredicate(arg, roots, spans, scores, feedback))
-      : predicate.args.some(arg => evaluateThreadPredicate(arg, roots, spans, scores, feedback));
+      ? predicate.args.every(arg => evaluateThreadPredicate(arg, roots, spans, scores, feedback, costOf))
+      : predicate.args.some(arg => evaluateThreadPredicate(arg, roots, spans, scores, feedback, costOf));
   }
-  return !evaluateThreadPredicate(predicate.arg, roots, spans, scores, feedback);
+  return !evaluateThreadPredicate(predicate.arg, roots, spans, scores, feedback, costOf);
 }
 
 function evaluateTracePredicate(
@@ -2865,6 +3219,7 @@ function evaluateTracePredicate(
   spans: RawTraceQuerySpan[],
   scores: RawTraceQueryScore[],
   feedback: RawTraceQueryFeedback[],
+  costOf: ModelCostResolver,
 ): boolean {
   if (predicate.type === 'relation') {
     const collection = predicate.collection === 'spans' ? spans : predicate.collection === 'scores' ? scores : feedback;
@@ -2881,11 +3236,11 @@ function evaluateTracePredicate(
   }
   if (predicate.type === 'boolean') {
     return predicate.operator === 'and'
-      ? predicate.args.every(arg => evaluateTracePredicate(arg, root, spans, scores, feedback))
-      : predicate.args.some(arg => evaluateTracePredicate(arg, root, spans, scores, feedback));
+      ? predicate.args.every(arg => evaluateTracePredicate(arg, root, spans, scores, feedback, costOf))
+      : predicate.args.some(arg => evaluateTracePredicate(arg, root, spans, scores, feedback, costOf));
   }
-  if (predicate.type === 'not') return !evaluateTracePredicate(predicate.arg, root, spans, scores, feedback);
-  return evaluateScalarPredicate(predicate, traceValues(root));
+  if (predicate.type === 'not') return !evaluateTracePredicate(predicate.arg, root, spans, scores, feedback, costOf);
+  return evaluateScalarPredicate(predicate, traceValues(root, costOf));
 }
 
 function evaluateScalarPredicate(
@@ -2957,7 +3312,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   };
 }
 
-function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
+function traceValues(root: RawTraceQuerySpan, costOf: ModelCostResolver): Record<string, unknown> {
   const metadata = Object.fromEntries(
     Object.entries(root.metadata ?? {}).flatMap(([key, value]) => {
       if (typeof value !== 'string' || value.trim() === '') return [];
@@ -2971,6 +3326,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     startedAt: root.startedAt,
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),
+    modelCost: costOf(root),
     entityName: root.entityName,
     entityType: root.entityType,
     environment: root.environment,
@@ -2992,6 +3348,7 @@ function evaluateTableSummary(
   scores: RawTraceQueryScore[],
   feedback: RawTraceQueryFeedback[],
   metrics: RawTraceQueryMetric[] = [],
+  modelCost: number | null = null,
 ): TraceQueryTableSummary {
   const traceSpans = spans.filter(span => span.traceId === root.traceId);
   const modelSpan = traceSpans
@@ -3069,6 +3426,7 @@ function evaluateTableSummary(
       .slice(0, TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1),
     promptCacheReadTokens: sumMetric(TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheReadTokens),
     promptCacheCreationTokens: sumMetric(TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheCreationTokens),
+    modelCost,
   });
 }
 
@@ -3093,19 +3451,47 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   };
 }
 
-function compareTraces(
-  left: TraceQueryTrace,
-  right: TraceQueryTrace,
-  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
-): number {
-  const values = compareTraceQueryStrings(left[plan.orderBy.field], right[plan.orderBy.field]);
-  if (values !== 0) return plan.orderBy.direction === 'asc' ? values : -values;
-  return compareTraceQueryStrings(left.traceId, right.traceId);
+type OrderedTrace = { trace: TraceQueryTrace; sortValue: TraceQueryCursorSortValue };
+
+function sortValueOf(
+  root: RawTraceQuerySpan,
+  field: TraceQueryOrderField,
+  costOf: ModelCostResolver,
+): TraceQueryCursorSortValue {
+  if (field === 'modelCost') return costOf(root);
+  return field === 'startedAt' ? root.startedAt : root.endedAt!;
 }
 
-function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
+/**
+ * Compares two sort values in the plan's direction. Unavailable (`null`) costs sort after
+ * every real value in both directions, so they never look cheapest or dearest.
+ */
+function compareSortValues(
+  left: TraceQueryCursorSortValue,
+  right: TraceQueryCursorSortValue,
+  direction: 'asc' | 'desc',
+): number {
+  if (left === null || right === null) return left === right ? 0 : left === null ? 1 : -1;
+  const values =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : compareTraceQueryStrings(String(left), String(right));
+  return direction === 'asc' ? values : -values;
+}
+
+function compareTraces(
+  left: OrderedTrace,
+  right: OrderedTrace,
+  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
+): number {
+  const values = compareSortValues(left.sortValue, right.sortValue, plan.orderBy.direction);
+  if (values !== 0) return values;
+  return compareTraceQueryStrings(left.trace.traceId, right.trace.traceId);
+}
+
+function isTraceAfterCursor(entry: OrderedTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
-  const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
-  if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;
-  return plan.orderBy.direction === 'asc' ? sortComparison > 0 : sortComparison < 0;
+  const sortComparison = compareSortValues(entry.sortValue, cursor.sortValue, plan.orderBy.direction);
+  if (sortComparison === 0) return compareTraceQueryStrings(entry.trace.traceId, cursor.traceId) > 0;
+  return sortComparison > 0;
 }

@@ -58,6 +58,7 @@ const TRACE_FIELDS = {
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
+  modelCost: 'r."modelCost"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   environment: 'r."environment"',
@@ -126,9 +127,49 @@ const TRACE_SELECT = `
 
 /** The table summary needs the root output and tags; other queries leave the blobs off the read path. */
 function traceSelect(plan: TrustedTraceQueryPlan): string {
-  return plan.result === 'traces' && plan.tableSummary
-    ? `${TRACE_SELECT},\n  r."output" AS "output",\n  r."tags" AS "tags"`
-    : TRACE_SELECT;
+  let select = TRACE_SELECT;
+  if (plan.result === 'traces' && plan.tableSummary) select += `,\n  r."output" AS "output",\n  r."tags" AS "tags"`;
+  if (coreStorage.traceQueryUsesModelCost(plan)) select += `,\n  r."modelCost" AS "modelCost"`;
+  return select;
+}
+
+/**
+ * Complete model cost per trace from the current total-token metric rows, mirroring
+ * `traceQueryModelCost` in core: sum per model call, then per trace, unavailable (NULL) when
+ * any call is unpriced, errored, negative, non-finite, or priced in a unit other than USD.
+ * `metricId` is the primary key, so retried exports never produce a second row.
+ */
+function traceCostsSql(
+  metricTable: string,
+  traceIdsSql: string,
+  parameters: { unit: string; names: string[] },
+  scopeSql: string,
+): string {
+  return `SELECT
+      "traceId",
+      CASE WHEN bool_and("priced") AND NOT bool_or("invalid") THEN sum("cost") END AS "modelCost"
+    FROM (
+      SELECT
+        m."traceId",
+        sum(m."estimatedCost") AS "cost",
+        bool_or(m."estimatedCost" IS NOT NULL) AS "priced",
+        bool_or(
+          (m."costMetadata" ->> 'error') IS NOT NULL
+          OR (
+            m."estimatedCost" IS NOT NULL
+            AND (
+              NOT (m."estimatedCost" >= 0 AND m."estimatedCost" < 'Infinity'::float8)
+              OR m."costUnit" IS NULL
+              OR upper(m."costUnit") <> ${parameters.unit}
+            )
+          )
+        ) AS "invalid"
+      FROM ${metricTable} m
+      WHERE m."traceId" IN (${traceIdsSql})
+        AND m."name" IN (${parameters.names.join(', ')})${scopeSql}
+      GROUP BY m."traceId", m."spanId"
+    ) calls
+    GROUP BY "traceId"`;
 }
 
 function fieldSql<TField extends string>(
@@ -397,10 +438,12 @@ function compilePostgresTraceScope(
   relationCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
+  usesModelCost = false,
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
   const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const metricTable = qualifiedTable(schema, TABLE_METRIC_EVENTS);
   const values: unknown[] = [selection.timeRange.from, selection.timeRange.to];
   // The delta window binds fixed positions $3..$5, so it must be pushed before the
   // dynamically numbered tenant scope values.
@@ -435,12 +478,32 @@ function compilePostgresTraceScope(
     ...scopeConditions.map(condition => `r.${condition}`),
   ];
   const ctes = [
-    `root_scope AS MATERIALIZED (
+    `${usesModelCost ? 'root_scope_base' : 'root_scope'} AS MATERIALIZED (
     SELECT *
     FROM ${spanTable} r
     WHERE ${rootConditions.join('\n      AND ')}
   )`,
   ];
+  if (usesModelCost) {
+    // Cost is rolled up once for the roots in scope and joined as a plain column, so
+    // predicates, ordering, and keyset cursors treat it like any other root field.
+    values.push(coreStorage.TRACE_QUERY_MODEL_COST_UNIT);
+    const unit = `$${values.length}`;
+    const names = coreStorage.TRACE_QUERY_MODEL_COST_METRICS.map(name => {
+      values.push(name);
+      return `$${values.length}`;
+    });
+    ctes.push(
+      `trace_costs AS MATERIALIZED (
+    ${traceCostsSql(metricTable, 'SELECT "traceId" FROM root_scope_base', { unit, names }, scopeSql('m'))}
+  )`,
+      `root_scope AS MATERIALIZED (
+    SELECT b.*, tc."modelCost" AS "modelCost"
+    FROM root_scope_base b
+    LEFT JOIN trace_costs tc ON tc."traceId" = b."traceId"
+  )`,
+    );
+  }
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS MATERIALIZED (
@@ -528,7 +591,14 @@ export function compilePostgresTraceQuery(
       throw new Error('Delta query requires a cursor and safe horizon');
     deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
   }
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, plan.scope, deltaWindow);
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    plan,
+    relationCollections,
+    plan.scope,
+    deltaWindow,
+    coreStorage.traceQueryUsesModelCost(plan),
+  );
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -579,8 +649,9 @@ LIMIT $${values.length}`,
     };
   }
 
-  const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  const orderField = `"${plan.orderBy.field}"`;
+  // Unavailable costs sort last in both directions so they never rank as cheapest or dearest.
+  const direction = `${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}${plan.orderBy.field === 'modelCost' ? ' NULLS LAST' : ''}`;
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
@@ -596,10 +667,16 @@ LIMIT $${values.length - 1} OFFSET $${values.length}`,
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortParameter = `$${values.length + 1}`;
-    const idParameter = `$${values.length + 2}`;
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortParameter} OR (${orderField} = ${sortParameter} AND "traceId" > ${idParameter}))`;
-    values.push(plan.cursor.sortValue, plan.cursor.traceId);
+    if (plan.cursor.sortValue === null) {
+      // The cursor sits inside the trailing unavailable block, where only traceId advances.
+      values.push(plan.cursor.traceId);
+      pageCondition = `WHERE ${orderField} IS NULL AND "traceId" > $${values.length}`;
+    } else {
+      const sortParameter = `$${values.length + 1}`;
+      const idParameter = `$${values.length + 2}`;
+      pageCondition = `WHERE (${orderField} ${comparison} ${sortParameter} OR (${orderField} = ${sortParameter} AND "traceId" > ${idParameter})${plan.orderBy.field === 'modelCost' ? ` OR ${orderField} IS NULL` : ''})`;
+      values.push(plan.cursor.sortValue, plan.cursor.traceId);
+    }
   }
   values.push(plan.limit + 1);
 
@@ -614,10 +691,27 @@ LIMIT $${values.length}`,
   };
 }
 
+/** Sort value for the next keyset cursor: the ordered timestamp, or the cost column (null when unavailable). */
+function keysetSortValue(
+  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
+  row: Record<string, unknown>,
+  trace: { startedAt: string; endedAt: string },
+): coreStorage.TraceQueryCursorSortValue {
+  if (plan.orderBy.field === 'modelCost') return nullableNumber(row.modelCost);
+  return trace[plan.orderBy.field];
+}
+
 export function compilePostgresThreadQuery(schema: string, plan: TrustedThreadQueryPlan): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections, plan.scope);
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    plan.traces,
+    relationCollections,
+    plan.scope,
+    undefined,
+    coreStorage.traceQueryUsesModelCost(plan),
+  );
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -859,6 +953,7 @@ interface TableSummaryRows {
   rollups: Map<string, TableSummaryRollup>;
   feedback: Map<string, coreStorage.TraceQueryFeedbackSummary[]>;
   scores: Map<string, coreStorage.TraceQueryScoreSummary[]>;
+  costs: Map<string, number | null>;
 }
 
 const ISO_TIMESTAMP_PATTERN = String.raw`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$`;
@@ -872,7 +967,12 @@ export function compilePostgresTableSummaryQueries(
   schema: string,
   scope: TraceQueryTenantScope | undefined,
   traceIds: string[],
-): { rollups: CompiledPostgresTraceQuery; feedback: CompiledPostgresTraceQuery; scores: CompiledPostgresTraceQuery } {
+): {
+  rollups: CompiledPostgresTraceQuery;
+  feedback: CompiledPostgresTraceQuery;
+  scores: CompiledPostgresTraceQuery;
+  costs: CompiledPostgresTraceQuery;
+} {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const metricTable = qualifiedTable(schema, TABLE_METRIC_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
@@ -978,7 +1078,14 @@ ORDER BY "traceId" ASC, "relatedRank" ASC`,
     values: [...values, relatedLimit],
   };
 
-  return { rollups, feedback, scores };
+  const costUnit = `$${values.length + 1}`;
+  const costNames = coreStorage.TRACE_QUERY_MODEL_COST_METRICS.map((_, index) => `$${values.length + 2 + index}`);
+  const costs: CompiledPostgresTraceQuery = {
+    text: traceCostsSql(metricTable, `SELECT unnest($1::text[])`, { unit: costUnit, names: costNames }, scopeSql('m')),
+    values: [...values, coreStorage.TRACE_QUERY_MODEL_COST_UNIT, ...coreStorage.TRACE_QUERY_MODEL_COST_METRICS],
+  };
+
+  return { rollups, feedback, scores, costs };
 }
 
 function nullableNumber(value: unknown): number | null {
@@ -992,7 +1099,7 @@ async function loadTableSummaryRows(
   traceIds: string[],
   deadline?: number,
 ): Promise<TableSummaryRows> {
-  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map() };
+  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map(), costs: new Map() };
   if (traceIds.length === 0) return result;
   const queries = compilePostgresTableSummaryQueries(schema, scope, traceIds);
   // `statement_timeout` is per statement, so re-derive the remaining budget before each one.
@@ -1003,6 +1110,8 @@ async function loadTableSummaryRows(
   const rollupRows = await run(queries.rollups);
   const feedbackRows = await run(queries.feedback);
   const scoreRows = await run(queries.scores);
+  const costRows = await run(queries.costs);
+  for (const row of costRows) result.costs.set(String(row.traceId), nullableNumber(row.modelCost));
   for (const row of rollupRows) {
     result.rollups.set(String(row.traceId), {
       errorTotal: Number(row.errorTotal ?? 0),
@@ -1074,6 +1183,7 @@ function traceRowToResult(row: Record<string, unknown>, summaries?: TableSummary
             scores: summaries.scores.get(traceId) ?? [],
             promptCacheReadTokens: rollup?.promptCacheReadTokens ?? null,
             promptCacheCreationTokens: rollup?.promptCacheCreationTokens ?? null,
+            modelCost: summaries.costs.get(traceId) ?? null,
           }),
         }
       : {}),
@@ -1215,7 +1325,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: keysetSortValue(plan, visibleRows.at(-1)!, last),
               traceId: last.traceId,
             })
           : null,

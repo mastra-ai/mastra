@@ -58,6 +58,7 @@ const TRACE_FIELDS = {
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
+  modelCost: { sql: 'r.modelCost', parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
@@ -126,9 +127,49 @@ const TRACE_SELECT = `
 
 /** The table summary needs the root output and tags; other queries leave the blobs off the read path. */
 function traceSelect(plan: TrustedTraceQueryPlan): string {
-  return plan.result === 'traces' && plan.tableSummary
-    ? `${TRACE_SELECT},\n  r.output AS output,\n  r.tags AS tags`
-    : TRACE_SELECT;
+  let select = TRACE_SELECT;
+  if (plan.result === 'traces' && plan.tableSummary) select += `,\n  r.output AS output,\n  r.tags AS tags`;
+  if (coreStorage.traceQueryUsesModelCost(plan)) select += `,\n  r.modelCost AS modelCost`;
+  return select;
+}
+
+/**
+ * Complete model cost per trace from the current total-token metric rows, mirroring
+ * `traceQueryModelCost` in core: sum per model call, then per trace, unavailable (NULL) when
+ * any call is unpriced, errored, negative, non-finite, or priced in a unit other than USD.
+ * `LIMIT 1 BY metricId` collapses retried exports without waiting for background merges.
+ */
+function traceCostsSql(traceIdsSql: string, parameters: ParameterBuilder, tenant: string): string {
+  const unit = parameters.add(coreStorage.TRACE_QUERY_MODEL_COST_UNIT, 'String');
+  const names = coreStorage.TRACE_QUERY_MODEL_COST_METRICS.map(name => parameters.add(name, 'String')).join(', ');
+  return `SELECT
+      traceId,
+      if(min(priced) = 1 AND max(invalid) = 0, sum(callCost), NULL) AS modelCost
+    FROM (
+      SELECT
+        traceId,
+        spanId,
+        sum(estimatedCost) AS callCost,
+        max(isNotNull(estimatedCost)) AS priced,
+        max(ifNull(
+          JSONHas(ifNull(costMetadata, ''), 'error')
+          OR (
+            isNotNull(estimatedCost)
+            AND (NOT (isFinite(estimatedCost) AND estimatedCost >= 0) OR isNull(costUnit) OR upper(costUnit) != ${unit})
+          ),
+          0
+        )) AS invalid
+      FROM (
+        SELECT traceId, spanId, estimatedCost, costUnit, costMetadata
+        FROM ${TABLE_METRIC_EVENTS}
+        WHERE traceId IN (${traceIdsSql})
+          AND name IN (${names})${tenant}
+        ORDER BY metricId
+        LIMIT 1 BY metricId
+      )
+      GROUP BY traceId, spanId
+    )
+    GROUP BY traceId`;
 }
 
 class ParameterBuilder {
@@ -154,9 +195,19 @@ function fieldDefinition<TField extends string>(
   return definition;
 }
 
-function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
-  if (field === 'startedAt' || field === 'endedAt') return field;
+function resolveOrderField(field: string): coreStorage.TraceQueryOrderField {
+  if (field === 'startedAt' || field === 'endedAt' || field === 'modelCost') return field;
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
+}
+
+/** Sort value for the next keyset cursor: the ordered timestamp, or the cost column (null when unavailable). */
+function keysetSortValue(
+  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
+  row: Record<string, unknown>,
+  trace: { startedAt: string; endedAt: string },
+): coreStorage.TraceQueryCursorSortValue {
+  if (plan.orderBy.field === 'modelCost') return nullableNumber(row.modelCost);
+  return trace[plan.orderBy.field];
 }
 
 function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
@@ -339,6 +390,7 @@ function compileClickHouseTraceScope(
   relationCollections: Set<RelatedCollection>,
   parameters: ParameterBuilder,
   scope: TraceQueryTenantScope | undefined,
+  usesModelCost = false,
 ): string[] {
   const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
@@ -354,13 +406,28 @@ function compileClickHouseTraceScope(
     ORDER BY traceId, dedupeKey
     LIMIT 1 BY traceId
   )`,
-    `root_scope AS (
+    `${usesModelCost ? 'root_scope_base' : 'root_scope'} AS (
     SELECT *
     FROM current_roots
     WHERE startedAt >= ${from}
       AND startedAt < ${to}${tenant}
   )`,
   ];
+  if (usesModelCost) {
+    // Cost is rolled up once for the roots in scope and joined as a plain column, so
+    // predicates, ordering, and keyset cursors treat it like any other root field. The
+    // column is Nullable, so an unmatched LEFT JOIN yields NULL (unavailable), not 0.
+    ctes.push(
+      `trace_costs AS (
+    ${traceCostsSql('SELECT traceId FROM root_scope_base', parameters, tenant)}
+  )`,
+      `root_scope AS (
+    SELECT b.*, tc.modelCost AS modelCost
+    FROM root_scope_base b
+    LEFT JOIN trace_costs tc ON tc.traceId = b.traceId
+  )`,
+    );
+  }
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS (
@@ -460,7 +527,13 @@ export function compileClickHouseTraceQuery(
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.where);
-  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters, plan.scope);
+  const ctes = compileClickHouseTraceScope(
+    plan,
+    relationCollections,
+    parameters,
+    plan.scope,
+    coreStorage.traceQueryUsesModelCost(plan),
+  );
 
   const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
   ctes.push(`candidates AS (
@@ -511,7 +584,8 @@ LIMIT ${limit}`,
   }
 
   const orderField = resolveOrderField(plan.orderBy.field);
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  // Unavailable costs sort last in both directions so they never rank as cheapest or dearest.
+  const direction = `${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}${orderField === 'modelCost' ? ' NULLS LAST' : ''}`;
   if (plan.paginationMode === 'page') {
     const limit = parameters.add(plan.perPage, 'UInt64');
     const offset = parameters.add(plan.page * plan.perPage, 'UInt64');
@@ -546,7 +620,7 @@ SELECT
   CAST(NULL, 'Nullable(String)') AS entityName,
   CAST(NULL, 'Nullable(String)') AS entityType,
   CAST(NULL, 'Nullable(String)') AS environment,
-  '' AS status,${plan.tableSummary ? `\n  CAST(NULL, 'Nullable(String)') AS output,\n  CAST([], 'Array(String)') AS tags,` : ''}
+  '' AS status,${plan.tableSummary ? `\n  CAST(NULL, 'Nullable(String)') AS output,\n  CAST([], 'Array(String)') AS tags,` : ''}${coreStorage.traceQueryUsesModelCost(plan) ? `\n  CAST(NULL, 'Nullable(Float64)') AS modelCost,` : ''}
   0 AS __row_position,
   page_total.total AS total,
   1 AS __metadata
@@ -560,9 +634,18 @@ ORDER BY __metadata ASC, __row_position ASC`,
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
-    const traceId = parameters.add(plan.cursor.traceId, 'String');
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortValue} OR (${orderField} = ${sortValue} AND traceId > ${traceId}))`;
+    if (plan.cursor.sortValue === null) {
+      // The cursor sits inside the trailing unavailable block, where only traceId advances.
+      const traceId = parameters.add(plan.cursor.traceId, 'String');
+      pageCondition = `WHERE isNull(${orderField}) AND traceId > ${traceId}`;
+    } else {
+      const sortValue =
+        typeof plan.cursor.sortValue === 'number'
+          ? parameters.add(plan.cursor.sortValue, 'Float64')
+          : parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+      const traceId = parameters.add(plan.cursor.traceId, 'String');
+      pageCondition = `WHERE (${orderField} ${comparison} ${sortValue} OR (${orderField} = ${sortValue} AND traceId > ${traceId})${orderField === 'modelCost' ? ` OR isNull(${orderField})` : ''})`;
+    }
   }
   const limit = parameters.add(plan.limit + 1, 'UInt64');
   return {
@@ -580,7 +663,13 @@ export function compileClickHouseThreadQuery(plan: TrustedThreadQueryPlan): Comp
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters, plan.scope);
+  const ctes = compileClickHouseTraceScope(
+    plan.traces,
+    relationCollections,
+    parameters,
+    plan.scope,
+    coreStorage.traceQueryUsesModelCost(plan),
+  );
 
   const eligibility = plan.traces.where ? compilePredicate(plan.traces.where, parameters) : '1';
   ctes.push(`eligible_roots AS (
@@ -790,6 +879,7 @@ interface TableSummaryRows {
   rollups: Map<string, TableSummaryRollup>;
   feedback: Map<string, coreStorage.TraceQueryFeedbackSummary[]>;
   scores: Map<string, coreStorage.TraceQueryScoreSummary[]>;
+  costs: Map<string, number | null>;
 }
 
 /**
@@ -804,6 +894,7 @@ export function compileClickHouseTableSummaryQueries(
   rollups: CompiledClickHouseTraceQuery;
   feedback: CompiledClickHouseTraceQuery;
   scores: CompiledClickHouseTraceQuery;
+  costs: CompiledClickHouseTraceQuery;
 } {
   const list = (types: readonly string[]) => types.map(type => `'${type}'`).join(', ');
   const relatedLimit = coreStorage.TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1;
@@ -905,7 +996,9 @@ WHERE relatedRank <= ${parameters.add(relatedLimit, 'UInt64')}
 ORDER BY traceId ASC, relatedRank ASC`,
   );
 
-  return { rollups, feedback, scores };
+  const costs = compile((parameters, ids, tenant) => traceCostsSql(ids, parameters, tenant));
+
+  return { rollups, feedback, scores, costs };
 }
 
 function nullableNumber(value: unknown): number | null {
@@ -918,14 +1011,16 @@ async function loadTableSummaryRows(
   traceIds: string[],
   timeoutMs: () => number,
 ): Promise<TableSummaryRows> {
-  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map() };
+  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map(), costs: new Map() };
   if (traceIds.length === 0) return result;
   const queries = compileClickHouseTableSummaryQueries(scope, traceIds);
-  const [rollupRows, feedbackRows, scoreRows] = await Promise.all([
+  const [rollupRows, feedbackRows, scoreRows, costRows] = await Promise.all([
     runWithClickHouseTraceQueryTimeout(client, { timeoutMs: timeoutMs() }, queries.rollups),
     runWithClickHouseTraceQueryTimeout(client, { timeoutMs: timeoutMs() }, queries.feedback),
     runWithClickHouseTraceQueryTimeout(client, { timeoutMs: timeoutMs() }, queries.scores),
+    runWithClickHouseTraceQueryTimeout(client, { timeoutMs: timeoutMs() }, queries.costs),
   ]);
+  for (const row of costRows) result.costs.set(String(row.traceId), nullableNumber(row.modelCost));
   for (const row of rollupRows) {
     result.rollups.set(String(row.traceId), {
       errorTotal: Number(row.errorTotal ?? 0),
@@ -997,6 +1092,7 @@ function traceRowToResult(row: Record<string, unknown>, summaries?: TableSummary
             scores: summaries.scores.get(traceId) ?? [],
             promptCacheReadTokens: rollup?.promptCacheReadTokens ?? null,
             promptCacheCreationTokens: rollup?.promptCacheCreationTokens ?? null,
+            modelCost: summaries.costs.get(traceId) ?? null,
           }),
         }
       : {}),
@@ -1138,7 +1234,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: keysetSortValue(plan, visibleRows.at(-1)!, last),
               traceId: last.traceId,
             })
           : null,

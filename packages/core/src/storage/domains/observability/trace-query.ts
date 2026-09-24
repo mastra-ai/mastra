@@ -52,6 +52,17 @@ export const TRACE_QUERY_TABLE_SUMMARY_TOOL_SPAN_TYPES: readonly string[] = [
   SpanType.MCP_TOOL_CALL,
   SpanType.CLIENT_TOOL_CALL,
 ];
+/**
+ * Metric names whose `estimatedCost` carries the complete cost of one model call. Detail
+ * metrics (text, cache, reasoning, audio tokens) price the same tokens again, so summing
+ * every row would double-count. These mirror `TokenMetrics` in `@mastra/observability`.
+ */
+export const TRACE_QUERY_MODEL_COST_METRICS: readonly string[] = [
+  'mastra_model_total_input_tokens',
+  'mastra_model_total_output_tokens',
+];
+/** The only cost unit trace queries sum. Any other unit makes the trace's cost unavailable. */
+export const TRACE_QUERY_MODEL_COST_UNIT = 'USD';
 
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
@@ -330,7 +341,7 @@ const traceQueryRequestObjectSchema = z
       .array(
         z
           .object({
-            field: z.enum(['startedAt', 'endedAt']),
+            field: z.enum(['startedAt', 'endedAt', 'modelCost']),
             direction: z.enum(['asc', 'desc']),
           })
           .strict(),
@@ -474,6 +485,8 @@ export const traceQueryTableSummarySchema = z
       .strict(),
     promptCacheReadTokens: z.number().nonnegative().nullable(),
     promptCacheCreationTokens: z.number().nonnegative().nullable(),
+    /** Complete model cost in USD, or `null` when it is unavailable. See `traceQueryModelCost`. */
+    modelCost: z.number().nonnegative().nullable(),
     feedback: z.array(traceQueryFeedbackSummarySchema).max(TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT),
     feedbackTruncated: z.boolean(),
     scores: z.array(traceQueryScoreSummarySchema).max(TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT),
@@ -645,6 +658,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    modelCost: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
     environment: stringField(true),
@@ -798,7 +812,7 @@ export interface TrustedTraceQueryPagePlan {
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
   orderBy: {
-    field: 'startedAt' | 'endedAt';
+    field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
   };
   /**
@@ -809,7 +823,7 @@ interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
-  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: TraceQueryCursorSortValue; traceId: string } };
 export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
 export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
   paginationMode: 'delta';
@@ -869,8 +883,12 @@ export type TraceQueryCursorPlan =
   | TrustedTraceQueryKeysetTracesPlan
   | TrustedTraceQueryGroupsPlan
   | TrustedThreadQueryPlan;
+/** Fields ungrouped trace results can be ordered by. `modelCost` sorts unavailable costs last. */
+export type TraceQueryOrderField = 'startedAt' | 'endedAt' | 'modelCost';
+/** ISO timestamp for time ordering; finite number or `null` (unavailable) for `modelCost` ordering. */
+export type TraceQueryCursorSortValue = string | number | null;
 export type TraceQueryCursorValues =
-  | { result: 'traces'; sortValue: string; traceId: string }
+  | { result: 'traces'; sortValue: TraceQueryCursorSortValue; traceId: string }
   | { result: 'groups'; threadId: string }
   | { result: 'threads'; threadId: string };
 
@@ -1260,6 +1278,10 @@ export function planTraceQuery(
     scope,
   });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
+  if (cursor?.result === 'traces') {
+    const numeric = typeof cursor.sortValue !== 'string';
+    if (numeric !== (orderBy.field === 'modelCost')) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
   return {
     result,
     timeRange,
@@ -1295,6 +1317,8 @@ export interface TraceQueryTableSummaryInput {
   /** Summed metric values per trace; null when no metric row exists. */
   promptCacheReadTokens: number | null;
   promptCacheCreationTokens: number | null;
+  /** Complete model cost from `traceQueryModelCost` or the store's equivalent SQL; null when unavailable. */
+  modelCost: number | null;
 }
 
 function normalizeTags(tags: unknown): string[] {
@@ -1334,6 +1358,7 @@ export function buildTraceQueryTableSummary(input: TraceQueryTableSummaryInput):
     },
     promptCacheReadTokens: input.promptCacheReadTokens,
     promptCacheCreationTokens: input.promptCacheCreationTokens,
+    modelCost: input.modelCost,
     feedback: input.feedback.slice(0, limit),
     feedbackTruncated: input.feedback.length > limit,
     scores: input.scores.slice(0, limit),
@@ -1348,6 +1373,85 @@ export function compareTraceQuerySummaryRecords(
 ): number {
   const byTimestamp = compareTraceQueryStrings(right.timestamp, left.timestamp);
   return byTimestamp !== 0 ? byTimestamp : compareTraceQueryStrings(left.id, right.id);
+}
+
+/** One current metric row from `TRACE_QUERY_MODEL_COST_METRICS`, already collapsed by `metricId`. */
+export interface TraceQueryModelCostMetric {
+  spanId: string | null;
+  estimatedCost: number | null;
+  costUnit: string | null;
+  costMetadata: Record<string, unknown> | null;
+}
+
+/**
+ * Complete model cost of one trace, or `null` when it is unavailable.
+ *
+ * Each model call is one span whose total-token rows carry its cost. A call is priced when at
+ * least one of its rows has an `estimatedCost`; the gateway-reported path prices a single
+ * carrier row and leaves the other total row bare. A call is invalid when any row records a
+ * `costMetadata.error` (no matching model, no matching tier, partial cost), a negative or
+ * non-finite cost, or a cost in a unit other than USD. The trace's cost is the sum over its
+ * calls and is unavailable when any call is unpriced or invalid, so a partial figure never
+ * masquerades as the total. A trace with no such rows has no known model cost.
+ *
+ * Stores implement the same rule in SQL; this is the reference used by shared tests.
+ *
+ * @internal Storage boundary helper.
+ */
+export function traceQueryModelCost(metrics: readonly TraceQueryModelCostMetric[]): number | null {
+  const spans = new Map<string, { cost: number; priced: boolean; invalid: boolean }>();
+  for (const metric of metrics) {
+    const span = spans.get(metric.spanId ?? '') ?? { cost: 0, priced: false, invalid: false };
+    if (metric.estimatedCost !== null) {
+      span.priced = true;
+      span.cost += metric.estimatedCost;
+      if (
+        !Number.isFinite(metric.estimatedCost) ||
+        metric.estimatedCost < 0 ||
+        metric.costUnit === null ||
+        metric.costUnit.toUpperCase() !== TRACE_QUERY_MODEL_COST_UNIT
+      ) {
+        span.invalid = true;
+      }
+    }
+    if (metric.costMetadata?.error != null) span.invalid = true;
+    spans.set(metric.spanId ?? '', span);
+  }
+  if (spans.size === 0) return null;
+  let total = 0;
+  for (const span of spans.values()) {
+    if (!span.priced || span.invalid) return null;
+    total += span.cost;
+  }
+  return total;
+}
+
+function predicateUsesField(predicate: TrustedTraceQueryPredicate | undefined, field: string): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(arg => predicateUsesField(arg, field));
+  if (predicate.type === 'not') return predicateUsesField(predicate.arg, field);
+  if (predicate.type === 'relation') return false;
+  return predicate.field === field;
+}
+
+function threadPredicateUsesField(predicate: TrustedThreadPredicate | undefined, field: string): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(arg => threadPredicateUsesField(arg, field));
+  if (predicate.type === 'not') return threadPredicateUsesField(predicate.arg, field);
+  return predicateUsesField(predicate.predicate, field);
+}
+
+/**
+ * Whether a plan filters or orders on the trace-level `modelCost` field, so stores know to
+ * roll up metric costs and hosts can reject the plan on stores without that capability.
+ */
+export function traceQueryUsesModelCost(plan: TrustedTraceQueryPlan | TrustedThreadQueryPlan): boolean {
+  if (plan.result === 'threads') {
+    return predicateUsesField(plan.traces.where, 'modelCost') || threadPredicateUsesField(plan.where, 'modelCost');
+  }
+  return (
+    (plan.result === 'traces' && plan.orderBy.field === 'modelCost') || predicateUsesField(plan.where, 'modelCost')
+  );
 }
 
 /**
@@ -1489,7 +1593,7 @@ const cursorEnvelopeSchema = z
       z
         .object({
           result: z.literal('traces'),
-          sortValue: z.string().datetime({ offset: true }),
+          sortValue: z.union([z.string().datetime({ offset: true }), z.number().finite(), z.null()]),
           traceId: z.string().min(1),
         })
         .strict(),
