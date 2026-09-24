@@ -3198,6 +3198,7 @@ describe('Observer Agent Helpers', () => {
       expect(prompt).toContain('prior suggested-response: Ask for invoice id.');
       expect(prompt).not.toContain('thread thread-2\n  - prior current-task');
       expect(prompt.indexOf('Prior Thread Metadata')).toBeLessThan(prompt.indexOf('<thread id="thread-1">'));
+      expect(prompt).toContain('<thread id="thread-2">');
       expect(prompt.indexOf('<thread id="thread-2">')).toBeLessThan(prompt.indexOf('## Your Task'));
     });
   });
