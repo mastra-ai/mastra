@@ -1375,7 +1375,13 @@ function buildProjectGitRoutes({
         }
         try {
           // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
-          await waitForPendingFilesystemCapture(session.sessionId);
+          // A failed drain only costs the snapshot; it must not block teardown.
+          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
+            console.warn('[GitHub Sessions] Failed to drain filesystem capture before delete', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           await controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {

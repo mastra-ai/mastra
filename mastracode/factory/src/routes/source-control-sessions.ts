@@ -369,7 +369,13 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
         try {
           // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
-          await waitForPendingFilesystemCapture(session.sessionId);
+          // A failed drain only costs the snapshot; it must not block teardown.
+          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
+            console.warn('[Factory Sessions] Failed to drain filesystem capture before delete', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           await options.controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {
