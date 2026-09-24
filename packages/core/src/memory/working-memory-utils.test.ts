@@ -289,6 +289,30 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
     ).toEqual([{ type: 'step-start' }, reasoning, call('other', 'lookupWeather')]);
   });
 
+  it('finds step boundaries after tool parts when step-start markers are missing', () => {
+    const reasoningA = { ...reasoning, reasoning: 'A' };
+    const reasoningB = { ...reasoning, reasoning: 'B' };
+    const reasoningC = { ...reasoning, reasoning: 'C' };
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        reasoningA,
+        call('wm1', 'updateWorkingMemory'),
+        reasoningB,
+        { type: 'text', text: 'Checking' },
+        call('wm2', 'updateWorkingMemory'),
+        call('other', 'lookupWeather'),
+        reasoningC,
+        { type: 'text', text: 'Done' },
+      ]),
+    ).toEqual([
+      reasoningB,
+      { type: 'text', text: 'Checking' },
+      call('other', 'lookupWeather'),
+      reasoningC,
+      { type: 'text', text: 'Done' },
+    ]);
+  });
+
   it('leaves state-signal setWorkingMemory calls alone', () => {
     const parts: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, call('wm', 'setWorkingMemory')];
     expect(removeWorkingMemoryToolInvocationParts(parts)).toBe(parts);

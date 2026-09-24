@@ -405,6 +405,65 @@ describe('Memory', () => {
         expect(JSON.stringify(prompt)).not.toContain('SIG_A');
         expect(JSON.stringify(prompt)).not.toContain('updateWorkingMemory');
       });
+
+      it.each([true, false])(
+        'long interleaved history replays one thinking block per assistant message (step-start markers: %s)',
+        async withStepStarts => {
+          const store = new InMemoryStore();
+          const saveMemory = new Memory({ storage: store });
+          const thread = await saveMemory.createThread({ threadId: 'thread-1', resourceId: 'resource-1' });
+          const parts: MastraDBMessage['content']['parts'] = [];
+          for (let i = 0; i < 30; i++) {
+            if (withStepStarts) parts.push({ type: 'step-start' });
+            parts.push(reasoning(`SIG_${i}`));
+            if (i % 3 === 0) {
+              parts.push(toolInvocation(`wm-${i}`, 'updateWorkingMemory'));
+            } else if (i % 3 === 1) {
+              parts.push({ type: 'text', text: `Step ${i}` }, toolInvocation(`call-${i}`, 'lookupWeather'));
+            } else {
+              parts.push(
+                toolInvocation(`wm-${i}`, 'updateWorkingMemory'),
+                toolInvocation(`call-${i}`, 'lookupWeather'),
+              );
+            }
+          }
+          if (withStepStarts) parts.push({ type: 'step-start' });
+          parts.push(reasoning('SIG_FINAL'), { type: 'text', text: 'Done' });
+
+          await saveMemory.saveMessages({
+            messages: [
+              {
+                id: 'user-1',
+                role: 'user',
+                createdAt: new Date('2026-01-01T00:00:00Z'),
+                threadId: thread.id,
+                resourceId: 'resource-1',
+                content: { format: 2, parts: [{ type: 'text', text: 'Plan my week' }] },
+              },
+              assistantMessage(parts),
+            ],
+          });
+
+          const { messages } = await saveMemory.recall({ threadId: thread.id, resourceId: 'resource-1' });
+          const prompt = new MessageList().add(messages, 'memory').get.all.aiV5.prompt();
+          const assistants = prompt.filter(message => message.role === 'assistant');
+
+          expect(JSON.stringify(prompt)).not.toContain('updateWorkingMemory');
+          for (let i = 0; i < 30; i += 3) {
+            expect(JSON.stringify(prompt)).not.toContain(`"SIG_${i}"`);
+          }
+          expect(assistants).toHaveLength(21);
+          for (const assistant of assistants) {
+            const reasoningParts = Array.isArray(assistant.content)
+              ? assistant.content.filter(part => part.type === 'reasoning')
+              : [];
+            expect(reasoningParts).toHaveLength(1);
+          }
+          prompt.slice(1).forEach((message, i) => {
+            expect(message.role === 'assistant' && prompt[i]!.role === 'assistant').toBe(false);
+          });
+        },
+      );
     });
 
     it('should not crash when content is undefined', () => {

@@ -113,11 +113,12 @@ export function extractWorkingMemoryContent(text: string): string | null {
 
 /**
  * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
- * (segment between `step-start` parts) at a time. A step whose tool calls were all
- * working-memory calls loses its tool-call/tool-result boundary once they are removed.
- * If only reasoning is left, the whole step is dropped: replaying that signed reasoning
- * merges it into the next step's assistant message, which providers such as Anthropic
- * reject (see #22798).
+ * at a time. A step starts at a `step-start` part, or where a tool part is followed by
+ * a non-tool part (the same boundary prompt conversion uses when markers are missing).
+ * A step whose tool calls were all working-memory calls loses its tool-call/tool-result
+ * boundary once they are removed. If only reasoning is left, the whole step is dropped:
+ * replaying that signed reasoning merges it into the next step's assistant message,
+ * which providers such as Anthropic reject (see #22798).
  */
 export function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): MastraMessagePart[] {
   const isWorkingMemoryCall = (part: MastraMessagePart) =>
@@ -126,10 +127,13 @@ export function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[
   if (!parts.some(isWorkingMemoryCall)) return parts;
 
   const steps: MastraMessagePart[][] = [];
-  for (const part of parts) {
-    if (part?.type === 'step-start' || steps.length === 0) steps.push([]);
+  parts.forEach((part, i) => {
+    const previous = parts[i - 1];
+    const startsStep =
+      part?.type === 'step-start' || (previous?.type === 'tool-invocation' && part?.type !== 'tool-invocation');
+    if (startsStep || steps.length === 0) steps.push([]);
     steps[steps.length - 1]!.push(part);
-  }
+  });
 
   return steps.flatMap(step => {
     if (!step.some(isWorkingMemoryCall)) return step;

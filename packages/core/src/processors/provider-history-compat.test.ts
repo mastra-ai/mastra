@@ -2067,6 +2067,36 @@ describe('anthropicOrphanedThinkingStep', () => {
     expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text']]);
   });
 
+  it('finds the orphaned thinking step after a tool part when its step-start marker is missing', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            reasoning('SIG_0'),
+            toolInvocation('call-0', 'lookupWeather'),
+            reasoning('SIG_A'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+  });
+
   it('drops a trailing thinking-only step when the next stored message is also from the assistant', async () => {
     const args = argsFor(list => {
       list.add([createUserMessage('weather?')], 'input');

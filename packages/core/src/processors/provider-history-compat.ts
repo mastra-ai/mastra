@@ -916,10 +916,16 @@ export const anthropicOrphanedThinkingStep: CompatRule = {
       if (message.role !== 'assistant' || !parts?.length) return;
 
       const followedByAssistant = messages[index + 1]?.role === 'assistant';
-      const stepStarts = parts.flatMap((part, i) => (part.type === 'step-start' ? [i] : []));
-      const steps = (stepStarts[0] === 0 ? stepStarts : [0, ...stepStarts]).map((start, i, starts) =>
-        parts.slice(start, starts[i + 1] ?? parts.length),
-      );
+      // A step starts at a `step-start` part, or where a tool part is followed by a
+      // non-tool part (the boundary prompt conversion uses when markers are missing).
+      const steps: (typeof parts)[] = [];
+      parts.forEach((part, i) => {
+        const previous = parts[i - 1];
+        const startsStep =
+          part.type === 'step-start' || (previous?.type === 'tool-invocation' && part.type !== 'tool-invocation');
+        if (startsStep || steps.length === 0) steps.push([]);
+        steps[steps.length - 1]!.push(part);
+      });
 
       const kept = steps.filter((step, i) => {
         const content = step.filter(
