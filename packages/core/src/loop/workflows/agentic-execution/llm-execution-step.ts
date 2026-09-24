@@ -1273,8 +1273,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   // Points at the live iteration's committer: the abort listener is registered once per
   // run, so it must not close over the first iteration's message id.
   let commitSettledEagerWorkOnAbort: (() => void) | undefined;
-  // Held so the dependent signal (and its listener) lives exactly as long as this step.
-  let eagerAbortSignal: AbortSignal | undefined;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1389,12 +1387,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         };
         if (!eagerAbortListenerRegistered && options?.abortSignal) {
           eagerAbortListenerRegistered = true;
-          // Listen on a dependent signal rather than the caller's: callers often reuse one
-          // long-lived signal across many runs, and a listener added to it directly would
-          // outlive this run and pin its message list. The caller's signal only holds the
-          // dependent weakly, so the listener goes away with this run's step closure.
-          eagerAbortSignal = AbortSignal.any([options.abortSignal]);
-          eagerAbortSignal.addEventListener('abort', () => commitSettledEagerWorkOnAbort?.(), { once: true });
+          // `options.abortSignal` is owned by this run (see `workflows/stream.ts`), which
+          // unlinks it from the caller's signal when the run ends, so this listener cannot
+          // outlive the run even when the caller reuses one signal across many runs.
+          options.abortSignal.addEventListener('abort', () => commitSettledEagerWorkOnAbort?.(), { once: true });
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.

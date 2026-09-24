@@ -1,10 +1,11 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
+import { EagerToolExecutionCoordinator } from './eager-tool-execution';
 
 /**
  * The two rules eager dispatch has to hold on every path that ends an attempt early:
@@ -214,6 +215,41 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('answered-a');
+  });
+
+  it('does not leave abort listeners on a caller signal reused across runs', async () => {
+    const executions: string[] = [];
+    let turn = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () =>
+        turn++ % 2 === 0
+          ? toolCallThen(async controller => {
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            })
+          : textOnly(),
+    });
+    const agent = createAgent(model, executions, {});
+    const caller = new AbortController();
+
+    for (let run = 0; run < 3; run++) {
+      await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true, abortSignal: caller.signal }));
+    }
+    expect(executions).toEqual(['a', 'a', 'a']);
+
+    // Every run has ended. Aborting the shared signal now must not reach any of them.
+    const stop = vi.spyOn(EagerToolExecutionCoordinator.prototype, 'stop');
+    try {
+      caller.abort();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(stop.mock.calls.filter(([options]) => options?.permanent)).toHaveLength(0);
+    } finally {
+      stop.mockRestore();
+    }
   });
 
   it('writes a settled result into the replacement attempt, and runs it once', async () => {
