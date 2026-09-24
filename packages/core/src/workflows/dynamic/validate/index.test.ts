@@ -502,6 +502,39 @@ describe('validateDynamicWorkflow', () => {
       ]);
     });
 
+    it('flags a missing required property whose name is inherited from Object.prototype', () => {
+      const buildEntity = {
+        inputSchema: { type: 'object', properties: { constructor: { type: 'string' } }, required: ['constructor'] },
+        outputSchema: emptyObjectSchema,
+      };
+      const issues = validateDynamicWorkflow(
+        def({
+          inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+          graph: [{ type: 'tool', id: 'build', toolId: 'buildEntity' }],
+        }),
+        { tools: { buildEntity } },
+      );
+      expect(issues).toEqual([expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0' })]);
+    });
+
+    it('rejects a mapping path that only resolves through Object.prototype', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          inputSchema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+          graph: [
+            {
+              type: 'mapping',
+              id: 'from-proto',
+              mapConfig: JSON.stringify({ email: { initData: true, path: '__proto__' } }),
+            },
+          ],
+        }),
+      );
+      expect(issues).toEqual([
+        expect.objectContaining({ code: 'invalid-map-config', path: 'graph.0.mapConfig.email.path' }),
+      ]);
+    });
+
     it('assumes agents accept { prompt } unless the registry says otherwise', () => {
       const issues = validateDynamicWorkflow(
         def({

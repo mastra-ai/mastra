@@ -21,10 +21,8 @@ import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ObserverAttachmentFilter } from './observer-agent';
 import {
   buildObserverSystemPrompt,
-  buildObserverTaskPrompt,
-  buildObserverHistoryMessage,
-  buildMultiThreadObserverTaskPrompt,
-  buildMultiThreadObserverHistoryMessage,
+  buildObserverRequestMessage,
+  buildMultiThreadObserverRequestMessage,
   parseObserverOutput,
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
@@ -316,17 +314,16 @@ export class ObserverRunner {
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
     const observerMessages = [
-      {
-        role: 'user' as const,
-        content: buildObserverTaskPrompt(existingObservations, {
+      buildObserverRequestMessage(
+        existingObservations,
+        messagesToObserve,
+        {
           ...options,
           includeThreadTitle: this.observationConfig.threadTitle,
           extractors: activeExtractors,
-        }),
-      },
-      buildObserverHistoryMessage(messagesToObserve, {
-        attachmentFilter,
-      }),
+        },
+        { attachmentFilter },
+      ),
     ];
 
     const doGenerate = async () => {
@@ -631,20 +628,16 @@ export class ObserverRunner {
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
     const observerMessages = [
-      {
-        role: 'user' as const,
-        content: buildMultiThreadObserverTaskPrompt(
-          existingObservations,
-          threadOrder,
-          priorMetadataByThread,
-          undefined,
-          this.observationConfig.threadTitle,
-          activeExtractors,
-        ),
-      },
-      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
-        attachmentFilter: multiThreadAttachmentFilter,
-      }),
+      buildMultiThreadObserverRequestMessage(
+        existingObservations,
+        messagesByThread,
+        threadOrder,
+        priorMetadataByThread,
+        undefined,
+        this.observationConfig.threadTitle,
+        activeExtractors,
+        { attachmentFilter: multiThreadAttachmentFilter },
+      ),
     ];
 
     const doGenerate = async () => {

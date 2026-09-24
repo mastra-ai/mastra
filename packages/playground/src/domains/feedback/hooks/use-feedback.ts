@@ -1,60 +1,7 @@
-import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getFeedbackRefetchInterval } from '../utils/feedback-refetch-interval';
-
-const FEEDBACK_PER_PAGE = 20;
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export type FeedbackReviewStatus = 'needs-review' | 'reviewed';
-type ListFeedbackArgs = NonNullable<Parameters<MastraClient['listFeedback']>[0]>;
-export type FeedbackOrderBy = NonNullable<ListFeedbackArgs['orderBy']>;
-
-const DEFAULT_FEEDBACK_ORDER_BY: FeedbackOrderBy = { field: 'timestamp', direction: 'DESC' };
-
-export function useFeedback({
-  reviewStatus,
-  orderBy = DEFAULT_FEEDBACK_ORDER_BY,
-}: {
-  reviewStatus?: FeedbackReviewStatus;
-  orderBy?: FeedbackOrderBy;
-}) {
-  const client = useMastraClient();
-
-  const query = useInfiniteQuery({
-    queryKey: ['feedback', 'list', reviewStatus ?? 'all', orderBy],
-    queryFn: ({ pageParam }) =>
-      client.listFeedback({
-        filters: reviewStatus ? { reviewStatus } : undefined,
-        pagination: { page: pageParam, perPage: FEEDBACK_PER_PAGE },
-        orderBy,
-      }),
-    initialPageParam: 0,
-    getNextPageParam: lastPage => (lastPage.pagination?.hasMore ? lastPage.pagination.page + 1 : undefined),
-  });
-
-  return {
-    ...query,
-    items: query.data?.pages.flatMap(page => page.feedback) ?? [],
-    total: query.data?.pages[0]?.pagination?.total,
-  };
-}
-
-/** Polls the pending-review total while enabled, stopping on permanent storage errors. */
-export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['feedback', 'inbox-count'],
-    queryFn: () =>
-      client.listFeedback({
-        filters: { reviewStatus: 'needs-review' },
-        pagination: { page: 0, perPage: 1 },
-        orderBy: { field: 'timestamp', direction: 'DESC' },
-      }),
-    enabled,
-    refetchInterval: getFeedbackRefetchInterval,
-  });
-}
 
 export function useUpdateFeedbackReviewStatus() {
   const client = useMastraClient();
@@ -63,10 +10,8 @@ export function useUpdateFeedbackReviewStatus() {
   return useMutation({
     mutationFn: ({ feedbackId, reviewStatus }: { feedbackId: string; reviewStatus: FeedbackReviewStatus }) =>
       client.updateFeedbackReviewStatus({ feedbackId, reviewStatus }),
-    // Trace/span threads render the same records, so refresh them alongside the inbox list.
     onSuccess: () =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['feedback'] }),
         queryClient.invalidateQueries({ queryKey: ['trace-feedback'] }),
         queryClient.invalidateQueries({ queryKey: ['span-feedback'] }),
       ]),
