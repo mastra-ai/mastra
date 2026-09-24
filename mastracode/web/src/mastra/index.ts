@@ -38,7 +38,6 @@ import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/j
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { githubRules } from './github-rules.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -180,7 +179,6 @@ const github =
         // Extra reviewer bot logins this deployment trusts to trigger
         // review/comment notifications, on top of the built-in defaults.
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
-        rules: githubRules,
       })
     : undefined;
 
