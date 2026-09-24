@@ -1686,54 +1686,70 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ ls: .*No such file or directory +│$/));
   });
 
-  it('never passes escape sequences from a description, output, or error to the terminal', () => {
-    // Cursor moves and screen clears (CSI), a clipboard write and a hyperlink (OSC), device control
-    // (DCS), an 8-bit CSI, and a stray ESC.
+  it('never passes escape sequences from a description, command, cwd, output, or error to the terminal', () => {
+    // Cursor moves and a screen clear (CSI), a clipboard write, a title change and a hyperlink (OSC),
+    // device control (DCS), an 8-bit CSI, and a stray ESC.
     const hostile = [
       '\x1b[2J\x1b[1A',
       '\x1b]52;c;aGVsbG8=\x07',
+      '\x1b]0;pwned\x1b\\',
       '\x1b]8;;https://evil.example\x1b\\',
       '\x1bPpayload\x1b\\',
       '\x9b2J',
       '\x1b=',
     ].join('');
-    const component = new ToolExecutionComponentEnhanced(
+    const injected = [
+      '\x1b[2J',
+      '\x1b[1A',
+      '\x1b]',
+      'aGVsbG8=',
+      'pwned',
+      'evil.example',
+      '\x1bP',
+      'payload',
+      '\x9b',
+      '\x1b=',
+    ];
+    const renderBox = (component: ToolExecutionComponentEnhanced) => {
+      const container = new Container();
+      container.addChild(component);
+      reconcileChatBoundarySpacers(container);
+      const raw = container.render(120).join('\n');
+      for (const sequence of injected) expect(raw).not.toContain(sequence);
+      return stripAnsi(raw)
+        .split('\n')
+        .map(line => line.trimEnd());
+    };
+
+    const described = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'ls', description: `Listing${hostile} files` },
       { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
-    component.updateResult(
+    described.updateResult(
       {
         content: [{ type: 'text', text: `out${hostile}put\n\nstderr:\nerror: bad${hostile}\n\nExit code: 1` }],
         isError: false,
       },
       false,
     );
-    const container = new Container();
-    container.addChild(component);
-    reconcileChatBoundarySpacers(container);
-    const raw = container.render(120).join('\n');
-
-    for (const sequence of [
-      '\x1b[2J',
-      '\x1b[1A',
-      '\x1b]52',
-      'aGVsbG8=',
-      'evil.example',
-      '\x1bP',
-      'payload',
-      '\x9b',
-      '\x1b=',
-    ]) {
-      expect(raw).not.toContain(sequence);
-    }
-    const lines = stripAnsi(raw)
-      .split('\n')
-      .map(line => line.trimEnd());
+    const lines = renderBox(described);
     expect(lines).toContainEqual(expect.stringMatching(/^│ ✗ Listing files +\d+ms │$/));
     expect(lines).toContainEqual(expect.stringMatching(/^│ error: bad +│$/));
     expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ error: bad +│$/));
+
+    // Without a description the row shows the command, and the header shows the cwd argument.
+    const bare = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: `ls${hostile} -la`, cwd: `/tmp/work${hostile}dir` },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+    bare.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+    const bareLines = renderBox(bare);
+    expect(bareLines).toContainEqual(expect.stringMatching(/^│ \$ \/tmp\/workdir +│$/));
+    expect(bareLines).toContainEqual(expect.stringMatching(/^│ ✓ ls -la +\d+ms │$/));
   });
 
   it('keeps quiet shell box borders aligned for long git output', () => {
