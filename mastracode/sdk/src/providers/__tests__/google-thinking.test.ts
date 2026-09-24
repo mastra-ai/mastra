@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGoogleThinkingMiddleware, thinkingLevelToGoogleThinkingLevel } from '../google-thinking.js';
+import { createGoogleThinkingMiddleware, resolveGoogleThinkingConfig } from '../google-thinking.js';
 
 type Params = {
   providerOptions?: Record<string, Record<string, unknown>>;
@@ -13,46 +13,41 @@ async function transform(middleware: NonNullable<ReturnType<typeof createGoogleT
   })) as Params;
 }
 
-describe('thinkingLevelToGoogleThinkingLevel', () => {
-  it('maps the session levels onto Google levels', () => {
-    expect(thinkingLevelToGoogleThinkingLevel('off')).toBeUndefined();
-    expect(thinkingLevelToGoogleThinkingLevel('low')).toBe('low');
-    expect(thinkingLevelToGoogleThinkingLevel('medium')).toBe('medium');
-    expect(thinkingLevelToGoogleThinkingLevel('high')).toBe('high');
+describe('resolveGoogleThinkingConfig', () => {
+  it('returns undefined for off or unset levels', () => {
+    expect(resolveGoogleThinkingConfig('gemini-3-flash', 'off')).toBeUndefined();
+    expect(resolveGoogleThinkingConfig('gemini-3-flash', undefined)).toBeUndefined();
   });
 
-  it('clamps levels above high down to high', () => {
-    expect(thinkingLevelToGoogleThinkingLevel('xhigh')).toBe('high');
-    expect(thinkingLevelToGoogleThinkingLevel('max')).toBe('high');
+  it('uses thinkingLevel for Gemini 3 and clamps xhigh/max to high', () => {
+    expect(resolveGoogleThinkingConfig('gemini-3-flash-preview', 'medium')).toEqual({ thinkingLevel: 'medium' });
+    expect(resolveGoogleThinkingConfig('gemini-3-flash-preview', 'max')).toEqual({ thinkingLevel: 'high' });
+  });
+
+  it('maps Gemini 3 Pro to its supported low|high levels', () => {
+    expect(resolveGoogleThinkingConfig('gemini-3-pro-preview', 'low')).toEqual({ thinkingLevel: 'low' });
+    expect(resolveGoogleThinkingConfig('gemini-3-pro-preview', 'medium')).toEqual({ thinkingLevel: 'high' });
+  });
+
+  it('uses thinkingBudget for Gemini 2.5', () => {
+    expect(resolveGoogleThinkingConfig('gemini-2.5-flash', 'low')).toEqual({ thinkingBudget: 1024 });
+    expect(resolveGoogleThinkingConfig('gemini-2.5-pro', 'xhigh')).toEqual({ thinkingBudget: 24576 });
+  });
+
+  it('omits config for unrecognized model families', () => {
+    expect(resolveGoogleThinkingConfig('gemini-2.0-flash', 'high')).toBeUndefined();
+    expect(resolveGoogleThinkingConfig('gemma-3-27b-it', 'high')).toBeUndefined();
   });
 });
 
 describe('createGoogleThinkingMiddleware', () => {
-  it('returns undefined when the level is off or unset', () => {
-    expect(createGoogleThinkingMiddleware('off')).toBeUndefined();
-    expect(createGoogleThinkingMiddleware(undefined)).toBeUndefined();
-  });
-
-  it('injects thinkingConfig.thinkingLevel under providerOptions.google', async () => {
-    const middleware = createGoogleThinkingMiddleware('high');
-    expect(middleware).toBeDefined();
-
-    const result = await transform(middleware!, {});
-    expect(result.providerOptions?.google).toEqual({
-      thinkingConfig: { thinkingLevel: 'high' },
-    });
-  });
-
-  it('clamps xhigh/max to high on the wire', async () => {
-    const result = await transform(createGoogleThinkingMiddleware('max')!, {});
-    expect(result.providerOptions?.google).toEqual({
-      thinkingConfig: { thinkingLevel: 'high' },
-    });
+  it('returns undefined when there is nothing to inject', () => {
+    expect(createGoogleThinkingMiddleware('gemini-3-flash', 'off')).toBeUndefined();
+    expect(createGoogleThinkingMiddleware('gemini-2.0-flash', 'high')).toBeUndefined();
   });
 
   it('preserves existing google config and unrelated providers', async () => {
-    const middleware = createGoogleThinkingMiddleware('low');
-    const result = await transform(middleware!, {
+    const result = await transform(createGoogleThinkingMiddleware('gemini-3-flash', 'low')!, {
       providerOptions: {
         google: { thinkingConfig: { includeThoughts: true }, safetySettings: [] as unknown as Record<string, unknown> },
         openai: { store: false },

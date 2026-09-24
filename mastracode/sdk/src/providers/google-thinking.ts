@@ -1,54 +1,56 @@
 /**
  * Google (Gemini) thinking-level middleware.
  *
- * The Mastra Code session thinking level (`off|low|medium|high|xhigh|max`) is
- * broader than Google's `thinkingLevel`, which for Gemini 3+ accepts
- * `minimal|low|medium|high`. This middleware maps the session level onto
- * Google's scale and injects
- * `providerOptions.google.thinkingConfig.thinkingLevel` before the request is
- * sent, mirroring how the Anthropic/Codex middlewares forward their own
- * reasoning controls.
+ * Maps the Mastra Code session thinking level (`off|low|medium|high|xhigh|max`)
+ * onto the thinking control each Gemini family accepts:
+ * - Gemini 3+: `thinkingConfig.thinkingLevel` (Gemini 3 Pro only accepts `low|high`).
+ * - Gemini 2.5: `thinkingConfig.thinkingBudget` (token budget).
+ * Unknown model families get no thinking config, so requests are unchanged.
  */
 
 import type { LanguageModelMiddleware } from 'ai';
 import type { ThinkingLevelSetting } from '../thinking.js';
 
-type GoogleThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+type GoogleThinkingConfig = { thinkingLevel: 'low' | 'medium' | 'high' } | { thinkingBudget: number };
+
+// Budgets stay within the smallest Gemini 2.5 maximum (24576 for Flash / Flash-Lite).
+const GEMINI_25_BUDGETS = { low: 1024, medium: 8192, high: 24576 } as const;
 
 /**
- * Map a session thinking level to Google's `thinkingLevel`.
- *
- * Returns `undefined` for `off` (thinking omitted). Levels above Google's
- * `high` (`xhigh`, `max`) clamp down to `high`, its deepest supported setting.
+ * Resolve the Google thinking config for a model and session level.
+ * Returns `undefined` for `off`, unset levels, and unrecognized model families.
  */
-export function thinkingLevelToGoogleThinkingLevel(level: ThinkingLevelSetting): GoogleThinkingLevel | undefined {
-  switch (level) {
-    case 'off':
-      return undefined;
-    case 'low':
-      return 'low';
-    case 'medium':
-      return 'medium';
-    case 'high':
-    case 'xhigh':
-    case 'max':
-      return 'high';
+export function resolveGoogleThinkingConfig(
+  modelId: string,
+  level: ThinkingLevelSetting | undefined,
+): GoogleThinkingConfig | undefined {
+  if (!level || level === 'off') return undefined;
+  const clamped = level === 'xhigh' || level === 'max' ? 'high' : level;
+  const id = modelId.toLowerCase();
+
+  if (id.startsWith('gemini-2.5')) {
+    return { thinkingBudget: GEMINI_25_BUDGETS[clamped] };
   }
+  if (/^gemini-3(\.\d+)?-pro/.test(id)) {
+    return { thinkingLevel: clamped === 'low' ? 'low' : 'high' };
+  }
+  if (/^gemini-\d/.test(id) && !id.startsWith('gemini-1') && !id.startsWith('gemini-2')) {
+    return { thinkingLevel: clamped };
+  }
+  return undefined;
 }
 
 /**
- * Create middleware that forwards the session thinking level to Google as
- * `providerOptions.google.thinkingConfig.thinkingLevel`.
- *
- * Returns `undefined` when the level is unset or maps to no thinking (`off`),
- * so callers wrap nothing and the request carries no thinking config.
+ * Create middleware that injects the resolved config into
+ * `providerOptions.google.thinkingConfig`. Returns `undefined` when there is
+ * nothing to inject, so callers wrap nothing.
  */
 export function createGoogleThinkingMiddleware(
+  modelId: string,
   level: ThinkingLevelSetting | undefined,
 ): LanguageModelMiddleware | undefined {
-  if (!level) return undefined;
-  const thinkingLevel = thinkingLevelToGoogleThinkingLevel(level);
-  if (!thinkingLevel) return undefined;
+  const config = resolveGoogleThinkingConfig(modelId, level);
+  if (!config) return undefined;
 
   return {
     specificationVersion: 'v3',
@@ -57,15 +59,8 @@ export function createGoogleThinkingMiddleware(
       const thinkingConfig = (google.thinkingConfig ?? {}) as Record<string, unknown>;
       params.providerOptions = {
         ...params.providerOptions,
-        google: {
-          ...google,
-          thinkingConfig: {
-            ...thinkingConfig,
-            thinkingLevel,
-          },
-        },
+        google: { ...google, thinkingConfig: { ...thinkingConfig, ...config } },
       } as typeof params.providerOptions;
-
       return params;
     },
   };

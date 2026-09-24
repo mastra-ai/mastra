@@ -183,9 +183,13 @@ function openaiApiKeyProvider(
   thinkingLevel?: ThinkingLevel,
 ) {
   const openai = createOpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL, headers });
-  const effectiveLevel = getEffectiveThinkingLevel(modelId, thinkingLevel ?? 'medium');
-  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-  const middleware = createReasoningEffortMiddleware('openai', reasoningEffort);
+  const middleware =
+    thinkingLevel && thinkingLevel !== 'off'
+      ? createReasoningEffortMiddleware(
+          'openai',
+          THINKING_LEVEL_TO_REASONING_EFFORT[getEffectiveThinkingLevel(modelId, thinkingLevel)],
+        )
+      : undefined;
   return wrapLanguageModel({
     model: openai.responses(modelId),
     middleware: middleware ? [middleware] : [],
@@ -506,7 +510,9 @@ export class MastraCodeGateway extends MastraModelGateway {
         apiKey: args.apiKey,
         headers: args.headers,
       });
-      const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
+      // Custom endpoints only reliably accept the standard low|medium|high efforts.
+      const level = this.#thinkingLevel === 'xhigh' || this.#thinkingLevel === 'max' ? 'high' : this.#thinkingLevel;
+      const reasoningEffort = level ? THINKING_LEVEL_TO_REASONING_EFFORT[level] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
       if (!middleware) {
         return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
@@ -735,7 +741,7 @@ export class MastraCodeGateway extends MastraModelGateway {
           headers: args.headers,
         }) as unknown as GatewayLanguageModel);
 
-    const thinkingMiddleware = createGoogleThinkingMiddleware(this.#thinkingLevel);
+    const thinkingMiddleware = createGoogleThinkingMiddleware(args.modelId, this.#thinkingLevel);
     if (!thinkingMiddleware) return baseModel;
 
     return wrapLanguageModel({
