@@ -410,7 +410,9 @@ describe('OtelBridge', () => {
         bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
 
         expect(warn).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0]![0])).toContain('The tracerProvider passed to OtelBridge returned a no-op span');
+        expect(String(warn.mock.calls[0]![0])).toContain(
+          'The tracerProvider passed to OtelBridge returned a no-op span',
+        );
 
         bridge.shutdown();
       });
@@ -460,7 +462,11 @@ describe('OtelBridge', () => {
       const bridge = new OtelBridge();
       const warn = vi.spyOn(bridge['logger'], 'warn');
 
-      const result = bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
+      const result = bridge.createSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'test' },
+      });
 
       expect(result).toBeDefined();
       expect(warn).not.toHaveBeenCalled();

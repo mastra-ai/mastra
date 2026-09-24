@@ -22,7 +22,7 @@ Enables bidirectional integration between Mastra tracing and OpenTelemetry infra
 
 ## Constructor
 
-```typescript
+```typescript oxfmt:false
 new OtelBridge(config?: OtelBridgeConfig)
 ```
 
@@ -32,7 +32,7 @@ new OtelBridge(config?: OtelBridgeConfig)
     name: 'tracerProvider',
     type: 'TracerProvider',
     description:
-      'OpenTelemetry tracer provider used to create spans. Pass it when your provider isn\'t registered globally, for example when a framework creates the provider without calling `trace.setGlobalTracerProvider()`. Defaults to the globally registered provider.',
+      "OpenTelemetry tracer provider used to create spans. Pass it when your provider isn't registered globally, for example when a framework creates the provider without calling `trace.setGlobalTracerProvider()`. Defaults to the globally registered provider.",
     isOptional: true,
   },
   {
