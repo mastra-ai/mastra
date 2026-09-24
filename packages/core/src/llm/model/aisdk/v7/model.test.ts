@@ -221,6 +221,51 @@ describe('AISDKV7LanguageModel', () => {
     });
   });
 
+  describe('tool-result media remapping', () => {
+    const toolPrompt = (value: unknown[]) =>
+      [
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'c1', toolName: 'read', output: { type: 'content', value } }],
+        },
+      ] as unknown as LanguageModelV4CallOptions['prompt'];
+    const outputOf = (call: any) => call.prompt[0].content[0].output.value;
+
+    it('converts V2 media parts to V4 file parts in doGenerate and doStream', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+      const prompt = toolPrompt([
+        { type: 'text', text: 'caption' },
+        { type: 'media', data: 'aGVsbG8=', mediaType: 'image/png' },
+      ]);
+      const expected = [
+        { type: 'text', text: 'caption' },
+        { type: 'file', data: { type: 'data', data: 'aGVsbG8=' }, mediaType: 'image/png' },
+      ];
+
+      await wrapped.doGenerate({ prompt } as LanguageModelV4CallOptions);
+      await wrapped.doStream({ prompt } as LanguageModelV4CallOptions);
+
+      expect(outputOf((model.doGenerate as any).mock.calls[0][0])).toMatchObject(expected);
+      expect(outputOf((model.doStream as any).mock.calls[0][0])).toMatchObject(expected);
+    });
+
+    it('converts image-url parts and leaves V4 file parts unchanged', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+      const v4File = { type: 'file', data: { type: 'data', data: 'aGk=' }, mediaType: 'image/png' };
+
+      await wrapped.doStream({
+        prompt: toolPrompt([{ type: 'image-url', url: 'https://example.com/a.jpg' }, v4File]),
+      } as LanguageModelV4CallOptions);
+
+      const value = outputOf((model.doStream as any).mock.calls[0][0]);
+      expect(value[0]).toMatchObject({ type: 'file', data: { type: 'url' } });
+      expect(String(value[0].data.url)).toBe('https://example.com/a.jpg');
+      expect(value[1]).toEqual(v4File);
+    });
+  });
+
   describe('response file untagging', () => {
     it('untags generated file data from doStream so the shared pipeline receives the flat shape', async () => {
       const model = createMockV4Model();
