@@ -230,11 +230,11 @@ export type RunProcessInputStepArgs = Omit<
   resourceId?: string;
   threadId?: string;
   /**
-   * Hint that this call is the request stage of execution, meaning
-   * processLLMRequest will follow for processors that implement it.
-   * The runner uses this to set llmRequestStage on individual processor args.
+   * IDs of processors whose processLLMRequest will run for this step.
+   * The runner sets llmRequestStage for these processors, including when they
+   * run inside a processor workflow.
    */
-  isRequestStage?: boolean;
+  llmRequestProcessorIds?: ReadonlySet<string>;
 };
 
 /**

@@ -418,6 +418,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const registryEntry = globalRunRegistry.get(runId);
             const executionAbortSignal = registryEntry?.abortSignal ?? abortSignal;
             const baseInputProcessors = registryEntry?.inputProcessors ?? resolvedInputProcessors ?? [];
+            // Use `llmRequestInputProcessors` (uncombined) because combined
+            // (workflow-wrapped) processors are skipped by
+            // `ProcessorRunner.runProcessLLMRequest`. Fall back to
+            // `inputProcessors` for backward compatibility.
+            const llmRequestInputProcessors =
+              registryEntry?.llmRequestInputProcessors ??
+              registryEntry?.inputProcessors ??
+              resolvedLlmRequestInputProcessors ??
+              resolvedInputProcessors ??
+              [];
             // Output processors likewise fall back to the rebuilt list when the
             // per-process registry is empty (cross-process worker).
             const effectiveOutputProcessors = registryEntry?.outputProcessors ?? resolvedOutputProcessors ?? [];
@@ -442,7 +452,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               });
               try {
                 const processInputStepResult = await runner.runProcessInputStep({
-                  isRequestStage: true,
+                  llmRequestProcessorIds: ProcessorRunner.getLLMRequestProcessorIds(llmRequestInputProcessors),
                   messageList,
                   stepNumber: stepIndex,
                   steps: inputData.accumulatedSteps ?? [],
@@ -673,25 +683,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // without persisting changes back to the message list, or short-circuit
             // the call entirely by returning a cached response.
             // Mirrors loop/workflows/agentic-execution/llm-execution-step.ts.
-            //
-            // Use `llmRequestInputProcessors` (uncombined) because combined
-            // (workflow-wrapped) processors are skipped by
-            // `ProcessorRunner.runProcessLLMRequest`. Fall back to
-            // `inputProcessors` for backward compatibility.
             let cachedResponse: CachedLLMStepResponse | undefined;
-            const allInputProcessors =
-              registryEntry?.llmRequestInputProcessors ??
-              registryEntry?.inputProcessors ??
-              resolvedLlmRequestInputProcessors ??
-              resolvedInputProcessors ??
-              [];
             // Create a single ProcessorRunner shared between processLLMRequest
             // and processLLMResponse so processor state (e.g. cache keys stashed
             // in the request hook) is available in the response hook.
             const requestStepRunner =
-              allInputProcessors.length > 0
+              llmRequestInputProcessors.length > 0
                 ? new ProcessorRunner({
-                    inputProcessors: allInputProcessors,
+                    inputProcessors: llmRequestInputProcessors,
                     outputProcessors: [],
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,

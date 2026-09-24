@@ -110,7 +110,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      "In 'memory-only' trim mode, applies stored-history trimming at each step. In standard 'best-fit' and 'contiguous' modes, trims stored history when called from legacy or workflow-nested paths that never invoke processLLMRequest, and defers to processLLMRequest on the agentic-loop prompt-stage path where earlier prompt processors may have already transformed the prompt.",
+      "In 'memory-only' trim mode, applies stored-history trimming at each step. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
     isOptional: true,
   },
   {
@@ -227,9 +227,7 @@ const result = await agent.generate('Research this topic using your tools', {
 })
 ```
 
-> **Note on processor workflow ordering:** If a `TokenLimiterProcessor` is nested inside a processor workflow (wrapped with `createStep`), it runs its trimming through `processInputStep`, which operates on stored messages before top-level prompt processors such as `ToolCallFilter` convert them. For post-filter counting, where earlier prompt processors like `ToolCallFilter` have already removed tool results from the prompt, register the limiter directly in `inputProcessors`, not wrapped in a `createStep`.
-
-````
+Processor workflows don't run `processLLMRequest`, so a `TokenLimiterProcessor` inside a processor workflow trims stored messages in `processInputStep`, before prompt processors such as `ToolCallFilter` remove anything from the request. To count the prompt the model receives, add the limiter directly to `inputProcessors`.
 
 ### As an output processor (limit response length)
 
@@ -252,7 +250,7 @@ export const agent = new Agent({
     }),
   ],
 })
-````
+```
 
 ## Related
 

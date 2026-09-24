@@ -218,15 +218,18 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   }
 
   /**
-   * Input-stage hook. Only `memory-only` mode acts here, because that mode's job
-   * is to shrink what memory keeps, not what a single request sends.
+   * Input-stage hook. `memory-only` mode always trims stored history here, because
+   * that mode's job is to shrink what memory keeps, not what a single request sends.
    *
    * The standard trim modes (`best-fit`, `contiguous`) budget the request at
-   * {@link TokenLimiterProcessor.processLLMRequest} instead: the prompt is the
-   * payload the model actually receives, after every earlier prompt processor has
-   * run, and trimming there never deletes stored messages. Trimming stored
-   * messages here would count history that a later prompt processor (for example
-   * `ToolCallFilter`) is about to remove from the request.
+   * {@link TokenLimiterProcessor.processLLMRequest} when the caller will run it
+   * (`llmRequestStage`): the prompt is the payload the model actually receives,
+   * after every earlier prompt processor has run, and trimming there never deletes
+   * stored messages. Trimming stored messages here would count history that a
+   * later prompt processor (for example `ToolCallFilter`) is about to remove.
+   *
+   * Callers that never run `processLLMRequest` for this processor (legacy
+   * generate/stream, processor workflows) get stored-message trimming here instead.
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<void> {
     const { messageList } = args;
@@ -236,10 +239,6 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       return;
     }
 
-    // When called from a request-stage path where processLLMRequest will follow,
-    // defer trimming to the prompt stage so it accounts for earlier prompt
-    // processors (e.g. ToolCallFilter).  For legacy/workflow paths that never
-    // invoke processLLMRequest we trim here so history stays bounded.
     if (args.llmRequestStage) return;
 
     if (!messageList) return;
