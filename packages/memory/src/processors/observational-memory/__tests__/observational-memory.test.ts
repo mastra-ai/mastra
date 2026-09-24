@@ -45,7 +45,7 @@ import { getObservationsAsOf } from '../observation-utils';
 import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
-  buildMultiThreadObserverPrompt,
+  buildMultiThreadObserverRequestMessage,
   buildObserverSystemPrompt,
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
@@ -3177,7 +3177,7 @@ describe('Observer Agent Helpers', () => {
     });
   });
 
-  describe('buildMultiThreadObserverPrompt', () => {
+  describe('buildMultiThreadObserverRequestMessage', () => {
     it('should include per-thread prior metadata when provided', () => {
       const messagesByThread = new Map<string, MastraDBMessage[]>([
         ['thread-1', [createTestMessage('Thread 1 message', 'user')]],
@@ -3188,11 +3188,8 @@ describe('Observer Agent Helpers', () => {
         ['thread-1', { currentTask: 'Handle billing issue', suggestedResponse: 'Ask for invoice id.' }],
       ]);
 
-      const prompt = buildMultiThreadObserverPrompt(
-        undefined,
-        messagesByThread,
-        ['thread-1', 'thread-2'],
-        priorMetadata,
+      const prompt = observerTextContent(
+        buildMultiThreadObserverRequestMessage(undefined, messagesByThread, ['thread-1', 'thread-2'], priorMetadata),
       );
 
       expect(prompt).toContain('Prior Thread Metadata');
@@ -3200,6 +3197,8 @@ describe('Observer Agent Helpers', () => {
       expect(prompt).toContain('prior current-task: Handle billing issue');
       expect(prompt).toContain('prior suggested-response: Ask for invoice id.');
       expect(prompt).not.toContain('thread thread-2\n  - prior current-task');
+      expect(prompt.indexOf('Prior Thread Metadata')).toBeLessThan(prompt.indexOf('<thread id="thread-1">'));
+      expect(prompt.indexOf('<thread id="thread-2">')).toBeLessThan(prompt.indexOf('## Your Task'));
     });
   });
 

@@ -1378,29 +1378,6 @@ export function buildMultiThreadObserverHistoryMessage(
   } as CoreMessage;
 }
 
-export function buildMultiThreadObserverTaskPrompt(
-  existingObservations: string | undefined,
-  threadOrder?: string[],
-  priorMetadataByThread?: Map<
-    string,
-    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
-  >,
-  wasTruncated?: boolean,
-  includeThreadTitle?: boolean,
-  extractors: readonly Extractor<any>[] = [],
-): string {
-  return (
-    buildMultiThreadObserverContextPrompt(
-      existingObservations,
-      threadOrder,
-      priorMetadataByThread,
-      wasTruncated,
-      includeThreadTitle,
-      extractors,
-    ) + buildMultiThreadObserverTaskInstructions(includeThreadTitle)
-  );
-}
-
 /**
  * Build the Observer's single multi-thread request message: prior memory first, then the
  * thread histories, then the task. Keeping everything in one user message, with the task
@@ -1513,26 +1490,6 @@ function buildMultiThreadObserverContextPrompt(
   }
 
   return prompt;
-}
-
-/**
- * Build the prompt for multi-thread batched observation.
- */
-export function buildMultiThreadObserverPrompt(
-  existingObservations: string | undefined,
-  messagesByThread: Map<string, MastraDBMessage[]>,
-  threadOrder: string[],
-  priorMetadataByThread?: Map<
-    string,
-    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
-  >,
-  wasTruncated?: boolean,
-  options?: ObserverFormatOptions,
-  includeThreadTitle?: boolean,
-  extractors: readonly Extractor<any>[] = [],
-): string {
-  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle, extractors)}`;
 }
 
 /**
