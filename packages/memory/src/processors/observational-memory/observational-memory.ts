@@ -933,11 +933,12 @@ export class ObservationalMemory {
     mainAgent?: ProcessorContext['agent'];
     currentModel?: ObservationModelContext;
   }): Promise<ResolvedInvocationModel> {
-    const mainModel =
-      options?.currentModel?.model ??
-      (options?.mainAgent
-        ? ((await options.mainAgent.getModel({ requestContext: options.requestContext })) as ResolvedInvocationModel)
-        : undefined);
+    let mainModel: ResolvedInvocationModel | undefined = options?.currentModel?.model;
+    if (!mainModel && options?.mainAgent) {
+      mainModel = (await options.mainAgent.getModel({
+        requestContext: options.requestContext,
+      })) as ResolvedInvocationModel;
+    }
     const mainModelId = getModelId(mainModel);
     const pick =
       resolveAutoModelId(mainModelId, { autoModels: this.autoModels }) ??
