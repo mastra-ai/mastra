@@ -659,6 +659,32 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(result.failures![0]!.error).toContain(invalidField);
   });
 
+  it('treats nulls in optional fields as not provided', async () => {
+    const schema = z.object({
+      name: z.string(),
+      city: z.string().optional(),
+      profile: z.object({ nickname: z.string().optional() }).optional(),
+    });
+
+    const { memory, result } = await runWorkingMemoryHook(schema, {
+      name: 'Tyler',
+      city: null,
+      profile: { nickname: null },
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workingMemory: JSON.stringify({ name: 'Tyler', profile: {} }) }),
+    );
+    expect(result.failures).toBeUndefined();
+  });
+
+  it('still rejects a null in a required field', async () => {
+    const { memory, result } = await runWorkingMemoryHook(z.object({ name: z.string() }), { name: null });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('name') }]);
+  });
+
   it('persists the validator output', async () => {
     const { memory } = await runWorkingMemoryHook(z.object({ name: z.string().trim() }), {
       name: '  Tyler ',

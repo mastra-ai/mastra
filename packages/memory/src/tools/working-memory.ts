@@ -68,7 +68,7 @@ export function deepMergeWorkingMemory(
   return result;
 }
 
-function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>): unknown {
+export function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>): unknown {
   if (Array.isArray(value)) {
     const itemSchema = (schema.items as Record<string, unknown>) ?? {};
     return value.map(item => stripNullsFromOptional(item, itemSchema));

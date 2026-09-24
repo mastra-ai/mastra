@@ -1,8 +1,10 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema } from '@mastra/core/schema';
+import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
+import { stripNullsFromOptional } from '../../tools/working-memory';
 import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
 
@@ -10,9 +12,12 @@ import type { ExtractorRuntimeContext } from './extractor';
  * The structured-output schema for this extractor stays generic because every structured extractor shares one
  * response object: a strict working-memory schema there would make one invalid document fail every sibling
  * extractor. The configured schema is enforced here instead, with its own validator, before anything is stored.
+ * Like the working memory tool, nulls in optional fields are treated as "not provided" rather than as invalid.
  */
 async function validateAgainstConfiguredSchema(schema: PublicSchema, value: unknown): Promise<unknown> {
-  const result = await toStandardSchema(schema)['~standard'].validate(value);
+  const standardSchema = toStandardSchema(schema);
+  const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' }) as Record<string, unknown>;
+  const result = await standardSchema['~standard'].validate(stripNullsFromOptional(value, jsonSchema));
   if (!result.issues) {
     return result.value;
   }
