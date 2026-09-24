@@ -2,10 +2,21 @@
 '@mastra/core': minor
 ---
 
-Default agents now recover from transient provider failures, assistant-prefill rejections, and provider history incompatibilities without extra configuration. A processor you supply with the same id is used instead of the matching default. Each added default is placed at the position its id gives it, so naming only one of the three still resolves them in the order that makes each repair run before the failures it prevents, and your own processors are never reordered relative to each other. Pass `errorProcessors: []` to run with no error processors at all, or set `errorProcessorDefaults: false` to run only the processors you configure with none of the defaults merged in.
+Every agent now recovers from transient provider failures, assistant-prefill rejections, and provider history incompatibilities with no configuration. Three error processors — `ProviderHistoryCompat`, `PrefillErrorHandler`, and `StreamErrorRetryProcessor` — are on by default, in the order that repairs history before anything retries. A `ProviderHistoryCompat` in `errorProcessors` now also repairs the outbound prompt before the provider sees it, instead of only reacting to a rejection.
 
-The default retry processor does not retry unmatched errors. Transient failures carry provider `isRetryable` metadata or match the built-in matchers, so they still recover, but a deterministic failure — a rejected structured-output attempt, an invalid request, a validation error — is no longer replayed twice with a 3s delay. Pass `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors` to opt in. `createCodingAgent` keeps retrying unmatched errors, as it always has.
+You stay in control of the list:
 
-Error-phase processors now also run in the LLM request lane, so a `ProviderHistoryCompat` placed in `errorProcessors` applies its preemptive prompt rules as well as its reactive API-error recovery. A processor that joins that lane is traced there, which adds one `processor_run` span per model step for the processors that implement `processLLMRequest`.
+```ts
+// Replace one default: your instance with the same id takes its slot.
+new Agent({ ..., errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })] })
 
-Because the resolved error-processor list is now non-empty for every agent, the implicit `maxProcessorRetries` safety cap of `3` applies to bare agents too — the defaults self-limit well below it, so behavior is unchanged unless a processor never stops asking to retry. The "errorProcessors are configured without an explicit maxProcessorRetries" warning now fires only when you configured error processors yourself, not for the framework defaults.
+// Run only your own processors — none of the defaults are merged in.
+new Agent({ ..., errorProcessors: [myProcessor], errorProcessorDefaults: false })
+
+// Run with no error processors at all.
+new Agent({ ..., errorProcessors: [] })
+```
+
+The default retry processor does not retry unmatched errors. Transient failures still recover through provider `isRetryable` metadata or the built-in matchers, and a bad-request (HTTP 400) response is retried once after 2s in case it was transient — but other deterministic failures, like a rejected structured-output attempt or a validation error, are no longer replayed. Pass `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors` to opt back in. `createCodingAgent` keeps retrying unmatched errors, as it always has.
+
+Error-processor retries are bounded by a safety cap of `3` per turn when you don't set `maxProcessorRetries`; the defaults stop well below it on their own. The "errorProcessors are configured without an explicit maxProcessorRetries" warning now fires only when you configured error processors yourself, not for the framework defaults.
