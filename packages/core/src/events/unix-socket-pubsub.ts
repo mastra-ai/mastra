@@ -658,12 +658,13 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   async #publishLeaseRecoveryOwner(ownerPath: string, owner: FileLeaseRecoveryOwner): Promise<boolean> {
     const candidatePath = `${ownerPath}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(candidatePath, JSON.stringify(owner), { flag: 'wx' });
     try {
+      await writeFile(candidatePath, JSON.stringify(owner), { flag: 'wx' });
       await link(candidatePath, ownerPath);
       return true;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST' || code === 'ENOENT') return false;
       throw error;
     } finally {
       await unlink(candidatePath).catch(() => {});
@@ -674,13 +675,33 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   async #ownsLeaseMutationRecovery(recoveryPath: string): Promise<boolean> {
     const ownerDirectory = `${recoveryPath}.owners`;
     const self = this.#leaseMutationRecoveryOwner();
+    const recoveryStillExists = async () => {
+      try {
+        await stat(recoveryPath);
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw error;
+      }
+    };
+    if (!(await recoveryStillExists())) return false;
     await mkdir(ownerDirectory, { recursive: true });
 
     while (true) {
       this.#throwIfClosed();
-      const ownerNames = (await readdir(ownerDirectory).catch(() => [] as string[]))
-        .filter(name => /^\d+\.json$/.test(name))
-        .sort((first, second) => Number(first.slice(0, -5)) - Number(second.slice(0, -5)));
+      if (!(await recoveryStillExists())) {
+        await rm(ownerDirectory, { recursive: true, force: true });
+        return false;
+      }
+      let ownerNames: string[];
+      try {
+        ownerNames = (await readdir(ownerDirectory))
+          .filter(name => /^\d+\.json$/.test(name))
+          .sort((first, second) => Number(first.slice(0, -5)) - Number(second.slice(0, -5)));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw error;
+      }
       const latestName = ownerNames.at(-1);
       if (latestName) {
         const latestOwner = await this.#readJson<FileLeaseRecoveryOwner>(join(ownerDirectory, latestName));
@@ -693,6 +714,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
         }
       }
 
+      if (!(await recoveryStillExists())) {
+        await rm(ownerDirectory, { recursive: true, force: true });
+        return false;
+      }
       const nextGeneration = latestName ? Number(latestName.slice(0, -5)) + 1 : 0;
       if (await this.#publishLeaseRecoveryOwner(join(ownerDirectory, `${nextGeneration}.json`), self)) {
         return true;

@@ -14,6 +14,12 @@ const recoveryRace = vi.hoisted(() => ({
   lockInstalled: undefined as (() => void) | undefined,
   resumeLockInstall: undefined as Promise<void> | undefined,
   publishedOwnerGenerations: [] as string[],
+  pauseOwnerRead: false,
+  ownerReadPaused: undefined as (() => void) | undefined,
+  resumeOwnerRead: undefined as Promise<void> | undefined,
+  pauseRecoveryRename: false,
+  recoveryRenamePaused: undefined as (() => void) | undefined,
+  resumeRecoveryRename: undefined as Promise<void> | undefined,
 }));
 
 vi.mock('node:fs/promises', async importOriginal => {
@@ -34,6 +40,14 @@ vi.mock('node:fs/promises', async importOriginal => {
         await recoveryRace.resumeLockInstall;
       }
     },
+    readdir: async (path: Parameters<typeof actual.readdir>[0], options?: Parameters<typeof actual.readdir>[1]) => {
+      if (recoveryRace.pauseOwnerRead && String(path).endsWith('.owners')) {
+        recoveryRace.pauseOwnerRead = false;
+        recoveryRace.ownerReadPaused?.();
+        await recoveryRace.resumeOwnerRead;
+      }
+      return actual.readdir(path, options as never);
+    },
     stat: async (path: Parameters<typeof actual.stat>[0], options?: Parameters<typeof actual.stat>[1]) => {
       if (recoveryRace.rejectClaimantStats && String(path).includes('.claimants/')) {
         throw new Error('claimant timestamps are unavailable');
@@ -41,9 +55,14 @@ vi.mock('node:fs/promises', async importOriginal => {
       return actual.stat(path, options as never);
     },
     rename: async (oldPath: Parameters<typeof actual.rename>[0], newPath: Parameters<typeof actual.rename>[1]) => {
+      const from = String(oldPath);
+      const to = String(newPath);
+      if (recoveryRace.pauseRecoveryRename && from.endsWith('.lock') && to.endsWith('.isolated')) {
+        recoveryRace.pauseRecoveryRename = false;
+        recoveryRace.recoveryRenamePaused?.();
+        await recoveryRace.resumeRecoveryRename;
+      }
       if (recoveryRace.enabled) {
-        const from = String(oldPath);
-        const to = String(newPath);
         if (from.endsWith('.lock') && to.endsWith('.isolated')) {
           recoveryRace.isolatedRenames += 1;
           if (recoveryRace.isolatedRenames === 2) {
@@ -79,6 +98,12 @@ describe('UnixSocketPubSub lease recovery', () => {
     recoveryRace.lockInstalled = undefined;
     recoveryRace.resumeLockInstall = undefined;
     recoveryRace.publishedOwnerGenerations = [];
+    recoveryRace.pauseOwnerRead = false;
+    recoveryRace.ownerReadPaused = undefined;
+    recoveryRace.resumeOwnerRead = undefined;
+    recoveryRace.pauseRecoveryRename = false;
+    recoveryRace.recoveryRenamePaused = undefined;
+    recoveryRace.resumeRecoveryRename = undefined;
     await Promise.allSettled(pubsubs.splice(0).map(pubsub => pubsub.close()));
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
@@ -150,6 +175,65 @@ describe('UnixSocketPubSub lease recovery', () => {
 
     expect(results.filter(result => result.acquired)).toHaveLength(1);
     expect(recoveryRace.publishedOwnerGenerations).toEqual(['1.json']);
+    const winner = results.find(result => result.acquired)!.owner;
+    await expect(first.getLeaseOwner(key)).resolves.toBe(winner);
+    await expect(second.getLeaseOwner(key)).resolves.toBe(winner);
+  });
+
+  it('rechecks the lock when recovery finishes before a late owner read', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'mastra-uds-lease-late-recovery-owner-'));
+    const key = 'late-recovery-owner-key';
+    const fileName = createHash('sha256').update(key).digest('hex');
+    const lockPath = join(tempDir, 'leases', 'mutations', `${fileName}.lock`);
+    const recoveryPath = join(`${lockPath}.recoveries`, 'dead-token.marker');
+    await mkdir(`${recoveryPath}.owners`, { recursive: true });
+    await writeFile(
+      lockPath,
+      JSON.stringify({ pid: 2_147_483_647, processNonce: 'dead-process', token: 'dead-token' }),
+    );
+    await link(lockPath, recoveryPath);
+
+    const first = new UnixSocketPubSub(join(tempDir, 'first.sock'));
+    const second = new UnixSocketPubSub(join(tempDir, 'second.sock'));
+    pubsubs.push(first, second);
+
+    let signalRenamePaused!: () => void;
+    const renamePaused = new Promise<void>(resolve => {
+      signalRenamePaused = resolve;
+    });
+    let resumeRename!: () => void;
+    recoveryRace.resumeRecoveryRename = new Promise<void>(resolve => {
+      resumeRename = resolve;
+    });
+    recoveryRace.recoveryRenamePaused = signalRenamePaused;
+    recoveryRace.pauseRecoveryRename = true;
+
+    const firstAcquisition = first.acquireLease(key, 'first-owner', 10_000);
+    await renamePaused;
+
+    let signalOwnerReadPaused!: () => void;
+    const ownerReadPaused = new Promise<void>(resolve => {
+      signalOwnerReadPaused = resolve;
+    });
+    let resumeOwnerRead!: () => void;
+    recoveryRace.resumeOwnerRead = new Promise<void>(resolve => {
+      resumeOwnerRead = resolve;
+    });
+    recoveryRace.ownerReadPaused = signalOwnerReadPaused;
+    recoveryRace.pauseOwnerRead = true;
+
+    const secondAcquisition = second.acquireLease(key, 'second-owner', 10_000);
+    await ownerReadPaused;
+    resumeRename();
+    const firstResult = await firstAcquisition;
+    resumeOwnerRead();
+    const [secondResult] = await Promise.allSettled([secondAcquisition]);
+
+    expect(secondResult.status).toBe('fulfilled');
+    const results = [firstResult, secondResult.status === 'fulfilled' ? secondResult.value : undefined].filter(
+      result => result !== undefined,
+    );
+    expect(results.filter(result => result.acquired)).toHaveLength(1);
     const winner = results.find(result => result.acquired)!.owner;
     await expect(first.getLeaseOwner(key)).resolves.toBe(winner);
     await expect(second.getLeaseOwner(key)).resolves.toBe(winner);
