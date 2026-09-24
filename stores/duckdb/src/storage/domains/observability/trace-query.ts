@@ -109,6 +109,13 @@ const TRACE_SELECT = `
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
 
+/** The table summary needs the root output and tags; other queries leave the blobs off the read path. */
+function traceSelect(plan: TrustedTraceQueryPlan): string {
+  return plan.result === 'traces' && plan.tableSummary
+    ? `${TRACE_SELECT},\n  r.output AS output,\n  r.tags AS tags`
+    : TRACE_SELECT;
+}
+
 function fieldDefinition<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
   field: TraceQueryCanonicalField,
@@ -472,7 +479,7 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
   }
 
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
+    SELECT ${traceSelect(plan)}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
     FROM root_scope r
     WHERE ${conditions.slice(3).join('\n      AND ') || 'TRUE'}
   )`);
@@ -737,32 +744,258 @@ function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
+type TableSummaryRollup = NonNullable<coreStorage.TraceQueryTableSummaryInput['spans']> & {
+  promptCacheReadTokens: number | null;
+  promptCacheCreationTokens: number | null;
+};
+
+interface TableSummaryRows {
+  rollups: Map<string, TableSummaryRollup>;
+  feedback: Map<string, coreStorage.TraceQueryFeedbackSummary[]>;
+  scores: Map<string, coreStorage.TraceQueryScoreSummary[]>;
+}
+
+/**
+ * Bounded side queries for the selected page only. Each reads the same current-record
+ * shape as the trace scope, restricted to the page's trace IDs, and never touches
+ * ordering or totals: the page query already fixed them.
+ */
+export function compileDuckDBTableSummaryQueries(
+  scope: TraceQueryTenantScope | undefined,
+  traceIds: string[],
+): { rollups: CompiledDuckDBTraceQuery; feedback: CompiledDuckDBTraceQuery; scores: CompiledDuckDBTraceQuery } {
+  const ids = traceIds.map(() => '?').join(', ');
+  const tenantConditions = (alias: string): string[] =>
+    scope
+      ? [`${alias}.organizationId = ?`, ...(scope.resourceId === undefined ? [] : [`${alias}.resourceId = ?`])]
+      : [];
+  const tenantValues = scope
+    ? scope.resourceId === undefined
+      ? [scope.organizationId]
+      : [scope.organizationId, scope.resourceId]
+    : [];
+  const where = (alias: string): { sql: string; values: unknown[] } => ({
+    sql: [`${alias}.traceId IN (${ids})`, ...tenantConditions(alias)].join('\n        AND '),
+    values: [...traceIds, ...tenantValues],
+  });
+  const list = (types: readonly string[]) => types.map(type => `'${type}'`).join(', ');
+  const relatedLimit = coreStorage.TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1;
+
+  const spanWhere = where('e');
+  const metricWhere = where('m');
+  const rollups: CompiledDuckDBTraceQuery = {
+    sql: `WITH current_span_rows AS (
+      SELECT
+        e.*,
+        coalesce(
+          min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY e.traceId, e.spanId),
+          min(e.timestamp) OVER (PARTITION BY e.traceId, e.spanId)
+        ) AS startedAt,
+        row_number() OVER (
+          PARTITION BY e.traceId, e.spanId
+          ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
+        ) AS currentRank
+      FROM span_events e
+      WHERE ${spanWhere.sql}
+    ),
+    current_spans AS (
+      SELECT traceId, spanId, spanType, error, startedAt, attributes
+      FROM current_span_rows
+      WHERE currentRank = 1
+    ),
+    model_spans AS (
+      SELECT
+        traceId,
+        CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END AS model,
+        ${durationMsSql('startedAt', `TRY_CAST(json_extract_string(attributes, '$.completionStartTime') AS TIMESTAMP)`)} AS timeToFirstTokenMs,
+        row_number() OVER (PARTITION BY traceId ORDER BY startedAt ASC, spanId ASC) AS modelRank
+      FROM current_spans
+      WHERE spanType IN (${list(coreStorage.TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES)})
+    ),
+    metric_sums AS (
+      SELECT
+        m.traceId,
+        sum(m.value) FILTER (WHERE m.name = ?) AS promptCacheReadTokens,
+        sum(m.value) FILTER (WHERE m.name = ?) AS promptCacheCreationTokens
+      FROM metric_events m
+      INNER JOIN current_spans c ON c.traceId = m.traceId AND c.spanId = m.spanId
+      WHERE ${metricWhere.sql}
+        AND m.name IN (?, ?)
+      GROUP BY m.traceId
+    )
+SELECT
+  c.traceId AS traceId,
+  count(*) FILTER (WHERE c.error IS NOT NULL) AS errorTotal,
+  count(*) FILTER (WHERE c.error IS NOT NULL AND c.spanType IN (${list(coreStorage.TRACE_QUERY_TABLE_SUMMARY_LLM_SPAN_TYPES)})) AS errorLlm,
+  count(*) FILTER (WHERE c.error IS NOT NULL AND c.spanType IN (${list(coreStorage.TRACE_QUERY_TABLE_SUMMARY_TOOL_SPAN_TYPES)})) AS errorTool,
+  any_value(ms.model) AS model,
+  any_value(ms.timeToFirstTokenMs) AS timeToFirstTokenMs,
+  any_value(mt.promptCacheReadTokens) AS promptCacheReadTokens,
+  any_value(mt.promptCacheCreationTokens) AS promptCacheCreationTokens
+FROM current_spans c
+LEFT JOIN model_spans ms ON ms.traceId = c.traceId AND ms.modelRank = 1
+LEFT JOIN metric_sums mt ON mt.traceId = c.traceId
+GROUP BY c.traceId`,
+    values: [
+      ...spanWhere.values,
+      coreStorage.TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheReadTokens,
+      coreStorage.TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheCreationTokens,
+      ...metricWhere.values,
+      coreStorage.TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheReadTokens,
+      coreStorage.TRACE_QUERY_TABLE_SUMMARY_METRICS.promptCacheCreationTokens,
+    ],
+  };
+
+  const feedbackWhere = where('f');
+  const feedback: CompiledDuckDBTraceQuery = {
+    sql: `SELECT *
+FROM (
+  SELECT
+    f.traceId, f.feedbackId, f.feedbackType, f.feedbackSource, f.value, f.valueString, f.valueNumber, f.comment, f.timestamp,
+    row_number() OVER (PARTITION BY f.traceId ORDER BY f.timestamp DESC, f.feedbackId ASC) AS relatedRank
+  FROM feedback_events f
+  WHERE ${feedbackWhere.sql}
+)
+WHERE relatedRank <= ?
+ORDER BY traceId ASC, relatedRank ASC`,
+    values: [...feedbackWhere.values, relatedLimit],
+  };
+
+  const scoreWhere = where('s');
+  const scores: CompiledDuckDBTraceQuery = {
+    sql: `SELECT *
+FROM (
+  SELECT
+    s.traceId, s.scoreId, s.scorerId, s.scorerVersion, s.scoreSource, s.score, s.timestamp, s.spanId,
+    row_number() OVER (PARTITION BY s.traceId ORDER BY s.timestamp DESC, s.scoreId ASC) AS relatedRank
+  FROM score_events s
+  WHERE ${scoreWhere.sql}
+)
+WHERE relatedRank <= ?
+ORDER BY traceId ASC, relatedRank ASC`,
+    values: [...scoreWhere.values, relatedLimit],
+  };
+
+  return { rollups, feedback, scores };
+}
+
+function nullableNumber(value: unknown): number | null {
+  return value == null ? null : Number(value);
+}
+
+async function loadTableSummaryRows(
+  db: DuckDBConnection,
+  scope: TraceQueryTenantScope | undefined,
+  traceIds: string[],
+): Promise<TableSummaryRows> {
+  const result: TableSummaryRows = { rollups: new Map(), feedback: new Map(), scores: new Map() };
+  if (traceIds.length === 0) return result;
+  const queries = compileDuckDBTableSummaryQueries(scope, traceIds);
+  const [rollupRows, feedbackRows, scoreRows] = await Promise.all([
+    db.query<Record<string, unknown>>(queries.rollups.sql, queries.rollups.values),
+    db.query<Record<string, unknown>>(queries.feedback.sql, queries.feedback.values),
+    db.query<Record<string, unknown>>(queries.scores.sql, queries.scores.values),
+  ]);
+  for (const row of rollupRows) {
+    result.rollups.set(String(row.traceId), {
+      errorTotal: Number(row.errorTotal ?? 0),
+      errorLlm: Number(row.errorLlm ?? 0),
+      errorTool: Number(row.errorTool ?? 0),
+      model: row.model == null ? null : String(row.model),
+      timeToFirstTokenMs: nullableNumber(row.timeToFirstTokenMs),
+      promptCacheReadTokens: nullableNumber(row.promptCacheReadTokens),
+      promptCacheCreationTokens: nullableNumber(row.promptCacheCreationTokens),
+    });
+  }
+  for (const row of feedbackRows) {
+    const traceId = String(row.traceId);
+    const records = result.feedback.get(traceId) ?? [];
+    records.push({
+      feedbackId: String(row.feedbackId),
+      feedbackType: String(row.feedbackType),
+      feedbackSource: String(row.feedbackSource),
+      value: row.valueNumber != null ? Number(row.valueNumber) : String(row.valueString ?? row.value ?? ''),
+      comment: row.comment == null ? null : String(row.comment),
+      timestamp: asIsoTimestamp(row.timestamp),
+    });
+    result.feedback.set(traceId, records);
+  }
+  for (const row of scoreRows) {
+    const traceId = String(row.traceId);
+    const records = result.scores.get(traceId) ?? [];
+    records.push({
+      scoreId: String(row.scoreId),
+      scorerId: String(row.scorerId),
+      scorerVersion: row.scorerVersion == null ? null : String(row.scorerVersion),
+      scoreSource: row.scoreSource == null ? null : String(row.scoreSource),
+      score: Number(row.score),
+      timestamp: asIsoTimestamp(row.timestamp),
+      spanId: row.spanId == null ? null : String(row.spanId),
+    });
+    result.scores.set(traceId, records);
+  }
+  return result;
+}
+
+function traceRowToResult(row: Record<string, unknown>, summaries?: TableSummaryRows) {
+  const traceId = String(row.traceId);
+  const rollup = summaries?.rollups.get(traceId);
+  return {
+    traceId,
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+    ...(summaries
+      ? {
+          tableSummary: coreStorage.buildTraceQueryTableSummary({
+            output: row.output,
+            tags: row.tags,
+            spans: rollup ?? null,
+            feedback: summaries.feedback.get(traceId) ?? [],
+            scores: summaries.scores.get(traceId) ?? [],
+            promptCacheReadTokens: rollup?.promptCacheReadTokens ?? null,
+            promptCacheCreationTokens: rollup?.promptCacheCreationTokens ?? null,
+          }),
+        }
+      : {}),
+  };
+}
+
+async function mapTraceRows(db: DuckDBConnection, plan: TrustedTraceQueryPlan, rows: Record<string, unknown>[]) {
+  const summaries =
+    plan.result === 'traces' && plan.tableSummary
+      ? await loadTableSummaryRows(
+          db,
+          plan.scope,
+          rows.map(row => String(row.traceId)),
+        )
+      : undefined;
+  return rows.map(row => traceRowToResult(row, summaries));
+}
+
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
   if (plan.paginationMode === 'page') {
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
-    const traces = rows
-      .filter(row => row.traceId != null)
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
+    const traces = await mapTraceRows(
+      db,
+      plan,
+      rows.filter(row => row.traceId != null),
+    );
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       // The list-polling feature predates the trace-query cursor encoder.
@@ -797,24 +1030,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = await mapTraceRows(db, plan, visibleRows);
   if (plan.paginationMode === 'delta') {
     const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
     const head = String(rows[0]?.streamHead ?? 0);

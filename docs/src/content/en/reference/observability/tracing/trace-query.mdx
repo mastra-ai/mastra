@@ -257,6 +257,7 @@ Both routes require `observability:read` and use the configured observability st
 | `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
 | `after` | No | Delta mode only. Opaque `deltaCursor` from a numbered page or previous poll. Omit to establish the current watermark. |
 | `limit` | No | Delta mode only. Maximum results per batch. Defaults to 10 and has a maximum of 100. |
+| `include` | No | Optional projections. Set `{ tableSummary: true }` to return the bounded Traces-table fields on every trace row. Not accepted with `group`, and the page can't exceed 100 traces. |
 
 ### Thread queries
 
@@ -283,6 +284,8 @@ The planner rejects a query before storage execution when it exceeds any of thes
 | String literal | 4,096 UTF-8 bytes |
 | Raw predicate path | 128 UTF-8 bytes |
 | `page.limit` | 1,000 |
+| `page.limit`, `pagination.perPage`, or delta `limit` with `include.tableSummary` | 100 |
+| Feedback and score summaries per trace with `include.tableSummary` | 10 each |
 | HTTP request body | 256 KiB |
 
 Each comparison literal counts as one literal. Each member of an `in` or `notIn` set also counts as one literal, even when the set is within its per-set limit.
@@ -602,6 +605,70 @@ A thread query returns distinct non-null thread IDs in ordinal ascending order:
 ```
 
 Related evidence isn't embedded in either response. Use the trace-detail and branch APIs to load spans after selecting a result.
+
+### Include Traces-table fields
+
+Set `include: { tableSummary: true }` to add a `tableSummary` object to every trace row. The default response stays lightweight, and the projection never changes which traces match, their order, cursors, or totals. The store selects the page first and then enriches only those traces, so a trace always produces one row regardless of how many spans, feedback records, or scores it has.
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange,
+  include: { tableSummary: true },
+  page: { limit: 25 },
+})
+```
+
+```json
+{
+  "traceId": "trace-123",
+  "inputPreview": "Is this medication safe with…",
+  "tableSummary": {
+    "outputPreview": "The known interaction is…",
+    "tags": ["production", "needs-review"],
+    "model": "gpt-5",
+    "timeToFirstTokenMs": 420,
+    "errorCounts": { "total": 2, "llm": 1, "tool": 1 },
+    "promptCacheReadTokens": 1200,
+    "promptCacheCreationTokens": 300,
+    "feedback": [
+      {
+        "feedbackId": "feedback-1",
+        "feedbackType": "thumbs_down",
+        "feedbackSource": "patient",
+        "value": 0,
+        "comment": "Interaction omitted",
+        "timestamp": "2026-09-22T12:00:00.000Z"
+      }
+    ],
+    "feedbackTruncated": false,
+    "scores": [
+      {
+        "scoreId": "score-1",
+        "scorerId": "factuality",
+        "scorerVersion": "2.0",
+        "scoreSource": "automated",
+        "score": 0.42,
+        "timestamp": "2026-09-22T12:01:00.000Z",
+        "spanId": null
+      }
+    ],
+    "scoresTruncated": true
+  }
+}
+```
+
+| Field | Source and meaning |
+| - | - |
+| `outputPreview` | Short text from the current root span's output, truncated like `inputPreview`. `null` when the root has no output. |
+| `tags` | The current root span's tags. Empty when none are stored. |
+| `model` | The `model` attribute of the trace's earliest current `model_generation` span. `null` when the trace made no model call. |
+| `timeToFirstTokenMs` | Milliseconds from that model span's start to its recorded first-token time. `null` when the span has no first-token time. |
+| `errorCounts` | Current spans with an error: `total` counts every span including the root, `llm` counts model spans, and `tool` counts tool-call spans. |
+| `promptCacheReadTokens`, `promptCacheCreationTokens` | Sums of the auto-extracted `mastra_model_input_cache_read_tokens` and `mastra_model_input_cache_write_tokens` metrics recorded on the trace's current spans. `null` when no metric row exists; `0` is a recorded value. |
+| `feedback`, `feedbackTruncated` | Up to 10 current feedback records, newest first with `feedbackId` as the tie-breaker. `feedbackTruncated` is `true` when the trace has more. |
+| `scores`, `scoresTruncated` | Up to 10 current score records, newest first with `scoreId` as the tie-breaker. Each `scoreId` contributes its latest write only. `scoresTruncated` is `true` when the trace has more. |
+
+A truncated list is a bounded view, not evidence of absence: a scorer missing from a truncated `scores` list may still have scored the trace. Score and feedback summaries are independent of the `where` predicate that selected the trace. Stores that don't advertise the `trace-query-table-summary` feature return `501` for requests that set `include.tableSummary`, and an enrichment that exceeds the execution timeout fails the whole request rather than returning partial rows.
 
 ## Pagination and errors
 

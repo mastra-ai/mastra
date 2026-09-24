@@ -38,6 +38,9 @@ import {
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
+  TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA,
+  TRACE_QUERY_TABLE_SUMMARY_TIME_RANGE,
+  evaluateTraceQuery,
 } from './trace-query';
 import type { TraceQueryFixtureData } from './trace-query';
 
@@ -172,6 +175,7 @@ async function writeTraceQueryFixture(
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
+      output: (span.output ?? null) as CreateSpanRecord['output'],
       error: span.error as CreateSpanRecord['error'],
     }));
   for (const span of records) await storage.createSpan({ span });
@@ -221,6 +225,20 @@ async function writeTraceQueryFixture(
         resourceId: feedback.resourceId ?? undefined,
         metadata: null,
       },
+    });
+  }
+
+  if (data.metrics?.length) {
+    await storage.batchCreateMetrics({
+      metrics: data.metrics.map(metric => ({
+        metricId: metric.metricId,
+        traceId: metric.traceId,
+        spanId: metric.spanId,
+        name: metric.name,
+        value: metric.value,
+        timestamp: new Date(metric.timestamp),
+        labels: {},
+      })),
     });
   }
 }
@@ -635,6 +653,113 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      it('projects bounded table summaries without changing trace order, cursors, or totals', async () => {
+        await writeTraceQueryFixture(
+          storage,
+          TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA,
+          capabilities.traceQuerySpanWriteModel,
+        );
+        const timeRange = TRACE_QUERY_TABLE_SUMMARY_TIME_RANGE;
+        const requests: TraceQueryRequest[] = [
+          { timeRange, page: { limit: 2 } },
+          { timeRange, orderBy: [{ field: 'endedAt', direction: 'asc' }], pagination: { page: 0, perPage: 2 } },
+          {
+            timeRange,
+            where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'summary-b' } },
+            page: { limit: 5 },
+          },
+        ];
+        for (const request of requests) {
+          const summaryPlan = planTraceQuery(parseTraceQueryRequest({ ...request, include: { tableSummary: true } }));
+          const summary = await storage.queryTraces(summaryPlan);
+          const expected = evaluateTraceQuery(TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA, summaryPlan);
+          if (!('traces' in summary) || !('traces' in expected)) throw new Error('Expected trace results');
+          expect(summary.traces, JSON.stringify(request)).toEqual(expected.traces);
+          expect(summary.traces.every(trace => trace.tableSummary !== undefined)).toBe(true);
+
+          const plain = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+          if (!('traces' in plain)) throw new Error('Expected trace results');
+          expect(plain.traces.map(trace => trace.traceId)).toEqual(summary.traces.map(trace => trace.traceId));
+          expect(plain.traces.every(trace => trace.tableSummary === undefined)).toBe(true);
+          if ('pagination' in plain && 'pagination' in summary) expect(summary.pagination).toEqual(plain.pagination);
+          if ('page' in plain && 'page' in summary) expect(summary.page).toEqual(plain.page);
+        }
+
+        const firstPage = await storage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, page: { limit: 2 }, include: { tableSummary: true } })),
+        );
+        if (!('page' in firstPage) || !firstPage.page.next) throw new Error('Expected a second page');
+        const secondPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange,
+            page: { limit: 2, after: firstPage.page.next },
+            include: { tableSummary: true },
+          }),
+        );
+        const secondPage = await storage.queryTraces(secondPlan);
+        const expectedSecond = evaluateTraceQuery(TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA, secondPlan);
+        if (!('traces' in secondPage) || !('traces' in expectedSecond)) throw new Error('Expected trace results');
+        expect(secondPage.traces.map(trace => trace.traceId)).toEqual(['summary-a']);
+        expect(secondPage.traces).toEqual(expectedSecond.traces);
+        expect(secondPage.traces[0]!.tableSummary).toMatchObject({
+          model: 'gpt-5',
+          timeToFirstTokenMs: 420,
+          errorCounts: { total: 3, llm: 1, tool: 1 },
+          promptCacheReadTokens: 1200,
+          promptCacheCreationTokens: 300,
+          scoresTruncated: true,
+          feedbackTruncated: false,
+        });
+      });
+
+      it('projects table summaries while polling trace deltas', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = TRACE_QUERY_TABLE_SUMMARY_TIME_RANGE;
+          const bootstrap = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', include: { tableSummary: true } })),
+          );
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const poll = await waitFor(
+            () =>
+              storage.queryTraces(
+                planTraceQuery(
+                  parseTraceQueryRequest({
+                    timeRange,
+                    mode: 'delta',
+                    after: bootstrap.deltaCursor,
+                    include: { tableSummary: true },
+                  }),
+                ),
+              ),
+            result => 'traces' in result && result.traces.length === 3,
+          );
+          if (!('traces' in poll)) throw new Error('Expected trace results');
+          const expected = new Map(
+            (
+              evaluateTraceQuery(
+                TRACE_QUERY_TABLE_SUMMARY_FIXTURE_DATA,
+                planTraceQuery(
+                  parseTraceQueryRequest({ timeRange, page: { limit: 10 }, include: { tableSummary: true } }),
+                ),
+              ) as { traces: Array<{ traceId: string; tableSummary?: unknown }> }
+            ).traces.map(trace => [trace.traceId, trace.tableSummary]),
+          );
+          for (const trace of poll.traces) {
+            expect(trace.tableSummary, trace.traceId).toEqual(expected.get(trace.traceId));
+          }
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
       });
 
       describe('score replacement conformance', () => {

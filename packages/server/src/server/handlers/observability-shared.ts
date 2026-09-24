@@ -24,6 +24,7 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
+const OBSERVABILITY_TRACE_QUERY_TABLE_SUMMARY_STORAGE_FEATURE = 'trace-query-table-summary';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -126,6 +127,18 @@ export function assertObservabilityTraceQueryRootDurationSupported(
 
   throw new HTTPException(501, {
     message: 'Root duration predicates are not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilityTraceQueryTableSummarySupported(
+  observabilityStore: ObservabilityStorage,
+  plan: coreStorage.TrustedTraceQueryPlan,
+) {
+  if (plan.result !== 'traces' || !plan.tableSummary) return;
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TABLE_SUMMARY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Table summaries are not supported by the configured observability store',
   });
 }
 

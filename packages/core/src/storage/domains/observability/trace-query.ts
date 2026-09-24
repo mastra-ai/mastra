@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
+import { SpanType } from '../../../observability/types';
 import {
   defaultDeltaLimit,
   deltaCursorSchema,
@@ -9,6 +10,7 @@ import {
   paginationInfoSchema,
 } from '../shared';
 import type { SpanRecord } from './tracing';
+import { buildOutputPreview } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
 export const TRACE_QUERY_MAX_NODES = 100;
@@ -22,12 +24,42 @@ export const TRACE_QUERY_DISCOVERY_MAX_LIMIT = 100;
 export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
+/** Maximum feedback or score summaries returned per trace by the table-summary projection. */
+export const TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT = 10;
+/** Largest page the table-summary projection enriches, bounding related-record work per request. */
+export const TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE = 100;
+/**
+ * Auto-extracted token metric names summed per trace by the table-summary projection.
+ * These mirror `TokenMetrics` in `@mastra/observability`, which depends on core and
+ * therefore can't be imported here.
+ */
+export const TRACE_QUERY_TABLE_SUMMARY_METRICS = {
+  promptCacheReadTokens: 'mastra_model_input_cache_read_tokens',
+  promptCacheCreationTokens: 'mastra_model_input_cache_write_tokens',
+} as const;
+/** Span types whose earliest current span supplies `model` and `timeToFirstTokenMs`. */
+export const TRACE_QUERY_TABLE_SUMMARY_MODEL_SPAN_TYPES: readonly string[] = [SpanType.MODEL_GENERATION];
+/** Span types counted as LLM errors by the table summary. */
+export const TRACE_QUERY_TABLE_SUMMARY_LLM_SPAN_TYPES: readonly string[] = [
+  SpanType.MODEL_GENERATION,
+  SpanType.MODEL_STEP,
+  SpanType.MODEL_INFERENCE,
+  SpanType.MODEL_CHUNK,
+];
+/** Span types counted as tool errors by the table summary. */
+export const TRACE_QUERY_TABLE_SUMMARY_TOOL_SPAN_TYPES: readonly string[] = [
+  SpanType.TOOL_CALL,
+  SpanType.MCP_TOOL_CALL,
+  SpanType.CLIENT_TOOL_CALL,
+];
 
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
 const PREDICATE_COMPLEXITY_MESSAGE = TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
 const PAGINATION_MODE_CONFLICT_MESSAGE = 'Trace queries cannot combine keyset and page pagination';
 const GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support page pagination';
+const TABLE_SUMMARY_GROUP_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support the table summary';
+const TABLE_SUMMARY_PAGE_TOO_LARGE_MESSAGE = `Table summary requests are limited to ${TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE} traces per page`;
 
 export function compareTraceQueryStrings(left: string, right: string): number {
   if (left < right) return -1;
@@ -310,9 +342,39 @@ const traceQueryRequestObjectSchema = z
     mode: z.literal('delta').optional(),
     after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
+    /** Optional projections layered onto the lightweight trace rows. */
+    include: z
+      .object({
+        /** Return the bounded Traces-table fields on every trace row. */
+        tableSummary: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((request, context) => {
+    if (request.include?.tableSummary) {
+      if (request.group) {
+        context.addIssue({
+          code: 'custom',
+          path: ['include', 'tableSummary'],
+          message: TABLE_SUMMARY_GROUP_NOT_SUPPORTED_MESSAGE,
+        });
+      }
+      const pageSize =
+        request.mode === 'delta'
+          ? (request.limit ?? defaultDeltaLimit)
+          : request.pagination
+            ? request.pagination.perPage
+            : (request.page?.limit ?? 100);
+      if (pageSize > TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE) {
+        context.addIssue({
+          code: 'custom',
+          path: ['include', 'tableSummary'],
+          message: TABLE_SUMMARY_PAGE_TOO_LARGE_MESSAGE,
+        });
+      }
+    }
     if (request.mode === 'delta') {
       for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
         if (request[field] !== undefined) {
@@ -368,6 +430,57 @@ export const queryThreadsInputSchema = z.preprocess((input, context) => {
   return input;
 }, queryThreadsInputObjectSchema);
 
+export const traceQueryFeedbackSummarySchema = z
+  .object({
+    feedbackId: z.string(),
+    feedbackType: z.string(),
+    feedbackSource: z.string(),
+    value: z.union([z.string(), z.number()]),
+    comment: z.string().nullable(),
+    timestamp: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export const traceQueryScoreSummarySchema = z
+  .object({
+    scoreId: z.string(),
+    scorerId: z.string(),
+    scorerVersion: z.string().nullable(),
+    scoreSource: z.string().nullable(),
+    score: z.number(),
+    timestamp: z.string().datetime({ offset: true }),
+    /** Target span, or null when the score applies to the whole trace. */
+    spanId: z.string().nullable(),
+  })
+  .strict();
+
+/**
+ * Bounded Traces-table fields for one trace. `null` means no record supplies the value;
+ * numeric zero is a real recorded value. Lists hold the newest records first and the
+ * matching `*Truncated` flag reports when more exist than the per-trace limit.
+ */
+export const traceQueryTableSummarySchema = z
+  .object({
+    outputPreview: z.string().nullable(),
+    tags: z.array(z.string()),
+    model: z.string().nullable(),
+    timeToFirstTokenMs: z.number().int().nonnegative().nullable(),
+    errorCounts: z
+      .object({
+        total: z.number().int().nonnegative(),
+        llm: z.number().int().nonnegative(),
+        tool: z.number().int().nonnegative(),
+      })
+      .strict(),
+    promptCacheReadTokens: z.number().nonnegative().nullable(),
+    promptCacheCreationTokens: z.number().nonnegative().nullable(),
+    feedback: z.array(traceQueryFeedbackSummarySchema).max(TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT),
+    feedbackTruncated: z.boolean(),
+    scores: z.array(traceQueryScoreSummarySchema).max(TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT),
+    scoresTruncated: z.boolean(),
+  })
+  .strict();
+
 export const traceQueryTraceSchema = z
   .object({
     traceId: z.string(),
@@ -386,6 +499,8 @@ export const traceQueryTraceSchema = z
     entityType: z.string().nullable(),
     environment: z.string().nullable(),
     status: z.enum(['success', 'error']),
+    /** Present only when the request set `include.tableSummary`. */
+    tableSummary: traceQueryTableSummarySchema.optional(),
   })
   .strict();
 
@@ -472,6 +587,9 @@ export type TraceQueryRequest = Omit<TraceQueryRequestInput, 'group'> & {
 };
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
+export type TraceQueryTableSummary = z.infer<typeof traceQueryTableSummarySchema>;
+export type TraceQueryFeedbackSummary = z.infer<typeof traceQueryFeedbackSummarySchema>;
+export type TraceQueryScoreSummary = z.infer<typeof traceQueryScoreSummarySchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
 export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
 export type TraceQueryDeltaTraceResponse = z.infer<typeof traceQueryDeltaTraceResponseSchema>;
@@ -683,6 +801,11 @@ interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
   };
+  /**
+   * Enrich the selected page with the bounded Traces-table fields. Not part of the
+   * cursor binding: the projection never changes ordering, totals, or membership.
+   */
+  tableSummary?: true;
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
@@ -763,7 +886,9 @@ export type TraceQueryIssueCode =
   | 'invalid_literal'
   | 'group_order_not_supported'
   | 'pagination_mode_conflict'
-  | 'group_pagination_not_supported';
+  | 'group_pagination_not_supported'
+  | 'table_summary_not_supported'
+  | 'table_summary_page_too_large';
 
 export interface TraceQueryIssue {
   code: TraceQueryIssueCode;
@@ -997,7 +1122,11 @@ export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue
             ? 'pagination_mode_conflict'
             : issue.message === GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE
               ? 'group_pagination_not_supported'
-              : undefined
+              : issue.message === TABLE_SUMMARY_GROUP_NOT_SUPPORTED_MESSAGE
+                ? 'table_summary_not_supported'
+                : issue.message === TABLE_SUMMARY_PAGE_TOO_LARGE_MESSAGE
+                  ? 'table_summary_page_too_large'
+                  : undefined
         : undefined;
     return {
       code: customIssueCode ?? 'invalid_request',
@@ -1084,6 +1213,7 @@ export function planTraceQuery(
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
+  const tableSummary = request.include?.tableSummary ? ({ tableSummary: true } as const) : {};
   const deltaBinding = digestBinding({
     timeRange,
     where,
@@ -1098,6 +1228,7 @@ export function planTraceQuery(
       where,
       scope,
       orderBy,
+      ...tableSummary,
       paginationMode: 'delta',
       limit: request.limit ?? defaultDeltaLimit,
       binding: deltaBinding,
@@ -1111,6 +1242,7 @@ export function planTraceQuery(
       where,
       scope,
       orderBy,
+      ...tableSummary,
       paginationMode: 'page',
       page: request.pagination.page,
       perPage: request.pagination.perPage,
@@ -1134,11 +1266,88 @@ export function planTraceQuery(
     where,
     scope,
     orderBy,
+    ...tableSummary,
     paginationMode: 'keyset',
     limit: page.limit,
     binding,
     cursor: cursor?.result === 'traces' ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
   };
+}
+
+/** Raw per-trace values a store collects for the table summary before assembly. */
+export interface TraceQueryTableSummaryInput {
+  /** Root span output, parsed or as its stored JSON string. */
+  output: unknown;
+  /** Root span tags, as an array or its stored JSON string. */
+  tags: unknown;
+  /** Rollup over the trace's current spans; omit when the trace has no current spans. */
+  spans?: {
+    errorTotal: number;
+    errorLlm: number;
+    errorTool: number;
+    model: string | null;
+    timeToFirstTokenMs: number | null;
+  } | null;
+  /** Newest-first current feedback, at most `TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1` rows. */
+  feedback: TraceQueryFeedbackSummary[];
+  /** Newest-first current scores, at most `TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1` rows. */
+  scores: TraceQueryScoreSummary[];
+  /** Summed metric values per trace; null when no metric row exists. */
+  promptCacheReadTokens: number | null;
+  promptCacheCreationTokens: number | null;
+}
+
+function normalizeTags(tags: unknown): string[] {
+  let value = tags;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : [];
+}
+
+/**
+ * Assembles one trace's table summary from store-collected values so every store and the
+ * reference evaluator share preview, tag, and truncation semantics.
+ *
+ * @internal Storage boundary helper.
+ */
+export function buildTraceQueryTableSummary(input: TraceQueryTableSummaryInput): TraceQueryTableSummary {
+  const limit = TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT;
+  const spans = input.spans ?? null;
+  const timeToFirstTokenMs =
+    spans?.timeToFirstTokenMs != null && Number.isFinite(spans.timeToFirstTokenMs) && spans.timeToFirstTokenMs >= 0
+      ? Math.round(spans.timeToFirstTokenMs)
+      : null;
+  return traceQueryTableSummarySchema.parse({
+    outputPreview: buildOutputPreview(input.output) ?? null,
+    tags: normalizeTags(input.tags),
+    model: spans?.model ?? null,
+    timeToFirstTokenMs,
+    errorCounts: {
+      total: spans?.errorTotal ?? 0,
+      llm: spans?.errorLlm ?? 0,
+      tool: spans?.errorTool ?? 0,
+    },
+    promptCacheReadTokens: input.promptCacheReadTokens,
+    promptCacheCreationTokens: input.promptCacheCreationTokens,
+    feedback: input.feedback.slice(0, limit),
+    feedbackTruncated: input.feedback.length > limit,
+    scores: input.scores.slice(0, limit),
+    scoresTruncated: input.scores.length > limit,
+  });
+}
+
+/** Deterministic newest-first order for feedback and score summaries; ties break on the record ID. */
+export function compareTraceQuerySummaryRecords(
+  left: { timestamp: string; id: string },
+  right: { timestamp: string; id: string },
+): number {
+  const byTimestamp = compareTraceQueryStrings(right.timestamp, left.timestamp);
+  return byTimestamp !== 0 ? byTimestamp : compareTraceQueryStrings(left.id, right.id);
 }
 
 /**

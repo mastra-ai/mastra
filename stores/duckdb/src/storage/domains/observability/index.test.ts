@@ -118,6 +118,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
+        'trace-query-table-summary',
         'thread-query',
         'trace-query-tenant-scope',
       ]);
@@ -130,6 +131,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
+        'trace-query-table-summary',
         'thread-query',
         'trace-query-tenant-scope',
       ]);
@@ -157,6 +159,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
+        'trace-query-table-summary',
         'thread-query',
         'trace-query-tenant-scope',
       ]);
@@ -168,6 +171,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-query-root-duration',
         'trace-query-discovery',
+        'trace-query-table-summary',
         'thread-query',
         'trace-query-tenant-scope',
       ]);

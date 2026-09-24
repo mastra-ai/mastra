@@ -694,6 +694,65 @@ describe('QUERY_TRACES', () => {
     );
   });
 
+  it('returns 501 before calling an older store for table summary requests', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query']);
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, include: { tableSummary: true } })),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Table summaries are not supported by the configured observability store',
+    });
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('passes table summary plans to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-table-summary']);
+
+    await QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, include: { tableSummary: true } }));
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(expect.objectContaining({ tableSummary: true }));
+  });
+
+  it('does not require the table summary capability for plain requests', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query']);
+
+    await QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE }));
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledOnce();
+    expect(observabilityStore.queryTraces.mock.calls[0]![0]).not.toHaveProperty('tableSummary');
+  });
+
+  it('rejects table summaries on grouped queries and oversized pages before touching storage', async () => {
+    // Schema-stage issues reach HTTP callers as `invalid_request`; the planner-level codes are core's.
+    const cases = [
+      {
+        request: { group: { by: ['threadId'] }, include: { tableSummary: true } },
+        message: 'Grouped trace queries do not support the table summary',
+      },
+      {
+        request: { page: { limit: 101 }, include: { tableSummary: true } },
+        message: 'Table summary requests are limited to 100 traces per page',
+      },
+    ];
+    for (const testCase of cases) {
+      const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-table-summary']);
+      const parsed = traceQueryRequestSchema.safeParse({ timeRange: TIME_RANGE, ...testCase.request });
+      expect(parsed.success, testCase.message).toBe(false);
+      if (parsed.success) throw new Error('Expected validation failure');
+      const validation = QUERY_TRACES.onValidationError?.(parsed.error, 'body');
+      expect(validation?.status).toBe(422);
+      expect(getDeclaredErrorSchema(422).parse(validation?.body)).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        issues: [{ code: 'invalid_request', path: ['include', 'tableSummary'], message: testCase.message }],
+      });
+      expect(() => params(mastra, { timeRange: TIME_RANGE, ...testCase.request })).toThrow();
+      expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+    }
+  });
+
   it('returns 501 when the request-available store lacks trace-query support', async () => {
     const { mastra, observabilityStore } = createHarness([]);
     const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE })));

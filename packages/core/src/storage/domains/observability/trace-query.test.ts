@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ObservabilityStorage } from './base';
 import {
+  buildTraceQueryTableSummary,
+  compareTraceQuerySummaryRecords,
   compareTraceQueryStrings,
   createTraceQueryObservedFieldDescriptor,
   encodeTraceQueryCursor,
@@ -32,6 +34,8 @@ import {
   TRACE_QUERY_DEFAULT_TIMEOUT_MS,
   TRACE_QUERY_MAX_STRING_BYTES,
   TRACE_QUERY_MAX_TIMEOUT_MS,
+  TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE,
+  TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT,
   queryThreadsInputSchema,
   queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
@@ -1872,5 +1876,99 @@ describe('trace-query responses and storage capability', () => {
         planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...baseRequest, predicateScope: 'trace', path: 'status' })),
       ),
     ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
+  });
+});
+
+describe('table summary projection', () => {
+  const withSummary = { ...baseRequest, include: { tableSummary: true } };
+
+  it('marks every ungrouped plan when requested and leaves cursor bindings unchanged', () => {
+    const plain = planTraceQuery(parsed());
+    const keyset = planTraceQuery(parsed(withSummary));
+    const page = planTraceQuery(parsed({ ...withSummary, pagination: { page: 0, perPage: 25 } }));
+    const delta = planTraceQuery(parsed({ ...withSummary, mode: 'delta' }));
+
+    expect(planTraceQuery(parsed())).not.toHaveProperty('tableSummary');
+    expect(keyset).toMatchObject({ paginationMode: 'keyset', tableSummary: true });
+    expect(page).toMatchObject({ paginationMode: 'page', tableSummary: true });
+    expect(delta).toMatchObject({ paginationMode: 'delta', tableSummary: true });
+    if (plain.result !== 'traces' || keyset.result !== 'traces') throw new Error('Expected trace plans');
+    if (plain.paginationMode !== 'keyset' || keyset.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    expect(keyset.binding).toBe(plain.binding);
+    expect(planTraceQuery(parsed({ ...baseRequest, include: { tableSummary: false } }))).not.toHaveProperty(
+      'tableSummary',
+    );
+  });
+
+  it('rejects the projection on grouped queries and oversized pages before planning', () => {
+    const grouped = validationError(() => parsed({ ...withSummary, group: { by: ['threadId'] } }));
+    expect(grouped.issues).toContainEqual(
+      expect.objectContaining({ code: 'table_summary_not_supported', path: ['include', 'tableSummary'] }),
+    );
+    const large = validationError(() =>
+      parsed({ ...withSummary, page: { limit: TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE + 1 } }),
+    );
+    expect(large.issues).toContainEqual(
+      expect.objectContaining({ code: 'table_summary_page_too_large', path: ['include', 'tableSummary'] }),
+    );
+    expect(parsed({ ...withSummary, page: { limit: TRACE_QUERY_TABLE_SUMMARY_MAX_PAGE_SIZE } })).toBeTruthy();
+    expect(parsed({ ...baseRequest, page: { limit: 1000 } })).toBeTruthy();
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, include: { rows: true } }).success).toBe(false);
+  });
+
+  it('assembles bounded summaries with shared preview, tag, and truncation semantics', () => {
+    const record = (id: number) => ({
+      feedbackId: `feedback-${id}`,
+      feedbackType: 'rating',
+      feedbackSource: 'user',
+      value: id,
+      comment: null,
+      timestamp: '2026-08-10T00:00:00.000Z',
+    });
+    const overflow = Array.from({ length: TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT + 1 }, (_, i) => record(i));
+    const summary = buildTraceQueryTableSummary({
+      output: JSON.stringify({ text: 'The known interaction is with warfarin.', files: [] }),
+      tags: '["production", 7, "needs-review"]',
+      spans: { errorTotal: 2, errorLlm: 1, errorTool: 1, model: 'gpt-5', timeToFirstTokenMs: 420.4 },
+      feedback: overflow,
+      scores: [],
+      promptCacheReadTokens: 1200,
+      promptCacheCreationTokens: null,
+    });
+
+    expect(summary).toEqual({
+      outputPreview: 'The known interaction is with warfarin.',
+      tags: ['production', 'needs-review'],
+      model: 'gpt-5',
+      timeToFirstTokenMs: 420,
+      errorCounts: { total: 2, llm: 1, tool: 1 },
+      promptCacheReadTokens: 1200,
+      promptCacheCreationTokens: null,
+      feedback: overflow.slice(0, TRACE_QUERY_TABLE_SUMMARY_RELATED_LIMIT),
+      feedbackTruncated: true,
+      scores: [],
+      scoresTruncated: false,
+    });
+    expect(
+      buildTraceQueryTableSummary({
+        output: null,
+        tags: null,
+        spans: { errorTotal: 0, errorLlm: 0, errorTool: 0, model: null, timeToFirstTokenMs: -5 },
+        feedback: [],
+        scores: [],
+        promptCacheReadTokens: 0,
+        promptCacheCreationTokens: null,
+      }),
+    ).toMatchObject({ outputPreview: null, tags: [], model: null, timeToFirstTokenMs: null, promptCacheReadTokens: 0 });
+    expect(traceQueryTraceResponseSchema.safeParse({ traces: [], page: { next: null } }).success).toBe(true);
+  });
+
+  it('orders summary records newest first with the record ID as the tie-breaker', () => {
+    const records = [
+      { id: 'b', timestamp: '2026-08-10T00:00:00.000Z' },
+      { id: 'a', timestamp: '2026-08-10T00:00:00.000Z' },
+      { id: 'c', timestamp: '2026-08-11T00:00:00.000Z' },
+    ];
+    expect(records.sort(compareTraceQuerySummaryRecords).map(record => record.id)).toEqual(['c', 'a', 'b']);
   });
 });
