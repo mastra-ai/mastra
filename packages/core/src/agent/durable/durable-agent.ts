@@ -42,13 +42,6 @@ import type {
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
-/**
- * Internal flag used by `generate()`/`resumeGenerate()` to tell the stream
- * adapter to close the underlying ReadableStream on SUSPENDED events so that
- * `getFullOutput()` resolves instead of hanging on a suspended run.
- * Not part of the public `DurableAgentStreamOptions` surface.
- */
-const CLOSE_ON_SUSPEND = Symbol('mastra.durable.closeOnSuspend');
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RECOVERY_LEASE_TTL_MS = 30_000;
 const RECOVERY_LEASE_RENEW_INTERVAL_MS = 10_000;
@@ -286,6 +279,19 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * fresh signal on each segment if you need abortability post-resume.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Whether this caller's stream closes when the run suspends (e.g. for tool
+   * approval). Defaults to `true`, matching non-durable `Agent.stream()` and
+   * `Workflow.stream()`: `fullStream`, `text`, and `getFullOutput()` resolve at
+   * the suspension boundary so callers (AG-UI, A2A, etc.) can react instead of
+   * hanging.
+   *
+   * Set to `false` to keep the stream open across suspension so a later resume
+   * can continue streaming on this same reader. Resume the run with
+   * `resumeStream()`/`resume()` — those always return a fresh stream regardless
+   * of this option.
+   */
+  closeOnSuspend?: boolean;
 }
 
 type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<OUTPUT> & {
@@ -1397,9 +1403,6 @@ export class DurableAgent<
     if (options?.actor !== undefined) {
       resolvedOptions.actor = options.actor;
     }
-    if ((options as any)?.[CLOSE_ON_SUSPEND] === true) {
-      Object.defineProperty(resolvedOptions, CLOSE_ON_SUSPEND, { value: true, enumerable: true });
-    }
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(resolvedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
     return resolvedOptions;
@@ -2067,6 +2070,11 @@ export class DurableAgent<
       autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
+    // Whether this caller's stream closes at the suspension boundary. Defaults
+    // to true (parity with non-durable Agent and Workflow). The same value
+    // gates the `across-suspension` continuation so the two cannot drift.
+    const closeOnSuspend = options?.closeOnSuspend ?? true;
+
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
       output,
@@ -2104,7 +2112,7 @@ export class DurableAgent<
       // now calls it in-process from globalRunRegistry and honors its return
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
-      closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      closeOnSuspend,
       hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
@@ -2159,7 +2167,7 @@ export class DurableAgent<
       output,
       options as AgentExecutionOptions<TOutput>,
       this.getPubSub(),
-      (options as any)?.[CLOSE_ON_SUSPEND] !== true ? { continuation: 'across-suspension' } : undefined,
+      closeOnSuspend ? undefined : { continuation: 'across-suspension' },
     );
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
@@ -2468,6 +2476,9 @@ export class DurableAgent<
     }
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
+    // Same default-true semantics as the initial stream() path.
+    const closeOnSuspend = (resolvedOptions as DurableAgentStreamOptions<TOutput>).closeOnSuspend ?? true;
+
     const {
       output,
       cleanup: createdStreamCleanup,
@@ -2495,7 +2506,7 @@ export class DurableAgent<
         scheduleAutoCleanup();
       },
       onSuspended: resolvedOptions.onSuspended,
-      closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
+      closeOnSuspend,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       requestContext: resolvedOptions.requestContext,
@@ -2572,7 +2583,7 @@ export class DurableAgent<
         output,
         resumeStreamOptions,
         this.getPubSub(),
-        (resolvedOptions as any)[CLOSE_ON_SUSPEND] !== true ? { continuation: 'across-suspension' } : undefined,
+        closeOnSuspend ? undefined : { continuation: 'across-suspension' },
       );
     }
 
@@ -2867,7 +2878,7 @@ export class DurableAgent<
       // Close the stream when the workflow re-suspends so the caller's
       // `for await` loop terminates. Without this the stream stays open
       // indefinitely when the resumed turn hits another suspend point.
-      [CLOSE_ON_SUSPEND]: true,
+      closeOnSuspend: true,
     } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
     return result.output;
   }
@@ -3164,7 +3175,7 @@ export class DurableAgent<
   ): Promise<FullOutput<TOutput>> {
     const result = await this.resume(runId, resumeData, {
       ...(options ?? {}),
-      [CLOSE_ON_SUSPEND]: true,
+      closeOnSuspend: true,
     } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
     let suspended = false;
     try {
