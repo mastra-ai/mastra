@@ -1,5 +1,46 @@
 # @mastra/core
 
+## 1.70.0-alpha.2
+
+### Minor Changes
+
+- Added a `closeOnSuspend` option to durable agent `stream()` and `resume()`, so callers can end the stream when a tool suspends. ([#24894](https://github.com/mastra-ai/mastra/pull/24894))
+
+  Previously, the stream returned by `DurableAgent.stream()` (and `createInngestAgent().stream()`) stayed open after a tool suspended for approval or user input, and there was no public way to change that. Loops over `fullStream` hung, so integrations like AG-UI could not emit `RUN_FINISHED`.
+
+  Pass `closeOnSuspend: true` to close the stream at the suspension boundary, matching non-durable `Agent.stream()`:
+
+  ```ts
+  const result = await durableAgent.stream('hi', { closeOnSuspend: true });
+  for await (const chunk of result.fullStream) {
+    // loop ends after the tool-call-suspended chunk
+  }
+  ```
+
+  The default is unchanged (`false`): the stream stays open across suspension.
+
+- Added trace-level `durationMs` predicates to advanced trace queries. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering required a span relation, which can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Use the top-level field to evaluate only the selected completed root:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+### Patch Changes
+
+- Dynamic workflow validation now reads JSON-Schema `properties` as own keys, so a field named `constructor` or `toString` no longer looks present on every schema ([#24900](https://github.com/mastra-ai/mastra/pull/24900))
+
 ## 1.70.0-alpha.1
 
 ### Minor Changes

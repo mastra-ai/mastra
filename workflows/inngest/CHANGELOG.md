@@ -1,5 +1,33 @@
 # @mastra/inngest
 
+## 1.10.0-alpha.2
+
+### Minor Changes
+
+- Added a `closeOnSuspend` option to durable agent `stream()` and `resume()`, so callers can end the stream when a tool suspends. ([#24894](https://github.com/mastra-ai/mastra/pull/24894))
+
+  Previously, the stream returned by `DurableAgent.stream()` (and `createInngestAgent().stream()`) stayed open after a tool suspended for approval or user input, and there was no public way to change that. Loops over `fullStream` hung, so integrations like AG-UI could not emit `RUN_FINISHED`.
+
+  Pass `closeOnSuspend: true` to close the stream at the suspension boundary, matching non-durable `Agent.stream()`:
+
+  ```ts
+  const result = await durableAgent.stream('hi', { closeOnSuspend: true });
+  for await (const chunk of result.fullStream) {
+    // loop ends after the tool-call-suspended chunk
+  }
+  ```
+
+  The default is unchanged (`false`): the stream stays open across suspension.
+
+### Patch Changes
+
+- Fixed a type error where Inngest workflows created with init() rejected a first step that shares the workflow's input schema when that schema uses .default() or coercion. The workflow's .then() now compares the step against the parsed input type (defaults applied), while run.start() and cron inputs keep accepting the raw caller input where defaulted fields may be omitted. Fixes https://github.com/mastra-ai/mastra/issues/24409 ([#24732](https://github.com/mastra-ai/mastra/pull/24732))
+
+- Fixed durable agent streams to publish through configured transports without duplicating Inngest Realtime events. ([#24814](https://github.com/mastra-ai/mastra/pull/24814))
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
 ## 1.9.2-alpha.1
 
 ### Patch Changes

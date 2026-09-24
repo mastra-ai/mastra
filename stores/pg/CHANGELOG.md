@@ -1,5 +1,34 @@
 # @mastra/pg
 
+## 1.27.0-alpha.2
+
+### Minor Changes
+
+- Added PostgreSQL support for filtering completed root traces by elapsed duration with exact millisecond comparisons. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering required a span relation, which can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Use the top-level field to evaluate only the selected completed root:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+### Patch Changes
+
+- Fix PostgreSQL saves failing on NUL characters or unpaired surrogates while preserving literal Unicode escape text. Fixes #24873. ([#24887](https://github.com/mastra-ai/mastra/pull/24887))
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
 ## 1.27.0-alpha.1
 
 ### Minor Changes

@@ -1,5 +1,40 @@
 # mastracode
 
+## 0.42.1-alpha.2
+
+### Patch Changes
+
+- Fixed `agent_signal_send` so senders put content where the peer can see it. The `payload` parameter was removed because peers never received it, and the `summary` parameter was renamed to `message` to make clear it is the full message delivered to the peer. ([#24823](https://github.com/mastra-ai/mastra/pull/24823))
+
+  **Before:**
+
+  ```ts
+  agent_signal_send({
+    targetId: 'peer-id',
+    summary: 'Review this',
+    expectsReply: false,
+  });
+  ```
+
+  **After:**
+
+  ```ts
+  agent_signal_send({
+    targetId: 'peer-id',
+    message: 'Review this',
+    expectsReply: false,
+  });
+  ```
+
+  The tool result now reports only the routing outcome instead of echoing the whole message back to the sender. Mastra Code still shows the target, routing options, full message, and outcome in the standard tool display, with a truncated message preview in quiet mode.
+
+- Updated dependencies [[`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`8bbfbef`](https://github.com/mastra-ai/mastra/commit/8bbfbef5e8e3c841c4173ea7ca274cbb61330831), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`4831f68`](https://github.com/mastra-ai/mastra/commit/4831f68d626bc8aac7e4f1cc6adc97ae3147f90b), [`4d8d9ad`](https://github.com/mastra-ai/mastra/commit/4d8d9adaf8bbe46ed5c398d1ce39b120801c9ed0), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`fe8fb98`](https://github.com/mastra-ai/mastra/commit/fe8fb98157bfc76037dc0f55cdaeddffaa877323), [`14015ff`](https://github.com/mastra-ai/mastra/commit/14015ff77892a1e98b8f97541e9f8eadfbe7cf8b), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`dc49e0f`](https://github.com/mastra-ai/mastra/commit/dc49e0f94603874390b951077b11e1cd569aa97f), [`8ac7c6f`](https://github.com/mastra-ai/mastra/commit/8ac7c6f57852227279622836cbf8afaa7b41a475), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/pg@1.27.0-alpha.2
+  - @mastra/code-sdk@1.8.2-alpha.2
+  - @mastra/core@1.70.0-alpha.2
+  - @mastra/memory@1.32.0-alpha.1
+  - @mastra/duckdb@1.11.0-alpha.2
+
 ## 0.42.1-alpha.1
 
 ### Patch Changes

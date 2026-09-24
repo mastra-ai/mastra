@@ -1,5 +1,60 @@
 # @mastra/code-sdk
 
+## 1.8.2-alpha.2
+
+### Patch Changes
+
+- Added a `prepareWakeRequestContext` option to `createMastraCode()`. A wake (a notification or cross-agent signal that starts a run on an idle thread) has no inbound request, so hosts that resolve credentials per tenant can use this option to attach the owning identity before the run starts. It is called only when a session owns the target resource. ([#24909](https://github.com/mastra-ai/mastra/pull/24909))
+
+  ```ts
+  const mastraCode = await createMastraCode({
+    prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
+      const owner = await lookUpOwner(resourceId);
+      if (owner) requestContext.set('user', owner);
+    },
+  });
+  ```
+
+- Fixed `agent_signal_send` so senders put content where the peer can see it. The `payload` parameter was removed because peers never received it, and the `summary` parameter was renamed to `message` to make clear it is the full message delivered to the peer. ([#24823](https://github.com/mastra-ai/mastra/pull/24823))
+
+  **Before:**
+
+  ```ts
+  agent_signal_send({
+    targetId: 'peer-id',
+    summary: 'Review this',
+    expectsReply: false,
+  });
+  ```
+
+  **After:**
+
+  ```ts
+  agent_signal_send({
+    targetId: 'peer-id',
+    message: 'Review this',
+    expectsReply: false,
+  });
+  ```
+
+  The tool result now reports only the routing outcome instead of echoing the whole message back to the sender. Mastra Code still shows the target, routing options, full message, and outcome in the standard tool display, with a truncated message preview in quiet mode.
+
+- Fixed plugin updates occasionally keeping stale code loaded. When an updated plugin file had the same size and modification timestamp as the previous version, the reload could reuse the old module; plugin reloads now detect changes by file content, so an update always runs the new code. ([#24890](https://github.com/mastra-ai/mastra/pull/24890))
+
+- The `/think` thinking level now applies to Gemini, custom OpenAI-compatible providers, and OpenAI API-key models, not just Anthropic and OpenAI Codex. Previously these models silently ignored it. ([#24899](https://github.com/mastra-ai/mastra/pull/24899))
+
+  ```
+  /think high
+  ```
+
+  Gemini and OpenAI API-key models map the level to what each model supports. Custom OpenAI-compatible providers receive the selected level unchanged, including `xhigh` and `max`. With thinking `off` (the default), requests are unchanged.
+
+- Updated dependencies [[`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`4831f68`](https://github.com/mastra-ai/mastra/commit/4831f68d626bc8aac7e4f1cc6adc97ae3147f90b), [`4d8d9ad`](https://github.com/mastra-ai/mastra/commit/4d8d9adaf8bbe46ed5c398d1ce39b120801c9ed0), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`8ac7c6f`](https://github.com/mastra-ai/mastra/commit/8ac7c6f57852227279622836cbf8afaa7b41a475), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/pg@1.27.0-alpha.2
+  - @mastra/core@1.70.0-alpha.2
+  - @mastra/memory@1.32.0-alpha.1
+  - @mastra/duckdb@1.11.0-alpha.2
+
 ## 1.8.2-alpha.1
 
 ### Patch Changes

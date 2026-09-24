@@ -1,5 +1,23 @@
 # @mastra/memory
 
+## 1.32.0-alpha.1
+
+### Patch Changes
+
+- Fixed Observational Memory saving its own instructions and system reminders as things the user said. The observer could record lines like "User's current priority is to extract new observations" as the thread's current task, which then misled the agent on later turns. The observer now receives its instructions after the conversation instead of as a separate message before it, and system reminders and signals in the conversation are labeled by their tag (for example `system-reminder` or `notification`) instead of as the user. Fixes [#22195](https://github.com/mastra-ai/mastra/issues/22195). ([#24908](https://github.com/mastra-ai/mastra/pull/24908))
+
+- Thread-scoped Observational Memory now describes observations as memory of the current conversation instead of "past conversations with this user". Agents using the default `scope: 'thread'` will reuse IDs, artifacts, and tool results recorded in observations instead of treating them as coming from a different session. Resource scope keeps its existing wording. Added `getObservationContextPrompt(scope)` for integrations that build the observations context themselves. ([#24889](https://github.com/mastra-ai/mastra/pull/24889))
+
+  ```ts
+  import { getObservationContextPrompt } from '@mastra/memory/processors';
+
+  const preamble = getObservationContextPrompt('thread');
+  // "The following observations block contains your memory of earlier parts of this current conversation. ..."
+  ```
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
 ## 1.32.0-alpha.0
 
 ### Minor Changes

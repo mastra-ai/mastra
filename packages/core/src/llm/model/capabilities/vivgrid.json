@@ -3,6 +3,7 @@
     "claude-fable-5",
     "claude-fable-5-1",
     "claude-opus-5",
+    "claude-opus-5-5",
     "claude-sonnet-5",
     "deepseek-v4.1-flash",
     "gemini-3.1-flash-lite-preview",
@@ -19,6 +20,8 @@
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "kimi-k3",
     "viv-fast"
   ],
@@ -43,6 +46,7 @@
     "claude-fable-5",
     "claude-fable-5-1",
     "claude-opus-5",
+    "claude-opus-5-5",
     "claude-sonnet-5",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
@@ -66,6 +70,8 @@
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "kimi-k3",
     "viv-fast"
   ]

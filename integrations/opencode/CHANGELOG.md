@@ -1,5 +1,22 @@
 # @mastra/opencode
 
+## 0.1.29-alpha.2
+
+### Patch Changes
+
+- Thread-scoped Observational Memory now describes observations as memory of the current conversation instead of "past conversations with this user". Agents using the default `scope: 'thread'` will reuse IDs, artifacts, and tool results recorded in observations instead of treating them as coming from a different session. Resource scope keeps its existing wording. Added `getObservationContextPrompt(scope)` for integrations that build the observations context themselves. ([#24889](https://github.com/mastra-ai/mastra/pull/24889))
+
+  ```ts
+  import { getObservationContextPrompt } from '@mastra/memory/processors';
+
+  const preamble = getObservationContextPrompt('thread');
+  // "The following observations block contains your memory of earlier parts of this current conversation. ..."
+  ```
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`4831f68`](https://github.com/mastra-ai/mastra/commit/4831f68d626bc8aac7e4f1cc6adc97ae3147f90b), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`8ac7c6f`](https://github.com/mastra-ai/mastra/commit/8ac7c6f57852227279622836cbf8afaa7b41a475), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+  - @mastra/memory@1.32.0-alpha.1
+
 ## 0.1.29-alpha.1
 
 ### Patch Changes

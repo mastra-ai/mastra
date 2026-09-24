@@ -1,5 +1,32 @@
 # @mastra/factory
 
+## 0.17.1-alpha.2
+
+### Patch Changes
+
+- Filesystem snapshots are no longer lost with "No active thread on this session" when a session is deleted right after a turn. Deleting a Factory session now waits up to 10 seconds for the last turn's snapshot to finish before tearing the session down; a snapshot that takes longer can still be skipped. ([#24905](https://github.com/mastra-ai/mastra/pull/24905))
+
+  `waitForPendingFilesystemCapture` is now exported so custom hosts can do the same:
+
+  ```ts
+  import { waitForPendingFilesystemCapture } from '@mastra/factory';
+
+  await waitForPendingFilesystemCapture(resourceId);
+  await controller.deleteSession({ resourceId });
+  ```
+
+- Improved `invalid_transition` rejections. They now name the next stages declared from the current phase. An agent that requests a mistyped stage id can correct it in the same run. ([#24906](https://github.com/mastra-ai/mastra/pull/24906))
+
+  Example: `The Delivery board does not allow moving from planning to plan_review. Next stages declared from planning: plan-review, canceled.`
+
+- Fixed Factory runs woken by a notification or cross-agent signal on an idle thread failing with "No usable anthropic credential is configured". The run now resolves credentials as the user who owns the Factory session, in that session's organization, including sessions opened from the browser or Slack. ([#24909](https://github.com/mastra-ai/mastra/pull/24909))
+
+- Fixed Factory work item conversations: board links now open the item's lifecycle conversation, and the transcript no longer crashes on malformed message parts. ([#24866](https://github.com/mastra-ai/mastra/pull/24866))
+
+- Updated dependencies [[`8bbfbef`](https://github.com/mastra-ai/mastra/commit/8bbfbef5e8e3c841c4173ea7ca274cbb61330831), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`fe8fb98`](https://github.com/mastra-ai/mastra/commit/fe8fb98157bfc76037dc0f55cdaeddffaa877323), [`14015ff`](https://github.com/mastra-ai/mastra/commit/14015ff77892a1e98b8f97541e9f8eadfbe7cf8b), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`dc49e0f`](https://github.com/mastra-ai/mastra/commit/dc49e0f94603874390b951077b11e1cd569aa97f), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/code-sdk@1.8.2-alpha.2
+  - @mastra/core@1.70.0-alpha.2
+
 ## 0.17.1-alpha.1
 
 ### Patch Changes
