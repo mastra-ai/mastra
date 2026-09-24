@@ -190,7 +190,7 @@ describe('ExperimentRunMeta', () => {
         });
 
         expect(await screen.findByText('Tokens')).toBeDefined();
-        expect(screen.getByText('12.4k')).toBeDefined();
+        expect(screen.getByText('12.4K')).toBeDefined();
         expect(screen.getByText('· $0.01')).toBeDefined();
 
         await waitForMutationsIdle(queryClient);
@@ -228,7 +228,7 @@ describe('ExperimentRunMeta', () => {
       it('when the experiment is running, then Tokens shows the "· so far" suffix', async () => {
         const { queryClient } = renderBar(runningExperiment, { data: fullMetrics, isLoading: false, isEnabled: true });
 
-        expect(await screen.findByText('12.4k')).toBeDefined();
+        expect(await screen.findByText('12.4K')).toBeDefined();
         // Avg score shows one "· so far" as well; Tokens adds a second.
         await screen.findAllByText('· so far');
         expect(screen.getAllByText('· so far')).toHaveLength(2);
