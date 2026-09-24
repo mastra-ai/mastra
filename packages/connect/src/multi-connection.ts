@@ -128,6 +128,12 @@ function wrapToolForConnection(input: {
     needsApprovalFn?: (input: unknown, ctx?: unknown) => boolean | Promise<boolean>;
   };
 
+  // Extend the first template's schema with `connection_name` so the model
+  // still sees per-tool argument hints, then relax it to passthrough. Two
+  // connections that expose the same tool key with different schemas (real
+  // for MCP servers whose tool shape depends on configuration) would
+  // otherwise trip the wrapper's validation before dispatch — the selected
+  // inner tool re-validates its own arguments at execute time.
   const wrappedInputSchema = extendInputSchemaWithConnectionName(template.inputSchema);
 
   // Preserve the inner tool's approval contract. The MCP client attaches
@@ -230,26 +236,30 @@ function wrapToolForConnection(input: {
 }
 
 /**
- * Rebuilds a zod object schema adding a `connection_name` string field. Uses
- * `.extend` when the source is a zod object; otherwise wraps with an
- * intersection so unknown Standard Schema shapes still validate.
+ * Extends the first template's zod object with a `connection_name` string
+ * field and relaxes the schema to passthrough so the wrapper does not reject
+ * per-connection argument shapes that differ from the template. When the
+ * template has no input schema (or is not a zod object we can extend),
+ * returns a passthrough object owning only `connection_name`. The selected
+ * inner tool re-validates its own arguments at execute time, so any extra
+ * fields are the inner tool's responsibility, not the wrapper's.
+ *
+ * `.passthrough()` is the v3 API and still works at runtime in v4 (where
+ * `z.looseObject` supersedes it). Keeping the v3 form for zod-v3/v4
+ * peer-dep compatibility.
  */
 function extendInputSchemaWithConnectionName(source: unknown): unknown {
-  const candidate = source as
-    | { extend?: (shape: Record<string, unknown>) => unknown; _def?: { typeName?: string } }
-    | undefined;
-  if (!candidate) {
-    return z.object({ connection_name: connectionNameField });
+  const candidate = source as { extend?: (shape: Record<string, unknown>) => unknown } | undefined;
+  if (candidate && typeof candidate.extend === 'function') {
+    const extended = candidate.extend({ connection_name: connectionNameField }) as
+      | { passthrough?: () => unknown }
+      | undefined;
+    if (extended && typeof extended.passthrough === 'function') {
+      return extended.passthrough();
+    }
+    return extended;
   }
-  if (typeof candidate.extend === 'function') {
-    return candidate.extend({ connection_name: connectionNameField });
-  }
-  // Fallback: intersect with an object containing connection_name. Not used
-  // by the generated proxy providers today (all use z.object) but keeps MCP
-  // and hand-authored tools working when their schema shape is unknown.
-  // `z.intersection` accepts any zod schema instance; keep the cast targeted
-  // to sidestep the peer-dep zod v3/v4 API drift.
-  return z.intersection(z.object({ connection_name: connectionNameField }), source as never);
+  return z.object({ connection_name: connectionNameField }).passthrough();
 }
 
 /**
@@ -391,7 +401,12 @@ export async function buildMcpMultiConnectionTools(input: {
   const listToolKey = listConnectionsToolKey(registration.integrationId);
   const innerAllowTools = allowTools?.filter(name => name !== listToolKey);
   const innerDisallowTools = disallowTools?.filter(name => name !== listToolKey);
-  const innerToolsByConnectionId = new Map<string, ToolsInput>();
+  // First pass: discover every inner catalog so `autoApproveTools` can be
+  // validated against the UNION of tools across all connections. A tool that
+  // appears on only a later connection would otherwise be rejected as
+  // "unknown" against an earlier connection's catalog, even though the
+  // wrapper still publishes it via the key-union below.
+  const rawInnerCatalogs = new Map<string, ToolsInput>();
   for (const connection of connections) {
     const cacheKey = `${registration.integrationId}::${connection.id}`;
     let entry = mcpClients.get(cacheKey);
@@ -418,20 +433,28 @@ export async function buildMcpMultiConnectionTools(input: {
     if (error) {
       throw new Error(`MCP tool discovery failed for connection ${connection.id}: ${error}`);
     }
-    const unknown = [...autoApproved].filter(name => !(name in discovery.tools));
-    if (unknown.length > 0) {
-      throw new MastraConnectError(
-        'invalid_options',
-        `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknown.join(
-          ', ',
-        )}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
-      );
-    }
-    const filtered = applyToolFilter(discovery.tools, {
+    rawInnerCatalogs.set(connection.id, discovery.tools);
+  }
+  const catalogUnion = new Set<string>();
+  for (const catalog of rawInnerCatalogs.values()) {
+    for (const key of Object.keys(catalog)) catalogUnion.add(key);
+  }
+  const unknownAutoApprove = [...autoApproved].filter(name => !catalogUnion.has(name));
+  if (unknownAutoApprove.length > 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknownAutoApprove.join(
+        ', ',
+      )}. Known tools: ${[...catalogUnion].join(', ')}.`,
+    );
+  }
+  const innerToolsByConnectionId = new Map<string, ToolsInput>();
+  for (const [connectionId, catalog] of rawInnerCatalogs) {
+    const filtered = applyToolFilter(catalog, {
       allowTools: innerAllowTools,
       disallowTools: innerDisallowTools,
     });
-    innerToolsByConnectionId.set(connection.id, filtered);
+    innerToolsByConnectionId.set(connectionId, filtered);
   }
   if (connections.length === 0) return {};
   assertNoListConnectionsCollision(registration.integrationId, innerToolsByConnectionId);

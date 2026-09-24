@@ -22,6 +22,12 @@ function createGatewayFetch(
   options: {
     connections?: Array<Record<string, unknown>>;
     matchAnyConnectionMcpPath?: boolean;
+    /**
+     * Per-connection-id tool list overrides. Keys are raw connection ids
+     * (matching `mcp_...` segments of the request path). When omitted for a
+     * connection, the default two-tool catalog is served.
+     */
+    toolsByConnectionId?: Record<string, Array<Record<string, unknown>>>;
   } = {},
 ) {
   const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string }> = [];
@@ -83,30 +89,33 @@ function createGatewayFetch(
     }
     if (method === 'notifications/initialized') return new Response(null, { status: 202 });
     if (method === 'tools/list') {
+      // Resolve per-connection tool list by parsing the connection id from
+      // the request URL. Falls back to the default two-tool catalog.
+      const connectionIdMatch = url.pathname.match(/\/v2\/connections\/([^/]+)\/mcp/);
+      const perConnection = connectionIdMatch ? options.toolsByConnectionId?.[connectionIdMatch[1]!] : undefined;
+      const defaultTools = [
+        {
+          name: 'list_records',
+          description: 'List records',
+          inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          annotations: { readOnlyHint: true, destructiveHint: false },
+        },
+        {
+          name: 'update_record',
+          description: 'Update a record',
+          inputSchema: {
+            type: 'object',
+            properties: { value: { type: 'string' } },
+            required: ['value'],
+            additionalProperties: false,
+          },
+          annotations: { readOnlyHint: false, destructiveHint: true },
+        },
+      ];
       return Response.json({
         jsonrpc: '2.0',
         id: body.id,
-        result: {
-          tools: [
-            {
-              name: 'list_records',
-              description: 'List records',
-              inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-              annotations: { readOnlyHint: true, destructiveHint: false },
-            },
-            {
-              name: 'update_record',
-              description: 'Update a record',
-              inputSchema: {
-                type: 'object',
-                properties: { value: { type: 'string' } },
-                required: ['value'],
-                additionalProperties: false,
-              },
-              annotations: { readOnlyHint: false, destructiveHint: true },
-            },
-          ],
-        },
+        result: { tools: perConnection ?? defaultTools },
       });
     }
     if (method === 'tools/call') {
@@ -381,5 +390,110 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     // routing input.
     expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Nope' }, {})).toBe(true);
     expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
+  });
+
+  it('validates autoApproveTools against the union of MCP catalogs across connections', async () => {
+    // Second connection exposes an extra tool the first does not. The union
+    // must include it so autoApproveTools can reference it without being
+    // rejected by an earlier connection's catalog.
+    const gateway = createGatewayFetch({
+      connections: TWO_CONNECTIONS,
+      matchAnyConnectionMcpPath: true,
+      toolsByConnectionId: {
+        [TWO_CONNECTIONS[1]!.id as string]: [
+          {
+            name: 'list_records',
+            description: 'List records',
+            inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          },
+          {
+            name: 'update_record',
+            description: 'Update a record',
+            inputSchema: {
+              type: 'object',
+              properties: { value: { type: 'string' } },
+              required: ['value'],
+              additionalProperties: false,
+            },
+          },
+          {
+            name: 'delete_record',
+            description: 'Delete a record (only on Globex)',
+            inputSchema: {
+              type: 'object',
+              properties: { id: { type: 'string' } },
+              required: ['id'],
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
+    });
+    const tools = connect({
+      projectId: 'project-1',
+      integrations: { [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_delete_record'] } },
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(tools);
+    const discovered = (await tools()) as Record<string, ApprovalTool>;
+    // delete_record surfaces via the key-union; auto-approved on Globex.
+    expect(discovered).toHaveProperty('catalog-mcp_delete_record');
+    expect(
+      await discovered['catalog-mcp_delete_record']!.needsApprovalFn!({ id: 'r1', connection_name: 'Globex' }, {}),
+    ).toBe(false);
+  });
+
+  it('accepts per-connection input differences at the wrapper (inner tool re-validates)', async () => {
+    // Same tool key on both connections but with divergent input schemas.
+    // The wrapper's inputSchema is passthrough, so a Globex-shaped call is
+    // not rejected against Acme's stricter schema before dispatch.
+    const gateway = createGatewayFetch({
+      connections: TWO_CONNECTIONS,
+      matchAnyConnectionMcpPath: true,
+      toolsByConnectionId: {
+        [TWO_CONNECTIONS[0]!.id as string]: [
+          {
+            name: 'update_record',
+            description: 'Update a record',
+            inputSchema: {
+              type: 'object',
+              properties: { value: { type: 'string' } },
+              required: ['value'],
+              additionalProperties: false,
+            },
+          },
+        ],
+        [TWO_CONNECTIONS[1]!.id as string]: [
+          {
+            name: 'update_record',
+            description: 'Update a record (Globex takes an id too)',
+            inputSchema: {
+              type: 'object',
+              properties: { value: { type: 'string' }, id: { type: 'string' } },
+              required: ['value', 'id'],
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
+    });
+    const tools = connect({
+      projectId: 'project-1',
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(tools);
+    const discovered = (await tools()) as unknown as Record<
+      string,
+      ApprovalTool & { execute: (input: unknown, ctx: { requestContext: RequestContext }) => Promise<unknown> }
+    >;
+    // Would have thrown a ValidationError if the wrapper enforced Acme's
+    // schema on this Globex-shaped call (Acme forbids `id`,
+    // additionalProperties: false).
+    await expect(
+      discovered['catalog-mcp_update_record']!.execute(
+        { value: 'x', id: 'r1', connection_name: 'Globex' },
+        { requestContext: new RequestContext() },
+      ),
+    ).resolves.toBeDefined();
   });
 });
