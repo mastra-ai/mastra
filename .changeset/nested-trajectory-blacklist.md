@@ -2,4 +2,4 @@
 '@mastra/evals': patch
 ---
 
-Fixed trajectory blacklist and redundant-call checks missing tool calls nested inside `agent_run` or `workflow_step` steps. `checkTrajectoryBlacklist` now flags blacklisted tools at any depth and blacklisted sequences within any nested step list, and `checkTrajectoryEfficiency` detects consecutive duplicate calls inside nested step lists. Trajectories with nested violations that previously passed will now score lower. Fixes #24925.
+Fixed trajectory scoring so blacklisted and repeated tool calls inside nested agent and workflow steps now lower the score. Previously only top-level calls were checked. Fixes #24925.
