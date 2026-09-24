@@ -332,7 +332,7 @@ The code-based scorer operates in one of three modes based on `ordering`:
 
 #### Strict mode (`ordering: 'strict'`)
 
-Full credit requires an exact match: the same steps in the same order with no extra or missing steps. Trajectories that don't match exactly earn partial credit based on how many expected steps matched in position, minus a penalty for extra steps. For example, the expected two steps followed by one extra step scores `0.75`.
+Only an exact match (the same steps in the same order, with nothing extra or missing) scores `1.0`. Anything else gets partial credit for the expected steps that matched in position, with a penalty deducted for each extra step. For example, the two expected steps followed by one extra step scores `0.75`.
 
 #### Relaxed mode (`ordering: 'relaxed'`, default)
 
