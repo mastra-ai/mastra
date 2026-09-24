@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.70.0-alpha.4
+
+### Patch Changes
+
+- Reduced stored durable agent iteration data for large prompts and tool sets. ([#24946](https://github.com/mastra-ai/mastra/pull/24946))
+
 ## 1.70.0-alpha.3
 
 ### Patch Changes

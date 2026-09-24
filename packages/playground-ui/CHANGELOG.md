@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 58.0.0-alpha.4
+
+### Patch Changes
+
+- Error rows in data lists now stay red when pressed instead of flashing grey. ([#24945](https://github.com/mastra-ai/mastra/pull/24945))
+
+- Code blocks in side panels (logs, traces, scores, experiments, dataset items) now use the same syntax highlighting as span payloads, and look the same in light and dark mode. ([#24945](https://github.com/mastra-ai/mastra/pull/24945))
+
+- Smoothed the FilterBar chip entrance: segment text now fades in once the segment has nearly finished growing, so it no longer looks squeezed or clipped. The chip shine sweep now animates with `transform` for smoother rendering. ([#24942](https://github.com/mastra-ai/mastra/pull/24942))
+
+- The logs page now opens log details in a side drawer, like the traces page. Clicking Trace or Span in a log opens the trace drawer on top. Long log messages and data no longer make the logs list scroll sideways. Removed `LogsLayout` and replaced `LogDetailsView` with `LogDataPanel`. The log drawer now has a readable timestamp heading, and the message sits in its own "Message" code section. ([#24945](https://github.com/mastra-ai/mastra/pull/24945))
+
+- Updated dependencies [[`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec)]:
+  - @mastra/core@1.70.0-alpha.4
+  - @mastra/client-js@1.49.0-alpha.4
+  - @mastra/react@1.6.2-alpha.4
+
 ## 58.0.0-alpha.3
 
 ### Patch Changes

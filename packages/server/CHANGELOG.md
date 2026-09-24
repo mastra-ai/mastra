@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.70.0-alpha.4
+
+### Patch Changes
+
+- Return HTTP 409 when a feedback review-status update conflicts with a newer version of the feedback, so clients can retry instead of treating it as a server error. ([#24033](https://github.com/mastra-ai/mastra/pull/24033))
+
+- Updated dependencies [[`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec)]:
+  - @mastra/core@1.70.0-alpha.4
+
 ## 1.70.0-alpha.3
 
 ### Patch Changes
