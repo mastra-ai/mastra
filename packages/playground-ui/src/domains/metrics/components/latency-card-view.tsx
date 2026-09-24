@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
 import { MetricsLineChart } from '../../../ds/components/MetricsLineChart/metrics-line-chart';
+import { MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart/metrics-line-chart-legend';
 import { TabContent } from '../../../ds/components/Tabs/tabs-content';
 import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
@@ -43,6 +44,7 @@ function LatencyChart({ data, onPointClick }: { data: LatencyPoint[]; onPointCli
     <MetricsLineChart
       data={data}
       series={latencySeries}
+      showLegend={false}
       onPointClick={onPointClick ? point => (isDrillablePoint(point) ? onPointClick(point) : undefined) : undefined}
     />
   );
@@ -90,15 +92,9 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
   const renderedActions = typeof actions === 'function' ? actions(activeTab) : actions;
   const interval = data?.interval ?? '1h';
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
-  const p50Values = data
-    ? Object.values(data)
-        .filter(Array.isArray)
-        .flat()
-        .map(d => d.p50)
-        .filter((v): v is number => typeof v === 'number')
+  const activeData = data
+    ? { agents: data.agentData, workflows: data.workflowData, tools: data.toolData }[activeTab]
     : [];
-  const avgP50 =
-    p50Values.length > 0 ? `${Math.round(p50Values.reduce((s, v) => s + v, 0) / p50Values.length)}ms` : '—';
 
   return (
     <MetricsCard>
@@ -107,7 +103,6 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
           title="Latency"
           description={interval === '1h' ? 'Hourly p50 and p95 latency.' : 'Daily p50 and p95 latency.'}
         />
-        {hasData && <MetricsCard.Summary value={avgP50} label="Avg p50" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
@@ -129,21 +124,24 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
               defaultTab={initialTab}
               className="overflow-visible"
             >
-              <TabList>
-                <Tab value="agents" disabled={!agentsHasData} disabledTooltip="No agent latency data for this period">
-                  Agents
-                </Tab>
-                <Tab
-                  value="workflows"
-                  disabled={!workflowsHasData}
-                  disabledTooltip="No workflow latency data for this period"
-                >
-                  Workflows
-                </Tab>
-                <Tab value="tools" disabled={!toolsHasData} disabledTooltip="No tool latency data for this period">
-                  Tools
-                </Tab>
-              </TabList>
+              <div className="flex flex-wrap items-center justify-between gap-2 [&>:first-child]:w-auto">
+                <TabList>
+                  <Tab value="agents" disabled={!agentsHasData} disabledTooltip="No agent latency data for this period">
+                    Agents
+                  </Tab>
+                  <Tab
+                    value="workflows"
+                    disabled={!workflowsHasData}
+                    disabledTooltip="No workflow latency data for this period"
+                  >
+                    Workflows
+                  </Tab>
+                  <Tab value="tools" disabled={!toolsHasData} disabledTooltip="No tool latency data for this period">
+                    Tools
+                  </Tab>
+                </TabList>
+                {activeData.length > 0 && <MetricsLineChartLegend data={activeData} series={latencySeries} />}
+              </div>
               <TabContent value="agents" className="pt-3">
                 <LatencyChart
                   data={data.agentData}
