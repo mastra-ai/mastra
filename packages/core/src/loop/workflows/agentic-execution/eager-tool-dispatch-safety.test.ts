@@ -1120,7 +1120,31 @@ describe('eager tool dispatch — discarded model attempt', () => {
   type Controller = ReadableStreamDefaultController<any>;
   type Script = (controller: Controller) => Promise<void> | void;
 
-  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  const signal = () => {
+    let fire!: () => void;
+    const fired = new Promise<void>(resolve => (fire = resolve));
+    return { fired, fire };
+  };
+  /** One macrotask, so rejections and settlements already queued as microtasks land first. */
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  /** Resolves when every eager coordinator the run created has no running work left. */
+  function trackEagerWork() {
+    const coordinators = new Set<EagerToolExecutionCoordinator>();
+    const start = EagerToolExecutionCoordinator.prototype.start;
+    const spy = vi.spyOn(EagerToolExecutionCoordinator.prototype, 'start').mockImplementation(function (
+      this: EagerToolExecutionCoordinator,
+      ...args: Parameters<typeof start>
+    ) {
+      coordinators.add(this);
+      return start.apply(this, args);
+    });
+    return {
+      idle: async () => {
+        await Promise.all([...coordinators].map(coordinator => coordinator.settleRunning()));
+        spy.mockRestore();
+      },
+    };
+  }
   const emitCall = (controller: Controller, toolCallId: string, value: string) =>
     controller.enqueue({ type: 'tool-call', toolCallId, toolName: 'tool-a', input: JSON.stringify({ value }) });
   const recover: Script = controller => {
@@ -1134,21 +1158,21 @@ describe('eager tool dispatch — discarded model attempt', () => {
     });
     controller.close();
   };
-  /** Emits a call, waits `ms`, then fails with an `error` chunk (answerable by an error processor). */
+  /** Emits a call, waits for `ready`, then fails with an `error` chunk (answerable by an error processor). */
   const callThenErrorChunk =
-    (toolCallId: string, value: string, ms: number): Script =>
+    (toolCallId: string, value: string, ready: () => Promise<unknown>): Script =>
     async controller => {
       emitCall(controller, toolCallId, value);
-      await sleep(ms);
+      await ready();
       controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
       controller.close();
     };
-  /** Emits a call, waits `ms`, then errors the stream itself (the fallback route). */
+  /** Emits a call, waits for `ready`, then errors the stream itself (the fallback route). */
   const callThenThrow =
-    (toolCallId: string, value: string, ms: number): Script =>
+    (toolCallId: string, value: string, ready: () => Promise<unknown>): Script =>
     async controller => {
       emitCall(controller, toolCallId, value);
-      await sleep(ms);
+      await ready();
       controller.error(new Error('model blew up mid-stream'));
     };
 
@@ -1182,8 +1206,20 @@ describe('eager tool dispatch — discarded model attempt', () => {
     },
   ] as never;
 
-  /** Records that it ran, then waits for its abort signal (event-driven, so CI speed is irrelevant). */
-  function abortAwareTool(record: Recorder['record']) {
+  /**
+   * Records that it ran. The discarded call then holds until it is aborted or the pipeline starts
+   * waiting it out (`settleRunning`), whichever comes first; `started` fires once it is running.
+   */
+  function abortAwareTool(record: Recorder['record'], started = signal()) {
+    const waited = signal();
+    const settleRunning = EagerToolExecutionCoordinator.prototype.settleRunning;
+    vi.spyOn(EagerToolExecutionCoordinator.prototype, 'settleRunning').mockImplementation(function (
+      this: EagerToolExecutionCoordinator,
+      ...args: Parameters<typeof settleRunning>
+    ) {
+      waited.fire();
+      return settleRunning.apply(this, args);
+    });
     return createTool({
       id: 'tool-a',
       description: 'Records that it ran',
@@ -1191,26 +1227,40 @@ describe('eager tool dispatch — discarded model attempt', () => {
       outputSchema: z.object({ value: z.string() }),
       execute: async ({ value }, options) => {
         record(`execute-${value}`);
-        const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
-        if (signal) {
-          await new Promise<void>(resolve => {
-            if (signal.aborted) return resolve();
-            signal.addEventListener('abort', () => resolve(), { once: true });
-            setTimeout(resolve, 500);
-          });
-          if (signal.aborted) record(`aborted-${value}`);
+        started.fire();
+        const abortSignal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
+        if (value === 'discarded' && abortSignal) {
+          await Promise.race([
+            waited.fired,
+            new Promise<void>(resolve => {
+              if (abortSignal.aborted) return resolve();
+              abortSignal.addEventListener('abort', () => resolve(), { once: true });
+            }),
+          ]);
+          if (abortSignal.aborted) record(`aborted-${value}`);
         }
         return { value };
       },
     });
   }
 
+  let finished = signal();
+  /** The finished-work scenarios fail the attempt only once the call has returned and settled. */
+  const finishedReady = async () => {
+    await finished.fired;
+    await tick();
+  };
+
   it.each([
     {
       // An error chunk answered by `retry`: the replacement attempt must be told what already ran.
       route: 'the replacement attempt',
       build: (prompts: any[][]) => ({
-        model: scriptedModel('mock-model', [callThenErrorChunk('call-finished', 'finished', 80), recover], prompts),
+        model: scriptedModel(
+          'mock-model',
+          [callThenErrorChunk('call-finished', 'finished', finishedReady), recover],
+          prompts,
+        ),
         errorProcessors: retryOnce,
       }),
     },
@@ -1219,7 +1269,9 @@ describe('eager tool dispatch — discarded model attempt', () => {
       route: 'the next fallback model',
       build: (prompts: any[][]) => ({
         model: [
-          { model: scriptedModel('failing-model', [callThenThrow('call-finished', 'finished', 80)], prompts) },
+          {
+            model: scriptedModel('failing-model', [callThenThrow('call-finished', 'finished', finishedReady)], prompts),
+          },
           { model: scriptedModel('fallback-model', [recover], prompts) },
         ] as never,
       }),
@@ -1229,6 +1281,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
     // effect, so the next model call must see it — otherwise it asks again and it runs twice.
     const executions: string[] = [];
     const prompts: any[][] = [];
+    finished = signal();
     const agent = new Agent({
       id: 'eager-finished-work-agent',
       name: 'Eager finished work agent',
@@ -1242,6 +1295,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
           outputSchema: z.object({ answer: z.string() }),
           execute: async ({ value }) => {
             executions.push(value);
+            queueMicrotask(finished.fire);
             return { answer: `answered-${value}` };
           },
         }),
@@ -1264,16 +1318,25 @@ describe('eager tool dispatch — discarded model attempt', () => {
     const run = async (eagerToolExecution: boolean) => {
       const { events, record } = createRecorder();
       const prompts: any[][] = [];
+      const started = signal();
+      const work = trackEagerWork();
+      // With eager dispatch the attempt fails only once its call is running.
+      const ready = () => (eagerToolExecution ? started.fired : Promise.resolve());
       const agent = new Agent({
         id: `eager-error-retry-agent-${eagerToolExecution}`,
         name: 'Eager error retry agent',
         instructions: 'Call tool-a.',
-        model: scriptedModel('mock-model', [callThenErrorChunk('call-discarded', 'discarded', 20), recover], prompts),
+        model: scriptedModel(
+          'mock-model',
+          [callThenErrorChunk('call-discarded', 'discarded', ready), recover],
+          prompts,
+        ),
         errorProcessors: retryOnce,
-        tools: { 'tool-a': abortAwareTool(record) },
+        tools: { 'tool-a': abortAwareTool(record, started) },
       });
       await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution })).catch(() => {});
-      await sleep(150);
+      await work.idle();
+      vi.restoreAllMocks();
       // The retry really happened, so the run did not just die early.
       expect(prompts.length).toBe(2);
       return events;
@@ -1287,12 +1350,18 @@ describe('eager tool dispatch — discarded model attempt', () => {
   it('lets eager work finish when the pipeline discards its attempt', async () => {
     const run = async (eagerToolExecution: boolean) => {
       const { events, record } = createRecorder();
+      const started = signal();
+      const work = trackEagerWork();
+      const ready = () => (eagerToolExecution ? started.fired : Promise.resolve());
       const agent = new Agent({
         id: `eager-fallback-agent-${eagerToolExecution}`,
         name: 'Eager fallback agent',
         instructions: 'Call tool-a.',
         model: [
-          { model: scriptedModel('failing-model', [callThenThrow('call-discarded', 'discarded', 20)]), maxRetries: 0 },
+          {
+            model: scriptedModel('failing-model', [callThenThrow('call-discarded', 'discarded', ready)]),
+            maxRetries: 0,
+          },
           {
             // Deliberately reuses the discarded toolCallId with new args: nothing may adopt the old promise.
             model: scriptedModel('recovering-model', [
@@ -1309,13 +1378,14 @@ describe('eager tool dispatch — discarded model attempt', () => {
             maxRetries: 0,
           },
         ] as any,
-        tools: { 'tool-a': abortAwareTool(record) },
+        tools: { 'tool-a': abortAwareTool(record, started) },
       });
       await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution, toolCallConcurrency: 1 })).catch(
         () => {},
       );
-      // Give any leaked eager execution time to surface rather than racing the assertion.
-      await sleep(50);
+      // Any eager execution still running must surface before the assertion.
+      await work.idle();
+      vi.restoreAllMocks();
       return events;
     };
 

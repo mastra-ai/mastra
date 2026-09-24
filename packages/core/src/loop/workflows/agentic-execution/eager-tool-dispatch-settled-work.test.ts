@@ -70,7 +70,14 @@ function textOnly() {
 function createAgent(
   model: MockLanguageModelV2,
   executions: string[],
-  opts: { delayMs?: number; retry?: boolean; gate?: ReturnType<typeof inFlightGate>; onAPIError?: () => void },
+  opts: {
+    started?: ReturnType<typeof deferred>;
+    release?: Promise<void>;
+    settled?: ReturnType<typeof deferred>;
+    retry?: boolean;
+    gate?: ReturnType<typeof inFlightGate>;
+    onAPIError?: () => void;
+  },
 ) {
   return new Agent({
     id: 'eager-settled-work-agent',
@@ -99,7 +106,9 @@ function createAgent(
         execute: async ({ value }) => {
           executions.push(value);
           if (opts.gate) return opts.gate.hold(() => ({ answer: `answered-${value}` }));
-          if (opts.delayMs) await new Promise(resolve => setTimeout(resolve, opts.delayMs));
+          opts.started?.resolve();
+          await opts.release;
+          opts.settled?.resolve();
           return { answer: `answered-${value}` };
         },
       }),
@@ -175,44 +184,49 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // Terminal error: no retry and no fallback, so the pipeline still runs this attempt's
     // calls. Cancelling the eager execution there only makes the foreach start it again.
     const executions: string[] = [];
+    const started = deferred();
+    const release = deferred();
+    const settled = deferred();
     const model = new MockLanguageModelV2({
       doStream: async () =>
         toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          // The model dies while the call is still running.
+          await started.promise;
           controller.error(new Error('provider died mid-stream'));
+          release.resolve();
         }),
     });
 
-    const stream = await createAgent(model, executions, { delayMs: 60 }).stream('go', {
+    const stream = await createAgent(model, executions, { started, release: release.promise, settled }).stream('go', {
       maxSteps: 1,
       eagerToolExecution: true,
     });
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await settled.promise;
 
     expect(executions).toEqual(['a']);
   });
 
   it('keeps a settled result when a retry is requested but no replacement attempt runs', async () => {
     const executions: string[] = [];
+    const settled = deferred();
     let attempts = 0;
     const model = new MockLanguageModelV2({
       doStream: async () => {
         attempts += 1;
         return toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 40));
+          await settled.promise;
           controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
           controller.close();
         });
       },
     });
 
-    const stream = await createAgent(model, executions, { retry: true }).stream('go', {
+    const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
       maxSteps: 1,
       eagerToolExecution: true,
     });
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(attempts).toBe(1);
     expect(executions).toEqual(['a']);
@@ -221,16 +235,17 @@ describe('eager tool dispatch — finished work survives every early exit', () =
 
   it('applies the configured payload transform to a settled result it writes on discard', async () => {
     const executions: string[] = [];
+    const settled = deferred();
     const model = new MockLanguageModelV2({
       doStream: async () =>
         toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 40));
+          await settled.promise;
           controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
           controller.close();
         }),
     });
 
-    const stream = await createAgent(model, executions, { retry: true }).stream('go', {
+    const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
       maxSteps: 1,
       eagerToolExecution: true,
       transform: {
@@ -239,7 +254,6 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       },
     } as never);
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('[redacted output-available]');
@@ -248,28 +262,27 @@ describe('eager tool dispatch — finished work survives every early exit', () =
   it('commits a settled result when the caller aborts, and still runs it only once', async () => {
     const executions: string[] = [];
     const abortController = new AbortController();
+    const settled = deferred();
     const model = new MockLanguageModelV2({
       doStream: async ({ abortSignal }) =>
         toolCallThen(async controller => {
           // The call settles, then the stream stalls until the caller gives up.
-          await new Promise(resolve => setTimeout(resolve, 40));
+          await settled.promise;
           abortController.abort();
           await new Promise<void>(resolve => {
             if (abortSignal?.aborted) return resolve();
             abortSignal?.addEventListener('abort', () => resolve(), { once: true });
-            setTimeout(resolve, 200);
           });
           controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
         }),
     });
 
-    const stream = await createAgent(model, executions, {}).stream('go', {
+    const stream = await createAgent(model, executions, { settled }).stream('go', {
       maxSteps: 2,
       eagerToolExecution: true,
       abortSignal: abortController.signal,
     });
     await drain(stream);
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(executions).toEqual(['a']);
     expect(recordedResults(stream)).toContain('answered-a');
@@ -440,6 +453,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // double-write when the replacement attempt then starts.
     const executions: string[] = [];
     const prompts: unknown[] = [];
+    const settled = deferred();
     let attempts = 0;
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
@@ -447,14 +461,14 @@ describe('eager tool dispatch — finished work survives every early exit', () =
         prompts.push(prompt);
         if (attempts > 1) return textOnly();
         return toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 40));
+          await settled.promise;
           controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
           controller.close();
         });
       },
     });
 
-    const stream = await createAgent(model, executions, { retry: true }).stream('go', {
+    const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
       maxSteps: 3,
       eagerToolExecution: true,
     });
@@ -630,12 +644,15 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // A tool that suspends at runtime without a suspendSchema: its eager attempt has already
     // done the pre-suspend work. Retrying the model must not start that body again.
     const effects: string[] = [];
+    const suspended = deferred();
     let attempts = 0;
     const model = new MockLanguageModelV2({
       doStream: async () => {
         attempts += 1;
         return toolCallThen(async controller => {
-          await new Promise(resolve => setTimeout(resolve, 40));
+          // Fail only once the call has suspended; one macrotask lets its rejection land.
+          await suspended.promise;
+          await new Promise(resolve => setImmediate(resolve));
           if (attempts === 1) {
             controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
           } else {
@@ -668,7 +685,11 @@ describe('eager tool dispatch — finished work survives every early exit', () =
           execute: async ({ value }, options?: any) => {
             if (options?.agent?.resumeData === undefined) {
               effects.push(`pre-${value}`);
-              await options?.agent?.suspend?.({ reason: 'needs input' });
+              try {
+                await options?.agent?.suspend?.({ reason: 'needs input' });
+              } finally {
+                suspended.resolve();
+              }
             }
             return { value };
           },
@@ -680,7 +701,6 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
     const types: string[] = [];
     for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(attempts).toBe(1);
     expect(types).toContain('tool-call-suspended');
