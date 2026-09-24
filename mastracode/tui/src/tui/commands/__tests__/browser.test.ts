@@ -552,5 +552,24 @@ describe('handleBrowserCommand', () => {
       expect(output).toContain('Pending changes (not yet applied):');
       expect(output).toContain('Viewport: 1600x1000');
     });
+
+    it('does not report drift when the active snapshot matches the file, including profile and model', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser = {
+        ...settings.browser,
+        enabled: true,
+        profile: '/tmp/profile',
+        stagehand: { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5', preserveUserDataDir: true },
+      };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+      expect(output).not.toContain('Pending changes');
+      expect(output).toContain('Browser: enabled');
+      expect(output).toContain('Profile: /tmp/profile');
+    });
   });
 });
