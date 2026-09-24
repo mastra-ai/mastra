@@ -150,7 +150,8 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
         try {
           const missingAt = item.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
           const missingTime = typeof missingAt === 'string' ? Date.parse(missingAt) : Number.NaN;
-          if (Number.isFinite(missingTime) && now().getTime() - missingTime < MISSING_RECHECK_MS) {
+          const missingAge = now().getTime() - missingTime;
+          if (Number.isFinite(missingTime) && missingAge >= 0 && missingAge < MISSING_RECHECK_MS) {
             summary.missing += 1;
             continue;
           }

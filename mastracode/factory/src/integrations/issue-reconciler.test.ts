@@ -231,6 +231,18 @@ describe('issue reconcilers', () => {
     await expect(reconcile()).resolves.toMatchObject({ updated: 1, missing: 0 });
     expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.metadata)
       .not.toHaveProperty(EXTERNAL_SOURCE_MISSING_KEY);
+
+    await seeded.workItems.update({
+      orgId: project.orgId,
+      id: item.id,
+      userId: 'factory-rule-dispatcher',
+      patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: '2099-01-01T00:00:00.000Z' } },
+    });
+    getIssue.mockResolvedValue(null);
+    await expect(reconcile()).resolves.toMatchObject({ missing: 1 });
+    expect(getIssue).toHaveBeenCalledTimes(4);
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.metadata?.[EXTERNAL_SOURCE_MISSING_KEY])
+      .toBe(currentTime.toISOString());
   });
 
   it('retries transient errors and marks unresolved dispatches as missing', async () => {
