@@ -2,4 +2,4 @@
 '@mastra/editor': patch
 ---
 
-Builder agents now inherit the shared stability error processors from `@mastra/core` instead of carrying their own copy, so `createBuilderAgent` resolves the same three processors in the same order as every other agent. `DEFAULT_BUILDER_ERROR_PROCESSORS` is still exported and keeps its existing `@mastra/core` peer range.
+Builder agents keep their own stability error processors (`ProviderHistoryCompat`, `PrefillErrorHandler`, `StreamErrorRetryProcessor`) instead of relying on the framework defaults, because the `@mastra/core` peer range allows cores that predate them — so the builder behaves the same on every supported core version. The processors are declared in the repair-first order the framework uses, and `maxProcessorRetries: 3` is set explicitly to match the runtime's implicit safety cap. `DEFAULT_BUILDER_ERROR_PROCESSORS` is still exported.

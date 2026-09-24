@@ -51,9 +51,11 @@ const workspace = new Workspace({
  *   foreign-reasoning strip) so model swaps don't break history.
  *
  * Same three processors, same order, as the shared stability defaults in
- * `@mastra/core/processors`. `createBuilderAgent` doesn't pass a list at all, so
- * the framework supplies its own tuned instances by default and this constant
- * exists for callers that want to compose from it.
+ * `@mastra/core/processors`. `createBuilderAgent` passes this list explicitly
+ * rather than relying on the framework defaults: the peer range allows older
+ * cores that have no defaults, and bumping the range would be a breaking
+ * change, so the builder brings its own stack and behaves the same on every
+ * core version.
  *
  * Exported so callers can compose a custom processor list that keeps the
  * subset they want (e.g. `[...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom]`).
@@ -198,6 +200,14 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     model: 'openai/gpt-5.5',
     memory,
     workspace,
+    // The builder always passes its own error processors: the peer range
+    // allows cores that predate the framework defaults, so relying on them
+    // would silently drop this stack on older cores. `maxProcessorRetries`
+    // is set alongside because newer cores warn when caller-configured error
+    // processors have no explicit retry budget; 3 matches the runtime's
+    // implicit safety cap, so this changes nothing but the warning.
+    errorProcessors: DEFAULT_BUILDER_ERROR_PROCESSORS,
+    maxProcessorRetries: 3,
     ...(args || {}),
     id: 'builder-agent',
     name: 'Agent Builder Agent',
