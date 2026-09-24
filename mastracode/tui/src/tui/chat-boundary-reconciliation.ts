@@ -1,6 +1,6 @@
 import type { Component, Container } from '@earendil-works/pi-tui';
 import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
-import { getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
+import { PENDING_SHELL_GROUP_KEY, getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
 import type { CompactToolLabelColor } from './components/tool-execution-interface.js';
 
 interface CompactToolGroupingParticipant {
@@ -51,13 +51,24 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   const spacerPool = children.filter(isChatBoundarySpacer);
   let poolIndex = 0;
 
+  // A shell call still streaming its directory joins the shell box right above it, if any.
+  const compactToolGroupKeys = new Array<string | undefined>(components.length);
+  let previousSpacingGroupKey: string | undefined;
+  for (let i = 0; i < components.length; i++) {
+    const component = components[i]!;
+    let key = (component as CompactToolGroupingParticipant).getCompactToolGroupKey?.();
+    if (key === PENDING_SHELL_GROUP_KEY && previousSpacingGroupKey?.startsWith('$ ')) key = previousSpacingGroupKey;
+    compactToolGroupKeys[i] = key;
+    if (getChatSpacingKind(component)) previousSpacingGroupKey = key;
+  }
+
   const nextCompactToolGroupKeys = new Array<string | undefined>(components.length);
   let nextSpacingComponentGroupKey: string | undefined;
   for (let i = components.length - 1; i >= 0; i--) {
     nextCompactToolGroupKeys[i] = nextSpacingComponentGroupKey;
     const component = components[i];
     if (component && getChatSpacingKind(component)) {
-      nextSpacingComponentGroupKey = (component as CompactToolGroupingParticipant).getCompactToolGroupKey?.();
+      nextSpacingComponentGroupKey = compactToolGroupKeys[i];
     }
   }
 
@@ -86,7 +97,7 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
 
     // --- compact-tool grouping (unchanged logic) --------------------------
     const participant = component as CompactToolGroupingParticipant;
-    const compactToolGroupKey = participant.getCompactToolGroupKey?.();
+    const compactToolGroupKey = compactToolGroupKeys[i];
     const compactToolGroupSummary = participant.getCompactToolGroupSummary?.();
     const nextCompactToolGroupKey = nextCompactToolGroupKeys[i];
     const isContinuation = !!compactToolGroupKey && compactToolGroupKey === previousCompactToolGroupKey;

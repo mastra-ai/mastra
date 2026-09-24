@@ -16,6 +16,7 @@ import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { formatStatusDuration } from '../status-duration.js';
 import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type {
@@ -372,7 +373,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   getCompactToolGroupKey(): string | undefined {
     if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
     // Shell calls only share a box when they run in the same directory, so each box has one header.
-    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) return `$ ${this.getShellHeaderPath()}`;
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) {
+      return this.argsStreaming && !this.result ? PENDING_SHELL_GROUP_KEY : `$ ${this.getShellHeaderPath()}`;
+    }
     return this.getCompactToolLabel();
   }
 
@@ -1732,6 +1735,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const contentWidth = Math.min(fullWidth, Math.max(QUIET_SHELL_MIN_CONTENT_WIDTH, naturalWidth));
     const rule = (left: string, right: string) =>
       `${border(left)}${border('─'.repeat(contentWidth + 2))}${border(right)}`;
+    // Every row must stay on one terminal line: a row that wraps adds a line that disappears again
+    // on the next update, jumping everything below it. Tabs and other control characters would make
+    // the measured width disagree with what the terminal draws, so they become plain spaces.
+    const singleLine = (text: string) =>
+      text.replace(/[\t\n\r\v\f]/g, ' ').replace(/[\x00-\x08\x0e-\x1a\x1c-\x1f\x7f]/g, '');
     const row = (left: string, right = '') => {
       const rightWidth = visibleWidth(right);
       const leftText = truncateAnsi(left, Math.max(1, contentWidth - (rightWidth ? rightWidth + 1 : 0)));
@@ -1739,13 +1747,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return `${border('│')} ${leftText}${padding}${right} ${border('│')}`;
     };
 
-    const headerPath = this.getShellHeaderPath();
+    const headerPath = singleLine(this.getShellHeaderPath());
     const header = row(`${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('muted', headerPath)}`);
     const lines: string[] = [];
     if (!this.compactToolContinuation) lines.push(rule('╭', '╮'), header, rule('├', '┤'));
 
     const rowText = this.getQuietShellRowText();
-    const description = rowText.isCommand ? theme.fg('muted', rowText.text) : rowText.text;
+    const description = rowText.isCommand ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);
     const isBackground =
       !!this.backgroundTaskId || (this.args as Record<string, unknown> | undefined)?.background === true;
     const running = !this.result || this.isPartial;
@@ -1770,10 +1778,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       time = this.formatDuration();
     }
     lines.push(row(`${mark} ${description}`, theme.fg('muted', time)));
-    if (errorLine) lines.push(row(theme.fg('error', `  └▸ ${errorLine}`)));
+    if (errorLine) lines.push(row(theme.fg('error', `  └▸ ${singleLine(errorLine)}`)));
     if (!this.compactToolHasFollowingContinuation) lines.push(rule('╰', '╯'));
 
-    this.contentBox.addChild(new Text(lines.join('\n'), 0, 0));
+    // Last guard for terminals too narrow for the minimum box: clip rather than wrap.
+    const maxLineWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2);
+    this.contentBox.addChild(new Text(lines.map(line => truncateAnsi(line, maxLineWidth)).join('\n'), 0, 0));
     this.syncQuietShellTicker(running && !isBackground && !this.liveUpdatesStopped);
   }
 
@@ -1793,12 +1803,24 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (!failed) return undefined;
     const message = parseErrorMessage(resultLines.join('\n'));
     if (message) return message;
-    const lines = (this.streamingOutput.trim() || resultLines.join('\n'))
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line && !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line));
-    const errorPattern = /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:/i;
-    return lines.find(line => errorPattern.test(line)) ?? lines.at(-1) ?? '';
+    const contentLines = (text: string) =>
+      text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line));
+    const errorPattern =
+      /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:|No such file or directory|Permission denied/i;
+    // Prefer what the command wrote to stderr. Without an error-looking line, the last line of
+    // output is often unrelated (a divider, the last match of a search), so show the exit code
+    // rather than guess.
+    const stderrLines = contentLines(resultLines.join('\n').match(/^stderr:\n([\s\S]*)$/m)?.[1] ?? '');
+    const lines = contentLines(this.streamingOutput.trim() || resultLines.join('\n'));
+    return (
+      stderrLines.find(line => errorPattern.test(line)) ??
+      stderrLines.at(-1) ??
+      lines.find(line => errorPattern.test(line)) ??
+      (exitCode !== undefined ? `exit code ${exitCode}` : (lines.at(-1) ?? ''))
+    );
   }
 
   /** Keeps a running grouped row's spinner and seconds counter moving between output events. */

@@ -321,4 +321,54 @@ describe('ChatBoundarySpacer', () => {
     const widths = new Set(container.render(140).map(line => visibleWidth(line.trimEnd())));
     expect(widths.size).toBe(1);
   });
+
+  it('keeps a streaming shell call in the box above until its directory arrives, so no lines flash', () => {
+    const make = (args: Record<string, unknown>) =>
+      new ToolExecutionComponentEnhanced(
+        'execute_command',
+        args,
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+    const done = make({ command: 'cd /tmp && gh api graphql', description: 'Reading PR reviews' });
+    done.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+    const streaming = make({});
+    streaming.setArgsStreaming(true);
+
+    const container = new Container();
+    container.addChild(done);
+    container.addChild(streaming);
+    const render = () => {
+      reconcileChatBoundarySpacers(container);
+      return container.render(120).map(line => stripAnsi(line).trimEnd());
+    };
+
+    // The description streams in before the "cd /tmp &&" that sets the directory
+    streaming.updateArgs({ description: 'Listing unresolved threads' }, false);
+    const whileStreaming = render();
+    expect(whileStreaming.filter(line => line.includes('$ /tmp'))).toHaveLength(1);
+    expect(whileStreaming.some(line => line.startsWith('╭'))).toBe(true);
+    expect(whileStreaming.filter(line => line.startsWith('╰'))).toHaveLength(1);
+
+    streaming.updateArgs(
+      { description: 'Listing unresolved threads', command: 'cd /tmp && gh api graphql -f query=x' },
+      false,
+    );
+    streaming.setArgsStreaming(false);
+    expect(render()).toHaveLength(whileStreaming.length);
+
+    // Without a shell box above, it opens its own box and fills in the directory later
+    const alone = new Container();
+    const first = make({ description: 'Listing files' });
+    first.setArgsStreaming(true);
+    alone.addChild(first);
+    reconcileChatBoundarySpacers(alone);
+    const before = alone.render(120).length;
+    first.updateArgs({ description: 'Listing files', command: 'cd /tmp && ls' });
+    first.setArgsStreaming(false);
+    reconcileChatBoundarySpacers(alone);
+    const after = alone.render(120).map(line => stripAnsi(line).trimEnd());
+    expect(after).toHaveLength(before);
+    expect(after.some(line => line.includes('$ /tmp'))).toBe(true);
+  });
 });

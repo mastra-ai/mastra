@@ -1321,7 +1321,45 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       expect(lines(sub, 400)[1]).toContain('│ $ ./src ');
 
       expect(getSpacingBetweenComponents(root, root2)).toBe(0);
-      expect(getSpacingBetweenComponents(root, sub)).toBe(1);
+      // A new directory closes one box and opens the next, with no blank line between their borders
+      expect(getSpacingBetweenComponents(root, sub)).toBe(0);
+      const boxed = make({ command: 'git status', description: 'Checking status' }, { text: 'clean' }, 2);
+      expect(boxed.getChatSpacingKind()).toBe('quiet-shell-tool');
+      expect(getSpacingBetweenComponents(sub, boxed)).toBe(0);
+      const view = new ToolExecutionComponentEnhanced(
+        'view',
+        { path: 'a.ts' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+      expect(getSpacingBetweenComponents(root, view)).toBe(1);
+    });
+
+    it('never wraps a row onto a second terminal line, at any width', () => {
+      const long = 'x'.repeat(300);
+      const cases = [
+        () => make({ command: 'ls', description: `Describing ${long}` }, { text: '' }),
+        () => make({ command: `cat\t${long}\nsecond line`, cwd: `/tmp/${long}` }, { text: '' }),
+        () => make({ command: 'sleep 100', description: `Waiting ${long}` }),
+        () =>
+          make(
+            { command: 'gh pr checks', description: 'Checking CI' },
+            {
+              text: `Validate changeset packages\tfail\t10m4s\thttps://github.com/${long}\n\nExit code: 1`,
+              isError: true,
+            },
+          ),
+      ];
+      for (const create of cases) {
+        const component = create();
+        const expectedRows = lines(component, 200).length;
+        for (let width = 12; width <= 200; width += 7) {
+          const rendered = component.render(width);
+          expect(rendered.length, `rows at width ${width}`).toBe(expectedRows);
+          for (const line of rendered) expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+        }
+        component.stopLiveUpdates();
+      }
     });
 
     it('shows run time recovered from history, and no fake time when it is unknown', () => {
@@ -1356,6 +1394,21 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       expect(lines(exited)).toEqual([
         expect.stringMatching(/^│ ✗ Running a command that fails on purpose +\d+ms │$/),
         expect.stringMatching(/^│ {3}└▸ ls: \/nope: No such file or directory +│$/),
+      ]);
+
+      // Without stderr or an error-looking line, the last output line is unrelated to the failure
+      const quietFailure = make(
+        {
+          command: "gh api graphql; echo ====; gh run view 1 --log-failed | rg -v '^$'",
+          description: 'Listing threads',
+        },
+        { text: 'resolved=false a.ts:1 :: a comment that mentions an error\n====\n\nExit code: 1' },
+      );
+      quietFailure.setCompactToolContinuation(true);
+      quietFailure.setCompactToolHasFollowingContinuation(true);
+      expect(lines(quietFailure)).toEqual([
+        expect.stringMatching(/^│ ✗ Listing threads +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ exit code 1 +│$/),
       ]);
 
       const background = make({ command: 'pnpm dev', description: 'Starting the dev server', background: true });
