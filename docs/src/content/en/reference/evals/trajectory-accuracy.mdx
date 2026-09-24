@@ -262,7 +262,7 @@ The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/
         name: 'ordering',
         type: "'strict' | 'relaxed' | 'unordered'",
         description:
-          "How step ordering is evaluated. 'strict' requires an exact match (same steps in the same order, no extra steps). 'relaxed' allows additional steps as long as expected steps appear in order. 'unordered' only checks that expected steps are present.",
+          "How step ordering is evaluated. 'strict' gives full credit only for an exact match and penalizes extra steps. 'relaxed' allows additional steps as long as expected steps appear in order. 'unordered' only checks that expected steps are present.",
         isOptional: true,
         defaultValue: "'relaxed'",
       },
@@ -332,7 +332,7 @@ The code-based scorer operates in one of three modes based on `ordering`:
 
 #### Strict mode (`ordering: 'strict'`)
 
-Requires an exact match. The actual steps must match the expected steps in the same order with no extra or missing steps. Returns `1.0` for an exact match and `0.0` otherwise.
+Full credit requires an exact match: the same steps in the same order with no extra or missing steps. Trajectories that don't match exactly earn partial credit based on how many expected steps matched in position, minus a penalty for extra steps. For example, the expected two steps followed by one extra step scores `0.75`.
 
 #### Relaxed mode (`ordering: 'relaxed'`, default)
 
@@ -340,7 +340,7 @@ Allows extra steps. Expected steps must appear in the correct relative order. Th
 
 #### Unordered mode (`ordering: 'unordered'`)
 
-Only checks that each expected step is present. Order is ignored, and extra steps are still penalized as in relaxed mode.
+Only checks that each expected step is present. Order is ignored, and extra steps are reported in the result but not penalized.
 
 ## Code-based scoring details
 
