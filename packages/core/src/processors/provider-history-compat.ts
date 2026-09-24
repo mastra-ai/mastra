@@ -621,7 +621,8 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
       for (const part of dbMessage.content.parts ?? []) {
         if (part.type !== 'reasoning') continue;
         const anthropic = part.providerMetadata?.anthropic as
-          { signature?: unknown; redactedData?: unknown } | undefined;
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined;
         for (const value of [anthropic?.signature, anthropic?.redactedData]) {
           if (typeof value === 'string' && value && !foreign.has(value)) foreign.set(value, origin);
         }
@@ -639,7 +640,8 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
       const content = message.content.filter(part => {
         if (part.type !== 'reasoning') return true;
         const anthropic = part.providerOptions?.anthropic as
-          { signature?: unknown; redactedData?: unknown } | undefined;
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined;
         const signature = anthropic?.signature ?? anthropic?.redactedData;
         if (typeof signature === 'string' && foreign.has(signature)) {
           dropped++;
