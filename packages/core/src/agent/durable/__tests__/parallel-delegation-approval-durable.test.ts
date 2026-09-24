@@ -417,6 +417,34 @@ describe('durable parallel delegation approvals', () => {
     });
   }, 60000);
 
+  it('closes the caller stream on suspension via new Agent({ durable: true }) with closeOnSuspend: true', async () => {
+    const storage = new InMemoryStore();
+    const gatedTool = createTool({
+      id: 'gatedTool',
+      description: 'Approval-gated tool',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      execute: async (input: { query: string }) => ({ result: `${input.query} done` }),
+    });
+    const agent = new Agent({
+      id: 'solo-public',
+      name: 'SoloPublic',
+      instructions: 'Use your tool.',
+      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV2,
+      tools: { gatedTool },
+      memory: new MockMemory(),
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, storage, logger: false });
+    const memory = { thread: 'solo-public-thread', resource: 'solo-public-resource' };
+
+    const result = await mastra.getAgent('agent').stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
+    const drained = await drainUntil(result.fullStream, () => false, 20000);
+
+    expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
+    expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
+  }, 60000);
+
   it('keeps the caller stream open on suspension by default', async () => {
     const { durableAgent } = setupSingle();
     const memory = { thread: 'solo-open-default-thread', resource: 'solo-open-default-resource' };
