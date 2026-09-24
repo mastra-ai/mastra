@@ -54,10 +54,7 @@ const RESERVED_OPTION_KEYS: Record<string, readonly string[]> = {
   discord: DISCORD_RESERVED_KEYS,
 };
 
-function stripReservedOptions<T extends Record<string, unknown> | undefined>(
-  integrationId: string,
-  options: T,
-): T {
+function stripReservedOptions<T extends Record<string, unknown> | undefined>(integrationId: string, options: T): T {
   if (!options) return options;
   const reserved = RESERVED_OPTION_KEYS[integrationId];
   if (!reserved) return options;
@@ -195,9 +192,11 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
     // shape mismatch surfaces at startup, not at first inbound interaction.
     if (!applicationId || !publicKey) {
       console.warn(
-        `[@mastra/connect] discord channel: missing ${
-          [!applicationId && 'applicationId', !publicKey && 'publicKey'].filter(Boolean).join(' + ')
-        } on the connection. Store them on the connection's metadata or pass them via integrations.discord.providerOptions.`,
+        `[@mastra/connect] discord channel: missing ${[!applicationId && 'applicationId', !publicKey && 'publicKey']
+          .filter(Boolean)
+          .join(
+            ' + ',
+          )} on the connection. Store them on the connection's metadata or pass them via integrations.discord.providerOptions.`,
       );
     }
     // `options` is spread AFTER `app` so an operator can override the app

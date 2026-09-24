@@ -438,9 +438,7 @@ describe('channels()', () => {
     expect((config as Record<string, unknown>).baseUrl).toBeUndefined();
     expect((config as Record<string, unknown>).apiBaseUrl).toBeUndefined();
     expect((config as Record<string, unknown>).encryptionKey).toBeUndefined();
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/ignoring reserved providerOptions/),
-    );
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/ignoring reserved providerOptions/));
     warn.mockRestore();
   });
 
