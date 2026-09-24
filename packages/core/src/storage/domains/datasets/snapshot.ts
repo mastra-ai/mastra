@@ -212,12 +212,18 @@ export function planDatasetSnapshotImport(prepared: PreparedDatasetSnapshotImpor
   const configuration = prepared.content.configuration;
   const datasetId = randomUUID();
   const version = prepared.content.items.length ? 1 : 0;
+  // Null settings mean "unset", which ordinary writes store as absent. Only authored item
+  // data (input, groundTruth, expectedTrajectory) keeps JSON null.
   const dataset: DatasetRecord = {
     ...configuration,
     description: configuration.description ?? undefined,
     inputSchema: configuration.inputSchema ?? undefined,
     groundTruthSchema: configuration.groundTruthSchema ?? undefined,
     requestContextSchema: configuration.requestContextSchema ?? undefined,
+    tags: configuration.tags ?? undefined,
+    targetType: configuration.targetType ?? undefined,
+    targetIds: configuration.targetIds ?? undefined,
+    scorerIds: configuration.scorerIds ?? undefined,
     ...prepared.destination,
     id: datasetId,
     version,
@@ -240,8 +246,16 @@ export function planDatasetSnapshotImport(prepared: PreparedDatasetSnapshotImpor
       itemId: id,
       portableId: item.itemIdentity,
     });
+    const { payload } = item;
     return {
-      ...item.payload,
+      ...payload,
+      externalId: payload.externalId ?? undefined,
+      toolMocks: payload.toolMocks ?? undefined,
+      unmockedToolPolicy: payload.unmockedToolPolicy ?? undefined,
+      scorerIds: payload.scorerIds ?? undefined,
+      requestContext: payload.requestContext ?? undefined,
+      metadata: payload.metadata ?? undefined,
+      source: payload.source ?? undefined,
       id,
       datasetId,
       datasetVersion: version,

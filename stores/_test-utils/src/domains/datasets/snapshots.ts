@@ -83,6 +83,64 @@ export function createDatasetSnapshotTransferTests(
     expect(exported.provenance.sourceDatasetId).toBe(datasetId);
   });
 
+  it('stores null settings and item overrides as unset, keeping authored JSON null', async () => {
+    const store = getStorage();
+    const { digest: _digest, ...content } = fixture();
+    content.configuration = {
+      ...content.configuration,
+      tags: null,
+      targetType: null,
+      targetIds: null,
+      scorerIds: null,
+      inputSchema: null,
+      groundTruthSchema: null,
+      requestContextSchema: null,
+    };
+    content.items = [
+      {
+        ...content.items[0]!,
+        payload: {
+          externalId: null,
+          input: null,
+          groundTruth: null,
+          toolMocks: null,
+          unmockedToolPolicy: null,
+          scorerIds: null,
+          requestContext: null,
+          metadata: null,
+          source: null,
+        },
+      },
+    ];
+    const imported = await store.importSnapshot({
+      snapshot: JSON.stringify(createDatasetSnapshot(content)),
+      idempotencyKey: 'nulls',
+    });
+    const dataset = await store.getDatasetById({ id: imported.receipt.datasetId });
+    for (const key of ['tags', 'targetType', 'targetIds', 'scorerIds', 'inputSchema', 'groundTruthSchema'] as const) {
+      expect(dataset?.[key], key).toBeUndefined();
+    }
+    const [item] = (await store.listItems({ datasetId: imported.receipt.datasetId, pagination: { page: 0, perPage: false } })).items;
+    expect(item).toMatchObject({ input: null, groundTruth: null });
+    // Adapters already differ on how an unset externalId reads (declared as string | null).
+    expect(item?.externalId ?? undefined).toBeUndefined();
+    for (const key of [
+      'toolMocks',
+      'unmockedToolPolicy',
+      'scorerIds',
+      'requestContext',
+      'metadata',
+      'source',
+    ] as const) {
+      expect(item?.[key], key).toBeUndefined();
+    }
+    const exported = await store.exportSnapshot({
+      datasetId: imported.receipt.datasetId,
+      acknowledgeSensitiveData: true,
+    });
+    expect(exported.items[0]!.payload).toEqual({ input: null, groundTruth: null });
+  });
+
   it('imports an empty dataset atomically at local version zero', async () => {
     const store = getStorage();
     const { digest: _digest, ...content } = fixture();
