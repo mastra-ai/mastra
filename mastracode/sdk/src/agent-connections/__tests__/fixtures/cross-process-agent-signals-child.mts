@@ -269,22 +269,24 @@ async function runThreadTransition() {
  */
 async function runYieldOnDemand() {
   let currentThreadId = role === 'owner' ? ownerThreadId : senderThreadId;
-  const manager = createThreadOwnershipManager(
-    async (claimThreadId, { onYield }) =>
-      agent.claimThreadOwnership({
-        resourceId,
-        threadId: claimThreadId,
-        streamOptions: { memory: { resource: resourceId, thread: claimThreadId } },
-        peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
-        yieldOwnership: () => {
-          if (currentThreadId === claimThreadId) return false;
-          onYield();
-          emit('yielded', { threadId: claimThreadId });
-          return true;
-        },
-      }),
-    { onOwnershipChanged: (changedThreadId, owned) => emit('ownership', { threadId: changedThreadId, owned }) },
-  );
+  const manager = createThreadOwnershipManager(async (claimThreadId, { onYield }) => {
+    const claim = await agent.claimThreadOwnership({
+      resourceId,
+      threadId: claimThreadId,
+      streamOptions: { memory: { resource: resourceId, thread: claimThreadId } },
+      peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
+      yieldOwnership: () => {
+        if (currentThreadId === claimThreadId) return false;
+        onYield();
+        emit('yielded', { threadId: claimThreadId });
+        return true;
+      },
+    });
+    // The manager retries silently; report every attempt so the test can see
+    // the contender lose while the owner is on the thread and win after it yields.
+    emit('claim-attempt', { threadId: claimThreadId, claimed: claim.claimed });
+    return claim;
+  });
 
   if (role === 'owner') {
     emit('claim-result', { threadId: ownerThreadId, claimed: await manager.claim(ownerThreadId) });

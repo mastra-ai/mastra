@@ -129,7 +129,6 @@ function createState() {
       gitBranch: 'feat/mc-queueing-ux',
     },
     pendingQueuedActions: [],
-    threadsOwnedElsewhere: new Set<string>(),
     activeGithubPrSubscriptions: [],
     goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
@@ -174,26 +173,6 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('queued');
-  });
-
-  it('flags the current thread when another mastracode process owns it', () => {
-    const state = createState();
-    state.threadsOwnedElsewhere.add('thread-1');
-
-    updateStatusLine(state);
-
-    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('open elsewhere');
-  });
-
-  it('does not flag threads owned elsewhere unless they are the current thread', () => {
-    const state = createState();
-    state.threadsOwnedElsewhere.add('thread-2');
-
-    updateStatusLine(state);
-
-    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).not.toContain('open elsewhere');
   });
 
   it('shows the landed fallback pack and failed source pack', () => {

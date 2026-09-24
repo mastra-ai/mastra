@@ -30,46 +30,39 @@ export function createSessionThreadAdvertisement<TState>(options: {
   // of losing the rename.
   const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
 
-  const threadOwnership = createThreadOwnershipManager(
-    async (threadId, { onYield }) => {
-      const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
-      const thread = await session.thread.getById({ threadId });
-      const agent = controller.getCurrentAgent(session);
-      const claim = await agent.claimThreadOwnership({
-        threadId,
-        resourceId: session.identity.getResourceId(),
-        // The claim answers for `threadId`, which is not necessarily the session's
-        // current thread once the user has moved on — so the woken run must bind
-        // its memory and request context to the claimed thread, not the current one.
-        streamOptions: () => session.machinery.buildStreamOptions({ threadId }),
-        peer: {
-          label: projectName,
-          ...(thread?.title ? { title: thread.title } : {}),
-        },
-        yieldOwnership: () => {
-          // Read the current thread live rather than tracking events: whichever
-          // path moved the session (including silent switches) is reflected here.
-          if (session.thread.getId() === threadId) return false;
-          onYield();
-          return true;
-        },
-      });
-      const observedTitle = latestObservedTitles.get(threadId);
-      if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
-        agent.updateThreadPeerAdvertisement({
-          resourceId: session.identity.getResourceId(),
-          threadId,
-          peer: { title: observedTitle.title },
-        });
-      }
-      return claim;
-    },
-    {
-      onOwnershipChanged: (threadId, owned) => {
-        session.emit({ type: 'thread_ownership_changed', threadId, owned });
+  const threadOwnership = createThreadOwnershipManager(async (threadId, { onYield }) => {
+    const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
+    const thread = await session.thread.getById({ threadId });
+    const agent = controller.getCurrentAgent(session);
+    const claim = await agent.claimThreadOwnership({
+      threadId,
+      resourceId: session.identity.getResourceId(),
+      // The claim answers for `threadId`, which is not necessarily the session's
+      // current thread once the user has moved on — so the woken run must bind
+      // its memory and request context to the claimed thread, not the current one.
+      streamOptions: () => session.machinery.buildStreamOptions({ threadId }),
+      peer: {
+        label: projectName,
+        ...(thread?.title ? { title: thread.title } : {}),
       },
-    },
-  );
+      yieldOwnership: () => {
+        // Read the current thread live rather than tracking events: whichever
+        // path moved the session (including silent switches) is reflected here.
+        if (session.thread.getId() === threadId) return false;
+        onYield();
+        return true;
+      },
+    });
+    const observedTitle = latestObservedTitles.get(threadId);
+    if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
+      agent.updateThreadPeerAdvertisement({
+        resourceId: session.identity.getResourceId(),
+        threadId,
+        peer: { title: observedTitle.title },
+      });
+    }
+    return claim;
+  });
 
   const claimThreadOwnership = async (threadId: string) => {
     try {

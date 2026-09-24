@@ -243,13 +243,15 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
 
     // The owner is still looking at owner-thread: the contender must lose and
-    // report the contention instead of taking the thread.
+    // keep retrying instead of taking the thread.
     const contender = startChild('sender', resourceId, 'yield-on-demand');
     contender.child.stdin.write('claim\n');
     expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
-    expect(await contender.waitFor('ownership')).toMatchObject({ threadId: 'owner-thread', owned: false });
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(owner.events.filter(event => event.event === 'yielded')).toEqual([]);
+    const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
+    expect(contenderAttempts().length).toBeGreaterThan(1);
+    expect(contenderAttempts().every(event => event.claimed === false)).toBe(true);
 
     // The owner moves to another thread while keeping owner-thread claimed. The
     // contender's retry loop now asks again and the owner yields.
@@ -257,13 +259,10 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     await owner.waitFor('switched');
     const yielded = await owner.waitFor('yielded');
     const deadline = Date.now() + 10_000;
-    while (
-      Date.now() < deadline &&
-      !contender.events.some(event => event.event === 'ownership' && event.owned === true)
-    ) {
+    while (Date.now() < deadline && !contenderAttempts().some(event => event.claimed === true)) {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    const ownershipEvents = contender.events.filter(event => event.event === 'ownership');
+    const attemptOutcomes = contenderAttempts().map(event => event.claimed);
 
     owner.child.stdin.write('probe\n');
     const discovery = await owner.waitFor('discovered');
@@ -275,7 +274,9 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
 
     expect(yielded).toMatchObject({ threadId: 'owner-thread' });
-    expect(ownershipEvents.map(event => event.owned)).toEqual([false, true]);
+    // Every attempt lost until the owner yielded; the retry after that won.
+    expect(attemptOutcomes.at(-1)).toBe(true);
+    expect(attemptOutcomes.slice(0, -1).every(claimed => claimed === false)).toBe(true);
     // From the owner's side owner-thread now belongs to the contender while
     // owner-thread-2 (its current thread) is still its own.
     expect(discovery.threads).toEqual([

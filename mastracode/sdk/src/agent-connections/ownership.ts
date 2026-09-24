@@ -27,20 +27,10 @@ type ThreadClaimState = {
   claim?: ThreadOwnershipClaim;
   retryTimer?: ReturnType<typeof setTimeout>;
   retryDelayMs: number;
-  /** Last ownership outcome reported; undefined until the first attempt settles. */
-  owned?: boolean;
 };
 
 export function createThreadOwnershipManager(
   claimThread: (threadId: string, context: ThreadClaimContext) => Promise<ThreadOwnershipClaim>,
-  options?: {
-    /**
-     * Fired when a thread's ownership outcome changes: `false` when another live
-     * process holds the thread (this manager keeps retrying), `true` once the
-     * claim succeeds after having been contended.
-     */
-    onOwnershipChanged?: (threadId: string, owned: boolean) => void;
-  },
 ): {
   claim(threadId?: string | null): Promise<boolean>;
   release(threadId: string): void;
@@ -56,15 +46,6 @@ export function createThreadOwnershipManager(
   const clearRetry = (state: ThreadClaimState) => {
     if (state.retryTimer) clearTimeout(state.retryTimer);
     state.retryTimer = undefined;
-  };
-
-  const reportOwnership = (threadId: string, state: ThreadClaimState, owned: boolean) => {
-    const previous = state.owned;
-    state.owned = owned;
-    // The first successful claim is the normal case and not worth reporting;
-    // only contention, and recovery from it, are transitions the UI cares about.
-    if (previous === owned || (previous === undefined && owned)) return;
-    options?.onOwnershipChanged?.(threadId, owned);
   };
 
   const scheduleRetry = (threadId: string, claimGeneration: number) => {
@@ -99,13 +80,11 @@ export function createThreadOwnershipManager(
         return false;
       }
       if (!nextClaim.claimed) {
-        reportOwnership(threadId, state, false);
         scheduleRetry(threadId, claimGeneration);
         return false;
       }
       state.retryDelayMs = OWNERSHIP_RETRY_INITIAL_DELAY_MS;
       state.claim = nextClaim;
-      reportOwnership(threadId, state, true);
       return true;
     } catch (error) {
       scheduleRetry(threadId, claimGeneration);
@@ -132,7 +111,6 @@ export function createThreadOwnershipManager(
       const state: ThreadClaimState = {
         generation: ++nextGeneration,
         retryDelayMs: OWNERSHIP_RETRY_INITIAL_DELAY_MS,
-        owned: existing?.owned,
       };
       states.set(threadId, state);
       return attemptClaim(threadId, state.generation, true);

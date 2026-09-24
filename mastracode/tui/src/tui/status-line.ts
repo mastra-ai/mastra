@@ -192,9 +192,6 @@ export function updateStatusLine(state: TUIState): void {
   const now = Date.now();
   const queuedCount = state.pendingQueuedActions.length + displayState.queuedFollowUps;
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
-  const currentThreadId = state.session?.thread.getId();
-  const ownedElsewhereLabel =
-    currentThreadId && state.threadsOwnedElsewhere.has(currentThreadId) ? 'open elsewhere' : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
   const goalMatchesActiveRun =
@@ -398,12 +395,6 @@ export function updateStatusLine(state: TUIState): void {
       parts.push({
         plain: queuedLabel,
         styled: theme.fg('warning', queuedLabel),
-      });
-    }
-    if (opts.showQueue && ownedElsewhereLabel) {
-      parts.push({
-        plain: ownedElsewhereLabel,
-        styled: theme.fg('warning', ownedElsewhereLabel),
       });
     }
     const tpsLabel = state.tokensPerSec > 0 ? `${String(state.tokensPerSec).padStart(3)} t/s` : null;

@@ -174,39 +174,6 @@ describe('createThreadOwnershipManager', () => {
     expect(currentUnsubscribe).not.toHaveBeenCalled();
   });
 
-  it('reports contention once and recovery once, never the first successful claim', async () => {
-    vi.useFakeTimers();
-    try {
-      const onOwnershipChanged = vi.fn();
-      const claimThread = vi
-        .fn()
-        .mockResolvedValueOnce({ claimed: true, unsubscribe: vi.fn() })
-        .mockResolvedValueOnce({ claimed: false, unsubscribe: vi.fn() })
-        .mockResolvedValueOnce({ claimed: false, unsubscribe: vi.fn() })
-        .mockResolvedValueOnce({ claimed: true, unsubscribe: vi.fn() });
-      const manager = createThreadOwnershipManager(claimThread, { onOwnershipChanged });
-
-      await expect(manager.claim('owned-thread')).resolves.toBe(true);
-      expect(onOwnershipChanged).not.toHaveBeenCalled();
-
-      await expect(manager.claim('contended-thread')).resolves.toBe(false);
-      expect(onOwnershipChanged).toHaveBeenCalledExactlyOnceWith('contended-thread', false);
-
-      // Retries that keep losing do not repeat the report.
-      await vi.advanceTimersByTimeAsync(250);
-      expect(claimThread).toHaveBeenCalledTimes(3);
-      expect(onOwnershipChanged).toHaveBeenCalledTimes(1);
-
-      await vi.advanceTimersByTimeAsync(500);
-      expect(claimThread).toHaveBeenCalledTimes(4);
-      expect(onOwnershipChanged).toHaveBeenCalledTimes(2);
-      expect(onOwnershipChanged).toHaveBeenLastCalledWith('contended-thread', true);
-      manager.close();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('forgets a thread it yielded to another process without unsubscribing twice', async () => {
     const unsubscribe = vi.fn();
     let yieldOwnership: (() => void) | undefined;
