@@ -1,5 +1,14 @@
 # @mastra/duckdb
 
+## 1.11.1-alpha.0
+
+### Patch Changes
+
+- Fixed `listTraces`, `listTracesLight` and `listBranches` on `@mastra/duckdb` so each trace and branch is counted once. Every ended span is stored with two start rows, and the fast path and delta polling counted both. `pagination.total` was double the real number, each page returned about half of `perPage`, a trace could show on two pages, and delta polls returned every trace twice. Fixes https://github.com/mastra-ai/mastra/issues/24919 ([#24932](https://github.com/mastra-ai/mastra/pull/24932))
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+
 ## 1.11.0
 
 ### Minor Changes
