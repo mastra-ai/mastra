@@ -5,6 +5,7 @@ import type { MastraCodeConfig } from '../index.js';
 import type { McpServerConfig } from '../mcp/types.js';
 import { loadSettings, resolveDefaultThinkingLevel } from '../onboarding/settings.js';
 import type { AcpSessionRuntime } from './agent.js';
+import { withCleanupFailure } from './errors.js';
 
 export async function createAcpSession(
   request: NewSessionRequest,
@@ -82,7 +83,11 @@ export async function createAcpSession(
 
     return runtime;
   } catch (error) {
-    await runtime.cleanup?.();
+    try {
+      await runtime.cleanup?.();
+    } catch (cleanupError) {
+      throw withCleanupFailure(error, cleanupError);
+    }
     throw error;
   }
 }

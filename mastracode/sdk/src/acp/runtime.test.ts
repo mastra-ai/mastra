@@ -147,4 +147,24 @@ describe('ACP runtime factory', () => {
       }),
     ).rejects.toMatchObject({ code: -32602 });
   });
+
+  it('preserves the MCP initialization error when storage cleanup fails', async () => {
+    const boot = bootResult();
+    const cleanupError = new Error('storage close failed');
+    boot.mcpManager.initInBackground.mockResolvedValueOnce({
+      failed: [{ name: 'broken', error: 'command not found' }],
+    } as never);
+    boot.storage.close.mockRejectedValueOnce(cleanupError);
+    vi.mocked(createMastraCode).mockResolvedValueOnce(boot as never);
+    await expect(
+      createAcpSession({
+        cwd: '/project',
+        mcpServers: [{ name: 'broken', command: '/missing-command', args: [], env: [] }],
+      }),
+    ).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringContaining('broken: command not found'),
+      cause: expect.objectContaining({ errors: [cleanupError] }),
+    });
+  });
 });
