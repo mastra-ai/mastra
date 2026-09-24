@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
@@ -31,6 +30,7 @@ import type {
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { resolveProcessedOutputText } from './resolve-output-text';
 import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
@@ -171,31 +171,6 @@ export type FullOutput<OUTPUT = undefined> = {
   /** Only messages loaded from memory (conversation history) */
   rememberedMessages: MastraDBMessage[];
 };
-
-/**
- * Resolve the output text from the latest response message, skipping internal
- * completion-check feedback so it can't become the final text.
- * The completionResult metadata only exists on DB-format messages, and the
- * message is converted alone so adjacent assistant messages aren't merged.
- *
- * Returns `undefined` only when there is no response message to read text from,
- * so callers can distinguish "no processed output exists" from an output
- * processor deliberately clearing the text to `''`. Never collapse the two with
- * a truthiness check: a redacting processor must be able to produce empty text.
- */
-function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
-  const responseDbMessages = messageList.get.response.db();
-  const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  if (hasCompletionCheckMessages) {
-    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
-    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
-    const lastConverted = converted[converted.length - 1];
-    return lastConverted ? coreContentToString(lastConverted.content) : undefined;
-  }
-  const responseMessages = messageList.get.response.aiV4.core();
-  const lastResponseMessage = responseMessages[responseMessages.length - 1];
-  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : undefined;
-}
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
@@ -1113,8 +1088,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     outputResult,
                   );
 
-                  // Get text from the latest response message (the last assistant message)
-                  const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  // Last assistant text, not the trailing tool-result message. `undefined`
+                  // means there is no assistant message; `''` means a processor cleared it.
+                  const outputText = resolveProcessedOutputText(self.messageList);
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct.
