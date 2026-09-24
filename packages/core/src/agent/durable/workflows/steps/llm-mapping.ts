@@ -15,6 +15,7 @@ import type {
   DurableAgenticExecutionOutput,
   SerializableDurableState,
 } from '../../types';
+import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { normalizeModelOutput } from './normalize-model-output';
 
 /**
@@ -403,6 +404,52 @@ export function createDurableLLMMappingStep() {
           await emitChunkEvent(pubsub, _runId, enrichedChunk);
         } catch (error) {
           mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+        }
+      }
+
+      // savePerStep: persist this step before the loop continues, like the regular agent's
+      // onStepFinish. The final step is saved by finalize-run. Observational memory saves on its
+      // own, and a save here would corrupt its bookkeeping (same exclusion as finalize-run).
+      if (
+        isContinued &&
+        state.savePerStep &&
+        !state.observationalMemory &&
+        !state.memoryConfig?.readOnly &&
+        state.threadId &&
+        state.resourceId
+      ) {
+        try {
+          // Re-read the entry: tool-call may have rebuilt the save queue into it. A connect()
+          // worker in another process has none until something rebuilds it.
+          let saveQueueManager = globalRunRegistry.get(_runId)?.saveQueueManager;
+          let memory = globalRunRegistry.get(_runId)?.memory;
+          if (!saveQueueManager && mastra) {
+            const rebuilt = await rebuildRunToolsFromMastra({
+              mastra: mastra as Mastra,
+              runId: _runId,
+              agentId: _agentId,
+              state,
+              requestContext,
+            });
+            saveQueueManager = rebuilt?.saveQueueManager;
+            memory = rebuilt?.memory;
+          }
+          if (saveQueueManager) {
+            if (!state.threadExists && memory) {
+              const thread = await memory.getThreadById?.({ threadId: state.threadId });
+              if (!thread) {
+                await memory.createThread?.({
+                  threadId: state.threadId,
+                  resourceId: state.resourceId,
+                  memoryConfig: state.memoryConfig,
+                });
+              }
+              output.state = { ...output.state, threadExists: true };
+            }
+            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+          }
+        } catch (error) {
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to save step: ${error}`);
         }
       }
 
