@@ -315,6 +315,8 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
    * tool call is suspended concurrently.
    */
   toolCallId?: string;
+  /** See `InngestAgentStreamOptions.closeOnSuspend`. Defaults to `false`. */
+  closeOnSuspend?: boolean;
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   /**
    * Per-call actor signal forwarded to FGA checks and tool execution. Must be
@@ -1113,7 +1115,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeResumeRegistry();
           }
         },
-        closeOnSuspend: (resumeOptions as InngestAgentStreamOptions)?.closeOnSuspend ?? false,
+        closeOnSuspend: resumeOptions?.closeOnSuspend ?? false,
       });
 
       // Load the workflow snapshot to build proper resume data
@@ -1426,7 +1428,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const result = await proxyRef!.resume(runId, resumeData, {
         ...resumeOptions,
         // Close the stream when the run re-suspends so callers' loops terminate.
-        closeOnSuspend: true,
+        closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
       } as InngestAgentResumeOptions<TOutput>);
       return result.output;
     },
