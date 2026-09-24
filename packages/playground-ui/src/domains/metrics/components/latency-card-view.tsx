@@ -7,6 +7,7 @@ import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LatencyPoint } from '../hooks/use-latency-metrics';
+import type { MetricsInterval } from '../metrics-interval';
 import { averageLatency, isDrillablePoint, isLatencyTab } from './latency-card-view.utils';
 import type { LatencyTab } from './latency-card-view.utils';
 import { CHART_COLORS } from './metrics-utils';
@@ -48,11 +49,19 @@ function LatencyChart({ data, onPointClick }: { data: LatencyPoint[]; onPointCli
 }
 
 export interface LatencyCardViewProps {
-  data: { agentData: LatencyPoint[]; workflowData: LatencyPoint[]; toolData: LatencyPoint[] } | undefined;
+  data:
+    | {
+        agentData: LatencyPoint[];
+        workflowData: LatencyPoint[];
+        toolData: LatencyPoint[];
+        /** Bucket size of the points. Defaults to `'1h'`. */
+        interval?: MetricsInterval;
+      }
+    | undefined;
   isLoading: boolean;
   isError: boolean;
   /** Optional drilldown: invoked when a chart node is clicked. Container provides the navigation. */
-  onPointClick?: (tab: LatencyTab, point: LatencyPoint) => void;
+  onPointClick?: (tab: LatencyTab, point: LatencyPoint, interval: MetricsInterval) => void;
   /**
    * Optional slot for top-bar action buttons (e.g. "View in Traces").
    * Pass a function to receive the active tab so the action can scope itself to the current entity type.
@@ -79,6 +88,7 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
   const [selectedTab, setSelectedTab] = useState<LatencyTab>('agents');
   const activeTab = tabHasData[selectedTab] ? selectedTab : initialTab;
   const renderedActions = typeof actions === 'function' ? actions(activeTab) : actions;
+  const interval = data?.interval ?? '1h';
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
   const p50Values = data
     ? Object.values(data)
@@ -93,7 +103,10 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Latency" description="Hourly p50 and p95 latency." />
+        <MetricsCard.TitleAndDescription
+          title="Latency"
+          description={interval === '1h' ? 'Hourly p50 and p95 latency.' : 'Daily p50 and p95 latency.'}
+        />
         {hasData && <MetricsCard.Summary value={avgP50} label="Avg p50" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
@@ -134,19 +147,19 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
               <TabContent value="agents" className="pt-3">
                 <LatencyChart
                   data={data.agentData}
-                  onPointClick={onPointClick ? p => onPointClick('agents', p) : undefined}
+                  onPointClick={onPointClick ? p => onPointClick('agents', p, interval) : undefined}
                 />
               </TabContent>
               <TabContent value="workflows" className="pt-3">
                 <LatencyChart
                   data={data.workflowData}
-                  onPointClick={onPointClick ? p => onPointClick('workflows', p) : undefined}
+                  onPointClick={onPointClick ? p => onPointClick('workflows', p, interval) : undefined}
                 />
               </TabContent>
               <TabContent value="tools" className="pt-3">
                 <LatencyChart
                   data={data.toolData}
-                  onPointClick={onPointClick ? p => onPointClick('tools', p) : undefined}
+                  onPointClick={onPointClick ? p => onPointClick('tools', p, interval) : undefined}
                 />
               </TabContent>
             </Tabs>

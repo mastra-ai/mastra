@@ -20,7 +20,7 @@ export function MetricsLineChartTooltip({
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}:{' '}
           <span className="font-mono">
-            {entry.value}
+            {typeof entry.value === 'number' ? entry.value.toLocaleString('en-US') : entry.value}
             {suffix}
           </span>
         </p>

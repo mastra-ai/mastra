@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { EyeIcon, LogsIcon } from 'lucide-react';
+import { useState } from 'react';
+import type { ComponentProps } from 'react';
 import { fn } from 'storybook/test';
 
 import { Button } from '../Button/Button';
@@ -7,6 +9,7 @@ import { MetricsCard } from '../MetricsCard';
 import { Tab, TabContent, TabList, Tabs } from '../Tabs';
 import { MetricsLineChart } from './metrics-line-chart';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
+import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 
 const data: Record<string, unknown>[] = [
   { time: '09:00', requests: 52_000, errors: 3 },
@@ -19,8 +22,9 @@ const data: Record<string, unknown>[] = [
 ];
 
 const total = (key: string) => (points: Record<string, unknown>[]) => ({
-  value: String(points.reduce((sum, point) => sum + (typeof point[key] === 'number' ? point[key] : 0), 0)),
-  suffix: 'total',
+  value: new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 }).format(
+    points.reduce<number>((sum, point) => sum + (typeof point[key] === 'number' ? point[key] : 0), 0),
+  ),
 });
 
 const series = [
@@ -37,8 +41,6 @@ const meta: Meta<typeof MetricsLineChart> = {
     series,
     height: 260,
     onPointClick: fn(),
-    xAxisInterval: 'preserveStartEnd',
-    xAxisMinTickGap: 28,
   },
 };
 
@@ -66,52 +68,66 @@ export const SinglePoint: Story = {
   ),
 };
 
-const latencyData: Record<string, unknown>[] = [
-  { time: '09:00', p50: 120, p95: 480 },
-  { time: '10:00', p50: 135, p95: 520 },
-  { time: '11:00', p50: 110, p95: 390 },
-  { time: '12:00', p50: 160, p95: 710 },
-  { time: '13:00', p50: 145, p95: 640 },
-  { time: '14:00', p50: 128, p95: 455 },
-  { time: '15:00', p50: 138, p95: 560 },
-];
+// 30 daily buckets, as the latency card renders for the 30d preset.
+const latencyData: Record<string, unknown>[] = Array.from({ length: 30 }, (_, i) => ({
+  time: new Date(2026, 7, 26 + i).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+  p50: Math.round(130 + 25 * Math.sin(i / 2.5)),
+  p95: Math.round(550 + 160 * Math.sin(i / 3.5 + 1)),
+}));
+
+const average = (key: string) => (points: Record<string, unknown>[]) => {
+  const values = points.map(point => point[key]).filter((v): v is number => typeof v === 'number');
+  return { value: `${Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)}ms` };
+};
 
 const latencySeries = [
-  { dataKey: 'p50', label: 'p50', color: 'var(--chart-green)' },
-  { dataKey: 'p95', label: 'p95', color: 'var(--chart-orange)' },
+  { dataKey: 'p50', label: 'p50', color: 'var(--chart-green)', aggregate: average('p50') },
+  { dataKey: 'p95', label: 'p95', color: 'var(--chart-orange)', aggregate: average('p95') },
 ] satisfies MetricsLineChartSeries[];
 
-export const InMetricsCardWithTabs: Story = {
-  render: args => (
-    <div className="w-[min(48rem,calc(100vw-3rem))]">
-      <MetricsCard>
-        <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Traffic" description="Requests, errors and latency per hour." />
-          <MetricsCard.Summary value="1.52M" label="Total requests" />
-          <MetricsCard.Actions>
-            <Button variant="ghost" size="icon-md" tooltip="View in Traces" aria-label="View in Traces">
-              <EyeIcon />
-            </Button>
-            <Button variant="ghost" size="icon-md" tooltip="View errors in Logs" aria-label="View errors in Logs">
-              <LogsIcon />
-            </Button>
-          </MetricsCard.Actions>
-        </MetricsCard.TopBar>
-        <MetricsCard.Content>
-          <Tabs defaultTab="volume" className="overflow-visible">
+function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
+  const [tab, setTab] = useState<'volume' | 'latency'>('volume');
+  const legend =
+    tab === 'volume' ? { data: args.data, series: args.series } : { data: latencyData, series: latencySeries };
+
+  return (
+    <MetricsCard>
+      <MetricsCard.TopBar>
+        <MetricsCard.TitleAndDescription title="Traffic" description="Requests, errors and latency." />
+        <MetricsCard.Actions>
+          <Button variant="ghost" size="icon-md" tooltip="View in Traces" aria-label="View in Traces">
+            <EyeIcon />
+          </Button>
+          <Button variant="ghost" size="icon-md" tooltip="View errors in Logs" aria-label="View errors in Logs">
+            <LogsIcon />
+          </Button>
+        </MetricsCard.Actions>
+      </MetricsCard.TopBar>
+      <MetricsCard.Content>
+        <Tabs defaultTab="volume" value={tab} onValueChange={setTab} className="overflow-visible">
+          <div className="flex flex-wrap items-center justify-between gap-2 [&>:first-child]:w-auto">
             <TabList>
               <Tab value="volume">Volume</Tab>
               <Tab value="latency">Latency</Tab>
             </TabList>
-            <TabContent value="volume" className="pt-3">
-              <MetricsLineChart {...args} />
-            </TabContent>
-            <TabContent value="latency" className="pt-3">
-              <MetricsLineChart {...args} data={latencyData} series={latencySeries} />
-            </TabContent>
-          </Tabs>
-        </MetricsCard.Content>
-      </MetricsCard>
+            <MetricsLineChartLegend {...legend} />
+          </div>
+          <TabContent value="volume" className="pt-3">
+            <MetricsLineChart {...args} showLegend={false} />
+          </TabContent>
+          <TabContent value="latency" className="pt-3">
+            <MetricsLineChart {...args} data={latencyData} series={latencySeries} showLegend={false} />
+          </TabContent>
+        </Tabs>
+      </MetricsCard.Content>
+    </MetricsCard>
+  );
+}
+
+export const InMetricsCardWithTabs: Story = {
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <TrafficCard {...args} />
     </div>
   ),
 };
