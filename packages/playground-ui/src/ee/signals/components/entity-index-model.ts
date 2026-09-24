@@ -40,7 +40,7 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
         ? '—'
         : `${readySignalCount} of ${enabledSignalCount}`,
     status: entity.status,
-    updatedAt: formatDate(entity.updatedAt, 'dateTime') ?? '—',
+    updatedAt: formatDate(entity.updatedAt, 'date-time') ?? '—',
   };
 }
 

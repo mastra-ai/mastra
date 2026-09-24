@@ -141,7 +141,7 @@ function DatasetPage() {
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
                 <span className="mr-3 text-caption whitespace-nowrap text-muted-foreground">
-                  {dataset?.createdAt ? `Created ${formatDate(dataset.createdAt, 'smart')}` : ''}
+                  {dataset?.createdAt ? `Created ${formatDate(dataset.createdAt, 'date-time')}` : ''}
                 </span>
               }
               rightSlot={

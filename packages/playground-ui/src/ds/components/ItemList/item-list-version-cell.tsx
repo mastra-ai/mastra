@@ -21,7 +21,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         })}
       >
         <strong className="text-body-sm">v. {version}</strong>
-        <em className="text-caption text-placeholder">{formatDate(date, 'dateTime')}</em>
+        <em className="text-caption text-placeholder">{formatDate(date, 'date-time')}</em>
       </div>
       {(isLatest || isDeleted) && (
         <div className="flex items-center gap-1">

@@ -227,18 +227,18 @@ export interface DataListDateCellProps {
 
 /** Compact date cell — `Today`, `May 19` or `May 19, 2025`. */
 export function DataListDateCell({ timestamp }: DataListDateCellProps) {
-  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'smart')}</DataListCell>;
+  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'date')}</DataListCell>;
 }
 
 export interface DataListCreatedCellProps {
   timestamp: Date | string;
 }
 
-/** Compact locale-aware date cell; the full date + time is in the tooltip. */
+/** Locale-aware date and time cell with second precision. */
 export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
   return (
-    <DataListCell className="text-muted-foreground tabular-nums" title={formatDate(timestamp, 'dateTime')}>
-      {formatDate(timestamp, 'smart')}
+    <DataListCell className="text-muted-foreground tabular-nums" title={formatDate(timestamp, 'date-time-seconds')}>
+      {formatDate(timestamp, 'date-time-seconds')}
     </DataListCell>
   );
 }

@@ -340,10 +340,13 @@ describe('DataListSelectCell', () => {
 });
 
 describe('DataListDateCell', () => {
-  it('says Today with the time for today', () => {
-    const { container } = render(<DataListDateCell timestamp={new Date()} />);
+  it('shows only the date for today', () => {
+    const today = new Date();
+    const { container } = render(<DataListDateCell timestamp={today} />);
 
-    expect(container.textContent).toMatch(/^Today \d/);
+    expect(container.textContent).toBe(
+      new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(today),
+    );
   });
 
   it('names the month and day for any other date', () => {
@@ -367,25 +370,26 @@ describe('DataListDateCell', () => {
 });
 
 describe('DataListCreatedCell', () => {
-  it('shows the date and puts the full date and time in the tooltip', () => {
+  it('shows the date and time to seconds without requiring a hover', () => {
     const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 7, 31, 13, 7, 47, 657)} />);
 
-    expect(container.textContent).toBe('Aug 31, 2020');
-    expect(cellOf(container).title).toBe('Aug 31, 2020, 1:07 PM');
+    expect(container.textContent).toBe('Aug 31, 2020, 1:07:47 PM');
+    expect(cellOf(container).title).toBe('Aug 31, 2020, 1:07:47 PM');
   });
 
-  it('says Today with the time when the timestamp is today', () => {
+  it('keeps the time to seconds when the timestamp is today', () => {
     const today = new Date();
     today.setHours(9, 5, 3, 0);
     const { container } = render(<DataListCreatedCell timestamp={today} />);
 
-    expect(container.textContent).toBe('Today 9:05 AM');
+    expect(container.textContent).toContain('9:05:03 AM');
+    expect(container.textContent).toContain(String(today.getFullYear()));
   });
 
   it('reads a timestamp given as a string', () => {
     const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 4, 19, 9, 5, 3).toISOString()} />);
 
-    expect(container.textContent).toBe('May 19, 2020');
+    expect(container.textContent).toBe('May 19, 2020, 9:05:03 AM');
   });
 
   it('shows nothing for a date it cannot read', () => {

@@ -27,18 +27,32 @@ describe('FlameGraph', () => {
     it('shows distinct UTC second-precision axis labels', () => {
       render(<FlameGraph omRecords={omHistoryRecords} markers={markers} messages={memoryMessages} tDomain={domain} />);
       const axis = screen.getByText('Time').nextElementSibling;
-      expect(Array.from(axis?.children ?? []).map(tick => tick.textContent)).toEqual([
-        '24/09, 10:00:00',
-        '24/09, 10:00:10',
-        '24/09, 10:00:20',
-        '24/09, 10:00:30',
-        '24/09, 10:00:40',
-      ]);
+      const formatter = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'UTC',
+      });
+      expect(Array.from(axis?.children ?? []).map(tick => tick.textContent)).toEqual(
+        [0, 10, 20, 30, 40].map(seconds => formatter.format(new Date(Date.UTC(2026, 8, 24, 10, 0, seconds)))),
+      );
     });
 
     it('shows the UTC seconds in the tooltip', () => {
       render(<FlameTooltip active domain={domain} payload={[{ name: 'Messages', value: 1, payload: { t: 0.25 } }]} />);
-      expect(screen.getByText('24/09, 10:00:10')).toBeTruthy();
+      const timestamp = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'UTC',
+      }).format(new Date('2026-09-24T10:00:10Z'));
+      expect(screen.getByText(timestamp)).toBeTruthy();
     });
   });
   it('renders the zoom controls in uncontrolled mode without crashing', () => {
@@ -558,7 +572,7 @@ describe('FlameTooltip', () => {
     expect(screen.getByText('time')).toBeTruthy();
     expect(screen.getByText('pendingMessageTokens')).toBeTruthy();
     // Rounded and grouped, so a fractional chart value still reads as a count.
-    expect(screen.getByText('1,200')).toBeTruthy();
+    expect(screen.getByText(new Intl.NumberFormat().format(1200).replace(/\s/g, ' '))).toBeTruthy();
     expect(screen.getByText('320')).toBeTruthy();
   });
 

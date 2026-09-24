@@ -138,7 +138,7 @@ export function ScoreDialog({
                   : []),
                 {
                   label: 'Created at',
-                  value: formatDate(score?.createdAt, 'dateTime') ?? 'n/a',
+                  value: formatDate(score?.createdAt, 'date-time') ?? 'n/a',
                   key: 'date',
                 },
                 ...(usageContext !== 'SpanDialog'

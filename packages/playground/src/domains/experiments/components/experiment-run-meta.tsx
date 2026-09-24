@@ -88,7 +88,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
 
       <MetaRow label="Started">
         {startedDate ? (
-          <span title={formatRelativeTime(startedDate)}>{formatDate(startedDate, 'dateTime')}</span>
+          <span title={formatRelativeTime(startedDate)}>{formatDate(startedDate, 'date-time')}</span>
         ) : (
           <span>—</span>
         )}

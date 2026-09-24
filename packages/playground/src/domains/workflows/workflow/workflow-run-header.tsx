@@ -93,7 +93,7 @@ export function RunWorkflowHeader({
         </span>
         <CopyButton content={runId} tooltip="Copy run ID" variant="ghost" size="icon-sm" className="shrink-0" />
         {timestamp !== undefined && Number.isFinite(timestamp) ? (
-          <span className="ml-auto shrink-0" title={formatDate(timestamp, 'dateTime')}>
+          <span className="ml-auto shrink-0" title={formatDate(timestamp, 'date-time')}>
             {formatRelativeTime(timestamp)}
           </span>
         ) : null}

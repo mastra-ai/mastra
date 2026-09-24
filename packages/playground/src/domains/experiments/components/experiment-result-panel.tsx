@@ -141,7 +141,7 @@ function ExperimentResultPanelBody({
           {result.createdAt && (
             <>
               <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{formatDate(result.createdAt, 'dateTime')}</DataKeysAndValues.Value>
+              <DataKeysAndValues.Value>{formatDate(result.createdAt, 'date-time')}</DataKeysAndValues.Value>
             </>
           )}
           {result.status && (

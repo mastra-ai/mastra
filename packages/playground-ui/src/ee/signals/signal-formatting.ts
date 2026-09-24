@@ -120,7 +120,7 @@ export function formatSnapshotDate(value: string) {
 }
 
 export function formatSnapshotCutoff(cutoffAt: string) {
-  return formatDate(cutoffAt, 'dateTime', UTC) ?? cutoffAt;
+  return formatDate(cutoffAt, 'date-time', UTC) ?? cutoffAt;
 }
 
 export function formatSnapshotWindow(startedAt: string, endedAt: string) {

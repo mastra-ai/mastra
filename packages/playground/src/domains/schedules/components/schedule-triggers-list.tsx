@@ -65,7 +65,7 @@ export function ScheduleTriggersList({
       {triggers.map(t => {
         const driftMs = t.actualFireAt - t.scheduledFireAt;
         const driftValue = formatDuration(driftMs, { signed: true });
-        const startedTooltip = `Scheduled ${t.scheduledFireAt ? formatDate(t.scheduledFireAt, 'dateTime') : '—'} — published ${t.actualFireAt ? formatDate(t.actualFireAt, 'dateTime') : '—'} (drift ${driftValue})`;
+        const startedTooltip = `Scheduled ${t.scheduledFireAt ? formatDate(t.scheduledFireAt, 'date-time') : '—'} — published ${t.actualFireAt ? formatDate(t.actualFireAt, 'date-time') : '—'} (drift ${driftValue})`;
         const isPublishFailure = t.outcome === 'failed';
         const errorMessage = isPublishFailure ? t.error : t.run?.error;
         const absDrift = Math.abs(driftMs);

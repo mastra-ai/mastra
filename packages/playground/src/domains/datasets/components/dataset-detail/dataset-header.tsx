@@ -44,7 +44,7 @@ export function DatasetHeader({
         <MainHeader.Description isLoading={isLoading}>{dataset?.description}</MainHeader.Description>
         <MainHeader.Description isLoading={isLoading}>
           <TextAndIcon>
-            <Calendar1Icon /> Created at {formatDate(dataset?.createdAt, 'smart')}
+            <Calendar1Icon /> Created at {formatDate(dataset?.createdAt, 'date-time')}
           </TextAndIcon>
           <TextAndIcon>
             <HistoryIcon /> Latest version v{dataset?.version ?? ''}

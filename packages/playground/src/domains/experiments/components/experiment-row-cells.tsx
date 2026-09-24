@@ -50,7 +50,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <EntityList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
       </EntityList.Cell>
-      <EntityList.TextCell>{formatDate(exp.createdAt, 'smart') ?? '—'}</EntityList.TextCell>
+      <EntityList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</EntityList.TextCell>
     </>
   );
 }

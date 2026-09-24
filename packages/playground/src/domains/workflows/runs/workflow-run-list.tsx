@@ -65,7 +65,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
     <span className="flex w-full min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
       {timestamp !== undefined && (
         <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
-          {formatDate(timestamp, 'dateTime')}
+          {formatDate(timestamp, 'date-time')}
         </time>
       )}
       {resourceId && (

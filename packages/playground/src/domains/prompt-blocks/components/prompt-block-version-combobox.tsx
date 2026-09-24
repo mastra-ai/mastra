@@ -42,7 +42,7 @@ export function PromptBlockVersionCombobox({
       return {
         label: `v${version.versionNumber}`,
         value: version.id,
-        description: formatDate(version.createdAt, 'dateTime') ?? '',
+        description: formatDate(version.createdAt, 'date-time') ?? '',
         end: isPublished ? (
           <Badge variant="green">Published</Badge>
         ) : isDraft ? (

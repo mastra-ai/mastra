@@ -21,24 +21,58 @@ describe('toDate', () => {
 });
 
 describe('formatDate', () => {
+  describe('when a date-only preset is requested', () => {
+    it('never includes time, including today', () => {
+      expect(formatDate(TODAY, 'date', { locale: 'en-US', timeZone: 'UTC', now: NOW })).toBe('Sep 24');
+    });
+  });
+  describe('when a historical timestamp needs a date and time', () => {
+    it('keeps the date and time regardless of the reference day', () => {
+      expect(formatDate(THIS_YEAR, 'date-time', { locale: 'en-US', timeZone: 'UTC', now: NOW })).toBe(
+        'Mar 5, 2026, 9:07 AM',
+      );
+    });
+  });
+  describe('when relative time reaches seven days', () => {
+    it('uses the date preset with the requested timezone and reference year', () => {
+      const options = { locale: 'en-US', timeZone: 'America/Los_Angeles', now: new Date('2026-01-08T07:30:00Z') };
+      const value = '2026-01-01T07:30:00Z';
+      expect(formatDate(value, 'relative-time', options)).toBe('Dec 31, 2025');
+      expect(formatDate(value, 'relative-time', options)).toBe(formatDate(value, 'date', options));
+    });
+  });
+  describe('when a time-only timestamp requires second precision', () => {
+    it.each([
+      ['en-US', 'UTC', '2:32:05 PM'],
+      ['en-GB', 'UTC', '14:32:05'],
+      ['en-US', 'America/Los_Angeles', '7:32:05 AM'],
+    ])('preserves seconds in %s and %s', (locale, timeZone, expected) => {
+      expect(formatDate('2026-09-24T14:32:05Z', 'time-seconds', { locale, timeZone })).toBe(expected);
+    });
+
+    it('returns no label for an invalid timestamp', () => {
+      expect(formatDate('invalid', 'time-seconds')).toBeUndefined();
+    });
+  });
+
   describe('when timestamps require second precision', () => {
     it('keeps the time of a historical score', () => {
       expect(
-        formatDate('2026-09-23T10:14:12Z', 'dateTimeSeconds', { locale: 'en-US', timeZone: 'UTC', now: NOW }),
+        formatDate('2026-09-23T10:14:12Z', 'date-time-seconds', { locale: 'en-US', timeZone: 'UTC', now: NOW }),
       ).toBe('Sep 23, 2026, 10:14:12 AM');
     });
 
     it('distinguishes timeline events within one minute', () => {
       const options = { locale: 'en-GB', timeZone: 'UTC' };
-      expect(formatDate('2026-09-24T10:00:00Z', 'dateTimeCompact', options)).toBe('24/09, 10:00:00');
-      expect(formatDate('2026-09-24T10:00:15Z', 'dateTimeCompact', options)).toBe('24/09, 10:00:15');
+      expect(formatDate('2026-09-24T10:00:00Z', 'date-time-seconds', options)).toBe('24 Sept 2026, 10:00:00');
+      expect(formatDate('2026-09-24T10:00:15Z', 'date-time-seconds', options)).toBe('24 Sept 2026, 10:00:15');
     });
   });
 
   describe('when the requested time zone crosses a calendar boundary', () => {
-    it('does not label yesterday as today', () => {
+    it('uses the requested calendar day', () => {
       expect(
-        formatDate('2026-09-24T06:30:00Z', 'smart', {
+        formatDate('2026-09-24T06:30:00Z', 'date', {
           locale: 'en-US',
           timeZone: 'America/Los_Angeles',
           now: new Date('2026-09-24T07:30:00Z'),
@@ -46,14 +80,14 @@ describe('formatDate', () => {
       ).toBe('Sep 23');
     });
 
-    it('labels the same local day as today across UTC midnight', () => {
+    it('keeps the same local date across UTC midnight', () => {
       expect(
-        formatDate('2026-09-24T23:30:00Z', 'smart', {
+        formatDate('2026-09-24T23:30:00Z', 'date', {
           locale: 'en-US',
           timeZone: 'America/Los_Angeles',
           now: new Date('2026-09-25T00:30:00Z'),
         }),
-      ).toBe('Today 4:30 PM');
+      ).toBe('Sep 24');
     });
 
     it('includes the year when local years differ', () => {
@@ -83,14 +117,14 @@ describe('formatDate', () => {
       expect(formatDate(TODAY, 'time', { locale })).toBe('2:32 PM');
     });
 
-    it('formats the dateTime preset', () => {
-      expect(formatDate(TODAY, 'dateTime', { locale })).toBe('Sep 24, 2026, 2:32 PM');
+    it('formats the date-time preset', () => {
+      expect(formatDate(TODAY, 'date-time', { locale })).toBe('Sep 24, 2026, 2:32 PM');
     });
 
-    it('formats the smart preset relative to today', () => {
-      expect(formatDate(TODAY, 'smart', { locale, now: NOW })).toBe('Today 2:32 PM');
-      expect(formatDate(THIS_YEAR, 'smart', { locale, now: NOW })).toBe('Mar 5');
-      expect(formatDate(LAST_YEAR, 'smart', { locale, now: NOW })).toBe('Sep 24, 2025');
+    it('formats date-only values in the reference year', () => {
+      expect(formatDate(TODAY, 'date', { locale, now: NOW })).toBe('Sep 24');
+      expect(formatDate(THIS_YEAR, 'date', { locale, now: NOW })).toBe('Mar 5');
+      expect(formatDate(LAST_YEAR, 'date', { locale, now: NOW })).toBe('Sep 24, 2025');
     });
 
     it('formats short dates without time', () => {
@@ -104,14 +138,14 @@ describe('formatDate', () => {
 
     it('follows the locale 24-hour clock', () => {
       expect(formatDate(TODAY, 'time', { locale })).toBe('14:32');
-      expect(formatDate(TODAY, 'dateTime', { locale })).toContain('14:32');
+      expect(formatDate(TODAY, 'date-time', { locale })).toContain('14:32');
     });
   });
 
   describe('when the value is unusable', () => {
     it('returns undefined', () => {
-      expect(formatDate(undefined, 'dateTime')).toBeUndefined();
-      expect(formatDate('not-a-date', 'smart')).toBeUndefined();
+      expect(formatDate(undefined, 'date-time')).toBeUndefined();
+      expect(formatDate('not-a-date', 'date')).toBeUndefined();
     });
   });
 });

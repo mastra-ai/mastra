@@ -13,7 +13,7 @@ export interface DatasetCompareVersionToolbarProps {
 function formatVersionLabel(version: number, createdAt?: Date | string): string {
   if (createdAt) {
     const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    return `v${version}  ${formatDate(d, 'dateTime')}`;
+    return `v${version}  ${formatDate(d, 'date-time')}`;
   }
   return `v${version}`;
 }

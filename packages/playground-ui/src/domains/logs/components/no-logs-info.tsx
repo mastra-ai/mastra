@@ -29,13 +29,13 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { tit
   }
   if (dateFrom && dateTo) {
     return {
-      title: `No logs between ${formatDate(dateFrom, 'dateTime')} and ${formatDate(dateTo, 'dateTime')}`,
+      title: `No logs between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
       description: LEVEL_TIP,
     };
   }
   if (dateFrom) {
     return {
-      title: `No logs since ${formatDate(dateFrom, 'dateTime')}`,
+      title: `No logs since ${formatDate(dateFrom, 'date-time')}`,
       description: LEVEL_TIP,
     };
   }

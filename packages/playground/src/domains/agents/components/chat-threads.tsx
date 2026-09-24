@@ -161,7 +161,7 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
     title && !isDefaultThreadName(title)
       ? title
       : createdAt
-        ? formatDate(createdAt, 'dateTime')
+        ? formatDate(createdAt, 'date-time-seconds')
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
   return <span className="block truncate text-body-sm">{titleText}</span>;

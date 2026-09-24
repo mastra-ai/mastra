@@ -27,13 +27,13 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { t
   }
   if (dateFrom && dateTo) {
     return {
-      title: `No traces between ${formatDate(dateFrom, 'dateTime')} and ${formatDate(dateTo, 'dateTime')}`,
+      title: `No traces between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
       description: RANGE_TIP,
     };
   }
   if (dateFrom) {
     return {
-      title: `No traces since ${formatDate(dateFrom, 'dateTime')}`,
+      title: `No traces since ${formatDate(dateFrom, 'date-time')}`,
       description: RANGE_TIP,
     };
   }

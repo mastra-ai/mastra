@@ -90,7 +90,7 @@ function FeedbackItems({
     const avatar = author ? <Avatar name={author} src={fb.author?.avatarUrl} size="sm" /> : null;
     const name = author && <CommentItemAuthor>{author}</CommentItemAuthor>;
     const timestamp = (
-      <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'dateTime')}</CommentItemTimestamp>
+      <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'date-time')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
     const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;

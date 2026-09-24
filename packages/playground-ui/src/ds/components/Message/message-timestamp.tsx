@@ -7,7 +7,7 @@ export function MessageTimestamp({ value }: { value: Date | string }) {
 
   return (
     <MessageMetadata>
-      <time dateTime={time.toISOString()} title={formatDate(time, 'dateTime')}>
+      <time dateTime={time.toISOString()} title={formatDate(time, 'date-time')}>
         {formatDate(time, 'time')}
       </time>
     </MessageMetadata>

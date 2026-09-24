@@ -295,7 +295,7 @@ export const MemorySearch = ({
                           >
                             {result.role}
                           </span>
-                          <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'dateTime')}>
+                          <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
                             {formatRelativeTime(result.createdAt)}
                           </Txt>
                           {result.threadTitle && (

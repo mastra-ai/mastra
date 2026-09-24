@@ -1,5 +1,5 @@
 export type DateInput = Date | string | number | null | undefined;
-export type DatePreset = 'smart' | 'dateTime' | 'dateTimeSeconds' | 'dateTimeCompact' | 'time';
+export type DatePreset = 'date' | 'date-time' | 'date-time-seconds' | 'time' | 'time-seconds' | 'relative-time';
 
 type FormatOptions = { locale?: string; now?: Date | number; timeZone?: string };
 
@@ -11,22 +11,15 @@ export function toDate(value: DateInput): Date | undefined {
 
 const PRESET_OPTIONS = {
   time: { hour: 'numeric', minute: '2-digit' },
-  dateTime: { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' },
-  dateTimeSeconds: {
+  'time-seconds': { hour: 'numeric', minute: '2-digit', second: '2-digit' },
+  'date-time': { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' },
+  'date-time-seconds': {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     second: '2-digit',
-  },
-  dateTimeCompact: {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
   },
   calendar: { year: 'numeric', month: 'numeric', day: 'numeric', calendar: 'gregory', numberingSystem: 'latn' },
   dayMonth: { month: 'short', day: 'numeric' },
@@ -66,12 +59,6 @@ function calendarDate(date: Date, timeZone?: string) {
   };
 }
 
-function isSameDay(a: Date, b: Date, timeZone?: string) {
-  const first = calendarDate(a, timeZone);
-  const second = calendarDate(b, timeZone);
-  return first.year === second.year && first.month === second.month && first.day === second.day;
-}
-
 /** Short absolute date without time: `Sep 24` this year, `Sep 24, 2025` otherwise. */
 export function formatShortDate(value: DateInput, { locale, now, timeZone }: FormatOptions = {}) {
   const date = toDate(value);
@@ -83,23 +70,35 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
 }
 
 /**
- * Locale-aware absolute date. Uses the browser locale unless `locale` is given.
- * - `smart`: `Today 2:32 PM` / `Sep 24` / `Sep 24, 2025`
- * - `dateTime`: `Sep 24, 2026, 2:32 PM`
- * - `dateTimeSeconds`: `Sep 24, 2026, 2:32:07 PM`
- * - `dateTimeCompact`: numeric day/month and 24-hour time with seconds (no year)
- * - `time`: `2:32 PM`
+ * Uses the browser locale unless `locale` is given.
+ * - `date`: date only; omits the year when it matches `now` in the requested timezone
+ * - `date-time`: date, year and time to minutes, including historical dates
+ * - `date-time-seconds`: date, year and time to seconds
+ * - `time`: time to minutes, without a date
+ * - `time-seconds`: time to seconds, without a date
+ * - `relative-time`: short relative label; delegates to `date` at seven days
  */
 export function formatDate(value: DateInput, preset: DatePreset, options: FormatOptions = {}) {
   const date = toDate(value);
   if (!date) return undefined;
   const { locale, now, timeZone } = options;
 
-  if (preset === 'smart') {
-    const reference = new Date(now ?? Date.now());
-    if (isSameDay(date, reference, timeZone)) return `Today ${getFormatter('time', locale, timeZone).format(date)}`;
-    return formatShortDate(date, options);
+  if (preset === 'relative-time') {
+    const diff = date.getTime() - new Date(now ?? Date.now()).getTime();
+    const abs = Math.abs(diff);
+    if (abs < 5_000) return 'just now';
+    const units = [
+      { limit: 60_000, size: 1_000, unit: 's' },
+      { limit: 3_600_000, size: 60_000, unit: 'm' },
+      { limit: 86_400_000, size: 3_600_000, unit: 'h' },
+      { limit: 7 * 86_400_000, size: 86_400_000, unit: 'd' },
+    ];
+    const match = units.find(({ limit }) => abs < limit);
+    if (!match) return formatDate(date, 'date', options);
+    const label = `${Math.floor(abs / match.size)}${match.unit}`;
+    return diff < 0 ? `${label} ago` : `in ${label}`;
   }
+  if (preset === 'date') return formatShortDate(date, options);
 
   return getFormatter(preset, locale, timeZone).format(date);
 }

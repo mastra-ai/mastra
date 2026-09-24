@@ -94,7 +94,7 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
             <ScheduleStatusText status={s.status} />
           </DataList.Cell>
           <DataList.Cell>
-            <span className="whitespace-nowrap" title={s.nextFireAt ? formatDate(s.nextFireAt, 'dateTime') : '—'}>
+            <span className="whitespace-nowrap" title={s.nextFireAt ? formatDate(s.nextFireAt, 'date-time') : '—'}>
               {s.nextFireAt ? formatRelativeTime(s.nextFireAt) : '—'}
             </span>
           </DataList.Cell>
@@ -104,13 +104,13 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
                 <WorkflowRunStatusInline status={s.lastRun.status} />
                 <span
                   className="text-caption text-muted-foreground"
-                  title={s.lastFireAt ? formatDate(s.lastFireAt, 'dateTime') : '—'}
+                  title={s.lastFireAt ? formatDate(s.lastFireAt, 'date-time') : '—'}
                 >
                   {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : ''}
                 </span>
               </span>
             ) : s.lastFireAt ? (
-              <span className="whitespace-nowrap" title={s.lastFireAt ? formatDate(s.lastFireAt, 'dateTime') : '—'}>
+              <span className="whitespace-nowrap" title={s.lastFireAt ? formatDate(s.lastFireAt, 'date-time') : '—'}>
                 {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : '—'}
               </span>
             ) : (

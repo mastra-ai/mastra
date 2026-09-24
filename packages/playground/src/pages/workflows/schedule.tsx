@@ -145,7 +145,7 @@ export default function SchedulePage() {
               <ScheduleStatusText status={schedule.status} />
             </MetaItem>
             <MetaItem label="Next fire">
-              <span title={schedule.nextFireAt ? formatDate(schedule.nextFireAt, 'dateTime') : '—'}>
+              <span title={schedule.nextFireAt ? formatDate(schedule.nextFireAt, 'date-time') : '—'}>
                 {schedule.nextFireAt ? formatRelativeTime(schedule.nextFireAt) : '—'}
               </span>
             </MetaItem>

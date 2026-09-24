@@ -333,7 +333,7 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           data={[
             {
               label: 'Created',
-              value: formatDate(item.createdAt, 'dateTime') ?? '',
+              value: formatDate(item.createdAt, 'date-time') ?? '',
               key: 'createdAt',
             },
             ...(item.datasetVersion != null

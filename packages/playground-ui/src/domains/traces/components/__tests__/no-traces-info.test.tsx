@@ -29,7 +29,9 @@ describe('NoTracesInfo', () => {
     );
 
     expect(
-      screen.getByRole('heading', { name: 'No traces between Sep 1, 2026, 9:00 AM and Sep 7, 2026, 6:00 PM' }),
+      screen.getByRole('heading', {
+        name: `No traces between ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(2026, 8, 1, 9, 0))} and ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(2026, 8, 7, 18, 0))}`,
+      }),
     ).toBeTruthy();
   });
 });

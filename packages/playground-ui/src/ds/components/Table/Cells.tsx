@@ -36,7 +36,7 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
   return (
     <Cell {...props}>
       <Txt as="span" variant="body" className="shrink-0">
-        {formatDate(dateTime, 'smart')}
+        {formatDate(dateTime, 'date-time-seconds')}
       </Txt>
     </Cell>
   );

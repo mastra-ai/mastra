@@ -28,11 +28,11 @@ export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
         <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>v{item.datasetVersion}</DataKeysAndValues.Value>
         <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>{formatDate(item.createdAt, 'dateTime')}</DataKeysAndValues.Value>
+        <DataKeysAndValues.Value>{formatDate(item.createdAt, 'date-time')}</DataKeysAndValues.Value>
         <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>
           {item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()
-            ? formatDate(item.updatedAt, 'dateTime')
+            ? formatDate(item.updatedAt, 'date-time')
             : 'n/a'}
         </DataKeysAndValues.Value>
       </DataKeysAndValues>

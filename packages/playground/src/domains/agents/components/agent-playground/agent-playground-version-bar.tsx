@@ -92,7 +92,7 @@ export function AgentPlaygroundVersionBar({
 
         return {
           value: v.id,
-          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'dateTime') ?? ''}`,
+          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
             <Badge variant={isPublished ? 'green' : 'blue'}>{isPublished ? 'Current' : 'Saved'}</Badge>

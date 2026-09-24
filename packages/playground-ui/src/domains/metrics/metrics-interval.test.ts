@@ -24,10 +24,18 @@ describe('formatMetricsBucketLabel', () => {
   const ts = new Date(2026, 8, 4, 7, 5);
 
   it('formats hourly buckets with the shared time format', () => {
-    expect(formatMetricsBucketLabel(ts, '1h')).toBe('7:05 AM');
+    expect(formatMetricsBucketLabel(ts, '1h')).toBe(
+      new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(ts),
+    );
   });
 
   it('formats daily buckets as a short date', () => {
-    expect(formatMetricsBucketLabel(ts, '1d')).toBe(new Date().getFullYear() === 2026 ? 'Sep 4' : 'Sep 4, 2026');
+    expect(formatMetricsBucketLabel(ts, '1d')).toBe(
+      new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: new Date().getFullYear() === 2026 ? undefined : 'numeric',
+      }).format(ts),
+    );
   });
 });

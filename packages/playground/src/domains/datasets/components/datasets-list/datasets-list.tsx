@@ -109,7 +109,7 @@ function SelectableDatasetRow({
       <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
       <TagsCell tags={ds.tags} />
       <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-      <EntityList.TextCell>{formatDate(ds.updatedAt, 'smart') ?? '—'}</EntityList.TextCell>
+      <EntityList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</EntityList.TextCell>
       <EntityList.Cell>
         {trailingCell ??
           (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-placeholder">—</span>)}
@@ -142,7 +142,7 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
         <TagsCell tags={ds.tags} />
         <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-        <EntityList.TextCell>{formatDate(ds.updatedAt, 'smart') ?? '—'}</EntityList.TextCell>
+        <EntityList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</EntityList.TextCell>
         {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
       </EntityList.RowLink>
 

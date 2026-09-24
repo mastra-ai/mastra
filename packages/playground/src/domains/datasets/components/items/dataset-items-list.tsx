@@ -185,7 +185,7 @@ export function DatasetItemsList({
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate text-body-sm text-placeholder">
-                    {formatDate(createdAtDate, 'smart')}
+                    {formatDate(createdAtDate, 'date-time')}
                   </span>
                 </DataList.Cell>
               </>

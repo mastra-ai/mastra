@@ -43,7 +43,7 @@ function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number
       label: (
         <span className="flex w-full items-center gap-2">
           <span>
-            <b>v. {v.datasetVersion}</b> · {formatDate(date, 'dateTime')}
+            <b>v. {v.datasetVersion}</b> · {formatDate(date, 'date-time')}
           </span>
           {v.isLatest ? (
             <Badge variant="blue" size="xs" className="ml-auto">

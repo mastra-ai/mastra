@@ -8,9 +8,9 @@ export function ToolCallTime({ at }: { at?: number }) {
     <time
       className="shrink-0 text-meta text-muted-foreground tabular-nums"
       dateTime={time.toISOString()}
-      title={formatDate(time, 'dateTime')}
+      title={formatDate(time, 'date-time-seconds')}
     >
-      {formatDate(time, 'time')}
+      {formatDate(time, 'time-seconds')}
     </time>
   );
 }

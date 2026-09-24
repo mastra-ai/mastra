@@ -74,7 +74,7 @@ export function AgentVersionPanel({
                       {isDraft && <Badge variant="blue">Draft</Badge>}
                     </div>
                     <Txt variant="meta" tone="faint" className="mt-0.5">
-                      {formatDate(version.createdAt, 'dateTime') ?? ''}
+                      {formatDate(version.createdAt, 'date-time') ?? ''}
                     </Txt>
                   </button>
                 </li>

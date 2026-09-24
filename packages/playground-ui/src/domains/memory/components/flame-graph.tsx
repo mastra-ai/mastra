@@ -70,9 +70,7 @@ function TimeAxis({ domain }: { domain: TDomain }) {
       </p>
       <div className="flex justify-between px-1 py-1.5 font-mono text-meta text-muted-foreground">
         {ticks.map(t => (
-          <span key={t}>
-            {formatDate(tToTimestamp(t, domain), 'dateTimeCompact', { locale: 'en-GB', timeZone: 'UTC' })}
-          </span>
+          <span key={t}>{formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' })}</span>
         ))}
       </div>
     </div>
@@ -93,9 +91,7 @@ export function FlameTooltip({
   if (!active || !payload?.length) return null;
   const t = payload[0]?.payload?.t;
   const time =
-    domain != null && t != null
-      ? formatDate(tToTimestamp(t, domain), 'dateTimeCompact', { locale: 'en-GB', timeZone: 'UTC' })
-      : null;
+    domain != null && t != null ? formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' }) : null;
   const visibleEntries = payload.filter(entry => entry.name !== 't' && entry.name !== 'time' && entry.value != null);
 
   if (showValue) {

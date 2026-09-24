@@ -93,7 +93,7 @@ export function ComparisonSideHeader({
           </span>
           {createdAt && (
             <TextAndIcon>
-              <CalendarIcon /> {formatDate(createdAt, 'dateTime')}
+              <CalendarIcon /> {formatDate(createdAt, 'date-time')}
             </TextAndIcon>
           )}
         </div>

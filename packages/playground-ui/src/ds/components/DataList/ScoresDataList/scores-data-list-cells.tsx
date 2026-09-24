@@ -14,7 +14,7 @@ export interface ScoresDataListDateCellProps {
 }
 
 export function ScoresDataListDateCell({ timestamp }: ScoresDataListDateCellProps) {
-  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'smart') ?? '-'}</DataListCell>;
+  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'date') ?? '-'}</DataListCell>;
 }
 
 // ---------------------------------------------------------------------------

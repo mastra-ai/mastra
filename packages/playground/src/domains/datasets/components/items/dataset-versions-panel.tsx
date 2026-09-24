@@ -139,7 +139,7 @@ export function DatasetVersionsPanel({
                         <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
                         {createdAtDate && (
                           <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                            {formatDate(createdAtDate, 'dateTime')}
+                            {formatDate(createdAtDate, 'date-time')}
                           </span>
                         )}
                         {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}

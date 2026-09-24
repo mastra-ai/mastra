@@ -41,7 +41,7 @@ export function AgentVersionCombobox({
 
       const trimmedMessage = version.changeMessage?.trim();
       const description = [
-        formatDate(version.createdAt, 'dateTime') ?? '',
+        formatDate(version.createdAt, 'date-time') ?? '',
         trimmedMessage && trimmedMessage !== 'Auto-saved after edit' ? trimmedMessage : undefined,
       ]
         .filter(Boolean)
