@@ -654,7 +654,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           // already returned as structured HTTP responses below. Logging them as errors
           // produces noise for callers — skip the logger call for those cases.
           const httpStatus =
-            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+            error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
           const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
           if (!isClientError) {
             // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.

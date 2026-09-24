@@ -246,15 +246,18 @@ export function getObservabilityStorageCapabilities(
   const features = declaredFeatures ?? [];
   const newApiCore = coreFeatures.has('observability:v1.13.2');
   const declares = (feature: string) => features.includes(feature);
-  const supports = (feature: string, method: string) => {
+  // Undeclared stores must implement every method behind the feature.
+  const supports = (feature: string, methods: readonly string[]) => {
     if (!newApiCore) return false;
-    if (!declaredFeatures) return implementsObservabilityStorageMethod(observabilityStore, method);
+    if (!declaredFeatures) {
+      return methods.every(method => implementsObservabilityStorageMethod(observabilityStore, method));
+    }
     return declares(feature);
   };
   // Stores released before the per-endpoint discovery features existed declare
   // `trace-query` and implement every discovery method, so treat it as implying discovery.
-  const supportsDiscovery = (feature: string, method: string) =>
-    supports(feature, method) || (newApiCore && declares(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE));
+  const supportsDiscovery = (feature: string, methods: readonly string[]) =>
+    supports(feature, methods) || (newApiCore && declares(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE));
   const traceQuery =
     newApiCore &&
     typeof coreStorage.planTraceQuery === 'function' &&
@@ -265,15 +268,22 @@ export function getObservabilityStorageCapabilities(
     declares(OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE);
 
   return {
-    metrics: supports('metrics', 'getMetricAggregate'),
-    logs: supports('logs', 'listLogs'),
+    // `listMetrics` is left out: it backs a newer route that metric dashboards don't use,
+    // and older stores that implement the OLAP methods predate it.
+    metrics: supports('metrics', [
+      'getMetricAggregate',
+      'getMetricBreakdown',
+      'getMetricTimeSeries',
+      'getMetricPercentiles',
+    ]),
+    logs: supports('logs', ['listLogs']),
     discovery: {
-      entityTypes: supportsDiscovery('entity-type-discovery', 'getEntityTypes'),
-      entityNames: supportsDiscovery('entity-name-discovery', 'getEntityNames'),
-      serviceNames: supportsDiscovery('service-name-discovery', 'getServiceNames'),
-      environments: supportsDiscovery('environment-discovery', 'getEnvironments'),
-      tags: supportsDiscovery('tag-discovery', 'getTags'),
-      metrics: supportsDiscovery('metric-discovery', 'getMetricNames'),
+      entityTypes: supportsDiscovery('entity-type-discovery', ['getEntityTypes']),
+      entityNames: supportsDiscovery('entity-name-discovery', ['getEntityNames']),
+      serviceNames: supportsDiscovery('service-name-discovery', ['getServiceNames']),
+      environments: supportsDiscovery('environment-discovery', ['getEnvironments']),
+      tags: supportsDiscovery('tag-discovery', ['getTags']),
+      metrics: supportsDiscovery('metric-discovery', ['getMetricNames', 'getMetricLabelKeys', 'getMetricLabelValues']),
     },
     deltaPolling:
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),

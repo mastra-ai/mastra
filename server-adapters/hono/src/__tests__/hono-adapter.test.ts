@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
 import { Mastra } from '@mastra/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { registerApiRoute } from '@mastra/core/server';
 import {
   TraceQueryExecutionError,
@@ -1663,6 +1664,25 @@ describe('Handler error logging', () => {
   it('logs 501 Not Implemented at warn level', async () => {
     const { response, logger } = await requestFailingRoute(
       new MastraHTTPException(501, { message: 'Not supported by the configured observability store' }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+  });
+
+  it('logs errors carrying a 501 in details at warn level', async () => {
+    const { response, logger } = await requestFailingRoute(
+      new MastraError({
+        id: 'TEST_NOT_IMPLEMENTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Not supported by the configured storage',
+        details: { status: 501 },
+      }),
     );
 
     expect(response.status).toBe(501);

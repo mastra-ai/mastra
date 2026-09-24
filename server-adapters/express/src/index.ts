@@ -593,7 +593,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
           const httpStatus =
-            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+            error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
           const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
           if (!isClientError) {
             // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.

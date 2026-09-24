@@ -507,6 +507,15 @@ describe('System Handlers', () => {
         async getMetricAggregate(): Promise<unknown> {
           throw new Error('not implemented');
         }
+        async getMetricBreakdown(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getMetricTimeSeries(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getMetricPercentiles(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
         async listLogs(): Promise<unknown> {
           throw new Error('not implemented');
         }
@@ -540,6 +549,15 @@ describe('System Handlers', () => {
           override async getMetricAggregate() {
             return {};
           }
+          override async getMetricBreakdown() {
+            return {};
+          }
+          override async getMetricTimeSeries() {
+            return {};
+          }
+          override async getMetricPercentiles() {
+            return {};
+          }
           override async listLogs() {
             return {};
           }
@@ -551,6 +569,16 @@ describe('System Handlers', () => {
           logs: true,
           discovery: { ...NO_OBSERVABILITY_CAPABILITIES.discovery, entityNames: true },
         });
+      });
+
+      it('requires every method behind a feature on undeclared stores', async () => {
+        class PartialMetricsStore extends BaseObservabilityStore {
+          override async getMetricAggregate() {
+            return {};
+          }
+        }
+
+        expect(await capabilitiesFor(new PartialMetricsStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
       });
 
       it('detects overrides through intermediate subclasses', async () => {
