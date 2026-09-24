@@ -388,6 +388,22 @@ export async function dispatchEvent(
       break;
     }
 
+    case 'thread_ownership_changed': {
+      if (event.owned) state.threadsOwnedElsewhere.delete(event.threadId);
+      else state.threadsOwnedElsewhere.add(event.threadId);
+      // Nothing is blocked either way: this session still runs the thread
+      // locally. The notice only explains where peer signals go.
+      if (event.threadId === state.session.thread.getId()) {
+        ectx.showInfo(
+          event.owned
+            ? 'This thread is now owned by this mastracode process; peer signals route here.'
+            : 'This thread is open in another mastracode process; peer signals route there until it moves on or closes.',
+        );
+      }
+      ectx.updateStatusLine();
+      break;
+    }
+
     case 'usage_update': {
       // Token accumulation handled by AgentController display state. Keep the
       // latest step separate for context auditing; cumulative usage is billing data.

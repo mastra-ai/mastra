@@ -173,4 +173,72 @@ describe('createThreadOwnershipManager', () => {
     expect(staleUnsubscribe).toHaveBeenCalledOnce();
     expect(currentUnsubscribe).not.toHaveBeenCalled();
   });
+
+  it('reports contention once and recovery once, never the first successful claim', async () => {
+    vi.useFakeTimers();
+    try {
+      const onOwnershipChanged = vi.fn();
+      const claimThread = vi
+        .fn()
+        .mockResolvedValueOnce({ claimed: true, unsubscribe: vi.fn() })
+        .mockResolvedValueOnce({ claimed: false, unsubscribe: vi.fn() })
+        .mockResolvedValueOnce({ claimed: false, unsubscribe: vi.fn() })
+        .mockResolvedValueOnce({ claimed: true, unsubscribe: vi.fn() });
+      const manager = createThreadOwnershipManager(claimThread, { onOwnershipChanged });
+
+      await expect(manager.claim('owned-thread')).resolves.toBe(true);
+      expect(onOwnershipChanged).not.toHaveBeenCalled();
+
+      await expect(manager.claim('contended-thread')).resolves.toBe(false);
+      expect(onOwnershipChanged).toHaveBeenCalledExactlyOnceWith('contended-thread', false);
+
+      // Retries that keep losing do not repeat the report.
+      await vi.advanceTimersByTimeAsync(250);
+      expect(claimThread).toHaveBeenCalledTimes(3);
+      expect(onOwnershipChanged).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(claimThread).toHaveBeenCalledTimes(4);
+      expect(onOwnershipChanged).toHaveBeenCalledTimes(2);
+      expect(onOwnershipChanged).toHaveBeenLastCalledWith('contended-thread', true);
+      manager.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('forgets a thread it yielded to another process without unsubscribing twice', async () => {
+    const unsubscribe = vi.fn();
+    let yieldOwnership: (() => void) | undefined;
+    const manager = createThreadOwnershipManager(async (_threadId, { onYield }) => {
+      yieldOwnership = onYield;
+      return { claimed: true, unsubscribe };
+    });
+
+    await expect(manager.claim('thread-1')).resolves.toBe(true);
+    // Core releases the claim itself before notifying; the manager must only
+    // drop its bookkeeping.
+    yieldOwnership?.();
+    manager.close();
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('ignores a yield from a superseded attempt', async () => {
+    const yields: Array<() => void> = [];
+    const unsubscribes: Array<ReturnType<typeof vi.fn>> = [];
+    const manager = createThreadOwnershipManager(async (_threadId, { onYield }) => {
+      yields.push(onYield);
+      const unsubscribe = vi.fn();
+      unsubscribes.push(unsubscribe);
+      return { claimed: true, unsubscribe };
+    });
+
+    await manager.claim('thread-1');
+    await manager.claim('thread-1');
+    // The first claim was displaced by the re-claim; a late yield from it must
+    // not drop the current claim.
+    yields[0]?.();
+    manager.close();
+    expect(unsubscribes[1]).toHaveBeenCalledOnce();
+  });
 });

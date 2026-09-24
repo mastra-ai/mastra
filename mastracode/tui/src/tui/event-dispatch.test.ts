@@ -117,6 +117,25 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.backgroundToolContexts.size).toBe(0);
   });
 
+  it('tracks threads owned by another process and only notifies for the current one', async () => {
+    state.threadsOwnedElsewhere = new Set();
+
+    await dispatchEvent({ type: 'thread_ownership_changed', threadId: 'other-thread', owned: false }, ectx, state);
+    expect([...state.threadsOwnedElsewhere]).toEqual(['other-thread']);
+    expect(ectx.showInfo).not.toHaveBeenCalled();
+    expect(ectx.updateStatusLine).toHaveBeenCalledTimes(1);
+
+    await dispatchEvent({ type: 'thread_ownership_changed', threadId: 'current-thread', owned: false }, ectx, state);
+    expect([...state.threadsOwnedElsewhere].sort()).toEqual(['current-thread', 'other-thread']);
+    expect(ectx.showInfo).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('open in another mastracode process'),
+    );
+
+    await dispatchEvent({ type: 'thread_ownership_changed', threadId: 'current-thread', owned: true }, ectx, state);
+    expect([...state.threadsOwnedElsewhere]).toEqual(['other-thread']);
+    expect(ectx.showInfo).toHaveBeenLastCalledWith(expect.stringContaining('now owned by this mastracode process'));
+  });
+
   it('ignores a thread lifecycle event that is stale when dispatch begins', async () => {
     state.backgroundToolContexts = new Map([
       ['current-tool', { toolName: 'view', threadId: 'current-thread', resourceId: 'resource', createdAt: 0 }],

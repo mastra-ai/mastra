@@ -4,6 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 
 import { createSignalsPubSub } from '../../../utils/signals-pubsub.js';
+import { createThreadOwnershipManager } from '../../ownership.js';
 
 const [role, resourceIdArg, scenario = 'request-reply', startAtArg] = process.argv.slice(2);
 if ((role !== 'owner' && role !== 'sender') || !resourceIdArg) {
@@ -256,8 +257,60 @@ async function runThreadTransition() {
   initialClaim.unsubscribe();
 }
 
+/**
+ * Drives the SDK ownership manager the way `createSessionThreadAdvertisement`
+ * does, with a mutable "current thread" standing in for `session.thread.getId()`.
+ *
+ * Owner: claims `owner-thread` as its current thread, then on `switch` moves
+ * to `owner-thread-2` while keeping `owner-thread` claimed (cumulative
+ * advertisement). Sender: on `claim` tries to own `owner-thread` — this must
+ * lose while the owner is still looking at it, then win once the owner has
+ * moved on and yields.
+ */
+async function runYieldOnDemand() {
+  let currentThreadId = role === 'owner' ? ownerThreadId : senderThreadId;
+  const manager = createThreadOwnershipManager(
+    async (claimThreadId, { onYield }) =>
+      agent.claimThreadOwnership({
+        resourceId,
+        threadId: claimThreadId,
+        streamOptions: { memory: { resource: resourceId, thread: claimThreadId } },
+        peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
+        yieldOwnership: () => {
+          if (currentThreadId === claimThreadId) return false;
+          onYield();
+          emit('yielded', { threadId: claimThreadId });
+          return true;
+        },
+      }),
+    { onOwnershipChanged: (changedThreadId, owned) => emit('ownership', { threadId: changedThreadId, owned }) },
+  );
+
+  if (role === 'owner') {
+    emit('claim-result', { threadId: ownerThreadId, claimed: await manager.claim(ownerThreadId) });
+    await waitForCommand('switch');
+    currentThreadId = 'owner-thread-2';
+    emit('claim-result', { threadId: currentThreadId, claimed: await manager.claim(currentThreadId) });
+    emit('switched', { threadId: currentThreadId });
+    await waitForCommand('probe');
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
+    emit('discovered', {
+      threads: peers
+        .map(peer => ({ threadId: peer.threadId, label: peer.label, selfAdvertised: peer.selfAdvertised === true }))
+        .sort((a, b) => a.threadId.localeCompare(b.threadId)),
+    });
+  } else {
+    await waitForCommand('claim');
+    emit('claim-result', { threadId: ownerThreadId, claimed: await manager.claim(ownerThreadId) });
+  }
+
+  await waitForCommand('close');
+  manager.close();
+}
+
 async function main() {
   if (scenario === 'thread-transition') await runThreadTransition();
+  else if (scenario === 'yield-on-demand') await runYieldOnDemand();
   else if (scenario === 'claim-only') await runClaimOnly();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
   else if (scenario === 'ownership-contention') await runOwnershipContention();

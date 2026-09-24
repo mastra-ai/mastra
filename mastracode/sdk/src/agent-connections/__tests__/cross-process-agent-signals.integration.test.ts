@@ -238,6 +238,56 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(contenderCode).toBe(0);
   }, 30_000);
 
+  it('yields a thread to another process once its owner has moved on, but never the current one', async () => {
+    const owner = startChild('owner', resourceId, 'yield-on-demand');
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+
+    // The owner is still looking at owner-thread: the contender must lose and
+    // report the contention instead of taking the thread.
+    const contender = startChild('sender', resourceId, 'yield-on-demand');
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+    expect(await contender.waitFor('ownership')).toMatchObject({ threadId: 'owner-thread', owned: false });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(owner.events.filter(event => event.event === 'yielded')).toEqual([]);
+
+    // The owner moves to another thread while keeping owner-thread claimed. The
+    // contender's retry loop now asks again and the owner yields.
+    owner.child.stdin.write('switch\n');
+    await owner.waitFor('switched');
+    const yielded = await owner.waitFor('yielded');
+    const deadline = Date.now() + 10_000;
+    while (
+      Date.now() < deadline &&
+      !contender.events.some(event => event.event === 'ownership' && event.owned === true)
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const ownershipEvents = contender.events.filter(event => event.event === 'ownership');
+
+    owner.child.stdin.write('probe\n');
+    const discovery = await owner.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(yielded).toMatchObject({ threadId: 'owner-thread' });
+    expect(ownershipEvents.map(event => event.owned)).toEqual([false, true]);
+    // From the owner's side owner-thread now belongs to the contender while
+    // owner-thread-2 (its current thread) is still its own.
+    expect(discovery.threads).toEqual([
+      { threadId: 'owner-thread', label: 'sender:owner-thread', selfAdvertised: false },
+      { threadId: 'owner-thread-2', label: 'owner:owner-thread-2', selfAdvertised: true },
+    ]);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
   it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
     const startAt = String(Date.now() + 3_000);
     const firstOwner = startChild('owner', resourceId, 'simultaneous-owner-wake', [startAt]);

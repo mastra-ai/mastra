@@ -786,6 +786,12 @@ export type AgentControllerEvent =
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
+  /**
+   * Cross-process ownership of a thread this session has loaded changed.
+   * `owned: false` means another live process holds the thread, so peer
+   * signals addressed to it route there; the session keeps retrying.
+   */
+  | { type: 'thread_ownership_changed'; threadId: string; owned: boolean }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }

@@ -255,6 +255,12 @@ export interface TUIState {
   currentThreadTitle?: string;
   /** Landed model-pack fallback for the current thread. */
   fallbackStatus?: { usingPack: string; failedPack: string };
+  /**
+   * Threads this session loaded that another live mastracode process currently
+   * owns. Peer signals to those threads route there; the status line flags it
+   * while the current thread is one of them.
+   */
+  threadsOwnedElsewhere: Set<string>;
   /** GitHub PR subscriptions for the current thread. */
   activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */
@@ -458,6 +464,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Thread / conversation
     pendingNewThread: false,
     currentThreadTitle: undefined,
+    threadsOwnedElsewhere: new Set(),
     activeGithubPrSubscriptions: [],
     threadPreviewCache: new Map(),
     attemptedThreadPreviewIds: new Set(),

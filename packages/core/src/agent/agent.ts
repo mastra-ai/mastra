@@ -8499,6 +8499,12 @@ export class Agent<
       | AgentExecutionOptions<OUTPUT>
       | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
+    /**
+     * Called when another process asks to claim this thread. Return `true` to
+     * release this claim so the requester can take it; the claim is
+     * unsubscribed before the requester's discovery settles.
+     */
+    yieldOwnership?: () => boolean;
   }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
     return agentThreadStreamRuntime.claimThreadOwnership(
       this.#getThreadRuntimeAgent(),

@@ -437,6 +437,11 @@ type AgentThreadOwnerDiscoveryEvent =
       sourceId: string;
       /** Caller's absolute deadline; optional on the wire (legacy senders omit it). */
       expiresAt?: number;
+      /**
+       * Set when the requester wants to own the thread itself (as opposed to
+       * looking the owner up for signal delivery). Owners may yield to it.
+       */
+      intent?: 'claim';
     }
   | { type: 'thread-owner-response'; key: string; requestId: string; sourceId: string };
 
@@ -977,6 +982,7 @@ export class AgentThreadStreamRuntime {
       threadId: string;
       streamOptions?: ClaimedThreadOwnerStreamOptions;
       peer?: false | AgentClaimThreadPeerOptions;
+      yieldOwnership?: () => boolean;
     },
     pubsub?: PubSub,
   ): Promise<{ claimed: boolean; unsubscribe: () => void }> {
@@ -987,7 +993,10 @@ export class AgentThreadStreamRuntime {
     const initialLocalClaim = state.claimedThreadOwners.get(key);
 
     if (!initialLocalClaim) {
-      const remoteOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, key, { includeLocal: false });
+      const remoteOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, key, {
+        includeLocal: false,
+        intent: 'claim',
+      });
       if (remoteOwnerSourceId) {
         return { claimed: false, unsubscribe: () => {} };
       }
@@ -1153,6 +1162,14 @@ export class AgentThreadStreamRuntime {
       // whole discovery backlog — without this guard it would answer every
       // request ever retained.
       if (isStaleRequest(data.expiresAt)) return;
+      // Yield-on-demand: a requester that wants to own this thread asks first.
+      // If the caller no longer needs the claim (e.g. the thread is not the one
+      // the user is looking at), release it and stay silent so the requester's
+      // discovery sees no owner and claims the thread itself.
+      if (data.intent === 'claim' && options.yieldOwnership?.()) {
+        unsubscribe();
+        return;
+      }
       await resolvedPubSub.publish(data.replyTopic, {
         type: 'thread-owner-response',
         runId: data.requestId,
@@ -1548,7 +1565,7 @@ export class AgentThreadStreamRuntime {
   async #findClaimedThreadOwner(
     pubsub: PubSub,
     key: string,
-    options?: { includeLocal?: boolean },
+    options?: { includeLocal?: boolean; intent?: 'claim' },
   ): Promise<string | undefined> {
     const hasLocalOwner = this.#getState(pubsub).claimedThreadOwners.has(key);
     if (options?.includeLocal !== false && hasLocalOwner) {
@@ -1598,6 +1615,7 @@ export class AgentThreadStreamRuntime {
               replyTopic,
               sourceId: this.#getSourceId(),
               expiresAt,
+              ...(options?.intent ? { intent: options.intent } : {}),
             },
           });
         })
