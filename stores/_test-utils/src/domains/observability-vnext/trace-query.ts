@@ -2558,7 +2558,10 @@ export function evaluateTraceQueryRequest(
   request: TraceQueryRequest,
   scope?: TraceQueryTenantScope,
 ): TraceQueryResponse {
-  return evaluateTraceQuery(data, planTraceQuery(parseTraceQueryRequest(request), { scope }));
+  return evaluateTraceQuery(
+    data,
+    planTraceQuery(parseTraceQueryRequest(request), { scope, allowRootDurationOrdering: true }),
+  );
 }
 
 export function normalizeTraceQueryResponse(

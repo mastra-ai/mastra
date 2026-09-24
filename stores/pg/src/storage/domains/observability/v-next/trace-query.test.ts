@@ -28,7 +28,9 @@ import { ObservabilityStoragePostgresVNext } from '.';
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
 function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
-  return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
+  return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }), {
+    allowRootDurationOrdering: true,
+  });
 }
 
 function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan {

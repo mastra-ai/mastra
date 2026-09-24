@@ -308,7 +308,9 @@ describe('planTraceQuery', () => {
 
   it('plans root duration ordering for keyset and numbered pagination', () => {
     for (const direction of ['asc', 'desc'] as const) {
-      const keyset = planTraceQuery(parsed({ ...baseRequest, orderBy: [{ field: 'durationMs', direction }] }));
+      const keyset = planTraceQuery(parsed({ ...baseRequest, orderBy: [{ field: 'durationMs', direction }] }), {
+        allowRootDurationOrdering: true,
+      });
       expect(keyset).toMatchObject({
         result: 'traces',
         paginationMode: 'keyset',
@@ -317,9 +319,27 @@ describe('planTraceQuery', () => {
 
       const numbered = planTraceQuery(
         parsed({ ...baseRequest, pagination: {}, orderBy: [{ field: 'durationMs', direction }] }),
+        { allowRootDurationOrdering: true },
       );
       expect(numbered).toMatchObject({ paginationMode: 'page', orderBy: { field: 'durationMs', direction } });
     }
+  });
+
+  it('rejects durationMs ordering unless the host explicitly enables it', () => {
+    for (const request of [
+      { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'desc' }] },
+      { ...baseRequest, pagination: {}, orderBy: [{ field: 'durationMs', direction: 'asc' }] },
+    ]) {
+      const denied = validationError(() => planTraceQuery(parsed(request)));
+      expect(denied.issues).toEqual([
+        expect.objectContaining({ code: 'order_field_not_supported', path: ['orderBy'] }),
+      ]);
+    }
+
+    // Timestamp ordering never requires the option.
+    expect(planTraceQuery(parsed({ ...baseRequest, orderBy: [{ field: 'endedAt', direction: 'asc' }] }))).toMatchObject(
+      { orderBy: { field: 'endedAt', direction: 'asc' } },
+    );
   });
 
   it('enforces ordered and maximum time ranges', () => {
@@ -1632,13 +1652,14 @@ describe('trace-query cursors', () => {
 
   it('round-trips numeric duration cursors while keeping timestamp cursors valid', () => {
     const durationRequest = { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'asc' }] };
-    const durationPlan = planTraceQuery(parsed(durationRequest));
+    const allow = { allowRootDurationOrdering: true };
+    const durationPlan = planTraceQuery(parsed(durationRequest), allow);
     const durationCursor = encodeTraceQueryCursor(durationPlan, {
       result: 'traces',
       sortValue: 2000,
       traceId: 'trace-c',
     });
-    expect(planTraceQuery(parsed({ ...durationRequest, page: { after: durationCursor } }))).toMatchObject({
+    expect(planTraceQuery(parsed({ ...durationRequest, page: { after: durationCursor } }), allow)).toMatchObject({
       cursor: { sortValue: 2000, traceId: 'trace-c' },
     });
 
@@ -1655,7 +1676,8 @@ describe('trace-query cursors', () => {
 
   it('rejects wrong-kind sort values during encoding and planning', () => {
     const durationRequest = { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'asc' }] };
-    const durationPlan = planTraceQuery(parsed(durationRequest));
+    const allow = { allowRootDurationOrdering: true };
+    const durationPlan = planTraceQuery(parsed(durationRequest), allow);
     const timestampPlan = planTraceQuery(parsed());
 
     expect(() =>
@@ -1679,7 +1701,10 @@ describe('trace-query cursors', () => {
         'utf8',
       ).toString('base64url');
     expect(() =>
-      planTraceQuery(parsed({ ...durationRequest, page: { after: forge(durationPlan, '2026-08-03T00:00:00.000Z') } })),
+      planTraceQuery(
+        parsed({ ...durationRequest, page: { after: forge(durationPlan, '2026-08-03T00:00:00.000Z') } }),
+        allow,
+      ),
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }));
     expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: forge(timestampPlan, 2000) } }))).toThrowError(
       expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
@@ -1688,7 +1713,8 @@ describe('trace-query cursors', () => {
 
   it('conflicts duration cursors when the query binding changes', () => {
     const durationRequest = { ...baseRequest, orderBy: [{ field: 'durationMs', direction: 'asc' }] };
-    const plan = planTraceQuery(parsed(durationRequest), { scope: { organizationId: 'org-a' } });
+    const allow = { allowRootDurationOrdering: true };
+    const plan = planTraceQuery(parsed(durationRequest), { ...allow, scope: { organizationId: 'org-a' } });
     const cursor = encodeTraceQueryCursor(plan, { result: 'traces', sortValue: 2000, traceId: 'trace-c' });
 
     const conflicts: Array<[unknown, { authorizationBinding?: string; scope?: { organizationId: string } }]> = [
@@ -1704,13 +1730,13 @@ describe('trace-query cursors', () => {
       [durationRequest, { scope: { organizationId: 'org-b' } }],
     ];
     for (const [request, options] of conflicts) {
-      expect(() => planTraceQuery(parsed({ ...(request as object), page: { after: cursor } }), options)).toThrowError(
-        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
-      );
+      expect(() =>
+        planTraceQuery(parsed({ ...(request as object), page: { after: cursor } }), { ...allow, ...options }),
+      ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
     }
 
     expect(
-      planTraceQuery(parsed({ ...durationRequest, page: { after: cursor } }), { scope: plan.scope }),
+      planTraceQuery(parsed({ ...durationRequest, page: { after: cursor } }), { ...allow, scope: plan.scope }),
     ).toMatchObject({ cursor: { sortValue: 2000, traceId: 'trace-c' } });
   });
 

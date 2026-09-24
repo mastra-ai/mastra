@@ -259,7 +259,8 @@ describe('trace-query reference evaluator', () => {
     ];
     for (const walk of walks) {
       const results = await collectTraceQueryPages(
-        async normalized => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, planTraceQuery(normalized)),
+        async normalized =>
+          evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, planTraceQuery(normalized, { allowRootDurationOrdering: true })),
         {
           timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
           orderBy: [{ field: 'durationMs', direction: walk.direction }],

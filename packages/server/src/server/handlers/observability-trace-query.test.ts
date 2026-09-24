@@ -316,6 +316,9 @@ describe('QUERY_TRACES', () => {
       // The server resolves only `organizationId` from the request context; resource-level
       // scope is a storage-boundary concern covered by the shared store suite.
       if (testCase.scope?.resourceId !== undefined) continue;
+      // Root-duration ordering is landed dark: the planner denies it until the server
+      // gains the `trace-query-root-duration-ordering` capability gate that enables it.
+      if (testCase.request.orderBy?.[0]?.field === 'durationMs') continue;
       const context = createTestServerContext({ mastra });
       if (testCase.scope) context.requestContext.set('organizationId', testCase.scope.organizationId);
       const response = await QUERY_TRACES.handler({ ...context, ...traceQueryRequestSchema.parse(testCase.request) });

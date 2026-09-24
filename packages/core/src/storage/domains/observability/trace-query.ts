@@ -764,6 +764,7 @@ export type TraceQueryIssueCode =
   | 'invalid_operands'
   | 'invalid_literal'
   | 'group_order_not_supported'
+  | 'order_field_not_supported'
   | 'pagination_mode_conflict'
   | 'group_pagination_not_supported';
 
@@ -956,6 +957,13 @@ export interface TraceQueryPlanOptions {
   authorizationBinding?: string;
   /** Trusted tenant scope; applied by stores and bound into keyset cursors. */
   scope?: TraceQueryTenantScope;
+  /**
+   * Enables planning `orderBy: [{ field: 'durationMs', ... }]`. Off by default so hosts that
+   * predate the `trace-query-root-duration-ordering` storage capability reject the request
+   * before an uncompilable plan can reach a storage adapter. Hosts must verify the adapter
+   * advertises that capability before enabling this.
+   */
+  allowRootDurationOrdering?: boolean;
 }
 
 export function planTraceQueryObservedFields(
@@ -1049,6 +1057,14 @@ export function planTraceQuery(
       code: 'group_order_not_supported',
       path: ['orderBy'],
       message: 'Grouped trace queries use fixed threadId ordering',
+    });
+  }
+
+  if (request.orderBy?.[0]?.field === 'durationMs' && !options.allowRootDurationOrdering) {
+    issues.push({
+      code: 'order_field_not_supported',
+      path: ['orderBy'],
+      message: 'Ordering by `durationMs` is not enabled for this deployment',
     });
   }
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };

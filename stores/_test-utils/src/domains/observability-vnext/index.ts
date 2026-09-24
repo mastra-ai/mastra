@@ -614,7 +614,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
             continue;
           }
-          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), { scope: testCase.scope });
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), {
+            scope: testCase.scope,
+            allowRootDurationOrdering: true,
+          });
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
         }
@@ -629,6 +632,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 ...(orderBy ? { orderBy } : {}),
                 page: { limit: 2, ...(after ? { after } : {}) },
               }),
+              { allowRootDurationOrdering: true },
             );
             const response = await storage.queryTraces(pagePlan);
             if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
@@ -727,6 +731,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 orderBy: [{ field: 'durationMs', direction: durationCase.direction }],
                 pagination: { page, perPage: 2 },
               }),
+              { allowRootDurationOrdering: true },
             );
             const durationResponse = await storage.queryTraces(durationPlan);
             if (!('traces' in durationResponse) || !('pagination' in durationResponse)) {

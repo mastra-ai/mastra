@@ -10126,7 +10126,7 @@ export type PostObservabilityTracesQuery_Body = {
     | undefined;
   orderBy?:
     | {
-        field: 'startedAt' | 'endedAt';
+        field: 'startedAt' | 'endedAt' | 'durationMs';
         direction: 'asc' | 'desc';
       }[]
     | undefined;
