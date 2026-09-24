@@ -16,7 +16,7 @@
 { ...deployStates.idle, description } // { tone: 'neutral', glyph: 'ring' }
 ```
 
-**Status labels inherit text style.** The label now always takes the size and color of its container, so it matches the other cells in a `DataList` without a wrapper. The `children` slot is removed; style the container instead.
+**Status labels inherit text style.** The label now always takes the size and color of its container, so it matches the other cells in a `DataList` without a wrapper. The `children` slot is removed; style the container instead. The dot and its gap scale with that text size, so a status in small metadata no longer looks heavier than one in a table row.
 
 ```tsx
 // Before
