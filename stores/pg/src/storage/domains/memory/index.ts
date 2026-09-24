@@ -183,6 +183,7 @@ export class MemoryPG extends MemoryStorage {
 
   #db: PgDB;
   #schema: string;
+  #warnedDuplicateOMKeys = new Set<string>();
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
 
@@ -2228,6 +2229,14 @@ export class MemoryPG extends MemoryStorage {
     };
   }
 
+  private warnDuplicateOMGeneration(lookupKey: string, row: { generationCount: number; hasDuplicate: boolean }): void {
+    if (!row.hasDuplicate || this.#warnedDuplicateOMKeys.has(lookupKey)) return;
+    this.#warnedDuplicateOMKeys.add(lookupKey);
+    this.logger?.warn?.(
+      `Duplicate observational memory generation ${row.generationCount} for lookupKey ${JSON.stringify(lookupKey)} in schema ${JSON.stringify(this.#schema)}. Memory history may be inconsistent. Review and reconcile duplicate rows using the @mastra/pg changelog diagnostic before relying on this history.`,
+    );
+  }
+
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
@@ -2236,10 +2245,15 @@ export class MemoryPG extends MemoryStorage {
         schemaName: getSchemaName(this.#schema),
       });
       const result = await this.#db.readClient.oneOrNone(
-        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT 1`,
+        `SELECT om.*, EXISTS (
+           SELECT 1 FROM ${tableName} duplicate
+           WHERE duplicate."lookupKey" = om."lookupKey" AND duplicate."generationCount" = om."generationCount" AND duplicate.id <> om.id
+         ) AS "hasDuplicate"
+         FROM ${tableName} om WHERE om."lookupKey" = $1 ORDER BY om."generationCount" DESC, om."createdAt", om.id LIMIT 1`,
         [lookupKey],
       );
       if (!result) return null;
+      this.warnDuplicateOMGeneration(lookupKey, result);
       return this.parseOMRow(result);
     } catch (error) {
       throw new MastraError(
@@ -2283,7 +2297,10 @@ export class MemoryPG extends MemoryStorage {
       }
 
       params.push(limit);
-      let sql = `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT $${paramIndex}`;
+      let sql = `SELECT om.*, EXISTS (
+        SELECT 1 FROM ${tableName} duplicate
+        WHERE duplicate."lookupKey" = om."lookupKey" AND duplicate."generationCount" = om."generationCount" AND duplicate.id <> om.id
+      ) AS "hasDuplicate" FROM ${tableName} om WHERE ${conditions.join(' AND ')} ORDER BY om."generationCount" DESC, om."createdAt", om.id LIMIT $${paramIndex}`;
       paramIndex++;
 
       if (options?.offset != null) {
@@ -2293,6 +2310,7 @@ export class MemoryPG extends MemoryStorage {
 
       const result = await this.#db.readClient.manyOrNone(sql, params);
       if (!result) return [];
+      for (const row of result) this.warnDuplicateOMGeneration(lookupKey, row);
       return result.map(row => this.parseOMRow(row));
     } catch (error) {
       throw new MastraError(
@@ -2342,48 +2360,58 @@ export class MemoryPG extends MemoryStorage {
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = now.toISOString();
-      await this.#db.client.none(
-        `INSERT INTO ${tableName} (
+      return await this.#db.client.tx(async t => {
+        // Serialize first-touch writes across instances, including databases with legacy duplicate histories.
+        await t.one('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${this.#schema}:${lookupKey}`]);
+        const existing = await t.oneOrNone(
+          `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 AND "generationCount" = 0 ORDER BY "createdAt", id LIMIT 1`,
+          [lookupKey],
+        );
+        if (existing) return this.parseOMRow(existing);
+        await t.none(
+          `INSERT INTO ${tableName} (
           id, "lookupKey", scope, "resourceId", "threadId",
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
-        [
-          id,
-          lookupKey,
-          input.scope,
-          input.resourceId,
-          input.threadId || null,
-          '',
-          null,
-          'initial',
-          toPgJson(input.config),
-          0,
-          null, // lastObservedAt
-          null, // lastObservedAtZ
-          null, // lastReflectionAt
-          null, // lastReflectionAtZ
-          0,
-          0,
-          0,
-          false,
-          false,
-          false, // isBufferingObservation
-          false, // isBufferingReflection
-          0, // lastBufferedAtTokens
-          null, // lastBufferedAtTime
-          input.observedTimezone || null,
-          nowStr, // createdAt
-          nowStr, // createdAtZ
-          nowStr, // updatedAt
-          nowStr, // updatedAtZ
-        ],
-      );
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+        `,
+          [
+            id,
+            lookupKey,
+            input.scope,
+            input.resourceId,
+            input.threadId || null,
+            '',
+            null,
+            'initial',
+            toPgJson(input.config),
+            0,
+            null, // lastObservedAt
+            null, // lastObservedAtZ
+            null, // lastReflectionAt
+            null, // lastReflectionAtZ
+            0,
+            0,
+            0,
+            false,
+            false,
+            false, // isBufferingObservation
+            false, // isBufferingReflection
+            0, // lastBufferedAtTokens
+            null, // lastBufferedAtTime
+            input.observedTimezone || null,
+            nowStr, // createdAt
+            nowStr, // createdAtZ
+            nowStr, // updatedAt
+            nowStr, // updatedAtZ
+          ],
+        );
 
-      return record;
+        return record;
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -2406,8 +2434,15 @@ export class MemoryPG extends MemoryStorage {
       });
       const lastObservedAtStr = record.lastObservedAt ? record.lastObservedAt.toISOString() : null;
       const lastBufferedAtTimeStr = record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null;
-      await this.#db.client.none(
-        `INSERT INTO ${tableName} (
+      await this.#db.client.tx(async t => {
+        await t.one('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${this.#schema}:${lookupKey}`]);
+        const existing = await t.oneOrNone(
+          `SELECT id FROM ${tableName} WHERE "lookupKey" = $1 AND "generationCount" = $2 LIMIT 1`,
+          [lookupKey, record.generationCount],
+        );
+        if (existing) throw new Error(`Observational memory generation ${record.generationCount} already exists`);
+        await t.none(
+          `INSERT INTO ${tableName} (
           id, "lookupKey", scope, "resourceId", "threadId",
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
@@ -2419,44 +2454,45 @@ export class MemoryPG extends MemoryStorage {
           "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
-        [
-          record.id,
-          lookupKey,
-          record.scope,
-          record.resourceId,
-          record.threadId || null,
-          record.activeObservations || '',
-          null,
-          record.originType || 'initial',
-          record.config ? toPgJson(record.config) : null,
-          record.generationCount || 0,
-          lastObservedAtStr,
-          lastObservedAtStr,
-          null, // lastReflectionAt
-          null, // lastReflectionAtZ
-          record.pendingMessageTokens || 0,
-          record.totalTokensObserved || 0,
-          record.observationTokenCount || 0,
-          record.observedMessageIds ? toPgJson(record.observedMessageIds) : null,
-          record.bufferedObservationChunks ? toPgJson(record.bufferedObservationChunks) : null,
-          record.bufferedReflection || null,
-          record.bufferedReflectionTokens ?? null,
-          record.bufferedReflectionInputTokens ?? null,
-          record.reflectedObservationLineCount ?? null,
-          record.isObserving || false,
-          record.isReflecting || false,
-          record.isBufferingObservation || false,
-          record.isBufferingReflection || false,
-          record.lastBufferedAtTokens || 0,
-          lastBufferedAtTimeStr,
-          record.observedTimezone || null,
-          record.metadata ? toPgJson(record.metadata) : null,
-          record.createdAt.toISOString(),
-          record.createdAt.toISOString(),
-          record.updatedAt.toISOString(),
-          record.updatedAt.toISOString(),
-        ],
-      );
+          [
+            record.id,
+            lookupKey,
+            record.scope,
+            record.resourceId,
+            record.threadId || null,
+            record.activeObservations || '',
+            null,
+            record.originType || 'initial',
+            record.config ? toPgJson(record.config) : null,
+            record.generationCount || 0,
+            lastObservedAtStr,
+            lastObservedAtStr,
+            null, // lastReflectionAt
+            null, // lastReflectionAtZ
+            record.pendingMessageTokens || 0,
+            record.totalTokensObserved || 0,
+            record.observationTokenCount || 0,
+            record.observedMessageIds ? toPgJson(record.observedMessageIds) : null,
+            record.bufferedObservationChunks ? toPgJson(record.bufferedObservationChunks) : null,
+            record.bufferedReflection || null,
+            record.bufferedReflectionTokens ?? null,
+            record.bufferedReflectionInputTokens ?? null,
+            record.reflectedObservationLineCount ?? null,
+            record.isObserving || false,
+            record.isReflecting || false,
+            record.isBufferingObservation || false,
+            record.isBufferingReflection || false,
+            record.lastBufferedAtTokens || 0,
+            lastBufferedAtTimeStr,
+            record.observedTimezone || null,
+            record.metadata ? toPgJson(record.metadata) : null,
+            record.createdAt.toISOString(),
+            record.createdAt.toISOString(),
+            record.updatedAt.toISOString(),
+            record.updatedAt.toISOString(),
+          ],
+        );
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -2568,8 +2604,15 @@ export class MemoryPG extends MemoryStorage {
       });
       const nowStr = now.toISOString();
       const lastObservedAtStr = record.lastObservedAt?.toISOString() || null;
-      await this.#db.client.none(
-        `INSERT INTO ${tableName} (
+      await this.#db.client.tx(async t => {
+        await t.one('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${this.#schema}:${lookupKey}`]);
+        const existing = await t.oneOrNone(
+          `SELECT id FROM ${tableName} WHERE "lookupKey" = $1 AND "generationCount" = $2 LIMIT 1`,
+          [lookupKey, record.generationCount],
+        );
+        if (existing) throw new Error(`Observational memory generation ${record.generationCount} already exists`);
+        await t.none(
+          `INSERT INTO ${tableName} (
           id, "lookupKey", scope, "resourceId", "threadId",
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
@@ -2577,38 +2620,39 @@ export class MemoryPG extends MemoryStorage {
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
-        [
-          id,
-          lookupKey,
-          record.scope,
-          record.resourceId,
-          record.threadId || null,
-          input.reflection,
-          null,
-          'reflection',
-          toPgJson(record.config),
-          input.currentRecord.generationCount + 1,
-          lastObservedAtStr, // lastObservedAt
-          lastObservedAtStr, // lastObservedAtZ
-          nowStr, // lastReflectionAt
-          nowStr, // lastReflectionAtZ
-          record.pendingMessageTokens,
-          Math.round(record.totalTokensObserved),
-          Math.round(record.observationTokenCount),
-          false, // isObserving
-          false, // isReflecting
-          false, // isBufferingObservation
-          false, // isBufferingReflection
-          0, // lastBufferedAtTokens
-          null, // lastBufferedAtTime
-          record.observedTimezone || null,
-          record.metadata ? toPgJson(record.metadata) : null,
-          nowStr, // createdAt
-          nowStr, // createdAtZ
-          nowStr, // updatedAt
-          nowStr, // updatedAtZ
-        ],
-      );
+          [
+            id,
+            lookupKey,
+            record.scope,
+            record.resourceId,
+            record.threadId || null,
+            input.reflection,
+            null,
+            'reflection',
+            toPgJson(record.config),
+            input.currentRecord.generationCount + 1,
+            lastObservedAtStr, // lastObservedAt
+            lastObservedAtStr, // lastObservedAtZ
+            nowStr, // lastReflectionAt
+            nowStr, // lastReflectionAtZ
+            record.pendingMessageTokens,
+            Math.round(record.totalTokensObserved),
+            Math.round(record.observationTokenCount),
+            false, // isObserving
+            false, // isReflecting
+            false, // isBufferingObservation
+            false, // isBufferingReflection
+            0, // lastBufferedAtTokens
+            null, // lastBufferedAtTime
+            record.observedTimezone || null,
+            record.metadata ? toPgJson(record.metadata) : null,
+            nowStr, // createdAt
+            nowStr, // createdAtZ
+            nowStr, // updatedAt
+            nowStr, // updatedAtZ
+          ],
+        );
+      });
 
       return record;
     } catch (error) {
