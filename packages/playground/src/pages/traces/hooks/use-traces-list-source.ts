@@ -10,6 +10,7 @@ export function useTracesListSource({
   initialAutoRefetch = true,
   withQueryTrace,
   legacyFilters,
+  enabled,
 }: {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
@@ -17,6 +18,7 @@ export function useTracesListSource({
   initialAutoRefetch?: boolean;
   withQueryTrace?: boolean;
   legacyFilters?: UseTraceQueryArgs['legacyFilters'];
+  enabled?: boolean;
 }) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
@@ -26,6 +28,7 @@ export function useTracesListSource({
     refetchOnWindowFocus: autoRefetch,
     withQueryTrace,
     legacyFilters,
+    enabled,
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.

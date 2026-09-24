@@ -5,6 +5,7 @@ import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/Fi
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useObservabilityCapabilities } from '@mastra/playground-ui/domains/capabilities';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import {
@@ -190,11 +191,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ),
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
-  // Set to false for servers without the trace-query API: lists through `listTracesLight` instead.
-  const withQueryTrace = true;
+  // Servers without the trace-query API list through `listTracesLight`. Older servers without the
+  // capabilities endpoint fall back to the trace-query API.
+  const { data: capabilitiesData, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
+  const withQueryTrace = capabilitiesData?.capabilities.traceQuery ?? true;
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
-    enabled: withQueryTrace,
+    enabled: withQueryTrace && !isCapabilitiesLoading,
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
@@ -298,6 +301,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
+    enabled: !isCapabilitiesLoading,
     legacyFilters: buildTraceListFilters({
       rootEntityType: url.selectedEntityOption?.entityType,
       status: url.selectedStatus,
@@ -424,7 +428,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
   // FilterBar never appears without the metadata fields it will offer. Only `isLoading` (never
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
-  if (isDiscoveryLoading) {
+  if (isCapabilitiesLoading || isDiscoveryLoading) {
     return (
       <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Traces</h1>
