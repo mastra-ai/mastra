@@ -171,14 +171,26 @@ Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) fo
 Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. The same client can reconnect by calling `observe()` with the `runId`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output, cleanup } = await durableResearcher.observe(runId)
+const { output } = await durableResearcher.observe(runId)
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
 }
-
-cleanup()
 ```
+
+Observing doesn't own the run. When the loop ends, or you leave it early with `break`, `return`, or an error, the observer unsubscribes and the run keeps going for anyone else watching it. To stop observing from outside the loop, for example when the client disconnects, call `detach()`:
+
+```typescript title="src/server/reconnect.ts"
+const { output, detach } = await durableResearcher.observe(runId)
+
+request.signal.addEventListener('abort', detach, { once: true })
+
+for await (const chunk of output.fullStream) {
+  // Stops when the run finishes or the client disconnects
+}
+```
+
+If you pass `idleTimeoutMs`, a stream that goes quiet for that long ends with an error chunk and detaches the observer. The run itself is only cleaned up when you also pass `isAlive` and it reports the run is no longer running.
 
 `createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
@@ -239,7 +251,9 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 ## Cleanup
 
-Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub and removes the run from the internal registry. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
+Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub, removes the run from the internal registry, and clears the run's cached events, so no one can replay the run afterwards. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
+
+Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
 
 ## Tool approval
 

@@ -3424,11 +3424,24 @@ export class DurableAgent<
    * Observe an existing stream.
    * Use this to reconnect to a stream after a network disconnection.
    *
+   * To stop observing without affecting the run, call the returned `detach()`
+   * or leave the `for await` loop over `fullStream` (break, return, or throw).
+   * Both unsubscribe this observer only; the run keeps going and other
+   * observers can still replay it. To stop observing when a request is
+   * cancelled, wire its signal to `detach`:
+   *
+   * ```ts
+   * const { fullStream, detach } = await agent.observe(runId, { offset });
+   * req.signal.addEventListener('abort', detach, { once: true });
+   * for await (const chunk of fullStream) send(chunk);
+   * ```
+   *
    * **Warning:** The returned `cleanup()` function destroys the run's registry
-   * entries and cached PubSub events. Only call it when you are done with the
-   * run entirely. If the workflow is suspended and you intend to resume later,
-   * do not call cleanup — let the auto-cleanup timer handle it after
-   * FINISH/ERROR. Auto-cleanup does not fire on SUSPENDED events.
+   * entries and cached PubSub events (replay history), including for other
+   * observers. Only call it when you are done with the run entirely. If the
+   * workflow is suspended and you intend to resume later, do not call cleanup —
+   * let the auto-cleanup timer handle it after FINISH/ERROR. Auto-cleanup does
+   * not fire on SUSPENDED events.
    *
    * Pass `idleTimeoutMs` to bound how long the stream waits on a silent topic:
    * a durable run whose driving process crashed stops emitting chunks but never
@@ -3436,8 +3449,11 @@ export class DurableAgent<
    * producerless topic. When the idle timeout fires, the optional `isAlive`
    * probe is consulted first — returning true (e.g. a live run-liveness
    * heartbeat, or a suspended HITL gate) re-arms the timer and keeps waiting,
-   * while false/absent terminates the stream with an error chunk. Both options
-   * are opt-in; omit them for the current unbounded behavior.
+   * while false/absent terminates the stream with an error chunk. Only an
+   * `isAlive` that returns false schedules the run's full cleanup; a bare
+   * `idleTimeoutMs` (no `isAlive`) only detaches this observer, so pass
+   * `isAlive` if you rely on the timeout to reclaim a crashed run's state. Both
+   * options are opt-in; omit them for the current unbounded behavior.
    */
   async observe(
     runId: string,
@@ -3452,7 +3468,7 @@ export class DurableAgent<
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
     // Track cleanup state to avoid double cleanup
@@ -3514,11 +3530,14 @@ export class DurableAgent<
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: completeTerminalLifecycle,
-      onError: async error => {
+      onError: async ({ error, runDead }) => {
         try {
-          await options?.onError?.(error);
+          await options?.onError?.({ error });
         } finally {
-          completeTerminalLifecycle();
+          // A bare idle timeout (runDead === false) only means this observer
+          // stopped hearing from the run — it may still be alive elsewhere, so
+          // don't tear down its registry entry or replay history.
+          if (runDead !== false) completeTerminalLifecycle();
         }
       },
       onAbort: completeTerminalLifecycle,
@@ -3529,8 +3548,32 @@ export class DurableAgent<
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
-    const { output, ready } = stream;
+    const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;
+
+    // This output belongs to this observer alone, so a consumer that stops
+    // reading fullStream (break/return/throw out of `for await`) should detach
+    // the observer. MastraModelOutput fans out to several readers and only drops
+    // the cancelled reader's listeners, so the cancel never reaches the pubsub
+    // subscription — pass it through here.
+    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
+    Object.defineProperty(output, 'fullStream', {
+      configurable: true,
+      get() {
+        const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+        return new ReadableStream<ChunkType<TOutput>>({
+          async pull(controller) {
+            const { done, value } = await reader.read();
+            if (done) controller.close();
+            else controller.enqueue(value);
+          },
+          cancel(reason) {
+            detach();
+            return reader.cancel(reason);
+          },
+        });
+      },
+    });
 
     // Wait for subscription to be ready
     await ready;
@@ -3567,6 +3610,7 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       cleanup,
+      detach,
       abort,
     };
   }
