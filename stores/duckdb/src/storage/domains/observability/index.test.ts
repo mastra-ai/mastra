@@ -127,6 +127,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -146,6 +147,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
@@ -180,6 +182,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -198,6 +201,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
     } finally {
       coreFeatures.clear();
