@@ -3,10 +3,10 @@ import type { DataListRootProps } from '@/ds/components/DataList';
 export { formatCompactNumber as formatCompact } from '@/ds/components/CompactNumber';
 
 export function formatCost(value: number, unit?: string | null): string {
-  if (unit?.toLowerCase() === 'usd' || !unit) {
-    return `$${value < 0.01 && value > 0 ? value.toFixed(4) : value.toFixed(2)}`;
-  }
-  return `${value.toFixed(4)} ${unit}`;
+  const isUsd = !unit || unit.toLowerCase() === 'usd';
+  const amount = value > 0 && value < 0.01 ? '<0.01' : value.toFixed(2);
+  if (!isUsd) return `${amount} ${unit}`;
+  return amount.startsWith('<') ? '<$0.01' : `$${amount}`;
 }
 
 export const METRICS_DATA_LIST_PROPS = {

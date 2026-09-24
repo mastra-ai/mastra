@@ -85,9 +85,9 @@ describe('TraceSummaryDescription', () => {
       />,
     );
 
-    expect(screen.getByText('1.2k')).not.toBeNull();
+    expect(screen.getByText('1.2K')).not.toBeNull();
     expect(screen.getByText('345')).not.toBeNull();
-    expect(screen.getByText('$0.0010')).not.toBeNull();
+    expect(screen.getByText('<$0.01')).not.toBeNull();
 
     fireEvent.focus(screen.getByLabelText('Input tokens'));
     expect((await screen.findByRole('tooltip')).textContent).toBe('Input tokens');

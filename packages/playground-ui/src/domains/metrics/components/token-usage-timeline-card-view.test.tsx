@@ -190,7 +190,7 @@ describe('TokenUsageTimelineCardView', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
-    expect(screen.getByText('0.0700 eur')).toBeTruthy();
+    expect(screen.getByText('0.07 eur')).toBeTruthy();
   });
 
   it('shows a spinner while loading', () => {

@@ -341,7 +341,7 @@ describe('TracesListView — usage cells', () => {
 
       const headers = headerTexts(container);
       expect(headers).toEqual(['Start', 'Name', 'Status', 'Total tokens']);
-      expect(screen.getByText('12.4k')).toBeTruthy();
+      expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
     it('leaves the cell blank when neither token count is known', () => {
@@ -371,9 +371,9 @@ describe('TracesListView — usage cells', () => {
       />,
     );
 
-    expect(screen.getByText('12.4k')).toBeTruthy();
+    expect(screen.getByText('12.4K')).toBeTruthy();
     expect(screen.getByText('800')).toBeTruthy();
-    expect(screen.getByText('0.0123 eur')).toBeTruthy();
+    expect(screen.getByText('0.01 eur')).toBeTruthy();
   });
 
   it('leaves the usage cells blank for a trace with no totals', () => {
@@ -386,7 +386,7 @@ describe('TracesListView — usage cells', () => {
       />,
     );
 
-    expect(screen.queryByText('12.4k')).toBeNull();
+    expect(screen.queryByText('12.4K')).toBeNull();
     expect(screen.getAllByRole('button')[0]?.textContent).not.toContain('NaN');
   });
 });

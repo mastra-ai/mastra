@@ -34,7 +34,8 @@ describe('formatFullNumber', () => {
   it('keeps every digit', () => {
     expect(formatFullNumber(12_310)).toBe('12,310');
     expect(formatFullNumber(12_345.67, { currency: 'USD' })).toBe('$12,345.67');
-    expect(formatFullNumber(0.0012, { currency: 'USD' })).toBe('$0.0012');
+    expect(formatFullNumber(0.0277, { currency: 'USD' })).toBe('$0.03');
+    expect(formatFullNumber(0.0012, { currency: 'USD' })).toBe('<$0.01');
   });
 });
 
