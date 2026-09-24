@@ -1,84 +1,11 @@
-import { json } from '@codemirror/lang-json';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import type { Extension } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Code } from '@/ds/components/Code/code';
 import { CopyButton } from '@/ds/components/CopyButton';
-import { useTheme } from '@/ds/components/ThemeProvider';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
-
-function buildDarkTheme(): Extension {
-  return draculaInit({
-    settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-caption)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: '#939393',
-      background: 'transparent',
-    },
-    styles: [{ tag: [t.className, t.propertyName] }],
-  });
-}
-
-function buildLightTheme(): Extension {
-  const editorTheme = EditorView.theme({
-    '&': {
-      backgroundColor: 'transparent',
-      color: 'var(--foreground)',
-      fontSize: 'var(--text-caption)',
-    },
-    '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: 'var(--placeholder)',
-      borderRight: 'none',
-    },
-    '.cm-content': {
-      color: 'var(--foreground)',
-      caretColor: 'var(--foreground)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--foreground)',
-    },
-  });
-
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
-}
-
-const useCodemirrorTheme = (): Extension => {
-  const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
-};
 
 export interface DataDetailsPanelCodeSectionProps {
   title: React.ReactNode;
@@ -98,7 +25,6 @@ export function DataDetailsPanelCodeSection({
   className,
   actions,
 }: DataDetailsPanelCodeSectionProps) {
-  const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const hasMultilineText = useMemo(() => {
     try {
@@ -152,12 +78,7 @@ export function DataDetailsPanelCodeSection({
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
-          <ReactCodeMirror
-            extensions={[json(), EditorView.lineWrapping]}
-            theme={theme}
-            value={codeStr}
-            editable={false}
-          />
+          <Code code={codeStr} lang="json" className="font-mono text-caption break-all whitespace-pre-wrap" />
         )}
       </div>
     </div>
