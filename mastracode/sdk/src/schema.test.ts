@@ -103,7 +103,7 @@ describe('stateSchema', () => {
   });
 
   it('preserves activeBrowserModel so status reports the model the browser launched with', () => {
-    const activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'codex-oauth' as const };
+    const activeBrowserModel = { modelName: 'openai/gpt-5.5', source: 'chat-model' as const, viaCodexOAuth: true };
 
     const parsed = stateSchema.parse({ activeBrowserModel });
 

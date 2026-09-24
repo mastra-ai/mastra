@@ -37,6 +37,7 @@ export type ScenarioName =
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
+  | 'browser-status-model'
   | 'browser-tool-unavailable'
   | 'browserbase-startup-restore'
   | 'browser-toggle-attach'

@@ -48,19 +48,27 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  */
 
 /**
- * Human-readable line for the model Stagehand will actually use, including the
- * implicit Codex fallback, so users can see it without reading the settings file.
+ * Chat model at the moment the browser is launched. Stagehand is fixed at
+ * creation and shared by every thread, so later model switches don't affect it.
  */
-function describeStagehandModel(
-  settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
-  resolved: ResolvedStagehandModel = resolveStagehandModel(settings),
-): string {
-  const { modelName, source } = resolved;
+function launchChatModelId(ctx: SlashCommandContext): string | undefined {
+  return ctx.state.session.model.get();
+}
+
+/**
+ * Human-readable line for the model Stagehand will actually use, including the
+ * implicit chat-model / Codex fallbacks, so users can see it without reading the
+ * settings file.
+ */
+function describeStagehandModel({ modelName, source, viaCodexOAuth }: ResolvedStagehandModel): string {
+  const codex = viaCodexOAuth ? ' via OpenAI Codex login' : '';
   switch (source) {
     case 'settings':
-      return `  Model: ${modelName}`;
+      return `  Model: ${modelName}${codex ? ` (${codex.trim()})` : ''}`;
+    case 'chat-model':
+      return `  Model: ${modelName} (current chat model${codex}; override with /browser set model)`;
     case 'codex-oauth':
-      return `  Model: ${modelName} (via OpenAI Codex login; override with /browser set model)`;
+      return `  Model: ${modelName} (OpenAI Codex login default; override with /browser set model)`;
     case 'stagehand-default':
       return '  Model: Stagehand default (set one with /browser set model)';
   }
@@ -285,10 +293,15 @@ function resolveModeAgent(mode: unknown, agentControllerState: unknown): Browser
     : (modeAgent as BrowserAgent | undefined);
 }
 
+/**
+ * @param chatModelId the chat model passed to `createBrowserFromSettings` for
+ *   this browser, so the recorded model matches what was really launched.
+ */
 function applyBrowserToAgents(
   ctx: SlashCommandContext,
   browser: MastraBrowser | undefined,
   browserSettings?: BrowserSettings,
+  chatModelId?: string,
 ): void {
   const modes = ctx.controller.listModes();
   let agentControllerState: unknown;
@@ -298,10 +311,12 @@ function applyBrowserToAgents(
   }
   ctx.controller.setBrowser?.(browser);
   // Track the active browser settings in controller state, plus the model the
-  // browser was actually created with (credentials may change afterwards).
+  // browser was actually created with (credentials/chat model may change afterwards).
   void ctx.state.session.state.set({
     [ACTIVE_BROWSER_KEY]: browserSettings ? toActiveBrowserSettings(browserSettings) : undefined,
-    [ACTIVE_BROWSER_MODEL_KEY]: browserSettings?.enabled ? resolveStagehandModel(browserSettings) : undefined,
+    [ACTIVE_BROWSER_MODEL_KEY]: browserSettings?.enabled
+      ? resolveStagehandModel(browserSettings, { chatModelId })
+      : undefined,
   } as any);
 }
 
@@ -495,6 +510,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     const state = ctx.state.session.state.get() as any;
     const activeSettings = state?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
     const activeModel = state?.[ACTIVE_BROWSER_MODEL_KEY] as ResolvedStagehandModel | undefined;
+    // What a launch right now would pick (pending/no-snapshot cases).
+    const resolveNow = (settings: BrowserSettings) =>
+      resolveStagehandModel(settings, { chatModelId: launchChatModelId(ctx) });
 
     // Check for config drift between file and active instance
     const hasDrift = activeSettings && getBrowserConfigKey(browser) !== getBrowserConfigKey(activeSettings);
@@ -512,7 +530,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       lines.push(`  Provider: ${activeProvider}`);
       if (activeSettings.provider === 'stagehand') {
         if (activeSettings.stagehand) lines.push(`  Environment: ${activeSettings.stagehand.env}`);
-        lines.push(describeStagehandModel(activeSettings, activeModel));
+        lines.push(describeStagehandModel(activeModel ?? resolveNow(activeSettings)));
       }
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
@@ -533,7 +551,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       lines.push(`  Provider: ${fileProvider}`);
       if (browser.provider === 'stagehand') {
         if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
-        lines.push(describeStagehandModel(browser));
+        lines.push(describeStagehandModel(resolveNow(browser)));
       }
       if (!fileIsBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
@@ -558,7 +576,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       const lines = [`Browser: enabled`, `  Provider: ${providerLabel}`];
       if (browser.provider === 'stagehand') {
         if (browser.stagehand) lines.push(`  Environment: ${browser.stagehand.env}`);
-        lines.push(describeStagehandModel(browser, activeModel));
+        lines.push(describeStagehandModel(activeModel ?? resolveNow(browser)));
       }
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
@@ -601,8 +619,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
 
     try {
-      const browserInstance = await createBrowserFromSettings(nextBrowser);
-      applyBrowserToAgents(ctx, browserInstance, nextBrowser);
+      const chatModelId = launchChatModelId(ctx);
+      const browserInstance = await createBrowserFromSettings(nextBrowser, { chatModelId });
+      applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
       if (nextBrowser.profile && nextBrowser.provider) {
         setProfileProvider(nextBrowser.profile, nextBrowser.provider);
       }
@@ -633,8 +652,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       // If it was enabled, we need to recreate the browser with new settings
       if (wasEnabled) {
         try {
-          const browserInstance = await createBrowserFromSettings(settings.browser);
-          applyBrowserToAgents(ctx, browserInstance, settings.browser);
+          const chatModelId = launchChatModelId(ctx);
+          const browserInstance = await createBrowserFromSettings(settings.browser, { chatModelId });
+          applyBrowserToAgents(ctx, browserInstance, settings.browser, chatModelId);
         } catch (err) {
           // If recreation fails, disable and report
           settings.browser.enabled = false;
@@ -716,8 +736,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     let browserInstance = currentAgent?.browser;
 
     if (!browserInstance && browser.enabled) {
-      browserInstance = await createBrowserFromSettings(browser);
-      applyBrowserToAgents(ctx, browserInstance, browser);
+      const chatModelId = launchChatModelId(ctx);
+      browserInstance = await createBrowserFromSettings(browser, { chatModelId });
+      applyBrowserToAgents(ctx, browserInstance, browser, chatModelId);
     }
 
     if (!browserInstance) {
@@ -946,9 +967,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   }
 
   // Apply browser to agents first, then persist on success
+  const chatModelId = launchChatModelId(ctx);
   try {
-    const browserInstance = await createBrowserFromSettings(nextBrowser);
-    applyBrowserToAgents(ctx, browserInstance, nextBrowser);
+    const browserInstance = await createBrowserFromSettings(nextBrowser, { chatModelId });
+    applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
     if (nextBrowser.profile && nextBrowser.provider) {
       setProfileProvider(nextBrowser.profile, nextBrowser.provider);
     }
@@ -965,9 +987,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     `  Provider: ${provider === 'stagehand' ? 'Stagehand (AI-powered)' : 'AgentBrowser (deterministic)'}`,
   ];
 
-  if (provider === 'stagehand' && stagehandSettings) {
-    summary.push(`  Environment: ${stagehandSettings.env}`);
-    summary.push(describeStagehandModel(nextBrowser));
+  if (provider === 'stagehand') {
+    if (stagehandSettings) summary.push(`  Environment: ${stagehandSettings.env}`);
+    summary.push(describeStagehandModel(resolveStagehandModel(nextBrowser, { chatModelId })));
   }
 
   // Only show headless for local browsers
