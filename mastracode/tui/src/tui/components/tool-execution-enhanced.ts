@@ -1474,10 +1474,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Helper to render shell command with terminal-like bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
       const border = (char: string) => this.formatToolBorder(char);
-      // Quiet mode names the tool like every other compact tool does, so a
-      // shell box is recognisable as an execute_command call at a glance.
-      const toolNamePrefix = this.quietDisplayMode === 'quiet' ? `${theme.fg('muted', this.toolName)} ` : '';
-      const footerPrompt = `${toolNamePrefix}${theme.bold(theme.fg('toolTitle', '$'))} `;
+      const footerPrompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
       const footerSuffix = `${cwdSuffix}${timeSuffix}${status}`;
       const termWidth = this.renderWidth;
       const contentWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"

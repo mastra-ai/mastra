@@ -1020,8 +1020,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).toContain('line 16');
     expect(visible).not.toMatch(/line 1\b/);
     expect(visible).not.toContain('line 14');
-    // Quiet mode names the tool, like every other compact tool.
-    expect(visible).toContain('execute_command $ pnpm');
+    // The `$` prompt identifies the shell box; the tool name would only cost width.
+    expect(visible).toContain('│ $ pnpm');
+    expect(visible).not.toContain('execute_command');
     // The command wraps rather than truncates so the whole thing is still readable.
     expect(visible).toContain('--reporter=dot');
     expect(visible).toContain('echo done');
