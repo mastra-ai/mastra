@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 1.70.0-alpha.3
+
+### Patch Changes
+
+- Fixed channel threads getting permanently stuck after a tool call suspended on adapters that cannot show approval buttons. With `toolDisplay: 'hidden'`, runs now auto-resume suspended tools on platforms without interactive buttons (for example SMS, iMessage or custom gateways). Set the new `approvalButtons` adapter option to override the detection. Inbound messages that don't start a run are now logged at warn level instead of being dropped silently. ([#24913](https://github.com/mastra-ai/mastra/pull/24913))
+
+  ```ts
+  channels: {
+    adapters: {
+      imessage: { adapter: imessageAdapter, toolDisplay: 'hidden' }, // now auto-resumes
+      custom: { adapter: customAdapter, toolDisplay: 'hidden', approvalButtons: true },
+    },
+  }
+  ```
+
+- Fixed client-sent copies of stored messages changing what's stored. When a request includes a message with the same ID as a stored one: ([#24895](https://github.com/mastra-ai/mastra/pull/24895))
+
+  - The stored message is kept as is. Client text, reasoning, and metadata no longer replace or add to it.
+  - For assistant messages, the client copy can only fill in a tool outcome for a call the stored message still has pending.
+  - To change a stored message, update it in storage.
+  - This also applies with `retainFullInput`, so the client's rendered copy can't undo an output processor's rewrite of a saved message, such as a redacted card number.
+
+  Fixes #20836.
+
+- Channel approval cards (Slack, Telegram, etc.) now show the sub-agent tool awaiting approval and its arguments, instead of the supervisor's `agent-<name>` delegation call. ([#24907](https://github.com/mastra-ai/mastra/pull/24907))
+
+- Fixed agent controller chat channels showing Approve/Deny buttons for tools that run or are blocked automatically. Channels now only show approval buttons when a person actually needs to decide (tools with an `ask` policy). Fixes #22379. ([#24914](https://github.com/mastra-ai/mastra/pull/24914))
+
+- Fixed `TokenLimiterProcessor` counting history that later prompt processors remove from the request. In the default `best-fit` and `contiguous` trim modes, the input budget is now enforced on the provider prompt in `processLLMRequest`, after earlier prompt processors such as `ToolCallFilter` have run, so only tokens that reach the model are counted. Tool calls and their results are kept or removed together, and stored messages are no longer changed. ([#24679](https://github.com/mastra-ai/mastra/pull/24679))
+
+  Where `processLLMRequest` doesn't run, such as `generateLegacy()`, `streamLegacy()` and limiters inside a processor workflow, `processInputStep` still trims stored messages as before.
+
+- Fixed images and files returned by tools going missing when an agent uses a router model such as `anthropic/*`. The selected model now receives the complete tool result, including images and files. ([#24910](https://github.com/mastra-ai/mastra/pull/24910))
+
 ## 1.70.0-alpha.2
 
 ### Minor Changes
