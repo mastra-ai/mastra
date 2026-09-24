@@ -141,7 +141,11 @@ pnpm --filter @mastra/code-sdk check:acp
 ```
 
 This suite runs the adapter and stdio protocol tests without building the TUI.
-`check:acp` checks the adapter against the repository's ES2023 library target.
+`check:acp` checks `agent.ts`, `event-mapper.ts`, `server.ts`, and `skills.ts`
+against the repository's ES2023 library target. It does not check `runtime.ts`
+or `index.ts`. Run `pnpm --filter @mastra/code-sdk check` for the full SDK
+typecheck, including those entrypoints. CI runs the full check after building
+the workspace dependencies.
 It requires built workspace imports, including `@mastra/core/workspace`; the signal
 factory alone is aliased to source. Runtime factory tests mock SDK startup. Use a running
 ACP client to verify provider authentication and actual tool execution.
