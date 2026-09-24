@@ -97,7 +97,8 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     memory,
     workspace,
     signals: resolvedSignals,
-    errorProcessors: errorProcessors ?? defaultStabilityErrorProcessors({ retryUnknownErrors: true }),
+    errorProcessors:
+      errorProcessors ?? defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true }),
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });
 }

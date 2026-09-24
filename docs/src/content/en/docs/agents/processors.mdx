@@ -127,7 +127,7 @@ Every agent adds whichever of these three your `errorProcessors` list doesn't al
 
 A default is only added when nothing in your list carries its `id`, so your own instance always wins and is never duplicated. An added default is placed at the position its `id` gives it among the defaults, so naming only a later one doesn't invert the pair. Supplying only your own `StreamErrorRetryProcessor` still resolves with `ProviderHistoryCompat` and `PrefillErrorHandler` ahead of it.
 
-Error processors stop at the first one that returns `{ retry: true }`, so that relative order decides which repair runs. The processors that repair a request come first and the retrying one comes last, because `StreamErrorRetryProcessor`'s bad-request matcher matches any `400`: placed earlier it would claim a request the repairs could have fixed and resend it unchanged.
+Error processors stop at the first one that returns `{ retry: true }`, so that relative order decides which repair runs. The default order puts the repairs ahead of the retrying processor. Placed earlier, an instance with broad matchers (the bad-request matcher matches any `400`, for example) would claim a request the repairs could have fixed and resend it unchanged. The default instance carries only its connection-reset matcher, but your own instance can be configured with broader matchers, so the order keeps repairs first for it too.
 
 Your processors are never reordered relative to each other. A processor with an `id` that matches a default takes part in that ordering. One with an `id` of your own keeps its position in your list.
 
