@@ -44,7 +44,7 @@ The screen-reader status text is now "Running" or "Failed" instead of "Tool call
 
 **Signals, notifications and skills are `Activity` presets**
 
-`components/ai/chat-event` is removed. Its presets moved into `components/ai/activity` and are named after the line they draw: `ChatSignal` is now `SignalActivity`, `ChatNotification` is now `NotificationActivity` and `ChatSkill` is now `SkillActivity`. Each one picks the icon, badges and body for one kind of event over `ActivityItem`.
+`components/ai/chat-event` is removed. Its presets moved into `components/ai/activity` and are named after the line they draw: `ChatSignal` is now `SignalActivity` and `ChatNotification` is now `NotificationActivity`. Each one picks the icon, badges and body for one kind of event over `ActivityItem`.
 
 The card presentation of signals and the notice presentation of notifications are removed along with their `variant` prop. A notification's priority is now a coloured badge on the line: urgent is red, high is orange, medium is blue. Its status and pending count are badges beside it. A system reminder names its path as the detail of the line.
 
@@ -103,5 +103,7 @@ import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcrip
 
 <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />;
 ```
+
+`ChatSkill` is removed: the Factory was its only consumer, so it now composes `ActivityItem` itself.
 
 `SignalActivity` and `NotificationActivity` no longer set their own width or vertical margin, so the caller places them.

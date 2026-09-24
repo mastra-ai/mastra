@@ -14,7 +14,6 @@ import {
   ActivitySpacer,
   ActivityTrigger,
 } from './activity';
-import { TranscriptDivider } from '@/ds/components/ai/transcript-divider';
 import { Badge } from '@/ds/components/Badge';
 
 const Code = ({ children }: { children: string }) => (
@@ -51,7 +50,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'One line for everything the agent does: tool calls, reasoning, signals, notifications, skills, and plain "working" rows. `ActivityItem` is the everyday shape — icon, label, detail, badges, and an optional body. A body folds behind a chevron; without one the line stands alone and looks the same. `status="running"` shimmers the line, `status="error"` marks it failed.\n\nThe compound parts (`Activity`, `ActivityTrigger`, `ActivityHeadline`, `ActivityContent`, …) build custom lines, such as a tool row with a timestamp ahead of the icon. `TranscriptDivider` separates turns.',
+          'One line for everything the agent does: tool calls, reasoning, signals, notifications, skills, and plain "working" rows. `ActivityItem` is the everyday shape — icon, label, detail, badges, and an optional body. A body folds behind a chevron; without one the line stands alone and looks the same. `status="running"` shimmers the line, `status="error"` marks it failed.\n\nThe compound parts (`Activity`, `ActivityTrigger`, `ActivityHeadline`, `ActivityContent`, …) build custom lines, such as a tool row with a timestamp ahead of the icon.',
       },
     },
   },
@@ -139,7 +138,6 @@ export const EveryKind: Story = {
         detailFont="sans"
         aria-label="Notification: github / issue-opened"
       />
-      <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />
       <ActivityItem icon={<Sparkles aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />
     </div>
   ),

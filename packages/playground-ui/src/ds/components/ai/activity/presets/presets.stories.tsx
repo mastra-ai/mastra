@@ -2,8 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { NotificationActivity } from './notification-activity';
 import { SignalActivity } from './signal-activity';
-import { SkillActivity } from './skill-activity';
-import { TranscriptDivider } from '@/ds/components/ai/transcript-divider';
 import { PullRequestIcon } from '@/ds/components/PullRequestIcon';
 
 const snapshot = 'Board: work\nStage: building\nRevision: 4\nAwaiting review on the composer changes before landing.';
@@ -26,7 +24,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Presets over `ActivityItem` for events that are not tool calls. SignalActivity, NotificationActivity and SkillActivity choose the icon, the label wording and the body renderer for one kind of event. A row only offers a disclosure when its body says more than the line already shows — a message that fits stays a single line and wraps instead of clipping. Width and vertical rhythm belong to the caller.',
+          'Presets over `ActivityItem` for events that are not tool calls. SignalActivity and NotificationActivity choose the icon, the label wording and the body renderer for one kind of event. A row only offers a disclosure when its body says more than the line already shows — a message that fits stays a single line and wraps instead of clipping. Width and vertical rhythm belong to the caller.',
       },
     },
   },
@@ -67,13 +65,12 @@ export const Transcript: Story = {
     docs: {
       description: {
         story:
-          'Every event row, in the order a run produces them: a skill activation opens the run, signals report on it, notifications arrive, and a divider marks the silence before the next turn. Factory and Studio render the same rows.',
+          'Every event row, in the order a run produces them: signals report on the run, then notifications arrive. Factory and Studio render the same rows.',
       },
     },
   },
   render: () => (
     <div className="flex flex-col gap-1">
-      <SkillActivity name="factory-build" instructions="Implement the approved plan." />
       <SignalActivity kind="state" label="factory-phase" mode="snapshot" message={snapshot} />
       <SignalActivity kind="reactive" label="work-item-feed" message="Damien: Keep the attachment previews." />
       <SignalActivity
@@ -96,7 +93,6 @@ export const Transcript: Story = {
         status="delivered"
         pending="3"
       />
-      <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />
       <SignalActivity kind="state" label="factory-phase" mode="delta" message="Stage: building → review" />
     </div>
   ),
