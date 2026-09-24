@@ -603,6 +603,110 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(traces.spans.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('counts each span once when its end event is written as a second create', async () => {
+      const baseSpan = {
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: null,
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+      } as const;
+      const started = Array.from({ length: 5 }, (_, i) => [
+        {
+          ...baseSpan,
+          traceId: `trace-dup-${i}`,
+          spanId: `root-dup-${i}`,
+          parentSpanId: null,
+          name: `root-${i}`,
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+          endedAt: null,
+        },
+        {
+          ...baseSpan,
+          traceId: `trace-dup-${i}`,
+          spanId: `tool-dup-${i}`,
+          parentSpanId: `root-dup-${i}`,
+          name: `tool-${i}`,
+          spanType: SpanType.TOOL_CALL,
+          startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i, 100)),
+          endedAt: null,
+        },
+      ]).flat();
+      const ended = started.map(record => ({ ...record, endedAt: new Date(record.startedAt.getTime() + 500) }));
+
+      const bootstrap = await storage.listTraces({ mode: 'delta' });
+      const branchBootstrap = await storage.listBranches({ mode: 'delta' });
+
+      // The event buffer sends SPAN_STARTED and SPAN_ENDED as two creates.
+      await storage.batchCreateSpans({ records: started });
+      await storage.batchCreateSpans({ records: ended });
+
+      const collect = async (list: (page: number) => Promise<{ ids: string[]; hasMore: boolean }>) => {
+        const ids: string[] = [];
+        for (let page = 0; ; page++) {
+          const res = await list(page);
+          ids.push(...res.ids);
+          if (!res.hasMore) break;
+        }
+        return ids;
+      };
+
+      const firstPage = await storage.listTraces({ pagination: { page: 0, perPage: 3 } });
+      expect(firstPage.pagination).toEqual({ total: 5, page: 0, perPage: 3, hasMore: true });
+      expect(firstPage.spans).toHaveLength(3);
+      expect(firstPage.spans.every(span => span.endedAt instanceof Date)).toBe(true);
+      const traceIds = await collect(async page => {
+        const res = await storage.listTraces({ pagination: { page, perPage: 3 } });
+        return { ids: res.spans.map(span => span.traceId), hasMore: res.pagination.hasMore };
+      });
+      expect(traceIds).toEqual(['trace-dup-4', 'trace-dup-3', 'trace-dup-2', 'trace-dup-1', 'trace-dup-0']);
+
+      const light = await storage.listTracesLight({ pagination: { page: 0, perPage: 3 } });
+      expect(light.pagination).toEqual({ total: 5, page: 0, perPage: 3, hasMore: true });
+      expect(light.spans).toHaveLength(3);
+
+      const branchIds = await collect(async page => {
+        const res = await storage.listBranches({ pagination: { page, perPage: 3 } });
+        return { ids: res.branches.map(branch => branch.spanId), hasMore: res.pagination.hasMore };
+      });
+      expect(branchIds).toEqual(['tool-dup-4', 'tool-dup-3', 'tool-dup-2', 'tool-dup-1', 'tool-dup-0']);
+
+      const delta = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor!, limit: 3 });
+      expect(delta.spans.map(span => span.traceId)).toEqual(['trace-dup-0', 'trace-dup-1', 'trace-dup-2']);
+      expect(delta.delta).toEqual({ limit: 3, hasMore: true });
+      const deltaRest = await storage.listTraces({ mode: 'delta', after: delta.deltaCursor!, limit: 3 });
+      expect(deltaRest.spans.map(span => span.traceId)).toEqual(['trace-dup-3', 'trace-dup-4']);
+      expect(deltaRest.delta).toEqual({ limit: 3, hasMore: false });
+
+      const branchDelta = await storage.listBranches({ mode: 'delta', after: branchBootstrap.deltaCursor!, limit: 10 });
+      expect(branchDelta.branches.map(branch => branch.spanId)).toEqual([
+        'tool-dup-0',
+        'tool-dup-1',
+        'tool-dup-2',
+        'tool-dup-3',
+        'tool-dup-4',
+      ]);
+      expect(branchDelta.delta).toEqual({ limit: 10, hasMore: false });
+    });
+
     it('listTracesLight returns seeded traces via the facade', async () => {
       await storage.batchCreateSpans({
         records: [
