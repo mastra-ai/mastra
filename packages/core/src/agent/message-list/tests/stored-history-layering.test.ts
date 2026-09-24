@@ -263,6 +263,27 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
   });
 });
 
+describe('a client-sent user message does not change the stored copy', () => {
+  it('keeps the stored text and metadata when the client resends it with different content', () => {
+    const userMessage = (text: string, metadata: Record<string, unknown>): MastraDBMessage => ({
+      id: 'user',
+      role: 'user',
+      createdAt: new Date(1),
+      threadId: 'thread',
+      resourceId: 'resource',
+      content: { format: 2, parts: [{ type: 'text', text }], metadata },
+    });
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(userMessage('My card is 4242.', { fromClient: true }), 'input');
+    list.add(userMessage('My card is [REDACTED].', { stored: true }), 'memory');
+
+    const [merged] = list.get.all.db();
+    expect(list.get.all.db()).toHaveLength(1);
+    expect(merged!.content.parts).toEqual([{ type: 'text', text: 'My card is [REDACTED].' }]);
+    expect(merged!.content.metadata).toEqual({ stored: true });
+  });
+});
+
 describe('stored history is not layered onto stored history', () => {
   it('still replaces one stored duplicate with another', () => {
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });

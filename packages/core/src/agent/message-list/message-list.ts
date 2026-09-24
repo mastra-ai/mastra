@@ -2161,7 +2161,9 @@ export class MessageList {
       !MessageMerger.isSealed(messageV2)
     ) {
       const replacementIndex = this.messages.indexOf(replacementTarget);
-      if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+      if (replacementTargetSource === 'input') {
+        MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
+      } else if (messageV2.role === 'user' && replacementTarget.role === 'user') {
         messageV2.content = {
           ...messageV2.content,
           ...replacementTarget.content,
@@ -2170,8 +2172,6 @@ export class MessageList {
             ...(replacementTarget.content.metadata ?? {}),
           },
         };
-      } else if (replacementTargetSource === 'input') {
-        MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
       } else {
         for (const incomingPart of replacementTarget.content.parts) {
           if (incomingPart.type !== 'text') continue;
