@@ -8,6 +8,7 @@ Code is always marked as code: `InlineCode` in running text, and a highlighted `
 
 ```tsx
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 <Txt variant="body-sm" tone="muted">
   Set <InlineCode>OPENAI_API_KEY</InlineCode> to use this model.
