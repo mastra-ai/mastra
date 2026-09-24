@@ -431,7 +431,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const cwd = argsObj?.cwd ? String(argsObj.cwd) : '';
     const { cdPath } = this.parseShellCommand();
     if (!cwd || !cdPath) return cwd || cdPath;
-    return cdPath.startsWith('/') || cdPath === '~' || cdPath.startsWith('~/') ? cdPath : joinPath(cwd, cdPath);
+    if (cdPath.startsWith('/') || cdPath === '~' || cdPath.startsWith('~/')) return cdPath;
+    // Expand home first: joining `~` with `..` would otherwise cancel out to `.`.
+    const expandedCwd = cwd === '~' || cwd.startsWith('~/') ? os.homedir() + cwd.slice(1) : cwd;
+    return joinPath(expandedCwd, cdPath);
   }
 
   /** The directory a quiet shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */

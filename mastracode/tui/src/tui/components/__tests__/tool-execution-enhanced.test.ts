@@ -1,4 +1,5 @@
 import { homedir } from 'node:os';
+import { dirname } from 'node:path';
 import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect, vi } from 'vitest';
@@ -1676,6 +1677,15 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       '$ /Users/example/real-cwd/packages/core',
     );
     expect(render('npm run build', 'quiet').component.getCompactToolGroupKey()).toBe('$ /Users/example/real-cwd');
+
+    // A relative cd from a home cwd moves from the home directory, not from `~` as literal text.
+    const fromHome = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'cd .. && ls', cwd: '~' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, projectRoot: '/work/repo' },
+      ui,
+    );
+    expect(fromHome.getCompactToolGroupKey()).toBe(`$ ${dirname(homedir())}`);
   });
 
   it('keeps the error visible when a quiet shell command fails', () => {
