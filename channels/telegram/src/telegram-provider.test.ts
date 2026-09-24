@@ -148,6 +148,78 @@ describe('TelegramProvider.connect', () => {
     await expect(provider.connect('agent-1', { botToken: BOT_TOKEN })).rejects.toThrow(/already connected/i);
   });
 
+  it.each(['default', 'explicit'] as const)(
+    'rejects reuse of an active %s bot token before changing its webhook',
+    async source => {
+      const { provider, storage } = makeProvider({ botToken: BOT_TOKEN });
+      const first = stubActiveConnect(BOT_TOKEN);
+      await provider.connect('agent-1');
+      const original = await provider.getInstallation('agent-1');
+
+      // A fresh provider must also detect the persisted installation.
+      const restored = new TelegramProvider({ storage, baseUrl: BASE_URL, botToken: BOT_TOKEN });
+      const second = stubActiveConnect(BOT_TOKEN);
+      await expect(restored.connect('agent-2', source === 'explicit' ? { botToken: BOT_TOKEN } : {})).rejects.toThrow(
+        /already connected to agent "agent-1"/i,
+      );
+      expect(first.setWebhook()?.url).toBe(original?.webhookUrl);
+      expect(second.setWebhook()).toBeUndefined();
+      expect(second.setMyCommands()).toBeUndefined();
+      expect(await provider.getInstallation('agent-1')).toEqual(original);
+      expect(await restored.getInstallation('agent-2')).toBeNull();
+    },
+  );
+
+  it('rejects concurrent webhook connections using the same default bot token', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    const second = stubActiveConnect(BOT_TOKEN);
+
+    const results = await Promise.allSettled([provider.connect('agent-1'), provider.connect('agent-2')]);
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected']);
+    expect(second.setWebhook()).toBeUndefined();
+    expect(second.setMyCommands()).toBeUndefined();
+    expect(await provider.listInstallations()).toHaveLength(1);
+  });
+
+  it('allows a default bot token to be reused after disconnect', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubActiveConnect(BOT_TOKEN);
+    await provider.connect('agent-1');
+    stubMethod(BOT_TOKEN, 'deleteWebhook');
+    await provider.disconnect('agent-1');
+
+    stubActiveConnect(BOT_TOKEN);
+    await expect(provider.connect('agent-2')).resolves.toMatchObject({ type: 'immediate' });
+    expect(await provider.listInstallations()).toMatchObject([{ agentId: 'agent-2', status: 'active' }]);
+  });
+
+  it('releases a bot token after webhook registration fails so it can be retried', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubGetMe(BOT_TOKEN);
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${BOT_TOKEN}/setWebhook`, method: 'POST' })
+      .reply(500, {
+        ok: false,
+        description: 'Registration failed',
+      });
+    await expect(provider.connect('agent-1')).rejects.toThrow();
+
+    stubActiveConnect(BOT_TOKEN);
+    await expect(provider.connect('agent-1')).resolves.toMatchObject({ type: 'immediate' });
+  });
+
+  it('lets a second agent override the default with a distinct bot token', async () => {
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    const otherToken = '654321:OTHER';
+    stubActiveConnect(BOT_TOKEN);
+    stubActiveConnect(otherToken);
+
+    await Promise.all([provider.connect('agent-1'), provider.connect('agent-2', { botToken: otherToken })]);
+    expect(await provider.listInstallations()).toHaveLength(2);
+  });
+
   it('upgrades a pending install to active when a token arrives (same id, same webhookId)', async () => {
     const { provider, storage } = makeProvider();
     const pending = await provider.connect('agent-1');
