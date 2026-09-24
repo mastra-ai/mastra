@@ -333,6 +333,17 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
             const arrayKeywords = ['items'] as const;
             const genericConstraintKeywords = ['const', 'enum', 'oneOf', 'not', 'if', 'then', 'else'] as const;
+            const scalarKeywords = [
+              'format',
+              'minimum',
+              'maximum',
+              'exclusiveMinimum',
+              'exclusiveMaximum',
+              'multipleOf',
+              'minLength',
+              'maxLength',
+              'pattern',
+            ] as const;
             const branchConstraintKeywords = ['anyOf', 'oneOf', 'not', 'if', 'then', 'else'] as const;
             const typeSpecificKeywords = (type: JSONSchema7['type']) =>
               type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
@@ -423,7 +434,9 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 if (isRedundantNullableUnion(originalType)) {
                   delete propSchema.anyOf;
                 }
-                for (const keyword of [...genericConstraintKeywords, 'anyOf'] as const) {
+                // Keep type-specific keywords (like `format`) only in the typed branch.
+                // OpenAI rejects them next to `anyOf` without an error.
+                for (const keyword of [...genericConstraintKeywords, ...scalarKeywords, 'anyOf'] as const) {
                   delete prop[keyword];
                 }
                 delete prop.type;
