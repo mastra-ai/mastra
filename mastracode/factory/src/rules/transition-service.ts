@@ -385,11 +385,16 @@ export class FactoryTransitionService {
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
       !board.allowsTransition(fromStage, request.stage)
     ) {
+      const nextStages = [...new Set((board.transitions[fromStage] ?? []).map(transition => transition.to))];
+      const nextStagesReason =
+        nextStages.length > 0
+          ? `Next stages declared from ${fromStage}: ${nextStages.join(', ')}.`
+          : `No next stage is declared from ${fromStage}.`;
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
-        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}.`,
+        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
     }
 
