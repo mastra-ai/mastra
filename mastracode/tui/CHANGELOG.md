@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.42.2-alpha.0
+
+### Patch Changes
+
+- Split Factory onboarding into shared organization provider setup and optional personal provider setup. ([#24959](https://github.com/mastra-ai/mastra/pull/24959))
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5), [`fec55ac`](https://github.com/mastra-ai/mastra/commit/fec55acdb25540a3b7c2434451db0234063f8a1e)]:
+  - @mastra/core@1.71.0-alpha.0
+  - @mastra/duckdb@1.11.1-alpha.0
+  - @mastra/code-sdk@1.8.3-alpha.0
+
 ## 0.42.1
 
 ### Patch Changes

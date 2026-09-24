@@ -1137,12 +1137,14 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop, taskCook]);
 
     expect(await screen.findByTestId('task-panel')).toBeTruthy();
-    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
-    expect(progress.getAttribute('aria-valuenow')).toBe('0');
-    expect(progress.getAttribute('aria-valuemax')).toBe('3');
     expect(screen.getByText('Planning menu')).toBeTruthy();
     expect(screen.getByText('Create shopping list')).toBeTruthy();
     expect(screen.getByText('Cook meal')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuemax')).toBe('3');
 
     await close();
   });
@@ -1155,22 +1157,22 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop]);
     await pushTasks([completedPlan, activeShop], 'task-list-update');
 
-    await waitFor(() => {
-      const progress = screen.getByRole('progressbar', { name: 'Task completion' });
-      expect(progress.getAttribute('aria-valuenow')).toBe('1');
-      expect(progress.getAttribute('aria-valuemax')).toBe('2');
-    });
+    expect(await screen.findByText('Shopping for ingredients')).toBeTruthy();
     expect(screen.getByText('Plan menu')).toBeTruthy();
-    expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
-    expect(screen.queryByText('Planning menu')).toBeFalsy();
+    expect(screen.getByText('Planning menu').closest('[aria-hidden="true"]')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('1');
+    expect(progress.getAttribute('aria-valuemax')).toBe('2');
 
     await close();
   });
 
   it('scrolls the active task into view when task state updates', async () => {
-    const scrollIntoView = vi.fn();
-    const originalScrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoView;
+    const scrollTo = vi.fn();
+    const originalScrollTo = Element.prototype.scrollTo;
+    Element.prototype.scrollTo = scrollTo;
 
     const { pushTasks, close } = await renderWithControlledSubscription();
 
@@ -1180,10 +1182,10 @@ describe('TaskPanel', () => {
       await pushTasks([taskPlanMenu, activeShop, taskCook], 'task-list-update');
 
       await waitFor(() => {
-        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+        expect(scrollTo).toHaveBeenCalled();
       });
     } finally {
-      Element.prototype.scrollIntoView = originalScrollIntoView;
+      Element.prototype.scrollTo = originalScrollTo;
       await close();
     }
   });

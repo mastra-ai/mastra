@@ -1,5 +1,14 @@
 # @mastra/mcp-docs-server
 
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Fixed embedded documentation tools to reject empty and relative project paths with clear validation errors. ([#24969](https://github.com/mastra-ai/mastra/pull/24969))
+
+- Updated dependencies [[`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0-alpha.0
+
 ## 1.3.0
 
 ### Minor Changes
