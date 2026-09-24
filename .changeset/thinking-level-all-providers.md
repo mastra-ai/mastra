@@ -8,4 +8,4 @@ The `/think` thinking level now applies to Gemini, custom OpenAI-compatible prov
 /think high
 ```
 
-Levels a provider doesn't support are clamped to its closest supported level. With thinking `off` (the default), requests are unchanged.
+Gemini and OpenAI API-key models map the level to what each model supports. Custom OpenAI-compatible providers receive the selected level unchanged, including `xhigh` and `max`. With thinking `off` (the default), requests are unchanged.

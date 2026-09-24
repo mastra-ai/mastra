@@ -31,7 +31,8 @@ export function resolveGoogleThinkingConfig(
   if (id.startsWith('gemini-2.5')) {
     return { thinkingBudget: GEMINI_25_BUDGETS[clamped] };
   }
-  if (/^gemini-3(\.\d+)?-pro/.test(id)) {
+  // Only Gemini 3 Pro lacks `medium`; Gemini 3.1 Pro accepts it.
+  if (id.startsWith('gemini-3-pro')) {
     return { thinkingLevel: clamped === 'low' ? 'low' : 'high' };
   }
   if (/^gemini-\d/.test(id) && !id.startsWith('gemini-1') && !id.startsWith('gemini-2')) {

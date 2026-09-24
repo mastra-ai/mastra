@@ -29,6 +29,10 @@ describe('resolveGoogleThinkingConfig', () => {
     expect(resolveGoogleThinkingConfig('gemini-3-pro-preview', 'medium')).toEqual({ thinkingLevel: 'high' });
   });
 
+  it('keeps medium for Gemini 3.1 Pro', () => {
+    expect(resolveGoogleThinkingConfig('gemini-3.1-pro-preview', 'medium')).toEqual({ thinkingLevel: 'medium' });
+  });
+
   it('uses thinkingBudget for Gemini 2.5', () => {
     expect(resolveGoogleThinkingConfig('gemini-2.5-flash', 'low')).toEqual({ thinkingBudget: 1024 });
     expect(resolveGoogleThinkingConfig('gemini-2.5-pro', 'xhigh')).toEqual({ thinkingBudget: 24576 });
