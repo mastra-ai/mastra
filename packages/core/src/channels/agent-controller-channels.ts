@@ -164,6 +164,8 @@ export class AgentControllerChannels extends AgentChannels {
    * server scope.
    */
   private autoApproveResourceIds = new Set<string>();
+  /** Sessions bound to mapped channel threads, for render-time policy checks. */
+  private sessionsByThread = new Map<string, Session<any>>();
 
   /** See {@link AgentControllerChannelsConfig.onSessionStart}. */
   private readonly onSessionStart: ChannelSessionStart | undefined;
@@ -445,7 +447,26 @@ export class AgentControllerChannels extends AgentChannels {
       await session.thread.switch({ threadId: thread.id });
     }
     await this.runSessionStartHook(session, thread, requestContext);
+    this.sessionsByThread.set(thread.id, session);
     return session;
+  }
+
+  /**
+   * Only render Approve/Deny controls when the session actually arms a human
+   * gate. `allow` tools auto-approve and `deny` tools auto-decline inside the
+   * session run, so a card for them would offer a decision nobody is waiting
+   * on. Falls back to rendering when the thread's session is unknown.
+   *
+   * @internal
+   */
+  override async shouldRenderToolApproval(
+    requestContext: RequestContext | undefined,
+    toolName: string,
+  ): Promise<boolean> {
+    const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
+    const session = threadId ? this.sessionsByThread.get(threadId) : undefined;
+    if (!session || session.thread.getId() !== threadId) return true;
+    return session.resolveToolApproval(toolName) === 'ask';
   }
 
   /**

@@ -1467,6 +1467,19 @@ export class AgentChannels {
   }
 
   /**
+   * Whether a `tool-call-approval` chunk for `toolName` should render
+   * Approve/Deny controls in the chat. The base class always renders them;
+   * subclasses that resolve approval policy themselves (e.g. an agent
+   * controller auto-approving `allow` tools) return `false` when no human
+   * decision is actually pending.
+   *
+   * @internal
+   */
+  async shouldRenderToolApproval(_requestContext: RequestContext | undefined, _toolName: string): Promise<boolean> {
+    return true;
+  }
+
+  /**
    * Reconstruct a {@link ChatChannelRenderContext} for a Mastra thread that is
    * backed by a channel, without an inbound platform event.
    *
