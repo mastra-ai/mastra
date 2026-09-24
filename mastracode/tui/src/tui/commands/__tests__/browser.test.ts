@@ -9,6 +9,7 @@ const browserMocks = vi.hoisted(() => ({
   loadSettings: vi.fn(),
   saveSettings: vi.fn(),
   setProfileProvider: vi.fn(),
+  resolveStagehandModel: vi.fn(),
   askModalQuestion: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importActual => ({
   loadSettings: browserMocks.loadSettings,
   saveSettings: browserMocks.saveSettings,
   setProfileProvider: browserMocks.setProfileProvider,
+  resolveStagehandModel: browserMocks.resolveStagehandModel,
 }));
 
 vi.mock('../../modal-question.js', () => ({
@@ -109,6 +111,14 @@ describe('handleBrowserCommand', () => {
     browserMocks.saveSettings.mockReset();
     browserMocks.setProfileProvider.mockReset();
     browserMocks.askModalQuestion.mockReset();
+    browserMocks.resolveStagehandModel.mockReset();
+    // Default: honor a configured model, otherwise Stagehand's own default. Tests
+    // that need the Codex fallback override this so the real auth store is never read.
+    browserMocks.resolveStagehandModel.mockImplementation((s: { stagehand?: { model?: string } }) =>
+      s.stagehand?.model
+        ? { modelName: s.stagehand.model, source: 'settings' }
+        : { modelName: undefined, source: 'stagehand-default' },
+    );
     selectorMocks.promptForApiKeyIfNeeded.mockReset();
     selectorMocks.lastOptions = undefined;
   });
@@ -320,6 +330,71 @@ describe('handleBrowserCommand', () => {
       const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
       expect(output).toContain('Pending changes (not yet applied):');
       expect(output).toContain('Model: anthropic/claude-sonnet-4-5');
+    });
+  });
+
+  describe('status model line', () => {
+    function statusOutput(ctx: SlashCommandContext): string {
+      return (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    }
+
+    it('shows the configured model', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({
+        modelName: 'anthropic/claude-sonnet-4-5',
+        source: 'settings',
+      });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).toContain('Model: anthropic/claude-sonnet-4-5');
+    });
+
+    it('reveals the implicit Codex fallback so users know which model is really running', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: 'openai/gpt-5.5', source: 'codex-oauth' });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).toContain('Model: openai/gpt-5.5 (via OpenAI Codex login');
+      expect(browserMocks.resolveStagehandModel).toHaveBeenCalledWith(settings.browser);
+    });
+
+    it('points at /browser set model when Stagehand is left on its own default', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).toContain('Model: Stagehand default (set one with /browser set model)');
+    });
+
+    it('omits the model line for agent-browser, which has no model', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      (settings.browser as any).provider = 'agent-browser';
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect(statusOutput(ctx)).not.toContain('Model:');
+    });
+
+    it('accepts info as an alias for status', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.resolveStagehandModel.mockReturnValue({ modelName: 'openai/gpt-5.5', source: 'codex-oauth' });
+
+      await handleBrowserCommand(ctx, ['info']);
+
+      expect(statusOutput(ctx)).toContain('Browser: enabled');
+      expect(statusOutput(ctx)).toContain('Model: openai/gpt-5.5');
     });
   });
 
