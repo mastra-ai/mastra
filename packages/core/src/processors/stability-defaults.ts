@@ -39,8 +39,8 @@ export function isECONNRESETError(error: unknown): boolean {
  *
  * The order is load-bearing: error processors short-circuit on the first
  * `{ retry: true }`, so the two processors that repair a request must run
- * **before** `stream-error-retry-processor`, whose `isBadRequestError` matcher
- * claims any `400` and blindly resends the same, still-broken request.
+ * **before** `stream-error-retry-processor`, whose retry matchers resend the
+ * request unchanged.
  *
  * `stream-error-retry-processor` goes last for that reason. Whichever repair
  * processor matches first gets its one shot at fixing the request; the retry
@@ -65,14 +65,16 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * - transient stream/connection failures — including a bare `500`/`isRetryable`
  *   error that would otherwise surface as an empty response.
  *
- * The retry processor keeps `retryUnknownErrors` off by default. Transient
- * failures carry provider `isRetryable` metadata or match the built-in matchers,
- * so the three classes above still recover, while a deterministic failure — a
- * rejected structured-output attempt, an invalid request, a validation error —
- * is not replayed twice with a 3s delay before the caller sees it. Pass
- * `{ retryUnknownErrors: true }` here, or a
- * `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors`,
- * to opt in.
+ * The retry processor keeps `retryUnknownErrors` off by default and carries no
+ * bad-request matcher. Transient failures carry provider `isRetryable`
+ * metadata or match the connection-reset matcher, so the three classes above
+ * still recover, while a deterministic failure — a rejected structured-output
+ * attempt, an invalid request, a validation error — surfaces immediately
+ * instead of being replayed unchanged. Most `400`s are deterministic, so the
+ * bad-request matcher is opt-in: pass `{ retryBadRequests: true }` here (as
+ * `createCodingAgent` does) or configure your own
+ * `StreamErrorRetryProcessor` in `errorProcessors`. Pass
+ * `{ retryUnknownErrors: true }` likewise to retry unmatched errors.
  *
  * A caller-supplied processor whose id matches one of these keeps its place at
  * that id's position; `errorProcessors: []` opts out entirely.
@@ -88,6 +90,16 @@ export function defaultStabilityErrorProcessors(
      * want it — `createCodingAgent` does, and tests it — opt in.
      */
     retryUnknownErrors?: boolean;
+    /**
+     * Retry any HTTP `400` once after a 2s delay, on the chance it was a
+     * spurious provider rejection. Off by default: most `400`s are
+     * deterministic client errors, and replaying them unchanged cannot
+     * succeed. The repair processors ahead of this one still claim and fix
+     * every `400` they recognize, so this option only affects the `400`s no
+     * repair could fix. `createCodingAgent` opts in, preserving its shipped
+     * behavior.
+     */
+    retryBadRequests?: boolean;
   } = {},
 ): ErrorProcessorOrWorkflow[] {
   return [
@@ -98,7 +110,7 @@ export function defaultStabilityErrorProcessors(
       maxRetries: 2,
       delayMs: 3000,
       matchers: [
-        { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
+        ...(options.retryBadRequests ? [{ match: isBadRequestError, maxRetries: 1, delayMs: 2000 }] : []),
         {
           match: isECONNRESETError,
           maxRetries: ECONNRESET_MAX_RETRIES,
