@@ -159,6 +159,9 @@ interface DurablePreparationAgent {
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
+  getConfiguredProcessorIds(
+    requestContext?: RequestContext,
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
@@ -407,6 +410,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let llmRequestInputProcessors: LLMRequestProcessorOrWorkflow[] = [];
   let outputProcessors: OutputProcessorOrWorkflow[] = [];
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
+  let hasConfiguredErrorProcessors = false;
 
   try {
     inputProcessors = await typedAgent.listInputProcessors(requestContext);
@@ -424,6 +428,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     errorProcessors = execOptions?.errorProcessors
       ? execOptions.errorProcessors
       : await typedAgent.listErrorProcessors(requestContext);
+    // Configured-only semantics (no framework defaults): gates the implicit
+    // retry-cap warning, since the defaults self-limit and must not warn.
+    hasConfiguredErrorProcessors = execOptions?.errorProcessors
+      ? execOptions.errorProcessors.length > 0
+      : (await typedAgent.getConfiguredProcessorIds(requestContext)).errorProcessorIds.length > 0;
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }
@@ -695,7 +704,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: execOptions?.returnScorerData,
-      hasErrorProcessors: errorProcessors.length > 0,
+      // "Configured" excludes framework default processors — the durable step
+      // uses this to gate the implicit retry-cap warning (the cap itself is
+      // driven by the resolved list from the run registry).
+      hasErrorProcessors: hasConfiguredErrorProcessors,
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,

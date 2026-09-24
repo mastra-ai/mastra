@@ -130,7 +130,7 @@ type PhantomSerializedKeys = Exclude<
   | keyof AgentExecutionOptionsBase<any>
   // These are durable-internal representations that don't map 1:1 to a
   // base option key but are derived from one:
-  | 'hasErrorProcessors' // derived from errorProcessors.length
+  | 'hasErrorProcessors' // derived from configured errorProcessors.length (no framework defaults)
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
   | 'instructionsOverride' // derived from instructions
   | 'systemMessage' // derived from system

@@ -22,16 +22,23 @@ const warnedAgents = new Set<string>();
 
 /**
  * Resolves the effective error-processor retry cap, warning once per agent when
- * the implicit cap is what's keeping a processor in check.
+ * the implicit cap is what's keeping a caller-configured processor in check.
+ *
+ * The warning is gated on `hasConfiguredErrorProcessors` (the caller's own list,
+ * not the resolved one): the framework's default stability processors resolve
+ * onto every agent, and they all self-limit well below the cap, so warning
+ * about them would be noise on every bare agent's first model call.
  */
 export function resolveMaxProcessorRetries({
   maxProcessorRetries,
   hasErrorProcessors,
+  hasConfiguredErrorProcessors,
   agentId,
   logger,
 }: {
   maxProcessorRetries: number | undefined;
   hasErrorProcessors: boolean;
+  hasConfiguredErrorProcessors?: boolean;
   agentId?: string;
   logger?: IMastraLogger;
 }): number | undefined {
@@ -39,7 +46,7 @@ export function resolveMaxProcessorRetries({
   if (!hasErrorProcessors) return undefined;
 
   const key = agentId ?? 'unknown';
-  if (!warnedAgents.has(key)) {
+  if (hasConfiguredErrorProcessors && !warnedAgents.has(key)) {
     warnedAgents.add(key);
     logger?.warn?.(
       `errorProcessors are configured without an explicit \`maxProcessorRetries\`. ` +
