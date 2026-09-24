@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { MessageList } from '../index';
 import { aiV5UIMessagesToAIV5ModelMessages } from './output-converter';
 
-const reasoning = (text: string, signature?: string) => ({
+const reasoning = (text: string, signature?: string, providerMetadata?: Record<string, Record<string, unknown>>) => ({
   type: 'reasoning' as const,
   reasoning: text,
   details: [{ type: 'text' as const, text }],
   createdAt: 1_700_000_000_000,
   ...(signature ? { providerMetadata: { bedrock: { signature } } } : {}),
+  ...(providerMetadata ? { providerMetadata } : {}),
 });
 
 const call = (toolCallId: string) => ({
@@ -86,8 +87,24 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
     expect(JSON.stringify(response)).toContain('step died before the signature arrived');
   });
 
+  it('keeps a reasoning-only block that carries a Gemini thought signature', () => {
+    const gemini = {
+      ...reasoning('gemini thinking'),
+      providerMetadata: { google: { thoughtSignature: 'gemini-sig' } },
+    };
+    const prompt = buildList(gemini).get.all.aiV5.prompt();
+    expect(JSON.stringify(prompt)).toContain('gemini thinking');
+  });
+
   it('keeps a reasoning-only block when its reasoning is signed', () => {
     const prompt = buildList(reasoning('finished thinking', 'sig2')).get.all.aiV5.prompt();
     expect(JSON.stringify(prompt)).toContain('finished thinking');
+  });
+
+  it('keeps a reasoning-only block carrying a Gemini thought signature', () => {
+    const prompt = buildList(
+      reasoning('gemini thinking', undefined, { google: { thoughtSignature: 'gsig' } }),
+    ).get.all.aiV5.prompt();
+    expect(JSON.stringify(prompt)).toContain('gemini thinking');
   });
 });
