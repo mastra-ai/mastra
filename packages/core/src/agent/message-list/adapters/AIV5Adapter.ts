@@ -4,9 +4,11 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type { ImageContent } from '../prompt/image-utils';
 import {
+  assertValidFilePartDataString,
   categorizeFileData,
   createDataUri,
   imageContentToString,
+  isAbsoluteUrl,
   parseDataUri,
   resolveFilePartMediaTypeAndData,
 } from '../prompt/image-utils';
@@ -865,11 +867,15 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        // OpenAI Files API file IDs (e.g. "file-abc123") must pass through as-is so
-        // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
-        return data.startsWith('data:') || data.startsWith('http') || data.startsWith('file-')
-          ? data
-          : `data:${mimeType};base64,${data}`;
+        // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
+        // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
+        // { file_id: "file-..." }. Anything else must be raw base64; wrapping a relative
+        // path instead would persist a data URL that fails every later turn.
+        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data)) {
+          return data;
+        }
+        assertValidFilePartDataString(data);
+        return `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;

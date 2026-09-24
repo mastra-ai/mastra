@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { convertDataContentToBase64String } from './data-content';
 
 /**
@@ -171,6 +172,50 @@ export function isValidUrl(str: string): boolean {
         return false;
       }
     }
+    return false;
+  }
+}
+
+// Characters of the standard and URL-safe base64 alphabets, plus padding and whitespace.
+// Deliberately loose: it only has to catch strings that clearly aren't base64 (paths, hosts).
+const BASE64_PATTERN = /^[A-Za-z0-9+/\-_=\s]*$/;
+
+/**
+ * Checks whether a string can be sent as file/image part data: a data URL, an
+ * OpenAI file ID (`file-...`), an absolute URL (any scheme), or raw base64.
+ * Relative paths like `/api/images/foo.png` are rejected, since treating them as
+ * base64 produces a data URL that can never be fetched.
+ *
+ * Data URLs are not inspected: history replayed as input may already contain a
+ * malformed one, and its download failure stays recoverable through error processors.
+ */
+export function isValidFilePartDataString(data: string): boolean {
+  return data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || BASE64_PATTERN.test(data);
+}
+
+/**
+ * Throws a user-facing error when file/image part data fails {@link isValidFilePartDataString}.
+ */
+export function assertValidFilePartDataString(data: string): void {
+  if (isValidFilePartDataString(data)) return;
+  const preview = data.length > 100 ? `${data.slice(0, 100)}...` : data;
+  throw new MastraError({
+    id: 'INVALID_FILE_PART_DATA',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `Invalid file part data "${preview}": expected an absolute URL (e.g. https://...), a data URL, or base64-encoded content. Relative paths are not supported; resolve them to absolute URLs before sending.`,
+  });
+}
+
+/**
+ * Checks if a string parses as an absolute URL (any scheme, e.g. `https:`, `gs:`, `s3:`).
+ * Unlike {@link isValidUrl}, protocol-relative and relative paths are not accepted.
+ */
+export function isAbsoluteUrl(str: string): boolean {
+  try {
+    new URL(str);
+    return true;
+  } catch {
     return false;
   }
 }
