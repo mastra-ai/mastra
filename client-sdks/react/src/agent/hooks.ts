@@ -612,6 +612,21 @@ export const useChat = ({
             .processDataStream({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
+                  // Merge history into `messages` now, as a queued update, so the
+                  // live chunks right behind it accumulate onto the stored parts.
+                  const history = resolveInitialMessages(chunk.payload.messages);
+                  const previousById = new Map(
+                    (lastHydration.current?.formattedMessages ?? []).map(message => [message.id, message]),
+                  );
+                  setMessages(current => {
+                    const live = current.filter(message => previousById.get(message.id) !== message);
+                    const liveById = new Map(live.map(message => [message.id, message]));
+                    const historyIds = new Set(history.map(message => message.id));
+                    return [
+                      ...history.map(message => liveById.get(message.id) ?? message),
+                      ...live.filter(message => !historyIds.has(message.id)),
+                    ];
+                  });
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,

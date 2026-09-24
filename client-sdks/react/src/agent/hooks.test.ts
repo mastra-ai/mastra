@@ -406,6 +406,63 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
+  it('applies a tool result that arrives right behind thread-history to the stored tool call', async () => {
+    keepSubscriptionOpen = true;
+    nextSubscribeChunks = [
+      {
+        type: 'thread-history',
+        runId: '',
+        from: 'AGENT',
+        payload: {
+          hasMore: false,
+          messages: [
+            {
+              id: 'assistant-1',
+              role: 'assistant',
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+              threadId: 'thread-1',
+              resourceId: 'resource-1',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'tool-invocation',
+                    toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {
+        type: 'tool-result',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: { toolCallId: 'call-1', toolName: 'lookup', result: { ok: true } },
+      },
+    ];
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+          withInitialHistory: { perPage: 20 },
+        }),
+      { wrapper },
+    );
+
+    const toolState = () =>
+      (result.current.messages[0]?.content.parts[0] as { toolInvocation?: { state?: string } } | undefined)
+        ?.toolInvocation?.state;
+    await waitFor(() => expect(result.current.messages.map(message => message.id)).toEqual(['assistant-1']));
+    await waitFor(() => expect(toolState()).toBe('result'));
+    unmount();
+  });
+
   it('does not show one resource thread history under another resource', async () => {
     keepSubscriptionOpen = true;
     nextSubscribeChunks = [
