@@ -1335,6 +1335,29 @@ describe('vNext Workflow Handlers', () => {
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
     });
+
+    it('returns an error naming the runs whose cancellation could not be saved', async () => {
+      const run = await mockWorkflow.createRun({ runId: 'test-run-cancel-failed' });
+      await run.start({ inputData: {} });
+
+      const workflowsStore = (await mockMastra.getStorage()!.getStore('workflows'))!;
+      const spy = vi.spyOn(workflowsStore, 'updateWorkflowState').mockRejectedValue(new Error('db down'));
+
+      try {
+        await expect(
+          CANCEL_WORKFLOW_RUN_ROUTE.handler({
+            ...createTestServerContext({ mastra: mockMastra }),
+            workflowId: 'test-workflow',
+            runId: 'test-run-cancel-failed',
+          }),
+        ).rejects.toMatchObject({
+          status: 500,
+          message: expect.stringContaining('test-workflow/test-run-cancel-failed'),
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 
   describe('STREAM_WORKFLOW_ROUTE', () => {
