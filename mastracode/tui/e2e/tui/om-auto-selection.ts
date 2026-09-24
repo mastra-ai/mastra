@@ -8,6 +8,9 @@ export const omAutoSelectionScenario: McE2eScenario = {
   description: 'Displays effective auto OM models and resets one explicit role through the real TUI.',
   testName: 'shows and independently resets automatic OM model selection',
   enableObservationalMemory: true,
+  // A Google API key makes Memory's auto policy prefer Gemini Flash; keep the
+  // expected picks independent of the host environment.
+  env: () => ({ GOOGLE_GENERATIVE_AI_API_KEY: '' }),
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;

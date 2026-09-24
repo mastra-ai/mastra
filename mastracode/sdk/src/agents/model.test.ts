@@ -234,7 +234,16 @@ describe('getDynamicModel fallback chain', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
+  });
+
+  it('labels a custom-provider model with its provider/model ID', () => {
+    seedSettings({});
+
+    const model = getDynamicModel(requestWithSession('mastracode/anthropic/claude-fable-5'));
+
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
   });
 
   it('returns a bare model for a manual /model selection that matches no pack', () => {
@@ -251,7 +260,7 @@ describe('getDynamicModel fallback chain', () => {
     const model = getDynamicModel(requestWithSession('openai/gpt-5.6-sol', 'build', 'anthropic'));
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('gpt-5.6-sol');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('gpt-5.6-sol');
   });
 
   it('builds the fallback array from the active pack chain, resolving each pack for the same mode', () => {
@@ -260,9 +269,14 @@ describe('getDynamicModel fallback chain', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
 
     expect(Array.isArray(model)).toBe(true);
-    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    const entries = model as Array<{ id?: string; model: { model: { modelId?: string } } }>;
     expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
-    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => entry.model.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => (entry.model as unknown as { id: string }).id)).toEqual([
+      'anthropic/claude-fable-5',
+      'openai/gpt-5.6-sol',
+      'github-copilot/gpt-4.1',
+    ]);
   });
 
   it('uses the explicit active pack when another pack has the same mode model', () => {
@@ -304,10 +318,10 @@ describe('getDynamicModel fallback chain', () => {
     });
 
     const model = getDynamicModel({ requestContext });
-    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    const entries = model as Array<{ id?: string; model: { model: { modelId?: string } } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
-    expect(entries.map(entry => entry.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => entry.model.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
   });
 
   it('ignores pending fallback state captured for another thread', () => {
@@ -344,7 +358,7 @@ describe('getDynamicModel fallback chain', () => {
     // The fallback pack cannot serve mode 'build', so the chain collapses to
     // the primary alone — a bare model, not a one-entry fallback array.
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
   });
 
   it('truncates the chain at a fallback entry whose model fails to resolve (deployed fail-closed)', async () => {
@@ -365,7 +379,7 @@ describe('getDynamicModel fallback chain', () => {
     const model = getDynamicModel({ requestContext });
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
   });
 
   it('gives a revisited pack a unique per-occurrence id (A→B→A chain)', () => {

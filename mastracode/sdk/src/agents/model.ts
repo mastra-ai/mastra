@@ -1,11 +1,11 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
+import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
-import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
+import { listBuiltinModePacks, resolveModePackFallbackChain, toMemoryModelId } from '../onboarding/packs.js';
 import {
   findModePackForModel,
   loadSettings,
@@ -308,7 +308,7 @@ export function listResolvableModePacks(settings: ReturnType<typeof loadSettings
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel | ModelWithRetries[] {
+): IdentifiedModelConfig | ModelWithRetries[] {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
   const controllerState = agentControllerContext?.getState?.() as
@@ -344,7 +344,9 @@ export function getDynamicModel(
 
   const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
-  const primary = resolveModel(modelId, resolveOptions);
+  // Label each resolved model with its full ID: the resolved gateway model only
+  // knows its bare provider model, and Memory's `'auto'` reads this label.
+  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
 
   const settings = loadSettings(settingsPath);
   // `models?` tolerates partial settings mocks; loaded settings always carry it.
@@ -390,7 +392,7 @@ export function getDynamicModel(
     appearances.set(packId, occurrence);
     entries.push({
       id: occurrence === 1 ? packId : `${packId}#${occurrence}`,
-      model: entryModel,
+      model: identifyModel(entryModelId, entryModel),
     });
   }
   // A chain that truncated to the primary alone is indistinguishable from no
@@ -399,29 +401,37 @@ export function getDynamicModel(
   return entries;
 }
 
+function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
+  return { model, id: toMemoryModelId(modelId) };
+}
+
 /** OM fallback-chain entry: a pack's OM model resolved through the gateway. Assignable to `ModelWithRetries`. */
 export type PackMemoryModelChainEntry = { id: string; model: GatewayLanguageModel };
 
 /**
- * Resolve the observational-memory model for the active mode pack, walking the
- * pack's fallback chain (`settings.models.packFallbacks`) and collecting each
- * pack's optional `models.memory` entry. Packs without an OM model are skipped
- * (the field is optional, so absence must not truncate the chain); duplicate
- * model ids collapse so an A⇄B cycle never retries an identical OM model.
+ * Resolve the observational-memory model for the active mode pack. The active
+ * pack's optional `models.memory` decides: unset returns `undefined` (callers
+ * follow the per-role OM settings), `'auto'` returns `'auto'`, and a concrete
+ * model walks the pack's fallback chain (`settings.models.packFallbacks`),
+ * collecting each pack's concrete memory model. Later packs without one are
+ * skipped; duplicate model ids collapse so an A⇄B cycle never retries an
+ * identical OM model.
  *
- * Returns a bare model for a single entry, a fallback array for multiple
+ * Returns a bare model for a single entry and a fallback array for multiple
  * entries (OM's internal agents run the same agentic loop, so the array gives
- * OM its own cross-pack failover), or `undefined` when no pack in the chain
- * defines an OM model — callers then fall back to the standalone OM
- * configuration.
+ * OM its own cross-pack failover).
  */
 export function resolvePackMemoryModelChain(
   settings: ReturnType<typeof loadSettings>,
   startPackId: string,
   resolveOptions: Parameters<typeof resolveModel>[1],
-): GatewayLanguageModel | PackMemoryModelChainEntry[] | undefined {
+): GatewayLanguageModel | PackMemoryModelChainEntry[] | 'auto' | undefined {
   const packs = listResolvableModePacks(settings);
-  if (!packs.some(pack => pack.id === startPackId)) return undefined;
+  const startPack = packs.find(pack => pack.id === startPackId);
+  if (!startPack) return undefined;
+  const startMemoryModelId = resolveModePackModels(settings, startPack).memory;
+  if (!startMemoryModelId) return undefined;
+  if (startMemoryModelId === 'auto') return 'auto';
 
   const chain = resolveModePackFallbackChain(
     settings.models?.packFallbacks ?? {},
@@ -434,7 +444,7 @@ export function resolvePackMemoryModelChain(
     const pack = packs.find(candidate => candidate.id === packId);
     if (!pack) break;
     const memoryModelId = resolveModePackModels(settings, pack).memory;
-    if (!memoryModelId || seenModelIds.has(memoryModelId)) continue;
+    if (!memoryModelId || memoryModelId === 'auto' || seenModelIds.has(memoryModelId)) continue;
     seenModelIds.add(memoryModelId);
     // Best-effort resolution: an unresolvable OM entry (e.g. unconnected
     // provider in deployed fail-closed mode) truncates the chain here rather

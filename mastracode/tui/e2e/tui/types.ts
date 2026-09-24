@@ -136,6 +136,7 @@ export type ScenarioName =
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'models-pack-activation-persistence'
+  | 'models-pack-memory-auto'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
