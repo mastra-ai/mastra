@@ -21,6 +21,26 @@ beforeEach(() => {
 });
 
 describe('FlameGraph', () => {
+  describe('when events occur within one minute', () => {
+    const domain = timestampsToTDomain(['2026-09-24T10:00:00Z', '2026-09-24T10:00:40Z']);
+
+    it('shows distinct UTC second-precision axis labels', () => {
+      render(<FlameGraph omRecords={omHistoryRecords} markers={markers} messages={memoryMessages} tDomain={domain} />);
+      const axis = screen.getByText('Time').nextElementSibling;
+      expect(Array.from(axis?.children ?? []).map(tick => tick.textContent)).toEqual([
+        '24/09, 10:00:00',
+        '24/09, 10:00:10',
+        '24/09, 10:00:20',
+        '24/09, 10:00:30',
+        '24/09, 10:00:40',
+      ]);
+    });
+
+    it('shows the UTC seconds in the tooltip', () => {
+      render(<FlameTooltip active domain={domain} payload={[{ name: 'Messages', value: 1, payload: { t: 0.25 } }]} />);
+      expect(screen.getByText('24/09, 10:00:10')).toBeTruthy();
+    });
+  });
   it('renders the zoom controls in uncontrolled mode without crashing', () => {
     render(<FlameGraph omRecords={omHistoryRecords} markers={markers} messages={memoryMessages} tDomain={tDomain} />);
 

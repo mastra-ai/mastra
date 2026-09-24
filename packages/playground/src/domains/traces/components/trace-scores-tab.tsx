@@ -70,7 +70,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
         <span className="font-mono text-meta text-muted-foreground">
-          {getShortId(score.id)} · {formatDate(createdAt, 'smart')}
+          {getShortId(score.id)} · {formatDate(createdAt, 'dateTimeSeconds')}
         </span>
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}

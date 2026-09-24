@@ -1,5 +1,5 @@
 export type DateInput = Date | string | number | null | undefined;
-export type DatePreset = 'smart' | 'dateTime' | 'time';
+export type DatePreset = 'smart' | 'dateTime' | 'dateTimeSeconds' | 'dateTimeCompact' | 'time';
 
 type FormatOptions = { locale?: string; now?: Date | number; timeZone?: string };
 
@@ -12,6 +12,23 @@ export function toDate(value: DateInput): Date | undefined {
 const PRESET_OPTIONS = {
   time: { hour: 'numeric', minute: '2-digit' },
   dateTime: { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' },
+  dateTimeSeconds: {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  },
+  dateTimeCompact: {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  },
+  calendar: { year: 'numeric', month: 'numeric', day: 'numeric', calendar: 'gregory', numberingSystem: 'latn' },
   dayMonth: { month: 'short', day: 'numeric' },
   dayMonthYear: { month: 'short', day: 'numeric', year: 'numeric' },
   precise: {
@@ -40,8 +57,19 @@ function getFormatter(key: FormatterKey, locale?: string, timeZone?: string) {
   return formatter;
 }
 
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+function calendarDate(date: Date, timeZone?: string) {
+  const parts = getFormatter('calendar', 'en-US', timeZone).formatToParts(date);
+  return {
+    year: parts.find(part => part.type === 'year')?.value,
+    month: parts.find(part => part.type === 'month')?.value,
+    day: parts.find(part => part.type === 'day')?.value,
+  };
+}
+
+function isSameDay(a: Date, b: Date, timeZone?: string) {
+  const first = calendarDate(a, timeZone);
+  const second = calendarDate(b, timeZone);
+  return first.year === second.year && first.month === second.month && first.day === second.day;
 }
 
 /** Short absolute date without time: `Sep 24` this year, `Sep 24, 2025` otherwise. */
@@ -49,7 +77,8 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
   const date = toDate(value);
   if (!date) return undefined;
   const reference = new Date(now ?? Date.now());
-  const key = date.getFullYear() === reference.getFullYear() ? 'dayMonth' : 'dayMonthYear';
+  const key =
+    calendarDate(date, timeZone).year === calendarDate(reference, timeZone).year ? 'dayMonth' : 'dayMonthYear';
   return getFormatter(key, locale, timeZone).format(date);
 }
 
@@ -57,6 +86,8 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
  * Locale-aware absolute date. Uses the browser locale unless `locale` is given.
  * - `smart`: `Today 2:32 PM` / `Sep 24` / `Sep 24, 2025`
  * - `dateTime`: `Sep 24, 2026, 2:32 PM`
+ * - `dateTimeSeconds`: `Sep 24, 2026, 2:32:07 PM`
+ * - `dateTimeCompact`: numeric day/month and 24-hour time with seconds (no year)
  * - `time`: `2:32 PM`
  */
 export function formatDate(value: DateInput, preset: DatePreset, options: FormatOptions = {}) {
@@ -66,7 +97,7 @@ export function formatDate(value: DateInput, preset: DatePreset, options: Format
 
   if (preset === 'smart') {
     const reference = new Date(now ?? Date.now());
-    if (isSameDay(date, reference)) return `Today ${getFormatter('time', locale, timeZone).format(date)}`;
+    if (isSameDay(date, reference, timeZone)) return `Today ${getFormatter('time', locale, timeZone).format(date)}`;
     return formatShortDate(date, options);
   }
 

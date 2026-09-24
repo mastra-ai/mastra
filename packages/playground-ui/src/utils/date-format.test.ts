@@ -21,6 +21,61 @@ describe('toDate', () => {
 });
 
 describe('formatDate', () => {
+  describe('when timestamps require second precision', () => {
+    it('keeps the time of a historical score', () => {
+      expect(
+        formatDate('2026-09-23T10:14:12Z', 'dateTimeSeconds', { locale: 'en-US', timeZone: 'UTC', now: NOW }),
+      ).toBe('Sep 23, 2026, 10:14:12 AM');
+    });
+
+    it('distinguishes timeline events within one minute', () => {
+      const options = { locale: 'en-GB', timeZone: 'UTC' };
+      expect(formatDate('2026-09-24T10:00:00Z', 'dateTimeCompact', options)).toBe('24/09, 10:00:00');
+      expect(formatDate('2026-09-24T10:00:15Z', 'dateTimeCompact', options)).toBe('24/09, 10:00:15');
+    });
+  });
+
+  describe('when the requested time zone crosses a calendar boundary', () => {
+    it('does not label yesterday as today', () => {
+      expect(
+        formatDate('2026-09-24T06:30:00Z', 'smart', {
+          locale: 'en-US',
+          timeZone: 'America/Los_Angeles',
+          now: new Date('2026-09-24T07:30:00Z'),
+        }),
+      ).toBe('Sep 23');
+    });
+
+    it('labels the same local day as today across UTC midnight', () => {
+      expect(
+        formatDate('2026-09-24T23:30:00Z', 'smart', {
+          locale: 'en-US',
+          timeZone: 'America/Los_Angeles',
+          now: new Date('2026-09-25T00:30:00Z'),
+        }),
+      ).toBe('Today 4:30 PM');
+    });
+
+    it('includes the year when local years differ', () => {
+      expect(
+        formatShortDate('2026-01-01T07:30:00Z', {
+          locale: 'en-US',
+          timeZone: 'America/Los_Angeles',
+          now: new Date('2026-01-01T08:30:00Z'),
+        }),
+      ).toBe('Dec 31, 2025');
+    });
+
+    it('omits the year when local years match across UTC New Year', () => {
+      expect(
+        formatShortDate('2025-12-31T23:30:00Z', {
+          locale: 'en-US',
+          timeZone: 'America/Los_Angeles',
+          now: new Date('2026-01-01T00:30:00Z'),
+        }),
+      ).toBe('Dec 31');
+    });
+  });
   describe('when the locale is en-US', () => {
     const locale = 'en-US';
 
