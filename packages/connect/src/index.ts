@@ -3,12 +3,14 @@ export type { ToolsOptions, ToolsIntegrationOptions, ToolsResolver } from './too
 export { connect } from './connect.js';
 export type { ConnectOptions, ConnectIntegrationOptions, ConnectTools } from './connect.js';
 export { channels } from './channels.js';
-export type { ChannelsOptions, ChannelsIntegrationOptions, ChannelsResolver } from './channels.js';
 export type {
-  ChannelProviderRegistration,
-  ChannelProviderLike,
-  ChannelBuildContext,
-} from './providers/channel-provider.js';
+  ChannelsOptions,
+  ChannelsIntegrationOptions,
+  ChannelsResolver,
+  ChannelsResolverContext,
+  ResolvedChannels,
+} from './channels.js';
+export type { ChannelProviderRegistration, ChannelBuildContext } from './providers/channel-provider.js';
 export { credential } from './credential.js';
 export { environment } from './environment.js';
 export type { ConnectEnvironment, EnvironmentIntegrationOptions, EnvironmentOptions } from './environment.js';

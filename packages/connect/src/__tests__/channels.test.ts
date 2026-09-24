@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { channels } from '../channels.js';
 
 const TOKEN = 'fake-test-token';
-const SLACK_REFRESH_TOKEN = 'xoxe-fake-refresh';
+const SLACK_REFRESH_TOKEN = 'xoxe-1-fake-slack-refresh';
 const TELEGRAM_BOT_TOKEN = '123456:fake-telegram';
 const DISCORD_BOT_TOKEN = 'discord-fake-bot';
 
@@ -30,7 +30,10 @@ function makeConnection(
   };
 }
 
-type CredentialMap = Record<string, { type: 'oauth2'; accessToken: string } | { type: 'api_key'; apiKey: string }>;
+type CredentialMap = Record<
+  string,
+  { type: 'oauth2'; accessToken: string; expiresAt?: string | null } | { type: 'api_key'; apiKey: string }
+>;
 
 type ContextMap = Record<
   string,
@@ -88,11 +91,71 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.doUnmock('@mastra/slack');
   vi.doUnmock('@mastra/telegram');
-  vi.doUnmock('@chat-adapter/discord');
+  vi.doUnmock('@mastra/discord');
   warnSpy.mockRestore();
 });
 
+/**
+ * Minimal `ChannelProvider` fake — the shape `channels()` returns is a
+ * constructor-produced instance we don't otherwise interrogate, so tests
+ * capture the constructor arg through a `configSpy` and assert on it.
+ */
+class FakeChannelProvider {
+  static readonly configSpy = vi.fn();
+  readonly id: string;
+  readonly config: Record<string, unknown>;
+  constructor(config: Record<string, unknown>, id: string) {
+    this.id = id;
+    this.config = config;
+    FakeChannelProvider.configSpy(id, config);
+  }
+  __attach() {}
+  getRoutes() {
+    return [];
+  }
+  getInfo() {
+    return { id: this.id, name: this.id, isConfigured: true };
+  }
+  async initialize() {}
+  async connect() {
+    return { type: 'immediate' as const, installationId: 'i_1' };
+  }
+  async disconnect() {}
+  async listInstallations() {
+    return [];
+  }
+  async getInstallation() {
+    return null;
+  }
+}
+
+function fakeSlack() {
+  return class SlackProvider extends FakeChannelProvider {
+    constructor(config: Record<string, unknown>) {
+      super(config, 'slack');
+    }
+  };
+}
+function fakeTelegram() {
+  return class TelegramProvider extends FakeChannelProvider {
+    constructor(config: Record<string, unknown>) {
+      super(config, 'telegram');
+    }
+  };
+}
+function fakeDiscord() {
+  return class DiscordProvider extends FakeChannelProvider {
+    constructor(config: Record<string, unknown>) {
+      super(config, 'discord');
+    }
+  };
+}
+
 describe('channels()', () => {
+  beforeEach(() => {
+    FakeChannelProvider.configSpy.mockReset();
+  });
+
   it('throws when the project id is missing', () => {
     expect(() => channels({ client: { accessToken: TOKEN } })).toThrow(/project id/i);
   });
@@ -111,68 +174,44 @@ describe('channels()', () => {
     ).toThrow(/integrations option/i);
   });
 
-  it('returns an empty snapshot when the project has no channel connections', async () => {
+  it('returns an empty map when the project has no channel connections', async () => {
     const fetchMock = platformFetch({ connections: [makeConnection({ id: 'c_gh', integrationId: 'github' })] });
     const resolver = channels(options(fetchMock));
     await expect(resolver).resolves.toEqual({});
   });
 
-  it('builds a slack provider from a single active slack connection', async () => {
-    const spy = vi.fn();
-    vi.doMock('@mastra/slack', () => ({
-      SlackProvider: class {
-        readonly id = 'slack';
-        constructor(config: unknown) {
-          spy(config);
-        }
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('builds a SlackProvider with { refreshToken } from a single active connection', async () => {
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack' })],
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_REFRESH_TOKEN, expiresAt: null } },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(record.slack).toBeDefined();
-    expect(record.slack.id).toBe('slack');
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ refreshToken: SLACK_REFRESH_TOKEN }));
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.slack).toBeInstanceOf(FakeChannelProvider);
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'slack',
+      expect.objectContaining({ refreshToken: SLACK_REFRESH_TOKEN }),
+    );
   });
 
-  it('builds a telegram provider from an api_key credential', async () => {
-    const spy = vi.fn();
-    vi.doMock('@mastra/telegram', () => ({
-      TelegramProvider: class {
-        readonly id = 'telegram';
-        constructor(config: unknown) {
-          spy(config);
-        }
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('builds a TelegramProvider with { botToken } from an api_key credential', async () => {
+    vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(record.telegram).toBeDefined();
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ botToken: TELEGRAM_BOT_TOKEN }));
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.telegram).toBeInstanceOf(FakeChannelProvider);
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'telegram',
+      expect.objectContaining({ botToken: TELEGRAM_BOT_TOKEN }),
+    );
   });
 
-  it('shims discord into a ChannelProvider via AdapterChannelProvider', async () => {
-    const spy = vi.fn();
-    const fakeAdapter = { name: 'discord' };
-    vi.doMock('@chat-adapter/discord', () => ({
-      createDiscordAdapter: (config: unknown) => {
-        spy(config);
-        return fakeAdapter;
-      },
-    }));
+  it('builds a DiscordProvider with { app: { botToken, applicationId, publicKey } } from credential + metadata', async () => {
+    vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
       credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
@@ -184,40 +223,63 @@ describe('channels()', () => {
       },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(record.discord).toBeDefined();
-    expect(record.discord.id).toBe('discord');
-    expect(typeof record.discord.getRoutes).toBe('function');
-    expect(record.discord.getRoutes()).toEqual([]);
-    expect(spy).toHaveBeenCalledWith(
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.discord).toBeInstanceOf(FakeChannelProvider);
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'discord',
       expect.objectContaining({
-        botToken: DISCORD_BOT_TOKEN,
-        applicationId: 'app_123',
-        publicKey: 'pubkey_abc',
+        app: expect.objectContaining({
+          botToken: DISCORD_BOT_TOKEN,
+          applicationId: 'app_123',
+          publicKey: 'pubkey_abc',
+        }),
       }),
     );
   });
 
-  it('resolves slack + telegram + discord together on a multi-channel project', async () => {
-    vi.doMock('@mastra/slack', () => ({
-      SlackProvider: class {
-        readonly id = 'slack';
-        getRoutes() {
-          return [];
-        }
+  it('accepts snake_case metadata keys for Discord (application_id / public_key)', async () => {
+    vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      contexts: {
+        c_dc: {
+          connection_config: null,
+          metadata: { application_id: 'app_snake', public_key: 'pubkey_snake' },
+        },
       },
-    }));
-    vi.doMock('@mastra/telegram', () => ({
-      TelegramProvider: class {
-        readonly id = 'telegram';
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
-    vi.doMock('@chat-adapter/discord', () => ({
-      createDiscordAdapter: () => ({ name: 'discord' }),
-    }));
+    });
+    const { channels: channelsFn } = await import('../channels.js');
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.discord).toBeDefined();
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'discord',
+      expect.objectContaining({
+        app: expect.objectContaining({
+          applicationId: 'app_snake',
+          publicKey: 'pubkey_snake',
+        }),
+      }),
+    );
+  });
+
+  it('warns when Discord metadata lacks applicationId or publicKey', async () => {
+    vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      // No metadata → both applicationId and publicKey are missing.
+    });
+    const { channels: channelsFn } = await import('../channels.js');
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.discord).toBeDefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/applicationId \+ publicKey/));
+  });
+
+  it('resolves slack + telegram + discord together into a single ChannelProvider map', async () => {
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
+    vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
+    vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
     const fetchMock = platformFetch({
       connections: [
         makeConnection({ id: 'c_slack', integrationId: 'slack' }),
@@ -231,11 +293,14 @@ describe('channels()', () => {
       },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(Object.keys(record).sort()).toEqual(['discord', 'slack', 'telegram']);
+    const providers = await channelsFn(options(fetchMock));
+    expect(Object.keys(providers).sort()).toEqual(['discord', 'slack', 'telegram']);
+    for (const provider of Object.values(providers)) {
+      expect(provider).toBeInstanceOf(FakeChannelProvider);
+    }
   });
 
-  it('skips a channel when its peer package is not installed', async () => {
+  it('skips a channel when its @mastra/* peer package is not installed', async () => {
     vi.doMock('@mastra/slack', () => {
       throw new Error("Cannot find module '@mastra/slack'");
     });
@@ -244,39 +309,24 @@ describe('channels()', () => {
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_REFRESH_TOKEN, expiresAt: null } },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(record.slack).toBeUndefined();
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.slack).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/@mastra\/slack/));
   });
 
-  it('skips connections marked disabled via per-integration overrides', async () => {
-    vi.doMock('@mastra/slack', () => ({
-      SlackProvider: class {
-        readonly id = 'slack';
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('skips channels marked disabled via per-integration overrides', async () => {
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack' })],
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_REFRESH_TOKEN, expiresAt: null } },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock, { integrations: { slack: { disabled: true } } }));
-    expect(record.slack).toBeUndefined();
+    const providers = await channelsFn(options(fetchMock, { integrations: { slack: { disabled: true } } }));
+    expect(providers.slack).toBeUndefined();
   });
 
-  it('honors a pinned connectionId over env-var fallback', async () => {
-    vi.doMock('@mastra/slack', () => ({
-      SlackProvider: class {
-        readonly id = 'slack';
-        constructor(public config: unknown) {}
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('honors a pinned connectionId when multiple are present', async () => {
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
     const fetchMock = platformFetch({
       connections: [
         makeConnection({ id: 'c_slack_a', integrationId: 'slack', accountLabel: 'A' }),
@@ -287,62 +337,50 @@ describe('channels()', () => {
       },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock, { integrations: { slack: { connectionId: 'c_slack_b' } } }));
-    expect(record.slack).toBeDefined();
-    expect((record.slack as any).config).toMatchObject({ refreshToken: 'refresh-b' });
+    const providers = await channelsFn(options(fetchMock, { integrations: { slack: { connectionId: 'c_slack_b' } } }));
+    expect(providers.slack).toBeDefined();
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'slack',
+      expect.objectContaining({ refreshToken: 'refresh-b' }),
+    );
   });
 
-  it('warns and skips when multiple active connections exist without a pin', async () => {
-    vi.doMock('@mastra/slack', () => ({
-      SlackProvider: class {
-        readonly id = 'slack';
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('warns and uses the first active connection when multiple exist without a pin', async () => {
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
     const fetchMock = platformFetch({
       connections: [
         makeConnection({ id: 'c_slack_a', integrationId: 'slack', accountLabel: 'A' }),
         makeConnection({ id: 'c_slack_b', integrationId: 'slack', accountLabel: 'B' }),
       ],
+      credentials: {
+        c_slack_a: { type: 'oauth2', accessToken: 'refresh-a', expiresAt: null },
+        c_slack_b: { type: 'oauth2', accessToken: 'refresh-b', expiresAt: null },
+      },
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(record.slack).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/active connections/));
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.slack).toBeDefined();
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'slack',
+      expect.objectContaining({ refreshToken: 'refresh-a' }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/slack channel: found 2 active connections; using c_slack_a\. Ignoring c_slack_b/),
+    );
   });
 
   it('skips a connection that needs_reauth', async () => {
-    vi.doMock('@mastra/slack', () => ({
-      SlackProvider: class {
-        readonly id = 'slack';
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack', status: 'needs_reauth' })],
     });
     const { channels: channelsFn } = await import('../channels.js');
-    const record = await channelsFn(options(fetchMock));
-    expect(record.slack).toBeUndefined();
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.slack).toBeUndefined();
   });
 
-  it('merges providerOptions into the provider constructor', async () => {
-    const spy = vi.fn();
-    vi.doMock('@mastra/telegram', () => ({
-      TelegramProvider: class {
-        readonly id = 'telegram';
-        constructor(config: unknown) {
-          spy(config);
-        }
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('merges non-reserved providerOptions into the ChannelProvider constructor call', async () => {
+    vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -350,23 +388,64 @@ describe('channels()', () => {
     const { channels: channelsFn } = await import('../channels.js');
     await channelsFn(
       options(fetchMock, {
-        integrations: { telegram: { providerOptions: { pollingIntervalMs: 5000 } } },
+        integrations: {
+          telegram: { providerOptions: { mode: 'webhook', typingStatus: false } },
+        },
       }),
     );
-    expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({ botToken: TELEGRAM_BOT_TOKEN, pollingIntervalMs: 5000 }),
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'telegram',
+      expect.objectContaining({
+        botToken: TELEGRAM_BOT_TOKEN,
+        mode: 'webhook',
+        typingStatus: false,
+      }),
     );
   });
 
-  it('caches snapshots within ttlMs and invalidate() forces refresh', async () => {
-    vi.doMock('@mastra/telegram', () => ({
-      TelegramProvider: class {
-        readonly id = 'telegram';
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('strips reserved providerOptions fields (credential + framework-managed) with a warning', async () => {
+    vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
+      credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { channels: channelsFn } = await import('../channels.js');
+    await channelsFn(
+      options(fetchMock, {
+        integrations: {
+          telegram: {
+            // Cast escape-hatch — the public type disallows these; here we
+            // simulate a caller who bypassed the compile-time check to verify
+            // the runtime defense still holds.
+            providerOptions: {
+              baseUrl: 'https://attacker.example.com',
+              apiBaseUrl: 'https://attacker.example.com/api',
+              botToken: 'attacker-token',
+              encryptionKey: 'attacker-key',
+              // Non-reserved field must still make it through.
+              mode: 'polling',
+            } as never,
+          },
+        },
+      }),
+    );
+    const call = FakeChannelProvider.configSpy.mock.calls.find(([kind]) => kind === 'telegram');
+    expect(call).toBeDefined();
+    const [, config] = call!;
+    expect(config.botToken).toBe(TELEGRAM_BOT_TOKEN);
+    expect(config.mode).toBe('polling');
+    expect((config as Record<string, unknown>).baseUrl).toBeUndefined();
+    expect((config as Record<string, unknown>).apiBaseUrl).toBeUndefined();
+    expect((config as Record<string, unknown>).encryptionKey).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/ignoring reserved providerOptions/),
+    );
+    warn.mockRestore();
+  });
+
+  it('caches providers within ttlMs and invalidate() forces refresh', async () => {
+    vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -375,7 +454,6 @@ describe('channels()', () => {
     const resolver = channelsFn(options(fetchMock));
     await resolver();
     await resolver();
-    // /connections + /credentials + /context — 3 requests on first resolution
     const firstCallCount = fetchMock.mock.calls.length;
     expect(firstCallCount).toBeGreaterThan(0);
     resolver.invalidate();
@@ -383,15 +461,8 @@ describe('channels()', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThan(firstCallCount);
   });
 
-  it('refresh() returns a fresh snapshot and updates the cache', async () => {
-    vi.doMock('@mastra/telegram', () => ({
-      TelegramProvider: class {
-        readonly id = 'telegram';
-        getRoutes() {
-          return [];
-        }
-      },
-    }));
+  it('refresh() returns a fresh map and updates the cache', async () => {
+    vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -402,5 +473,23 @@ describe('channels()', () => {
     const before = fetchMock.mock.calls.length;
     await resolver.refresh();
     expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('is callable with a { requestContext } object (matches the tools() shape)', async () => {
+    // `channels()` is kept callable for symmetry with `tools()` even though
+    // `Mastra({ channels })` reads the map synchronously and can't take a
+    // callback. The callable form must not throw and must resolve to the
+    // same shape as `await`.
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack' })],
+      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_REFRESH_TOKEN, expiresAt: null } },
+    });
+    const { channels: channelsFn } = await import('../channels.js');
+    const resolver = channelsFn(options(fetchMock));
+    const viaCallback = await resolver({ requestContext: {}, mastra: {} });
+    const viaAwait = await resolver;
+    expect(Object.keys(viaCallback).sort()).toEqual(Object.keys(viaAwait).sort());
+    expect(viaCallback.slack).toBe(viaAwait.slack);
   });
 });
