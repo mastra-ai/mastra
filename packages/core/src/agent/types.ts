@@ -988,7 +988,7 @@ interface AgentConfigBase<
    * When a processor calls abort({ retry: true }), the agent retries with feedback.
    * Unset by default. Input and output processor retries require this value to be
    * set. When error processors resolve to a non-empty list and this is omitted,
-   * their runtime cap is 10.
+   * their runtime cap is 3.
    */
   maxProcessorRetries?: number;
   /**
@@ -1178,7 +1178,7 @@ export type AgentGenerateOptions<
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides the agent's default maxProcessorRetries. Input and output processor
-   * retries require an explicit cap; error processors default to a cap of 10 when
+   * retries require an explicit cap; error processors default to a cap of 3 when
    * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
