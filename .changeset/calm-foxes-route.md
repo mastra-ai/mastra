@@ -9,15 +9,9 @@
 - Dotted Anthropic ids such as `anthropic/claude-opus-4.6` are normalized before being handed to Stagehand, matching the chat agents.
 - Fixed the Browserbase API key being saved in session state; the active-browser snapshot is now credential-free and records which model the browser launched with.
 
-Removed the exported `STAGEHAND_CODEX_FALLBACK_MODEL` constant. Use `resolveStagehandModel()` instead:
-
 ```ts
 import { resolveStagehandModel } from '@mastra/code-sdk/onboarding/settings';
 
-// Before
-// import { STAGEHAND_CODEX_FALLBACK_MODEL } from '@mastra/code-sdk/onboarding/settings';
-
-// After
 const { modelName, source, viaCodexOAuth } = resolveStagehandModel(settings.browser, {
   chatModelId: session.model.get(),
 });

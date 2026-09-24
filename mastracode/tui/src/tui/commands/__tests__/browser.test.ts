@@ -744,5 +744,50 @@ describe('handleBrowserCommand', () => {
 
       expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).not.toContain('Pending changes');
     });
+
+    it('ignores a model respelling that Codex OAuth remaps to the launched model anyway', async () => {
+      const { ctx, settings, controllerState } = activeWithoutProfile();
+      settings.browser.stagehand = { env: 'LOCAL', preserveUserDataDir: false, model: 'openai/gpt-5.3-codex' };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      (controllerState as Record<string, unknown>).activeBrowserModel = {
+        modelName: 'openai/gpt-5.3-codex',
+        source: 'settings',
+        viaCodexOAuth: true,
+      };
+      // The file now says gpt-5.3, which createBrowserFromSettings remaps to gpt-5.3-codex over Codex.
+      settings.browser.stagehand.model = 'openai/gpt-5.3';
+      browserMocks.resolveStagehandModel.mockReturnValue({
+        modelName: 'openai/gpt-5.3',
+        source: 'settings',
+        viaCodexOAuth: true,
+      });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).not.toContain('Pending changes');
+    });
+
+    it('still reports a model respelling as pending without Codex OAuth, since those are different API models', async () => {
+      const { ctx, settings, controllerState } = activeWithoutProfile();
+      settings.browser.stagehand = { env: 'LOCAL', preserveUserDataDir: false, model: 'openai/gpt-5.3-codex' };
+      (controllerState as Record<string, unknown>).activeBrowserSettings = structuredClone(settings.browser);
+      (controllerState as Record<string, unknown>).activeBrowserModel = {
+        modelName: 'openai/gpt-5.3-codex',
+        source: 'settings',
+        viaCodexOAuth: false,
+      };
+      settings.browser.stagehand.model = 'openai/gpt-5.3';
+      browserMocks.resolveStagehandModel.mockReturnValue({
+        modelName: 'openai/gpt-5.3',
+        source: 'settings',
+        viaCodexOAuth: false,
+      });
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain(
+        'Pending changes (not yet applied):',
+      );
+    });
   });
 });

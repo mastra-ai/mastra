@@ -17,6 +17,7 @@ import {
   toActiveBrowserSettings,
   VIEWPORT_PRESETS,
 } from '@mastra/code-sdk/onboarding/settings';
+import { remapOpenAIModelForCodexOAuth } from '@mastra/code-sdk/providers/model-ids';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
 import type { ModelItem } from '../components/model-selector.js';
@@ -322,15 +323,26 @@ function applyBrowserToAgents(
 
 /**
  * Get a summary key for browser settings to detect config drift.
+ *
+ * `resolved` is the model resolution for these settings; when the configured
+ * model is used it is canonicalized the way `createBrowserFromSettings` does
+ * (Anthropic id normalization, `-codex` remaps over Codex OAuth) so that two
+ * spellings of the same launched model don't read as pending changes.
  */
-function getBrowserConfigKey(settings: BrowserSettings): string {
+function getBrowserConfigKey(settings: BrowserSettings, resolved?: ResolvedStagehandModel): string {
   if (!settings.enabled) return 'disabled';
   const parts: string[] = [settings.provider];
   if (settings.provider === 'stagehand' && settings.stagehand?.env) {
     parts.push(settings.stagehand.env);
   }
   if (settings.provider === 'stagehand' && settings.stagehand?.model) {
-    parts.push(`model:${settings.stagehand.model}`);
+    const canonical =
+      resolved?.source === 'settings' && resolved.modelName
+        ? resolved.viaCodexOAuth
+          ? remapOpenAIModelForCodexOAuth(resolved.modelName)
+          : resolved.modelName
+        : settings.stagehand.model;
+    parts.push(`model:${canonical}`);
   }
   parts.push(settings.headless ? 'headless' : 'headed');
   // Mirror createBrowserFromSettings: a profile or CDP connection forces 'shared' scope,
@@ -515,7 +527,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       resolveStagehandModel(settings, { chatModelId: launchChatModelId(ctx) });
 
     // Check for config drift between file and active instance
-    const hasDrift = activeSettings && getBrowserConfigKey(browser) !== getBrowserConfigKey(activeSettings);
+    const hasDrift =
+      activeSettings &&
+      getBrowserConfigKey(browser, resolveNow(browser)) !==
+        getBrowserConfigKey(activeSettings, activeModel ?? resolveNow(activeSettings));
 
     if (hasDrift && activeSettings) {
       // Show both active and file settings when they differ
