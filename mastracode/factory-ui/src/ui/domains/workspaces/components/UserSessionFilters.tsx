@@ -10,6 +10,7 @@ import {
   ALL_SESSION_OWNERS,
   MY_SESSIONS,
   activeUserSessionFilterCount,
+  defaultUserSessionFilters,
   sessionOwnerFilterValue,
 } from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
@@ -24,15 +25,15 @@ export function UserSessionFilters({
   owners,
   viewerUserId,
   onChange,
-  onClear,
+  onReset,
 }: {
   filters: UserSessionFiltersState;
   owners: readonly UserSessionOwnerOption[];
   viewerUserId?: string;
-  onChange: (filters: UserSessionFiltersState) => void;
-  onClear: () => void;
+  onChange: (changes: Partial<UserSessionFiltersState>) => void;
+  onReset: () => void;
 }) {
-  const activeCount = activeUserSessionFilterCount(filters);
+  const activeCount = activeUserSessionFilterCount(filters, defaultUserSessionFilters(viewerUserId));
   const triggerLabel = activeCount === 0 ? 'Filter sessions' : `Filter sessions, ${activeCount} active`;
 
   return (
@@ -49,12 +50,12 @@ export function UserSessionFilters({
             label="Search sessions"
             placeholder="Search sessions…"
             value={filters.search}
-            onSearch={search => onChange({ ...filters, search })}
+            onSearch={search => onChange({ search })}
             shortcutDisabled
             size="sm"
           />
 
-          <FilterSelect label="Owner" value={filters.owner} onValueChange={owner => onChange({ ...filters, owner })}>
+          <FilterSelect label="Owner" value={filters.owner} onValueChange={owner => onChange({ owner })}>
             <SelectItem value={ALL_SESSION_OWNERS}>All owners</SelectItem>
             {viewerUserId ? <SelectItem value={MY_SESSIONS}>Mine</SelectItem> : null}
             {owners.map(owner => (
@@ -64,30 +65,22 @@ export function UserSessionFilters({
             ))}
           </FilterSelect>
 
-          <FilterSelect
-            label="Status"
-            value={filters.status}
-            onValueChange={status => onChange({ ...filters, status })}
-          >
+          <FilterSelect label="Status" value={filters.status} onValueChange={status => onChange({ status })}>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="working">Working</SelectItem>
             <SelectItem value="initializing">Initializing</SelectItem>
             <SelectItem value="idle">Idle</SelectItem>
           </FilterSelect>
 
-          <FilterSelect
-            label="Updated"
-            value={filters.updated}
-            onValueChange={updated => onChange({ ...filters, updated })}
-          >
+          <FilterSelect label="Updated" value={filters.updated} onValueChange={updated => onChange({ updated })}>
             <SelectItem value="all">Any time</SelectItem>
             <SelectItem value="24h">Last 24 hours</SelectItem>
             <SelectItem value="7d">Last 7 days</SelectItem>
             <SelectItem value="30d">Last 30 days</SelectItem>
           </FilterSelect>
 
-          <Button type="button" variant="ghost" size="sm" disabled={activeCount === 0} onClick={onClear}>
-            Clear filters
+          <Button type="button" variant="ghost" size="sm" disabled={activeCount === 0} onClick={onReset}>
+            Reset filters
           </Button>
         </div>
       </PopoverContent>
@@ -112,7 +105,7 @@ function FilterSelect<Value extends string>({
         {label}
       </Txt>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger variant="outline" size="sm" aria-label={label}>
+        <SelectTrigger size="sm" aria-label={label}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>{children}</SelectContent>

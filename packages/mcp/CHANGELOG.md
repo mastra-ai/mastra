@@ -1,5 +1,25 @@
 # @mastra/mcp
 
+## 2.1.0-alpha.0
+
+### Minor Changes
+
+- Carry the MCP tool `title` through `MCPClient` and `MCPServer`. Closes #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  - `MCPServer` publishes a tool's `title` in `tools/list`. Tools that only set `mcp.annotations.title` are unchanged.
+  - Tools returned by `MCPClient` carry `tool.title`, taken from the server's tool `title` and falling back to `annotations.title`, the same precedence MCP clients use for display names.
+  - `listToolDefinitions()` keeps the title and `toolFromDefinition()` restores it.
+
+  ```ts
+  const tools = await mcp.listTools();
+  tools.github_create_issue.title; // 'Create Issue'
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+
 ## 2.0.0
 
 ### Major Changes

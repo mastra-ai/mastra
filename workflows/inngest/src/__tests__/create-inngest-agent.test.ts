@@ -7,7 +7,12 @@
  */
 
 import { Agent } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, globalRunRegistry } from '@mastra/core/agent/durable';
+import {
+  AGENT_CONTROL_TOPIC,
+  AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
+  globalRunRegistry,
+} from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
@@ -18,6 +23,7 @@ import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
+import { InngestExecutionEngine } from '../execution-engine';
 import { createInngestAgent, isInngestAgent } from '../index';
 
 // Mock model for testing
@@ -234,47 +240,80 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
   });
 
-  it("wraps each workflow's local pubsub in a cache-sharing CachingPubSub", async () => {
-    // Regression: previously the InngestWorkflow function constructed its own bare
-    // `new InngestPubSub(...)` inside the durable handler, so workflow steps published
-    // chunk events to a pubsub instance the agent's `observe()` never sees.
-    //
-    // The fix is an `__setPubsubFactory` override that wraps each workflow's *own*
-    // workflow-local default InngestPubSub with a CachingPubSub backed by the same
-    // cache as the agent's pubsub. This preserves per-workflow event channels
-    // (workflow-events on `workflow:<workflowId>:<runId>` must stay workflow-local,
-    // otherwise nested-workflow watch isolation breaks) while still routing all
-    // publishes through the cache that observe() reads from.
-    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-factory'), inngest });
-    swapInnerToInProcess(durableAgent);
+  it('routes workflow agent topics through the configured pubsub exactly once', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-custom-pubsub-routing'),
+      inngest,
+      pubsub: customPubsub,
+    });
 
-    const workflows = durableAgent.getDurableWorkflows();
-    const workflow = workflows.find((w: any) => w.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
     expect(workflow).toBeDefined();
+    expect(workflow.__getEmitWorkflowEvents()).toBe(false);
 
     const factory = workflow.__getPubsubFactory?.();
     expect(typeof factory).toBe('function');
 
-    // Simulate what the workflow function does at runtime: pass in a workflow-local
-    // InngestPubSub default. The factory must wrap it (not substitute it) so the
-    // workflow-id-scoped channels survive.
-    const parentDefault = new EventEmitterPubSub(); // stand-in for the workflow's default InngestPubSub
-    const wrapped = factory(parentDefault);
-    expect(wrapped).toBeInstanceOf(CachingPubSub);
-    expect((wrapped as any).inner).toBe(parentDefault);
-    // Must reuse the same backing cache as the agent's pubsub so observe() sees workflow writes.
-    expect((wrapped as any).cache).toBe(durableAgent.cache);
+    const workflowDefault = new EventEmitterPubSub();
+    const defaultPublish = vi.spyOn(workflowDefault, 'publish');
+    const routed = factory(workflowDefault);
+    const runId = 'inngest-custom-pubsub-run';
+    const streamTopic = AGENT_STREAM_TOPIC(runId);
+    const controlTopic = AGENT_CONTROL_TOPIC(runId);
 
-    // Nested InngestWorkflows (e.g. the single-iteration loop body) run as their
-    // own Inngest functions and resolve their own pubsub at runtime. Each must
-    // get its own workflow-local CachingPubSub - same cache, different inner -
-    // otherwise chunk events emitted by tool/llm steps inside the inner loop
-    // bypass the cache and `observe()` can never replay them.
+    await routed.publish(streamTopic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'from-workflow' },
+    } as any);
+    await routed.publish(controlTopic, {
+      type: 'agent-control-abort-request',
+      runId,
+      data: {},
+    } as any);
+
+    expect(customPublish).toHaveBeenCalledTimes(2);
+    expect(customPublish).toHaveBeenNthCalledWith(1, streamTopic, expect.any(Object), undefined);
+    expect(customPublish).toHaveBeenNthCalledWith(2, controlTopic, expect.any(Object), undefined);
+    expect(defaultPublish).not.toHaveBeenCalled();
+
+    const replayed: any[] = [];
+    await durableAgent.pubsub.subscribeWithReplay(streamTopic, event => {
+      replayed.push(event);
+    });
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0].data).toEqual({ chunk: 'from-workflow' });
+
+    const workflowTopic = `workflow.events.v2.${runId}`;
+    await routed.publish(workflowTopic, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-step-result' },
+    } as any);
+    expect(defaultPublish).toHaveBeenCalledOnce();
+    expect(defaultPublish).toHaveBeenCalledWith(workflowTopic, expect.any(Object), undefined);
+    expect(customPublish).toHaveBeenCalledTimes(2);
+
+    const customClearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+    const defaultClearTopic = vi.spyOn(workflowDefault, 'clearTopic');
+    await routed.clearTopic(streamTopic);
+    await routed.clearTopic(workflowTopic);
+    expect(customClearTopic).toHaveBeenCalledOnce();
+    expect(customClearTopic).toHaveBeenCalledWith(streamTopic);
+    expect(defaultClearTopic).toHaveBeenCalledOnce();
+    expect(defaultClearTopic).toHaveBeenCalledWith(workflowTopic);
+
+    expect(routed.supportedModes).toEqual(['pull']);
+    expect(routed.supportsNativeBatching).toBe(true);
+    expect(routed.supportsOffsets).toBe(false);
+
     const collectNested = (steps: any[]): any[] => {
       const found: any[] = [];
       for (const step of steps ?? []) {
-        // `type: 'step'` holds the workflow directly; loop/foreach wrap their
-        // body in a `SingleStepEntry`, so the workflow lives at `step.step.step`.
         const inner = step.type === 'step' ? step.step : (step.step?.step ?? step.step);
         if ((step.type === 'step' || step.type === 'loop' || step.type === 'foreach') && inner?.executionGraph) {
           found.push(inner);
@@ -288,48 +327,60 @@ describe('createInngestAgent observe-replay wiring', () => {
     const nested = collectNested(workflow.executionGraph.steps);
     expect(nested.length).toBeGreaterThan(0);
     for (const inner of nested) {
-      const innerFactory = inner.__getPubsubFactory?.();
-      expect(typeof innerFactory).toBe('function');
-      const nestedDefault = new EventEmitterPubSub();
-      const nestedWrapped = innerFactory(nestedDefault);
-      expect(nestedWrapped).toBeInstanceOf(CachingPubSub);
-      // Each nested workflow keeps its own workflow-local inner...
-      expect((nestedWrapped as any).inner).toBe(nestedDefault);
-      // ...but shares the cache, so writes from any workflow show up on observe().
-      expect((nestedWrapped as any).cache).toBe(durableAgent.cache);
+      expect(inner.__getPubsubFactory()).toBe(factory);
+      expect(inner.__getEmitWorkflowEvents()).toBe(false);
+    }
+  });
+
+  it('routes runtime workflow error events through the configured pubsub exactly once', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-custom-pubsub-routing'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: new Error('runtime failure'),
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-custom-pubsub-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow('Workflow failed');
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
     }
 
-    // Internal workflow watch events must remain live but stay out of replay history.
-    const watchTopic = 'workflow.events.v2.inngest-observe-factory-run';
-    const watchEvents: any[] = [];
-    await wrapped.subscribe(watchTopic, event => {
-      watchEvents.push(event);
-    });
-    await wrapped.publish(watchTopic, {
-      type: 'watch',
-      runId: 'inngest-observe-factory-run',
-      data: { type: 'workflow-step-result', payload: { large: 'payload' } },
-    } as any);
-    expect(watchEvents).toHaveLength(1);
-    expect(await wrapped.getHistory(watchTopic)).toEqual([]);
-
-    // Agent stream publishes from factory-produced pubsubs still become replayable
-    // via the agent's pubsub because they share a cache.
-    const runId = 'inngest-observe-factory-run';
-    const topic = AGENT_STREAM_TOPIC(runId);
-    await wrapped.publish(topic, {
-      type: AgentStreamEventTypes.CHUNK,
-      runId,
-      data: { chunk: 'from-workflow' },
-    } as any);
-    await new Promise(resolve => setTimeout(resolve, 20));
-
-    const replayed: any[] = [];
-    await durableAgent.pubsub.subscribeWithReplay(topic, event => {
-      replayed.push(event);
-    });
-    expect(replayed).toHaveLength(1);
-    expect(replayed[0].data).toEqual({ chunk: 'from-workflow' });
+    expect(customPublish).toHaveBeenCalledOnce();
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
+      undefined,
+    );
   });
 
   it('should receive both cached and live events', async () => {
@@ -521,6 +572,25 @@ describe('InngestAgent parity surface', () => {
     return durableAgent;
   }
 
+  function setSuspendedSnapshot(durableAgent: ReturnType<typeof makeIsolatedAgent>) {
+    (durableAgent as any).__setMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+            value: {},
+            context: {},
+            status: 'suspended',
+            suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+          }),
+        }),
+      }),
+    });
+  }
+
+  async function publishStreamEvent(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string, event: any) {
+    await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
+  }
+
   it('threads widened execution options through prepare() into workflow input', async () => {
     // Slice 1: prove the widened option surface actually flows to
     // prepareForDurableExecution. We use prepare() instead of stream() because
@@ -666,6 +736,7 @@ describe('InngestAgent parity surface', () => {
     const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
       value: { retainedState: true },
       context: {},
+      status: 'suspended',
       suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
       requestContext: {
         userId: 'user-1',
@@ -726,6 +797,176 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('resume() fails when its cached history boundary cannot be read', async () => {
+    const durableAgent = makeIsolatedAgent('resume-stream-boundary-failure');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-stream-boundary-failure-run';
+    const historyError = new Error('history unavailable');
+    const originalGetHistory = durableAgent.pubsub.getHistory.bind(durableAgent.pubsub);
+    const historySpy = vi
+      .spyOn(durableAgent.pubsub, 'getHistory')
+      .mockRejectedValueOnce(historyError)
+      .mockImplementation(originalGetHistory);
+    const sendSpy = stubInngestSend();
+    let result: Awaited<ReturnType<typeof durableAgent.resume>> | undefined;
+
+    try {
+      try {
+        result = await durableAgent.resume(runId, { approved: true });
+        expect.fail('resume should fail when its stream boundary cannot be read');
+      } catch (error) {
+        expect(error).toBe(historyError);
+      }
+
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+    } finally {
+      result?.cleanup();
+      globalRunRegistry.delete(runId);
+      historySpy.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('resume() starts after cached history', async () => {
+    const durableAgent = makeIsolatedAgent('resume-stream-boundary');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-stream-boundary-run';
+    const originalToolCall = {
+      type: 'tool-call',
+      payload: { toolCallId: 'original-call', toolName: 'save_note', args: { note: 'old' } },
+    };
+    const originalSuspension = {
+      type: 'tool-call-suspended',
+      payload: { toolCallId: 'original-call', toolName: 'save_note' },
+    };
+    await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: originalToolCall });
+    await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: originalSuspension });
+    await publishStreamEvent(durableAgent, runId, {
+      type: AgentStreamEventTypes.SUSPENDED,
+      data: { suspendedPaths: { 'agentic-loop': ['agentic-loop'] } },
+    });
+
+    const resumedChunks = [
+      {
+        type: 'tool-result',
+        payload: { toolCallId: 'original-call', toolName: 'save_note', result: { saved: true } },
+      },
+      { type: 'text-start', payload: { id: 'resumed-text' } },
+      { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+      { type: 'text-end', payload: { id: 'resumed-text' } },
+    ];
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+      for (const chunk of resumedChunks) {
+        await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: chunk });
+      }
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: {
+          output: { text: 'Done.', steps: [{ toolResults: [resumedChunks[0].payload], toolCalls: [] }] },
+          stepResult: { reason: 'stop' },
+        },
+      });
+    });
+
+    const result = await durableAgent.resume(runId, { approved: true });
+    try {
+      const received = [];
+      for await (const chunk of result.fullStream) received.push(chunk);
+
+      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      expect(received).not.toContainEqual(originalToolCall);
+      expect(received).not.toContainEqual(originalSuspension);
+    } finally {
+      result.cleanup();
+      globalRunRegistry.delete(runId);
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('resumeGenerate() returns the resumed result instead of the cached suspension', async () => {
+    const durableAgent = makeIsolatedAgent('resume-generate-boundary');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-generate-boundary-run';
+    const originalToolCall = {
+      type: 'tool-call',
+      payload: { toolCallId: 'original-call', toolName: 'save_note', args: { note: 'old' } },
+    };
+    await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: originalToolCall });
+    await publishStreamEvent(durableAgent, runId, {
+      type: AgentStreamEventTypes.CHUNK,
+      data: {
+        type: 'tool-call-suspended',
+        payload: { toolCallId: 'original-call', toolName: 'save_note' },
+      },
+    });
+    await publishStreamEvent(durableAgent, runId, {
+      type: AgentStreamEventTypes.SUSPENDED,
+      data: { suspendedPaths: { 'agentic-loop': ['agentic-loop'] } },
+    });
+
+    const resumedToolResult = {
+      toolCallId: 'original-call',
+      toolName: 'save_note',
+      result: { saved: true },
+    };
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'tool-result', payload: resumedToolResult },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'text-start', payload: { id: 'resumed-text' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'text-end', payload: { id: 'resumed-text' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: {
+          type: 'step-finish',
+          payload: {
+            output: {
+              steps: [],
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: {
+          output: {
+            text: 'Done.',
+            steps: [{ toolResults: [resumedToolResult], toolCalls: [] }],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          },
+          stepResult: { reason: 'stop' },
+        },
+      });
+    });
+
+    try {
+      const result = await durableAgent.resumeGenerate(runId, { approved: true });
+
+      expect(result.finishReason).toBe('stop');
+      expect(result.text).toBe('Done.');
+      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolCalls).toEqual([]);
+    } finally {
+      globalRunRegistry.delete(runId);
+      sendSpy.mockRestore();
+    }
+  });
+
   it('forwards the per-call actor signal into the workflow trigger event', async () => {
     // `actor` reaches FGA checks and tool execution by riding on the event
     // payload the execution engine reads. The durable-agent wrapper used to
@@ -765,6 +1006,7 @@ describe('InngestAgent parity surface', () => {
     const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
       value: {},
       context: {},
+      status: 'suspended',
       suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
       // A stale actor persisted in storage must be ignored.
       actor: { actorKind: 'system', sourceWorkflow: 'stale-workflow' },
@@ -818,6 +1060,7 @@ describe('InngestAgent parity surface', () => {
         'agentic-loop': nestedSuspension,
         'other-step': { status: 'suspended', suspendPayload: {} },
       },
+      status: 'suspended',
       suspendedPaths: { 'agentic-loop': [0], 'other-step': [1] },
       resumeLabels: {
         'tool-call-a': { stepId: 'agentic-loop' },
@@ -874,6 +1117,7 @@ describe('InngestAgent parity surface', () => {
       const durableAgent = makeAgentWithSnapshot('resume-single-inferred', {
         value: {},
         context: {},
+        status: 'suspended',
         suspendedPaths: { 'agentic-loop': [0] },
         resumeLabels: { 'tool-call-a': { stepId: 'agentic-loop' } },
       });
@@ -896,6 +1140,7 @@ describe('InngestAgent parity surface', () => {
       const durableAgent = makeAgentWithSnapshot('resume-dispatch-failure', {
         value: {},
         context: {},
+        status: 'suspended',
         suspendedPaths: { 'agentic-loop': [0] },
         resumeLabels: {},
       });
@@ -908,6 +1153,55 @@ describe('InngestAgent parity surface', () => {
       expect(globalRunRegistry.get(runId)).toBeUndefined();
 
       sendSpy.mockRestore();
+    });
+
+    it('rejects resume() instead of starting a fresh run when the run never becomes suspended', async () => {
+      // #24749: a missing suspended snapshot used to dispatch a start event whose input
+      // was the resume payload, crashing the loop with "reading 'threadId'".
+      vi.useFakeTimers();
+      const durableAgent = makeAgentWithSnapshot('resume-not-suspended', { value: {}, context: {}, status: 'running' });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-not-suspended-run';
+
+      try {
+        const pending = durableAgent.resume(runId, { answer: 'yes' });
+        const assertion = expect(pending).rejects.toThrow(
+          `Cannot resume run ${runId}: it is not suspended (status: running).`,
+        );
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
+        value: {},
+        context: {},
+        status: 'suspended',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const fork = (durableAgent as any).__fork();
+      // The fork re-wraps the original InngestPubSub; isolate it like makeIsolatedAgent does.
+      (fork.pubsub as any).inner = new EventEmitterPubSub();
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-forked-approve-run';
+
+      await fork.approveToolCall({ runId });
+      try {
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        const sentEvent = sendSpy.mock.calls[0]?.[0];
+        expect(sentEvent?.data.resume.steps).toEqual(['agentic-loop']);
+        expect(sentEvent?.data.resume.resumePayload).toEqual({ approved: true });
+      } finally {
+        globalRunRegistry.get(runId)?.cleanup?.();
+        sendSpy.mockRestore();
+      }
     });
   });
 
@@ -1250,6 +1544,117 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
       expect(persistenceWarnings).toHaveLength(0);
     } finally {
       warnSpy.mockRestore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #24736: __fork, resumeStream and tool approval must stay on the durable path
+// ---------------------------------------------------------------------------
+describe('InngestAgent fork and resume overrides (#24736)', () => {
+  const inngest = new Inngest({
+    id: 'fork-resume-tests',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeDurable(id: string) {
+    const agent = new Agent({ id, name: id, instructions: 'Original', model: createMockModel() as any });
+    return createInngestAgent({ agent, inngest });
+  }
+
+  function spyResume(durableAgent: ReturnType<typeof makeDurable>) {
+    const output = { marker: 'output' };
+    const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+    const resumeGenerateSpy = vi.spyOn(durableAgent, 'resumeGenerate').mockResolvedValue({ text: 'done' } as any);
+    return { output, resumeSpy, resumeGenerateSpy };
+  }
+
+  function closeOnSuspendSet(options: object) {
+    return (options as any).closeOnSuspend === true;
+  }
+
+  it('resumeStream routes through resume() with close-on-suspend', async () => {
+    const durableAgent = makeDurable('resume-stream-route');
+    const { output, resumeSpy } = spyResume(durableAgent);
+
+    const result = await durableAgent.resumeStream({ approved: true }, { runId: 'r1', maxSteps: 3 });
+
+    expect(result).toBe(output);
+    expect(resumeSpy).toHaveBeenCalledTimes(1);
+    const [runId, data, opts] = resumeSpy.mock.calls[0]!;
+    expect(runId).toBe('r1');
+    expect(data).toEqual({ approved: true });
+    expect(opts).toMatchObject({ maxSteps: 3 });
+    expect(opts).not.toHaveProperty('runId');
+    expect(closeOnSuspendSet(opts as object)).toBe(true);
+  });
+
+  it('resumeStream throws without a runId', async () => {
+    const durableAgent = makeDurable('resume-stream-no-run');
+    await expect(durableAgent.resumeStream({ approved: true })).rejects.toThrow(/requires a runId/);
+  });
+
+  it('approveToolCall / declineToolCall resume the durable run', async () => {
+    const durableAgent = makeDurable('approve-decline-route');
+    const { resumeSpy } = spyResume(durableAgent);
+
+    await durableAgent.approveToolCall({ runId: 'r1', toolCallId: 't1' });
+    await durableAgent.declineToolCall({ runId: 'r2', toolCallId: 't2', reason: 'nope' });
+
+    expect(resumeSpy.mock.calls[0]![0]).toBe('r1');
+    expect(resumeSpy.mock.calls[0]![1]).toEqual({ approved: true });
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({ toolCallId: 't1' });
+    expect(resumeSpy.mock.calls[1]![0]).toBe('r2');
+    expect(resumeSpy.mock.calls[1]![1]).toEqual({ approved: false, reason: 'nope' });
+    expect(resumeSpy.mock.calls[1]![2]).not.toHaveProperty('reason');
+  });
+
+  it('approveToolCallGenerate / declineToolCallGenerate route through resumeGenerate()', async () => {
+    const durableAgent = makeDurable('approve-decline-generate');
+    const { resumeGenerateSpy } = spyResume(durableAgent);
+
+    await durableAgent.approveToolCallGenerate({ runId: 'r1', toolCallId: 't1' });
+    await durableAgent.declineToolCallGenerate({ runId: 'r2', reason: 'no' });
+
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(1, 'r1', { approved: true }, { toolCallId: 't1' });
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(2, 'r2', { approved: false, reason: 'no' }, {});
+  });
+
+  it('__fork returns an independent InngestAgent', () => {
+    const durableAgent = makeDurable('fork-identity');
+    const fork = durableAgent.__fork();
+
+    expect(isInngestAgent(fork)).toBe(true);
+    expect(fork).not.toBe(durableAgent);
+    expect(fork.id).toBe(durableAgent.id);
+    expect(fork.agent).not.toBe(durableAgent.agent);
+
+    fork.__updateInstructions('Overridden');
+    expect(fork.agent.getInstructions()).toBe('Overridden');
+    expect(durableAgent.agent.getInstructions()).toBe('Original');
+  });
+
+  it('__fork keeps the registered Mastra instance and dispatches streams to Inngest', async () => {
+    const durableAgent = makeDurable('fork-dispatch');
+    const mastra = new Mastra({ agents: { forkDispatch: durableAgent as any }, logger: false });
+    void mastra;
+
+    const fork = durableAgent.__fork();
+    (fork.pubsub as any).inner = new EventEmitterPubSub();
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const doStream = (fork.agent as any).model?.doStream;
+
+    const result = await fork.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const deadline = Date.now() + 1_000;
+      while (!sendSpy.mock.calls.length && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      expect(sendSpy).toHaveBeenCalled();
+      if (doStream) expect(doStream).not.toHaveBeenCalled();
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
     }
   });
 });

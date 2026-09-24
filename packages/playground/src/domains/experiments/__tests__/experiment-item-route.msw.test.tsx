@@ -149,7 +149,7 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute();
 
       expect(await screen.findByText('Tokens')).toBeDefined();
-      expect(await screen.findByText('12.4K')).toBeDefined();
+      expect(await screen.findByText('12.4k')).toBeDefined();
       expect(screen.getByText('Latency (avg)')).toBeDefined();
       expect(await screen.findByText('1.9s')).toBeDefined();
 

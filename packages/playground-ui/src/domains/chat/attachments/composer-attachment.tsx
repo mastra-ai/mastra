@@ -32,7 +32,6 @@ export function ComposerAttachment({ name, children, onRemove, variant = 'thumbn
       </div>
       <Button
         type="button"
-        variant="outline"
         size="icon-sm"
         aria-label={`Remove ${name}`}
         tooltip={`Remove ${name}`}

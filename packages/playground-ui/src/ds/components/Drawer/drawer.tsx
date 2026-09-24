@@ -5,7 +5,7 @@ import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
@@ -73,7 +73,7 @@ const drawerPopupVariants = cva(
   cn(
     'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
     'text-foreground',
-    overlaySurfaceStyle,
+    dialogSurfaceStyle,
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
     'data-[nested-drawer-open]:after:bg-black/25',
@@ -177,8 +177,6 @@ const DrawerContext = React.createContext<DrawerContextValue>({
 
 const useDrawerContext = () => React.useContext(DrawerContext);
 
-export const useDrawerSide = () => useDrawerContext().side;
-
 const resolveDrawerViewportLayout = (
   variant: DrawerVariant,
   overlay: NonNullable<DrawerBackdropVariantsProps['overlay']>,
@@ -269,7 +267,6 @@ const DrawerProvider = DrawerPrimitive.Provider;
 const DrawerIndent = DrawerPrimitive.Indent;
 const DrawerIndentBackground = DrawerPrimitive.IndentBackground;
 const DrawerSwipeArea = DrawerPrimitive.SwipeArea;
-const createDrawerHandle = DrawerPrimitive.createHandle;
 // Inner region where pointer drags select text / scroll instead of swiping the drawer closed.
 const DrawerInteractive = DrawerPrimitive.Content;
 
@@ -492,7 +489,6 @@ export {
   DrawerIndentBackground,
   DrawerSwipeArea,
   DrawerInteractive,
-  createDrawerHandle,
 };
 
 export type {

@@ -62,7 +62,7 @@ export const AgentMetadataModelSwitcher = ({
       setLoading(true);
       try {
         const result = await updateModel({
-          provider: fullProviderId as UpdateModelParams['provider'],
+          provider: fullProviderId,
           modelId,
         });
         console.info('Model updated:', result);
@@ -111,7 +111,7 @@ export const AgentMetadataModelSwitcher = ({
         const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
         if (fullOriginalProviderId && originalModel) {
           updateModel({
-            provider: fullOriginalProviderId as UpdateModelParams['provider'],
+            provider: fullOriginalProviderId,
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);

@@ -11,10 +11,10 @@ From the repository root:
 ```shell
 pnpm install
 pnpm --dir mastracode/web install
-pnpm --dir mastracode/web run prebuild
+pnpm factory:build
 ```
 
-`prebuild` builds the linked packages required by the host.
+`factory:build` runs this package's `prebuild`, which builds the linked monorepo packages required by the host. `pnpm factory:dev` doesn't build them, so run `pnpm factory:build` again after pulling changes to those packages.
 
 ## Development
 

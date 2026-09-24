@@ -180,8 +180,6 @@ export function useCreateFactoryFlow() {
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>
       patchDraft.mutateAsync({ factoryId: factory.id }),
     rememberLinkedRepository: (linkedRepositoryId: string) => patchDraft.mutateAsync({ linkedRepositoryId }),
-    back: () =>
-      patchDraft.mutateAsync({ step: CREATE_FACTORY_STEPS[CREATE_FACTORY_STEPS.indexOf(step) - 1] ?? 'name' }),
     /** Re-persist the current draft, with its host, right before a full-page OAuth redirect. */
     persistBeforeRedirect: (hostFactoryId: string | undefined) => writeDraft({ ...readDraft(), hostFactoryId }),
     clear: clear.mutateAsync,

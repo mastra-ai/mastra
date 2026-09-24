@@ -26,7 +26,7 @@ export const NoResults: Story = {
   args: {
     titleSlot: 'No results found',
     descriptionSlot: 'Try adjusting your search or filters to find what you are looking for.',
-    actionSlot: <Button variant="outline">Clear filters</Button>,
+    actionSlot: <Button>Clear filters</Button>,
   },
 };
 
@@ -57,7 +57,7 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox className="h-auto w-[126px] text-muted-foreground" />,
+    iconSlot: <Inbox />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
     actionSlot: <Button>Get Started</Button>,
@@ -69,12 +69,21 @@ export const Fill: Story = {
   args: {
     titleSlot: 'Your inbox is empty',
     descriptionSlot: 'The fill variant centers the block in the full height of its parent.',
-    actionSlot: <Button variant="outline">Go to traces</Button>,
+    actionSlot: <Button>Go to traces</Button>,
     variant: 'fill',
   },
   render: args => (
-    <div className="h-[480px] border border-dashed border-border">
+    <div className="h-120 border border-dashed border-border">
       <EmptyState {...args} />
     </div>
   ),
+};
+
+export const ErrorTone: Story = {
+  args: {
+    tone: 'error',
+    titleSlot: 'Unable to load traces',
+    descriptionSlot: 'The observability store did not respond. Check the connection and try again.',
+    actionSlot: <Button>Try again</Button>,
+  },
 };

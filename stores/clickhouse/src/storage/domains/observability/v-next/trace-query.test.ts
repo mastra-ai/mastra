@@ -4,11 +4,13 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
   planTraceQueryObservedFields,
+  planTraceQueryValues,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -20,6 +22,7 @@ import {
   compileClickHouseThreadQuery,
   compileClickHouseTraceQuery,
   compileClickHouseTraceQueryObservedFields,
+  compileClickHouseTraceQueryValues,
   queryThreads,
   queryTraces,
   runWithClickHouseTraceQueryTimeout,
@@ -37,6 +40,15 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('ClickHouse advanced trace query', () => {
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.query).toMatch(/dateDiff\('millisecond', r\.startedAt, r\.endedAt\) > \{trace_query_\d+:Float64\}/);
+    expect(Object.values(compiled.query_params)).toContain(5000);
+  });
+
   it('bootstraps delta polling and hands numbered pages a query-bound cursor', async () => {
     coreFeatures.add('observability-delta-polling');
     try {
@@ -384,6 +396,40 @@ describe('ClickHouse advanced trace query', () => {
     });
   });
 
+  it('scopes root_scope and related CTEs to the tenant with named parameters', () => {
+    const request = parseTraceQueryRequest({
+      timeRange: TIME_RANGE,
+      where: { scores: { some: { op: 'exists', path: 'score' } } },
+    });
+    const compiled = compileClickHouseTraceQuery(
+      planTraceQuery(request, { scope: { organizationId: 'org-1', resourceId: 'res-1' } }),
+    );
+
+    // The related-scores CTE wraps a FINAL subquery, so check the tenant condition once for
+    // root_scope and once for current_scores by position rather than by CTE boundary.
+    const rootStart = compiled.query.indexOf('root_scope AS (');
+    const scoresStart = compiled.query.indexOf('current_scores AS (');
+    expect(rootStart).toBeGreaterThan(-1);
+    expect(scoresStart).toBeGreaterThan(rootStart);
+    const rootScope = compiled.query.slice(rootStart, scoresStart);
+    const scores = compiled.query.slice(scoresStart);
+    for (const cte of [rootScope, scores]) {
+      expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
+      expect(cte).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
+    }
+    expect(compiled.query).not.toContain('org-1');
+    expect(Object.values(compiled.query_params)).toEqual(expect.arrayContaining(['org-1', 'res-1']));
+  });
+
+  it('emits no tenant conditions for an unscoped plan', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { scores: { some: { op: 'exists', path: 'score' } } } }),
+    );
+
+    expect(compiled.query).not.toContain('organizationId =');
+    expect(compiled.query).not.toContain('resourceId =');
+  });
+
   it('deduplicates completed span deliveries without relying on background merges', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({
@@ -501,6 +547,42 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     expect(compiled.query).toMatch(/ifNull\(r\.threadId != \{trace_query_3:String\}, 1\)/);
+  });
+
+  it('compiles tag predicates against the non-nullable root array', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'alpha' },
+            { op: 'notIncludes', path: 'tags', value: 'beta' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).toContain('has(r.tags, {trace_query_3:String})');
+    expect(compiled.query).toContain('notEmpty(r.tags) AND NOT has(r.tags, {trace_query_4:String})');
+    expect(compiled.query).toContain('(notEmpty(r.tags))');
+    expect(compiled.query).toContain('(empty(r.tags))');
+    expect(compiled.query).not.toMatch(/is(Not)?Null\(r\.tags\)/);
+    expect(compiled.query_params).toMatchObject({ trace_query_3: 'alpha', trace_query_4: 'beta' });
+  });
+
+  it('discovers tag values one row per distinct tag per root', () => {
+    const compiled = compileClickHouseTraceQueryValues(
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', search: 'al' }),
+      ),
+    );
+
+    expect(compiled.query).toContain('SELECT toString(arrayJoin(arrayDistinct(r.tags))) AS value FROM root_scope r');
+    expect(compiled.query).toContain('positionCaseInsensitiveUTF8(value, {trace_query_3:String}) > 0');
+    expect(compiled.query).toContain('ORDER BY count DESC, value ASC');
+    expect(compiled.query_params).toMatchObject({ trace_query_3: 'al' });
   });
 
   it('matches the requested keyset order and always ties on traceId ascending', () => {

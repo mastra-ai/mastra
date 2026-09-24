@@ -10,8 +10,13 @@ export interface PageLayoutProps {
   headerActions?: ReactNode;
   /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
   actionRow?: ReactNode;
-  /** `container` pads the body (default); `fit` lets the body fill the page edge to edge. */
-  variant?: 'container' | 'fit';
+  /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
+  header?: ReactNode;
+  /**
+   * `container` pads the body (default); `narrow` centers the body in a max-width column;
+   * `fit` lets the body fill the page edge to edge.
+   */
+  variant?: 'container' | 'fit' | 'narrow';
 }
 
 export function PageLayout({
@@ -19,8 +24,15 @@ export function PageLayout({
   breadcrumbs,
   headerActions,
   actionRow,
+  header,
   variant = 'container',
 }: PageLayoutProps) {
+  const headerSlot = header ? (
+    <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
+      {header}
+    </div>
+  ) : null;
+
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
@@ -39,11 +51,30 @@ export function PageLayout({
       <main
         className={cn(
           'min-h-0 flex-1 overflow-y-auto',
-          // `fit` hands the whole body height to its child (panels, graphs, tables that own their scroll).
-          variant === 'container' ? 'p-4' : 'grid grid-rows-[minmax(0,1fr)]',
+          variant === 'container' && 'p-4',
+          // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
+          variant === 'fit' && (header ? 'grid grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-rows-[minmax(0,1fr)]'),
         )}
       >
-        {children}
+        {variant === 'narrow' ? (
+          // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
+          // eslint-disable-next-line tailwindcss/enforces-shorthand
+          <div
+            data-slot="page-layout-container"
+            className={cn(
+              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-[minmax(0,1fr)] p-4',
+              header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+            )}
+          >
+            {headerSlot}
+            {children}
+          </div>
+        ) : (
+          <>
+            {headerSlot}
+            {children}
+          </>
+        )}
       </main>
     </div>
   );

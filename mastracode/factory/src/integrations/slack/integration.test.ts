@@ -123,4 +123,47 @@ describe('SlackIntegration.channels', () => {
 
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: false });
   });
+
+  // The storage handle is only useful if it survives the trip from the
+  // integration context into the hook the channel machinery calls.
+  it("forwards the model-packs domain to the session-start hook, so a session starts on the sender's own model", async () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const modelPacks = { getActive: vi.fn(async () => ({ models: { build: 'openai/gpt-5.6', plan: '', fast: '' } })) };
+    const config = integration.channels(
+      ctxWith({
+        modelPacks,
+        memorySettings: { get: vi.fn(async () => null) },
+        projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-5' })) },
+        sourceControlOwner: {
+          sessions: {
+            getBySessionId: vi.fn(async () => ({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' })),
+          },
+          projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
+          connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
+        },
+      }),
+    );
+    const session = {
+      mode: { get: () => 'build' },
+      thread: { getSetting: vi.fn(async () => null) },
+      model: {
+        get: vi.fn(() => 'openai/gpt-5.5'),
+        switch: vi.fn(async () => {}),
+        saveForMode: vi.fn(async () => {}),
+      },
+      om: {
+        observer: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
+        reflector: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
+      },
+      state: { get: () => ({}), set: vi.fn(async () => {}) },
+    };
+
+    await config.onSessionStart!({
+      session,
+      thread: { id: 'us-1', resourceId: 'us-1' },
+    } as any);
+
+    expect(modelPacks.getActive).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.model.switch).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.6' });
+  });
 });

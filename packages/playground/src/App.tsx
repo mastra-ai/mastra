@@ -63,7 +63,6 @@ import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
-import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -87,6 +86,8 @@ import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
+import WorkflowSchedules from './pages/workflows/workflow-schedules';
+import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { AuthLayout } from '@/components/auth-layout';
@@ -315,7 +316,6 @@ export const routes: RouteObject[] = [
         element: <SignalsEntityDetailPage />,
       },
       { path: '/traces', element: <Traces /> },
-      { path: '/inbox', element: <InboxPage /> },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
@@ -450,6 +450,8 @@ export const routes: RouteObject[] = [
             path: 'graph/:runId',
             element: <Workflow />,
           },
+          { path: 'traces', element: <WorkflowTraces /> },
+          { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
 

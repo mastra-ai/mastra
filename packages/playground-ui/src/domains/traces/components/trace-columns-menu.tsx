@@ -201,7 +201,7 @@ export function TraceColumnsMenu({
               </FieldBlock.Column>
             </DialogBody>
             <DialogFooter>
-              <Button icon={<X />} type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
+              <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>
                 Cancel
               </Button>
               <Button icon={<Columns3 />} type="submit" variant="primary">

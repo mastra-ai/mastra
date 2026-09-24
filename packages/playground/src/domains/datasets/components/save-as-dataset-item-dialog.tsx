@@ -287,7 +287,7 @@ export function SaveAsDatasetItemDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button icon={<X />} type="button" variant="outline" onClick={handleCancel}>
+            <Button icon={<X />} type="button" onClick={handleCancel}>
               Cancel
             </Button>
             <Button

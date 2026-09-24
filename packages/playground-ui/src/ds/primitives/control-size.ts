@@ -42,22 +42,19 @@ export const controlSizeClasses: Record<ControlSize, string> = {
   lg: 'h-control-lg text-label',
 };
 
-export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
+export type ControlTriggerVisualVariant = 'default' | 'ghost';
 
 // Open ("popup-open") state per variant. `default` washes through `--surface-tint`, the
 // layer its raised material expresses every other state in: its fill is a pinned card
 // colour, and swapping that would drop the control out of the material it shares with a
-// field. The transparent variants have no material to wash, so they take a fill rung.
+// field. `ghost` has no material to wash, so it takes a fill rung.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
   default: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
-  outline: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground data-[popup-open]:border-border-hover',
   ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
 };
 
 // Open-state classes for a trigger rendered with any Button variant; only the
 // form-style variants have one (a `primary`/`destructive` trigger keeps its look).
 export function controlTriggerOpenStateFor(variant: string | null | undefined): string | undefined {
-  return variant === 'default' || variant === 'outline' || variant === 'ghost'
-    ? controlTriggerOpenState[variant]
-    : undefined;
+  return variant === 'default' || variant === 'ghost' ? controlTriggerOpenState[variant] : undefined;
 }

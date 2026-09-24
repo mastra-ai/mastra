@@ -132,7 +132,7 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
         <Txt variant="caption" tone="muted">
           Unable to load memory configuration
         </Txt>
-        <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+        <Button size="sm" disabled={isFetching} onClick={() => void refetch()}>
           Retry
         </Button>
       </div>

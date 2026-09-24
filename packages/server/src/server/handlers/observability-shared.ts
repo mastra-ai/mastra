@@ -1,6 +1,12 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
-import type { MastraCompositeStore, ObservabilityStorage, ScoresStorage } from '@mastra/core/storage';
+import type {
+  MastraCompositeStore,
+  ObservabilityStorage,
+  ScoresStorage,
+  TrustedThreadPredicate,
+  TrustedTraceQueryPredicate,
+} from '@mastra/core/storage';
 import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
@@ -17,8 +23,13 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
+const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
+export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE = 'observability-trace-query-tenant-scope';
+export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE =
+  'Trusted tenant scope requires a newer @mastra/core with trace-query tenant scope support. Please upgrade.';
 
 export function supportsTraceQueryDiscoveryCore() {
   return (
@@ -93,11 +104,53 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
+function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(usesRootDuration);
+  if (predicate.type === 'not') return usesRootDuration(predicate.arg);
+  if (predicate.type === 'relation') {
+    return predicate.collection === 'traces' && usesRootDuration(predicate.predicate);
+  }
+  return predicate.field === 'durationMs';
+}
+
+export function supportsObservabilityTraceQueryRootDuration(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE) === true;
+}
+
+export function assertObservabilityTraceQueryRootDurationSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  if (!usesRootDuration(predicate) || supportsObservabilityTraceQueryRootDuration(observabilityStore)) return;
+
+  throw new HTTPException(501, {
+    message: 'Root duration predicates are not supported by the configured observability store',
+  });
+}
+
 export function assertObservabilityTraceQueryDiscoverySupported(observabilityStore: ObservabilityStorage) {
   if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE)) return;
 
   throw new HTTPException(501, {
     message: 'Trace query discovery is not supported by the configured observability store',
+  });
+}
+
+/**
+ * A scoped request must never run unscoped: a store that predates tenant scope would
+ * silently ignore `plan.scope` and return every tenant's rows, so it is rejected instead.
+ * Unscoped requests are unaffected.
+ */
+export function assertObservabilityTraceQueryTenantScopeSupported(
+  observabilityStore: ObservabilityStorage,
+  scope: coreStorage.TraceQueryTenantScope | undefined,
+) {
+  if (scope === undefined) return;
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'The configured observability store cannot enforce the trusted tenant scope',
   });
 }
 
@@ -141,7 +194,8 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/traces/query',
     summary: 'Query traces',
-    description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
+    description:
+      'Returns completed logical traces or distinct thread groups matching an advanced trace query. Thread grouping remains supported but is deprecated; use queryTraceThreads instead.',
     requiresPermission: 'observability:read',
   },
 

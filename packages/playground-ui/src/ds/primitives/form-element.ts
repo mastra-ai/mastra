@@ -4,15 +4,6 @@
 // guards on each variant keep hover and active fills from painting over these.
 export const sharedFormElementDisabledStyle = 'disabled:cursor-not-allowed disabled:text-muted-foreground';
 
-// Surface half of the disabled language, for neutral controls that carry a fill.
-// It recesses to the lowest rung of the fill ladder, one step below the resting
-// `--fill`, so a disabled field reads quieter than an enabled one on every
-// surface. Variants with their own hue (primary, destructive) keep that hue at
-// reduced emphasis instead, so a disabled destructive action still reads as
-// destructive. Transparent variants (ghost) opt out entirely: a disabled icon
-// button in a toolbar should stay invisible rather than resolve into a pill.
-export const disabledOutlineSurfaceStyle = 'disabled:border-border disabled:bg-transparent';
-
 // Focus indicator for the (green-less) input family. Instead of a heavy ring we
 // reinforce the existing 1px border: on focus it brightens to a translucent
 // `foreground` (theme-aware — light on dark surfaces, dark on light) that clears
@@ -61,19 +52,27 @@ const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]'
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
 const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
-const surfaceRimFocusWithin = 'focus-within:[--surface-rim:var(--surface-rim-focus)]';
+const fieldRimFocus = 'focus-visible:[--surface-rim:var(--field-rim-focus)]';
+const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
+export const fieldErrorRim = '[--field-rim:var(--destructive)] [--field-rim-focus:var(--destructive)]';
+export const fieldErrorRimWithin =
+  'has-[[aria-invalid=true]]:[--field-rim:var(--destructive)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive)]';
+export const fieldTriggerStyle =
+  'bg-field shadow-input ' +
+  fieldRimFocus +
+  ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
 
 export const inputSurfaceAndFocusStyle =
-  'bg-card shadow-raised text-foreground disabled:bg-fill-subtle ' +
+  'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +
   surfaceTintHover +
   ' outline-hidden focus-visible:outline-hidden ' +
-  surfaceRimFocus;
+  fieldRimFocus;
 
 export const inputSurfaceAndFocusWithinStyle =
-  'bg-card shadow-raised text-foreground has-[:disabled]:bg-fill-subtle ' +
+  'bg-field shadow-input text-foreground has-[:disabled]:bg-field-disabled ' +
   surfaceTintHoverWithin +
   ' outline-hidden focus-within:outline-hidden ' +
-  surfaceRimFocusWithin;
+  fieldRimFocusWithin;
 
 // The same material, for a neutral control that is a button rather than a field: `Button`'s
 // `default` variant, and with it every trigger built on it (Select, Combobox, DateTimePicker).

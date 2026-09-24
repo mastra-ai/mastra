@@ -20,6 +20,7 @@ import {
   ThreadRail,
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
@@ -44,6 +45,7 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
+import { startViewTransition } from '@/lib/routing';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -140,6 +142,7 @@ export const Thread = ({
   isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { draft, updateDraft } = useThreadInput(threadId);
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
@@ -163,8 +166,40 @@ export const Thread = ({
     opensTurn: message => threadRailAnchorIds.has(message.id),
   });
 
+  // Before the first message the dock is unpinned and centered so the greeting,
+  // composer and prompts read as one landing. The composer keeps its tree position
+  // in both modes so the first send doesn't remount it (focus and attachments stay).
+  const showLanding = isEmpty && !isHistoryLoading;
+  // The layout follows `showLanding` one commit late so leaving the landing can be
+  // wrapped in a view transition: the named composer then glides to the dock
+  // instead of snapping. Only the exit caused by a send is animated (the chat is
+  // running then); a history load resolving on refresh or thread switch also flips
+  // `showLanding` false and must snap, or the composer visibly slides on every load.
+  const [landingShown, setLandingShown] = useState(showLanding);
+  useEffect(() => {
+    if (landingShown === showLanding) return;
+    if (showLanding || !isRunning) {
+      setLandingShown(showLanding);
+      return;
+    }
+    startViewTransition(() => setLandingShown(false));
+  }, [showLanding, landingShown, isRunning]);
+
   return (
-    <ComposerAttachmentsProvider>
+    <ComposerAttachmentsProvider
+      controlled={
+        draft && updateDraft
+          ? {
+              value: draft.attachments,
+              onChange: value =>
+                updateDraft(previous => ({
+                  ...previous,
+                  attachments: typeof value === 'function' ? value(previous.attachments) : value,
+                })),
+            }
+          : undefined
+      }
+    >
       <ChatShell
         className="h-full"
         scroller={{
@@ -177,7 +212,7 @@ export const Thread = ({
         <ChatShell.Stage>
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
-            <ChatShell.Content>
+            <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
               {isLoadingPrevious && (
                 <ChatShell.Column
                   data-testid="thread-history-older-skeleton"
@@ -192,9 +227,7 @@ export const Thread = ({
                 <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
                   <ChatMessagesLoadingSkeleton />
                 </ChatShell.Column>
-              ) : isEmpty ? (
-                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
-              ) : (
+              ) : landingShown ? null : (
                 <ChatShell.Column
                   ref={messagesContainerRef}
                   data-testid="thread-message-column"
@@ -238,19 +271,31 @@ export const Thread = ({
                 </ChatShell.Column>
               )}
             </ChatShell.Content>
-            <ChatShell.Dock>
-              <ChatShell.ScrollButton />
-              <ChatShell.Column className="gap-2 px-2 md:px-2">
-                {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
-                <TaskPanel />
-                <AgentComposer
-                  agentId={agentId}
-                  threadId={threadId}
-                  hasModelList={hasModelList}
-                  hideModelSwitcher={hideModelSwitcher}
-                  runOptionsSlot={runOptionsSlot}
-                  refreshThreadList={refreshThreadList}
-                />
+            <ChatShell.Dock
+              data-testid={landingShown ? 'thread-landing' : undefined}
+              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+            >
+              {landingShown ? null : <ChatShell.ScrollButton />}
+              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+                {landingShown ? (
+                  <ThreadWelcome agentName={agentName} />
+                ) : (
+                  <>
+                    {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                    <TaskPanel />
+                  </>
+                )}
+                <div className={landingShown ? 'starter-prompt' : undefined}>
+                  <AgentComposer
+                    agentId={agentId}
+                    threadId={threadId}
+                    hasModelList={hasModelList}
+                    hideModelSwitcher={hideModelSwitcher}
+                    runOptionsSlot={runOptionsSlot}
+                    refreshThreadList={refreshThreadList}
+                  />
+                </div>
+                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
@@ -260,17 +305,23 @@ export const Thread = ({
   );
 };
 
-export interface ThreadWelcomeProps {
-  agentName?: string;
-  suggestedPrompts?: string[];
-}
-
-const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
   return (
-    <div className="flex w-full grow flex-col items-center pt-[15vh]">
-      <Avatar name={agentName || 'Agent'} size="lg" />
-      <p className="mt-4 font-medium">How can I help you today?</p>
-      <SuggestedPromptList prompts={suggestedPrompts} />
+    <div data-testid="thread-welcome" className="flex w-full flex-col items-center gap-4">
+      <div className="starter-heading">
+        <Avatar name={agentName || 'Agent'} size="lg" />
+      </div>
+      <Txt
+        as="h1"
+        variant="display"
+        tone="muted"
+        className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
+      >
+        <span className="starter-shimmer">
+          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
+          do for you today?
+        </span>
+      </Txt>
     </div>
   );
 };
@@ -292,10 +343,19 @@ const AgentComposer = ({
   runOptionsSlot,
   refreshThreadList,
 }: AgentComposerProps) => {
-  const { threadInput: text, setThreadInput } = useThreadInput(threadId);
+  const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const preparing = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(
+    () => () => {
+      lifetime.current++;
+    },
+    [],
+  );
+  const [preparationError, setPreparationError] = useState<string>();
   const send = useChatSend();
-  const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
+  const { attachments, toCoreUserMessages, clear, isAddingAttachments } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
@@ -308,13 +368,40 @@ const AgentComposer = ({
   const sendBlocked = isRunning && !canSendWhileStreaming;
 
   const submit = async () => {
-    if (isEmpty || sendBlocked || !canExecuteAgent) return;
-    const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
-    const message = text;
-    setThreadInput('');
-    clear();
-    setSendPulseKey(k => k + 1);
-    send({ message, attachments: coreUserMessages });
+    if (
+      isEmpty ||
+      sendBlocked ||
+      !canExecuteAgent ||
+      draftStatus?.restoring ||
+      isAddingAttachments ||
+      preparing.current
+    )
+      return;
+    preparing.current = true;
+    const currentLifetime = lifetime.current;
+    const submittedIds = new Set(attachments.map(attachment => attachment.id));
+    setPreparationError(undefined);
+    try {
+      const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
+      if (lifetime.current !== currentLifetime) return;
+      // Clear only the submitted snapshot; edits made during file conversion belong to the next draft.
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: previous.text === text ? '' : previous.text,
+          attachments: previous.attachments.filter(attachment => !submittedIds.has(attachment.id)),
+        }));
+      else {
+        setThreadInput('');
+        clear();
+      }
+      setSendPulseKey(k => k + 1);
+      send({ message: text, attachments: coreUserMessages });
+    } catch {
+      if (lifetime.current === currentLifetime)
+        setPreparationError('Attachments could not be prepared. Your draft has been kept.');
+    } finally {
+      preparing.current = false;
+    }
   };
 
   return (
@@ -322,6 +409,16 @@ const AgentComposer = ({
     // the bottom edge independently of the root crossfade.
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
+      {(preparationError || draftStatus?.error) && (
+        <p role="alert" className="text-ui-sm">
+          {preparationError || draftStatus?.error}
+        </p>
+      )}
+      {draftStatus?.restoring && (
+        <p role="status" className="text-ui-sm">
+          Restoring draft…
+        </p>
+      )}
       <Composer
         className="relative"
         onSubmit={event => {
@@ -354,12 +451,12 @@ const AgentComposer = ({
                   void submit();
                 }
               }}
-              disabled={!canExecuteAgent}
+              disabled={!canExecuteAgent || draftStatus?.restoring}
             />
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
             <ComposerActions>
               <ComposerActionRow
-                canExecute={canExecuteAgent}
+                canExecute={canExecuteAgent && !draftStatus?.restoring}
                 agentId={agentId}
                 runOptionsSlot={runOptionsSlot}
                 showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
@@ -474,6 +571,7 @@ const ComposerSendButton = ({
   canSendWhileStreaming,
   onCancel,
 }: ComposerSendButtonProps) => {
+  const { isAddingAttachments } = useComposerAttachments();
   // While streaming and not allowed to send mid-stream, the only action is cancel.
   if (isRunning && !canSendWhileStreaming) {
     return (
@@ -490,7 +588,7 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        disabled={!canExecute || isEmpty}
+        disabled={!canExecute || isEmpty || isAddingAttachments}
       >
         <ArrowUp />
       </Button>
