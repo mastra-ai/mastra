@@ -3793,12 +3793,21 @@ export class Run<
                 : undefined;
         if (!nestedWorkflowId) continue;
 
-        const nestedRunIdMetadata = stepResult?.metadata?.nestedRunId;
-        const nestedRunIds: unknown[] = Array.isArray(nestedRunIdMetadata)
-          ? nestedRunIdMetadata
-          : Array.isArray(stepResult)
-            ? stepResult.map(result => result?.metadata?.nestedRunId)
-            : [nestedRunIdMetadata ?? runId];
+        // Suspended foreach iterations keep their links under `suspendPayload.__workflow_meta`
+        // (default engine: `foreachOutput`; evented engine: per-iteration entries in `output`).
+        const linkedRunIds = (result: any): unknown[] => [
+          result?.metadata?.nestedRunId,
+          result?.suspendPayload?.__workflow_meta?.runId,
+        ];
+        const nestedRunIds = [stepResult, ...(Array.isArray(stepResult) ? stepResult : [])]
+          .flatMap(result => [
+            result,
+            ...(result?.suspendPayload?.__workflow_meta?.foreachOutput ?? []),
+            ...(Array.isArray(result?.output) ? result.output : []),
+          ])
+          .flatMap(linkedRunIds)
+          .flat();
+        if (!nestedRunIds.some(id => typeof id === 'string') && stepGraph?.type !== 'foreach') nestedRunIds.push(runId);
 
         for (const nestedRunId of nestedRunIds) {
           const key = `${nestedWorkflowId}:${nestedRunId}`;

@@ -106,6 +106,65 @@ describe('Run.cancel after restart cascades to persisted nested runs', () => {
     }
   });
 
+  it.each([
+    ['default', createWorkflow, createStep],
+    ['evented', createEventedWorkflow, createEventedStep],
+  ] as const)('%s engine cancels suspended foreach nested runs from a recreated run', async (_, create, step) => {
+    const item = z.object({ n: z.number() });
+    const build = () => {
+      const maybeSuspend = (step as typeof createStep)({
+        id: 'maybe-suspend',
+        inputSchema: item,
+        outputSchema: item,
+        execute: async ({ inputData, suspend }) => (inputData.n === 1 ? suspend({}) : inputData),
+      });
+      const child = (create as typeof createWorkflow)({ id: 'child', inputSchema: item, outputSchema: item })
+        .then(maybeSuspend)
+        .commit();
+      return (create as typeof createWorkflow)({ id: 'parent', inputSchema: z.array(item), outputSchema: z.any() })
+        .foreach(child)
+        .commit();
+    };
+
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const processA = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { parent: build() },
+    });
+    const processB = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { parent: build() },
+    });
+    await processA.startWorkers();
+    try {
+      const run = await processA.getWorkflow('parent').createRun();
+      const result = await run.start({ inputData: [{ n: 0 }, { n: 1 }, { n: 2 }] });
+      expect(result.status).toBe('suspended');
+      await processA.stopWorkers();
+
+      const children = (await store.listWorkflowRuns({})).runs.filter(r => r.workflowName === 'child');
+      const suspended = children.filter(r => (r.snapshot as WorkflowRunState).status === 'suspended');
+      expect(suspended).toHaveLength(1);
+
+      await processB.startWorkers();
+      await (await processB.getWorkflow('parent').createRun({ runId: run.runId })).cancel();
+
+      for (const child of children) {
+        const before = (child.snapshot as WorkflowRunState).status;
+        const after = (await store.loadWorkflowSnapshot({ workflowName: 'child', runId: child.runId }))?.status;
+        expect(after).toBe(before === 'suspended' ? 'canceled' : before);
+      }
+    } finally {
+      await processA.stopWorkers();
+      await processB.stopWorkers();
+    }
+  });
+
   function snapshot(runId: string, status: WorkflowRunState['status'], context: Record<string, any> = {}) {
     return {
       runId,
