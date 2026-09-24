@@ -132,7 +132,7 @@ import {
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export { TABLE_DELETION_REQUESTS } from './ddl';
-export { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
+export { recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
@@ -1421,11 +1421,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
     try {
-      return await feedbackOps.updateFeedbackReviewStatus(
-        this.#client,
-        args,
-        deltaPollingSupported(this.#deltaCursorStrategy) ? this.#deltaCursorStrategy : null,
-      );
+      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
