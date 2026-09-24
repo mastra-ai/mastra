@@ -112,7 +112,8 @@ describe('foreach nested workflow runs', () => {
           runId: run.runId,
         });
         const foreachOutput = (snapshot!.context.child as any).suspendPayload.__workflow_meta.foreachOutput as any[];
-        const forEachIndex = foreachOutput.findIndex(entry => entry?.status === 'suspended');
+        // Resume the last suspended iteration first so each resume targets a non-first suspended index.
+        const forEachIndex = foreachOutput.findLastIndex(entry => entry?.status === 'suspended');
         result = await run.resume({ forEachIndex, resumeData: { ok: true } });
       }
 

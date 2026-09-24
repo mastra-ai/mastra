@@ -430,7 +430,14 @@ export async function executeStep(
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                // The step-level suspend payload belongs to one iteration; a foreach iteration
+                // must resume its own nested run.
+                runId:
+                  (executionContext.foreachIndex !== undefined
+                    ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[
+                        executionContext.foreachIndex
+                      ]?.suspendPayload?.__workflow_meta?.runId
+                    : undefined) ?? stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
                 label: resume?.label,
                 forEachIndex: resume?.forEachIndex,
               }
