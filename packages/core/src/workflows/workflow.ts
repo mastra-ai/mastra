@@ -120,6 +120,7 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
   StepFlowEntryOptions,
+  WorkflowCancelResult,
 } from './types';
 import {
   cleanStepResult,
@@ -3738,23 +3739,32 @@ export class Run<
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    // Storage errors don't prevent cancellation: the abort signal and in-memory status are already
+    // updated. They are reported to the caller instead.
+    return this.persistCancellation();
+  }
+
+  /**
+   * Persists 'canceled' for this run and its persisted nested runs, collecting failures.
+   */
+  protected async persistCancellation(): Promise<WorkflowCancelResult> {
+    const failed: WorkflowCancelResult['failed'] = [];
+    let workflowsStore: WorkflowsStorage | undefined;
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.updateWorkflowState({
         workflowName: this.workflowId,
         runId: this.runId,
-        opts: {
-          status: 'canceled',
-        },
+        opts: { status: 'canceled' },
       });
-      if (workflowsStore) {
-        await this.cancelPersistedDescendants(workflowsStore);
-      }
     } catch (error) {
-      // Storage errors should not prevent cancellation from succeeding
-      // The abort signal and in-memory status are already updated
       this.mastra?.getLogger()?.error(`Failed to persist cancellation for workflow run ${this.runId}`, { error });
+      failed.push({ workflowName: this.workflowId, runId: this.runId, error });
     }
+    if (workflowsStore) {
+      failed.push(...(await this.cancelPersistedDescendants(workflowsStore)));
+    }
+    return { failed };
   }
 
   /**
@@ -3762,7 +3772,10 @@ export class Run<
    * Links are read from storage (step `metadata.nestedRunId`, or the parent runId for non-foreach nesting), so this also works after a process
    * restart when no in-memory parent/child tracking exists. Terminal runs are left untouched.
    */
-  protected async cancelPersistedDescendants(workflowsStore: WorkflowsStorage): Promise<void> {
+  protected async cancelPersistedDescendants(
+    workflowsStore: WorkflowsStorage,
+  ): Promise<WorkflowCancelResult['failed']> {
+    const failed: WorkflowCancelResult['failed'] = [];
     const visited = new Set<string>([`${this.workflowId}:${this.runId}`]);
     const queue: Array<{ runId: string; workflowName: string }> = [
       { runId: this.runId, workflowName: this.workflowId },
@@ -3776,6 +3789,8 @@ export class Run<
         if (typeof snapshot === 'string') snapshot = JSON.parse(snapshot) as WorkflowRunState;
       } catch (error) {
         this.mastra?.getLogger()?.error(`Failed to load workflow run ${runId} while canceling descendants`, { error });
+        // An unreadable run hides its descendants, so it is reported even when it is the root.
+        failed.push({ workflowName, runId, error });
         continue;
       }
       if (!snapshot?.context) continue;
@@ -3848,8 +3863,10 @@ export class Run<
         }
       } catch (error) {
         this.mastra?.getLogger()?.error(`Failed to cancel nested workflow run ${runId}`, { error });
+        failed.push({ workflowName, runId, error });
       }
     }
+    return failed;
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
