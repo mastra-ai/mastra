@@ -825,7 +825,7 @@ async function listTraceRows<TSpan>(
         LIMIT ? OFFSET ?
       )
       ${reconstructForAnchors(reconstructSelect, 'page_roots')}
-      ${buildOrderByClause(orderBy)}
+      ${buildOrderByClause(orderBy)}, traceId, spanId
     `;
     const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
     const spans = rows.map(row => mapRow(row as Record<string, unknown>));
@@ -1245,7 +1245,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
         LIMIT ? OFFSET ?
       )
       ${reconstructForAnchors(SPAN_RECONSTRUCT_SELECT, 'page_anchors')}
-      ${buildOrderByClause(orderBy)}
+      ${buildOrderByClause(orderBy)}, traceId, spanId
     `;
     const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
     const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
