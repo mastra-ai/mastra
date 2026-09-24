@@ -227,7 +227,9 @@ export class EagerToolExecutionCoordinator {
               resolve(result);
             },
             error => {
-              if (eagerToolCallSuspensionIntent(error)) this.#suspended.add(toolCallId);
+              if (eagerToolCallSuspensionIntent(error) && !controller.signal.aborted) {
+                this.#suspended.add(toolCallId);
+              }
               reject(error);
             },
           )

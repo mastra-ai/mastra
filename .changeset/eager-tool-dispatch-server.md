@@ -3,3 +3,9 @@
 ---
 
 Stored agent default options now accept `eagerToolExecution`.
+
+```ts
+defaultOptions: {
+  eagerToolExecution: false,
+}
+```

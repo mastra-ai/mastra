@@ -1470,6 +1470,28 @@ describe('EagerToolExecutionCoordinator', () => {
     expect(coordinator.running).toBe(1);
   });
 
+  it('ignores a suspension from cancelled work that ignored the abort', async () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    let suspendLate!: () => void;
+
+    coordinator.start(
+      'call-1',
+      () =>
+        new Promise<never>((_, reject) => {
+          suspendLate = () =>
+            reject(new EagerToolExecutionNotRun('suspended', { suspension: { payload: {} } as never }));
+        }),
+    );
+
+    coordinator.stop({ cancelRunning: true });
+    coordinator.beginTurn();
+    suspendLate();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // A zombie from the discarded attempt must not block the replacement from retrying.
+    expect(coordinator.hasSuspendedHandback).toBe(false);
+  });
+
   it('aborts and forgets running work when the caller aborts, not just queued work', async () => {
     // What the caller-abort listener asks of the coordinator. The run's own signal only
     // reaches tools that bother to observe it, and an aborted run bails before any
