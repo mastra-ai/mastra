@@ -65,6 +65,10 @@ export interface ReviewListFilters {
 }
 
 export interface DatasetReviewProps {
+  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
+  withQueryTrace: boolean;
+  /** Shows the Feedback tabs on the result and trace drawers. */
+  withFeedback: boolean;
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
@@ -110,6 +114,8 @@ export function DatasetReview({
   toolbarEnd,
   onCreateScorer,
   breadcrumbs,
+  withQueryTrace,
+  withFeedback,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
@@ -545,6 +551,8 @@ export function DatasetReview({
 
   const detailPanel = (
     <ExperimentResultDetail
+      withQueryTrace={withQueryTrace}
+      withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}
       scores={featuredItem ? featuredScoresByItemId?.[featuredItem.itemId] : undefined}

@@ -1049,6 +1049,7 @@ type InputShared_Type_41 = {
   tracingOptions?: InputShared_Type_40 | undefined;
   requireToolApproval?: boolean | undefined;
   autoResumeSuspendedTools?: boolean | undefined;
+  eagerToolExecution?: boolean | undefined;
   toolCallConcurrency?:
     | (
         | number
@@ -2228,6 +2229,7 @@ type Shared_Type_5 = {
   tracingOptions?: Shared_Type_4 | undefined;
   requireToolApproval?: boolean | undefined;
   autoResumeSuspendedTools?: boolean | undefined;
+  eagerToolExecution?: boolean | undefined;
   toolCallConcurrency?:
     | (
         | number

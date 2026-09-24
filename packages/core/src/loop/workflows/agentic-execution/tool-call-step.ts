@@ -33,6 +33,7 @@ import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
+  EAGER_TOOL_EXECUTION_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
@@ -53,6 +54,16 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import {
+  EAGER_TOOL_ABORT_SIGNAL,
+  EAGER_TOOL_BAILOUT,
+  EAGER_TOOL_EXECUTION_MARKER,
+  eagerToolCallAlreadyAnnouncedInput,
+  EagerToolExecutionNotRun,
+  eagerToolCallDidNotExecute,
+  eagerToolCallSuspensionIntent,
+} from './eager-tool-execution';
+import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
 import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
@@ -97,10 +108,56 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext }) => {
+    execute: async executionContext => {
+      const { inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext } = executionContext;
+      // Eager dispatch invokes this step with its own signal, chained to the run's, so a
+      // call started for a model attempt that is later discarded can be cancelled on its
+      // own. Every other caller falls back to the run signal, unchanged.
+      const callerAbortSignal = (executionContext as unknown as Record<symbol, AbortSignal | undefined>)[
+        EAGER_TOOL_ABORT_SIGNAL
+      ];
+      const abortSignal =
+        callerAbortSignal && options?.abortSignal
+          ? AbortSignal.any([callerAbortSignal, options.abortSignal])
+          : (callerAbortSignal ?? options?.abortSignal);
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      const isEagerExecution = Boolean((executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]);
+      // Present only on an eager dispatch. Marked before bailing out, so the dispatcher
+      // can reject a settlement whose bailout the tool swallowed.
+      const eagerBailout = (executionContext as unknown as Record<symbol, EagerToolBailout | undefined>)[
+        EAGER_TOOL_BAILOUT
+      ];
+      // Adopt an execution the LLM step started eagerly for this call, if any. The
+      // eager invocation itself carries the marker so it never adopts itself.
+      // Set when the eager attempt this invocation replaces already ran the tool's
+      // `onInputAvailable`, so the hook stays at one call per adoption.
+      let inputAlreadyAnnouncedEagerly = false;
+      // Set when the eager attempt was abandoned because the tool suspended at runtime.
+      // Stashed here and consumed further down, where the suspension helper's dependencies
+      // (`args`, `transformChunk`, `flushMessagesBeforeSuspension`) exist.
+      let eagerSuspensionIntent: EagerSuspensionIntent | undefined;
+      if (!isEagerExecution) {
+        // Take rather than read: adoption is exactly-once, so a later iteration that
+        // reuses this toolCallId executes again instead of replaying a stale result.
+        const eagerExecution = readScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator')?.take(
+          inputData.toolCallId,
+        );
+        if (eagerExecution) {
+          try {
+            return (await eagerExecution) as any;
+          } catch (error) {
+            // The eager attempt produced nothing adoptable: it was cancelled while
+            // still queued, or it turned out to need suspension. Run it normally
+            // instead. In the suspension case the body did start, so the hook it
+            // already announced must not be announced a second time.
+            if (!eagerToolCallDidNotExecute(error)) throw error;
+            inputAlreadyAnnouncedEagerly = eagerToolCallAlreadyAnnouncedInput(error);
+            eagerSuspensionIntent = eagerToolCallSuspensionIntent(error);
+          }
+        }
+      }
       // Use tools from the scope (set by llmExecutionStep via prepareStep/processInputStep)
       // when available. This avoids serialization — execute functions live off-the-wire.
       // Fall back to the original tools from the closure if not set.
@@ -382,17 +439,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (tool && 'onInputAvailable' in tool) {
+      if (tool && 'onInputAvailable' in tool && !inputAlreadyAnnouncedEagerly) {
         try {
           await tool?.onInputAvailable?.({
             toolCallId: inputData.toolCallId,
             input: inputData.args,
             messages: messageList.get.input.aiV5.model(),
-            abortSignal: options?.abortSignal,
+            abortSignal,
           });
         } catch (error) {
           logger?.error('Error calling onInputAvailable', error);
         }
+        // Announced before `execute`, so a bailout raised from inside the tool body has
+        // already fired the hook. Record it so the foreach's re-run does not fire it
+        // again for the same call.
+        if (eagerBailout) eagerBailout.inputAvailableCalled = true;
       }
 
       if (!tool.execute) {
@@ -488,6 +549,162 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               .describe('Optional explanation for the decision, surfaced to the model when the tool call is declined'),
           }),
         );
+
+        // The real suspension sequence, extracted so it has exactly one implementation with
+        // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
+        // eager attempt that suspended at runtime. Defined here because it closes over
+        // `args`, `transformChunk`, `flushMessagesBeforeSuspension` and `approvalSchema`, and
+        // called before approval gating so a handed-back call is never re-gated or re-run.
+        const raiseToolSuspension = async (suspendPayload: any, options?: SuspendOptions): Promise<any> => {
+          if (options?.requireToolApproval) {
+            const innerApproval =
+              typeof options.requireToolApproval === 'object' && options.requireToolApproval
+                ? options.requireToolApproval
+                : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
+                  ? suspendPayload.requireToolApproval
+                  : null;
+
+            const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
+            const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
+
+            await stopGoalActivity({
+              agentId,
+              runId,
+              now: readScoped(scopeCtx, NOW_KEY, 'now'),
+            });
+            const approvalChunk = await transformChunk(
+              {
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                },
+              },
+              'approval',
+            );
+            if (outputWriter) {
+              await outputWriter(approvalChunk);
+            } else {
+              safeEnqueue(controller, approvalChunk);
+            }
+
+            // Add approval metadata to message before persisting
+            addToolMetadata({
+              toolCallId: inputData.toolCallId,
+              toolName: approvalToolName,
+              args: approvalArgs,
+              ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
+                ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
+                : {}),
+              type: 'approval',
+              suspendedToolRunId: options.runId,
+              resumeSchema: JSON.stringify(
+                standardSchemaToJSONSchema(
+                  toStandardSchema(
+                    z.object({
+                      approved: z
+                        .boolean()
+                        .describe(
+                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                        ),
+                    }),
+                  ),
+                ),
+              ),
+              metadata: approvalChunk.metadata,
+            });
+
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
+            return suspend(
+              {
+                type: 'approval',
+                requireToolApproval: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                },
+                __streamState: streamState.serialize(),
+                __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persist the inner suspended run id in the workflow snapshot, partitioned per
+                // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
+                // same id as delegatedRunId for cold reloads, while the snapshot remains the
+                // runtime source for routing this targeted resume.
+                suspendedToolRunId: options.runId,
+              },
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
+          } else {
+            const suspensionChunk = await transformChunk(
+              {
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: options?.resumeSchema,
+                },
+              },
+              'suspend',
+              { suspendPayload },
+            );
+            safeEnqueue(controller, suspensionChunk);
+
+            // Add suspension metadata to message before persisting
+            addToolMetadata({
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args,
+              suspendPayload,
+              suspendedToolRunId: options?.runId,
+              type: 'suspension',
+              resumeSchema: options?.resumeSchema,
+              metadata: suspensionChunk.metadata,
+            });
+
+            // Flush messages before suspension to ensure they are persisted
+            await flushMessagesBeforeSuspension();
+
+            return await suspend(
+              {
+                toolCallSuspended: suspendPayload,
+                __streamState: streamState.serialize(),
+                __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                resumeLabel: options?.resumeLabel,
+                suspendedToolRunId: options?.runId,
+              },
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
+          }
+        };
+
+        // An eager attempt that suspended at runtime hands its intent back here. The body
+        // already ran once on that attempt, so raise the real suspension from this — the
+        // owning foreach iteration — instead of running the tool again. The intent wins over
+        // any value or error the tool produced after swallowing the bailout.
+        // This deliberately skips `approvalGated` below: an approval-requiring tool is never
+        // dispatched eagerly (the eligibility check excludes every approval source), so there is
+        // no approval decision to re-make here. A runtime `suspend({ requireToolApproval })` is
+        // still honoured — the intent's options carry it into the approval branch of the helper.
+        if (eagerSuspensionIntent) {
+          return await raiseToolSuspension(eagerSuspensionIntent.suspendPayload, eagerSuspensionIntent.options);
+        }
 
         if (approvalGated) {
           if (!approvalDecision) {
@@ -588,7 +805,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             : resumeData;
 
         const toolOptions: MastraToolInvocationOptions = {
-          abortSignal: options?.abortSignal,
+          abortSignal,
           toolCallId: inputData.toolCallId,
           // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
           // Regular tools retain the input-only context expected by the AI SDK tool contract.
@@ -614,142 +831,39 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
-            if (options?.requireToolApproval) {
-              const innerApproval =
-                typeof options.requireToolApproval === 'object' && options.requireToolApproval
-                  ? options.requireToolApproval
-                  : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
-                    ? suspendPayload.requireToolApproval
-                    : null;
-
-              const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
-              const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
-
-              await stopGoalActivity({
-                agentId,
-                runId,
-                now: readScoped(scopeCtx, NOW_KEY, 'now'),
-              });
-              const approvalChunk = await transformChunk(
-                {
-                  type: 'tool-call-approval',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: approvalToolName,
-                    args: approvalArgs,
-                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
-                  },
-                },
-                'approval',
-              );
-              if (outputWriter) {
-                await outputWriter(approvalChunk);
-              } else {
-                safeEnqueue(controller, approvalChunk);
-              }
-
-              // Add approval metadata to message before persisting
-              addToolMetadata({
-                toolCallId: inputData.toolCallId,
-                toolName: approvalToolName,
-                args: approvalArgs,
-                ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
-                  ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
-                  : {}),
-                type: 'approval',
-                suspendedToolRunId: options.runId,
-                resumeSchema: JSON.stringify(
-                  standardSchemaToJSONSchema(
-                    toStandardSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
-                    ),
-                  ),
-                ),
-                metadata: approvalChunk.metadata,
-              });
-
-              // Flush messages before suspension to ensure they are persisted
-              await flushMessagesBeforeSuspension();
-
-              return suspend(
-                {
-                  type: 'approval',
-                  requireToolApproval: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: approvalToolName,
-                    args: approvalArgs,
-                  },
-                  __streamState: streamState.serialize(),
-                  __agentId: agentId,
-                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                  // Persist the inner suspended run id in the workflow snapshot, partitioned per
-                  // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
-                  // same id as delegatedRunId for cold reloads, while the snapshot remains the
-                  // runtime source for routing this targeted resume.
-                  suspendedToolRunId: options.runId,
-                },
-                {
-                  resumeLabel: inputData.toolCallId,
-                },
-              );
-            } else {
-              const suspensionChunk = await transformChunk(
-                {
-                  type: 'tool-call-suspended',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    suspendPayload,
-                    args: inputData.args,
-                    resumeSchema: options?.resumeSchema,
-                  },
-                },
-                'suspend',
-                { suspendPayload },
-              );
-              safeEnqueue(controller, suspensionChunk);
-
-              // Add suspension metadata to message before persisting
-              addToolMetadata({
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args,
+            // A tool can suspend at runtime without declaring a suspend schema, so the
+            // eager eligibility whitelist cannot see it coming. Bail here, before any
+            // suspension side effect (chunk, metadata, flush) has happened, so the call
+            // is genuinely handed back to the ordinary foreach rather than half-suspended
+            // on this path. Bailing after the chunk was emitted would leave a suspension
+            // announced that never suspends.
+            if (isEagerExecution) {
+              // Recorded before the throw, because the throw is not enough on its own: it
+              // unwinds through the tool's body, and a tool that catches it would otherwise
+              // return normally and have that return adopted as the call's result.
+              const reason = `"${inputData.toolName}" requested suspension`;
+              // What the tool asked for rides out with the bailout, so the owning foreach
+              // iteration can raise the real suspension instead of running the body again.
+              // An explicit pick, not the whole `SuspendOptions`, which is unbounded.
+              const suspension: EagerSuspensionIntent = {
                 suspendPayload,
-                suspendedToolRunId: options?.runId,
-                type: 'suspension',
-                resumeSchema: options?.resumeSchema,
-                metadata: suspensionChunk.metadata,
-              });
-
-              // Flush messages before suspension to ensure they are persisted
-              await flushMessagesBeforeSuspension();
-
-              return await suspend(
-                {
-                  toolCallSuspended: suspendPayload,
-                  __streamState: streamState.serialize(),
-                  __agentId: agentId,
-                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                  toolCallId: inputData.toolCallId,
-                  toolName: inputData.toolName,
+                options: {
                   resumeLabel: options?.resumeLabel,
-                  suspendedToolRunId: options?.runId,
+                  resumeSchema: options?.resumeSchema,
+                  runId: options?.runId,
+                  requireToolApproval: options?.requireToolApproval,
                 },
-                {
-                  resumeLabel: inputData.toolCallId,
-                },
-              );
+              };
+              if (eagerBailout) {
+                eagerBailout.reason = reason;
+                eagerBailout.suspension = suspension;
+              }
+              throw new EagerToolExecutionNotRun(reason, {
+                inputAvailableCalled: eagerBailout?.inputAvailableCalled,
+                suspension,
+              });
             }
+            return await raiseToolSuspension(suspendPayload, options);
           },
           resumeData: resumeDataToPassToToolOptions,
           // The payload this tool call suspended with (see `toolCallSuspended` above), so a
@@ -1317,7 +1431,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             const awaitAuthoritativeBackgroundResult = async () => {
-              const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              const completedTask = await bgTask.waitForCompletion({ abortSignal: abortSignal });
               // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
               if (completedTask.status !== 'cancelled') {
                 const reconciliation = await reconciliationComplete;
@@ -1421,6 +1535,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         const rawResult = await tool.execute(args, toolOptions);
+
+        // The tool asked to suspend or bail and then swallowed the throw. Its return value
+        // is the return value of a call that was never supposed to complete here, so bail
+        // before it is published: `onOutput` is a side effect the foreach will produce
+        // again when it runs the call for real.
+        if (eagerBailout?.reason) {
+          throw new EagerToolExecutionNotRun(eagerBailout.reason, {
+            inputAvailableCalled: eagerBailout.inputAvailableCalled,
+            // A swallowed suspend produces its rejection here rather than in the closure,
+            // so the intent has to be re-attached or the hand-back loses it.
+            suspension: eagerBailout.suspension,
+          });
+        }
+
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
@@ -1430,7 +1558,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
               output: result,
-              abortSignal: options?.abortSignal,
+              abortSignal,
             });
           } catch (error) {
             logger?.error('Error calling onOutput', error);
@@ -1443,13 +1571,28 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
         }
+        // "The eager attempt must not run this" is control flow, not a tool failure.
+        // Turning it into a resolved `{ error }` would defeat the fail-safe: adoption
+        // awaits the eager promise and would record that error as the tool's result
+        // instead of running the call normally.
+        if (eagerToolCallDidNotExecute(error)) {
+          throw error;
+        }
+        // The tool caught the bailout and threw something else without a `cause`: the
+        // call still bailed, so hand back the recorded intent instead of a tool failure.
+        if (eagerBailout?.reason) {
+          throw new EagerToolExecutionNotRun(eagerBailout.reason, {
+            inputAvailableCalled: eagerBailout.inputAvailableCalled,
+            suspension: eagerBailout.suspension,
+          });
+        }
         // A throw while the request is aborted is a mid-flight cancellation, not a genuine
         // failure. Recording it as an error result would fake-complete the call (its
         // `result` becomes the abort message) and read as success on resume, so flag it
         // aborted instead and let the mapping step leave the call incomplete. Key off the
         // abort signal, not the error type: CoreToolBuilder wraps the AbortError in a
         // TOOL_EXECUTION_FAILED MastraError, so isAbortError(error) wouldn't match here.
-        if (options?.abortSignal?.aborted) {
+        if (abortSignal?.aborted) {
           // Log the discarded error for observability (control flow unchanged).
           logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
             toolName: inputData.toolName,

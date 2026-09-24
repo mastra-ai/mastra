@@ -60,7 +60,7 @@ import {
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { withToolTitle } from '../../../tools/tool-title';
-import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
+import { getNeedsApprovalFn, getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
 import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
@@ -70,6 +70,7 @@ import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
+  EAGER_TOOL_EXECUTION_KEY,
   GENERATE_ID_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
   MEMORY_KEY,
@@ -94,6 +95,14 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import {
+  EAGER_TOOL_ABORT_SIGNAL,
+  EAGER_TOOL_BAILOUT,
+  EAGER_TOOL_EXECUTION_MARKER,
+  EagerToolExecutionNotRun,
+  isEagerlyExecutableToolCall,
+} from './eager-tool-execution';
+import type { EagerToolBailout, EagerToolExecutionCoordinator } from './eager-tool-execution';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
@@ -208,6 +217,20 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
   /** Live step tracker, consulted at tool-result time to parent PROVIDER_TOOL_CALL spans. */
   modelSpanTracker?: IModelSpanTracker;
+  onCompleteToolCall?: (toolCall: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    providerMetadata?: Record<string, unknown>;
+    providerExecuted?: boolean;
+  }) => void;
+  /**
+   * Called the moment the model's terminal chunk is accepted, before any further await.
+   * Closing eager dispatch after this function returns instead would leave a window in
+   * which an execution settling frees its permit and promotes a queued call, which then
+   * runs alongside whatever the foreach picks up under a limit that counted neither.
+   */
+  onModelFinished?: () => void;
 };
 
 /**
@@ -542,6 +565,8 @@ async function processOutputStream<OUTPUT = undefined>({
   tracingContext,
   pendingProviderToolCallsByToolCallId,
   modelSpanTracker,
+  onCompleteToolCall,
+  onModelFinished,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -798,6 +823,13 @@ async function processOutputStream<OUTPUT = undefined>({
         args: chunk.payload.args,
         providerExecuted: chunk.payload.providerExecuted,
       });
+      onCompleteToolCall?.({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+        providerMetadata: chunk.payload.providerMetadata,
+        providerExecuted: chunk.payload.providerExecuted,
+      });
     }
 
     if (STEP_CONTENT_CHUNK_TYPES.has(chunk.type)) {
@@ -869,6 +901,7 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'finish': {
+        onModelFinished?.();
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
@@ -1225,11 +1258,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   outputWriter,
   mastra,
   rotateResponseMessageId: rotateLoopResponseMessageId,
-}: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
+  eagerCoordinator,
+  eagerToolCallStep,
+  runAbortSignal,
+}: OuterLLMRun<TOOLS, OUTPUT> & {
+  toolCallForeachOptions?: ToolCallForeachOptions;
+  eagerCoordinator?: EagerToolExecutionCoordinator;
+  eagerToolCallStep?: { execute: (context: any) => Promise<unknown> };
+}) {
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
+  let eagerAbortListenerRegistered = false;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1251,6 +1292,149 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+
+      /**
+       * This attempt is being thrown away: the error handling either retries the request
+       * or falls through to the next model, and the tool calls this attempt emitted are
+       * discarded with it.
+       *
+       * Eager work that already started is waited out rather than cancelled. A running
+       * tool may already have done its side effect, and a cancelled call is one the
+       * replacement attempt is free to make again. Once every started call has settled,
+       * each outcome — result or thrown error — is written into the conversation, so the
+       * replacement sees those calls as done. Work that never started is simply dropped.
+       * `beginTurn` then reopens dispatch so the retry or fallback model is treated like
+       * any other turn.
+       *
+       * Every path that discards an attempt has to call this. There are three: an error
+       * thrown out of the stream (which also covers falling over to the next model), an
+       * error chunk that an error processor answers with a retry, and a processor
+       * rejecting the step's output with a retrying tripwire.
+       */
+      const discardAttemptEagerWork = async () => {
+        eagerCoordinator?.stop();
+        await eagerCoordinator?.settleRunning(runAbortSignal);
+        // An abort ended the wait: the abort exit settles and commits instead.
+        if (runAbortSignal?.aborted) return;
+        const completed = eagerCoordinator?.stop({ cancelRunning: true });
+        eagerCoordinator?.beginTurn();
+        // Written the moment the attempt dies, not when a replacement starts: a retry that
+        // never runs (out of steps, a bail) would otherwise lose the only record of a
+        // side effect that happened.
+        if (completed?.length) eagerCoordinator?.carryDiscardedWork(completed);
+        await commitCarriedEagerWork(currentMessageId);
+      };
+
+      const commitCarriedEagerWork = async (messageId: string) => {
+        const completed = eagerCoordinator?.takeCarriedWork() ?? [];
+        if (!completed.length) return [];
+        // Recorded before the awaits below so a concurrent rollback can still recarry it.
+        eagerCoordinator?.recordCommittedWork(messageId, completed);
+
+        // A tool that already ran is the one thing the discard cannot undo. Committing
+        // the call and its result into the conversation is what keeps eager execution
+        // observably equal to the default: the replacement attempt sees the work as
+        // done, so it is not asked to call the tool again.
+        //
+        // Written under the id the starting attempt is using. On a fallback that is the
+        // dead attempt's own id, so the result merges into the assistant message that
+        // already carries the call instead of adding a second message with the same tool
+        // call id. On a retry that deleted the dead attempt's messages, it is the new
+        // attempt's id, and this is the only surviving record of the side effect.
+        //
+        // Chunks go through the same payload transforms as streamed tool chunks, so
+        // configured transcript/display redaction applies to recovered work too.
+        const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
+        const { resolveTool } = createToolResolvers({ ...tools, ...stepTools } as ToolSet);
+        const transformOptions = {
+          resolveTool,
+          policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
+          logger,
+        };
+        const chunks: CollectedChunk[] = [];
+        for (const work of completed) {
+          const call = {
+            type: 'tool-call',
+            payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args },
+          };
+          // An incomplete call is written as the call alone, left in history as incomplete.
+          for (const chunk of work.incomplete
+            ? [call]
+            : [
+                call,
+                'error' in work
+                  ? {
+                      type: 'tool-error',
+                      payload: {
+                        toolCallId: work.toolCallId,
+                        toolName: work.toolName,
+                        args: work.args,
+                        error: work.error,
+                      },
+                    }
+                  : {
+                      type: 'tool-result',
+                      payload: {
+                        toolCallId: work.toolCallId,
+                        toolName: work.toolName,
+                        args: work.args,
+                        result: work.result,
+                      },
+                    },
+              ]) {
+            chunks.push(
+              (await addToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT>, transformOptions)) as CollectedChunk,
+            );
+          }
+        }
+        const messages = buildMessagesFromChunks({
+          chunks,
+          messageId,
+          // No tool set needed: it is only consulted to infer provider execution, and
+          // the eligibility whitelist never dispatches a provider-executed call.
+        });
+        for (const message of messages) {
+          messageList.add(message, 'response');
+        }
+        return chunks;
+      };
+
+      /**
+       * The run was aborted. Like the default pipeline, which waits for a started tool
+       * before it emits `abort`, every eager call that has started is waited out,
+       * whether or not it observes its signal: abort is cooperative, and a tool that
+       * ignores it still does its side effect. Each outcome is then committed and
+       * streamed, so the aborted run records it. Work that never started is dropped.
+       */
+      const settleEagerWorkOnAbort = async (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
+        if (!eagerCoordinator) return;
+        eagerCoordinator.stop({ permanent: true });
+        await eagerCoordinator.settleRunning();
+        const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
+        if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
+        for (const chunk of await commitCarriedEagerWork(currentMessageId)) {
+          if (chunk.type === 'tool-call') continue;
+          safeEnqueue(controller, { ...chunk, runId, from: ChunkFrom.AGENT } as ChunkType<OUTPUT>);
+        }
+      };
+
+      if (eagerCoordinator) {
+        writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
+        // A caller abort stops further eager dispatch permanently. Work already running is
+        // left to finish: the abort exit waits it out and commits it. Registered once for
+        // the whole run rather than per iteration, so long loops do not pile up listeners.
+        if (!eagerAbortListenerRegistered && runAbortSignal) {
+          eagerAbortListenerRegistered = true;
+          // `runAbortSignal` is owned by this run (see `workflows/stream.ts`), which unlinks
+          // it from the caller's signal when the run ends, so this listener cannot outlive
+          // the run even when the caller reuses one signal across many runs.
+          runAbortSignal.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), { once: true });
+        }
+        // A stop caused by one bad turn (tripwire, model error, retry) must not disable
+        // eager dispatch for the rest of the run: the next turn is a fresh model call.
+        // Only an abort is permanent.
+        eagerCoordinator.beginTurn();
+      }
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -1367,6 +1551,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             ? modelConfig.maxRetries
             : (modelSettings?.maxRetries ?? modelConfig.maxRetries),
         };
+
+        // An attempt is starting, which is the only proof a replacement for a discarded
+        // one exists. Every replacement route arrives here — the next fallback model, and
+        // a retry re-entering the step as a fresh invocation — so this is the single place
+        // a dead attempt's finished tool work is written into the conversation the new
+        // attempt will see. Before the request, so the model gets it, and after the
+        // pre-run signal drain above, so it is not recorded under an id that drain is
+        // about to rotate away. A later rotation — an input processor can still call
+        // rotateResponseMessageId — is harmless for a different reason: rotation seals
+        // the committed message, so the attempt streams into a fresh one and a removal
+        // of that fresh id cannot take the committed record with it.
+        await commitCarriedEagerWork(currentMessageId);
 
         const currentStep: {
           messageId: string;
@@ -1902,6 +2098,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
         }
 
+        // Publish the step's tools and workspace before the stream rather than after it.
+        // The post-stream write below is the one that mattered when tool execution could
+        // only start after the model finished; eager dispatch runs a tool while the stream
+        // is still open, and it reads both of these from the run scope. Written late, a
+        // tool would see no workspace and no step tools. The values here are the ones
+        // `prepareStep` and the input processors already settled on; the later write
+        // repeats them and picks up anything the stream itself changed.
+        writeScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools', currentStep.tools);
+        if (currentStep.workspace !== undefined) {
+          writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', currentStep.workspace);
+        }
+
         let toolResultTripwireFromStream: TripWire | null = null;
         try {
           const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
@@ -1938,8 +2146,166 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             pendingProviderToolCallsByToolCallId,
             modelSpanTracker,
+            // Synchronous with the terminal chunk, so no execution can settle and promote
+            // a queued sibling between the model stopping and dispatch closing.
+            onModelFinished: () => eagerCoordinator?.stop(),
+            onCompleteToolCall:
+              eagerCoordinator && eagerToolCallStep
+                ? toolCall => {
+                    if (options?.abortSignal?.aborted) return;
+                    if (
+                      !isEagerlyExecutableToolCall({
+                        toolCall,
+                        tool: currentStep.tools?.[toolCall.toolName],
+                        // Read at dispatch, not at coordinator construction, so a
+                        // `prepareStep` that reshapes the tool set for this step is
+                        // the version the predicate sees.
+                        activeTools: readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') as
+                          | string[]
+                          | undefined,
+                        requireToolApproval: requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+                        autoResumeSuspendedTools,
+                        // Output processors reach the loop wrapped in a workflow, so the
+                        // plain `processOutputStep` / `processLLMResponse` methods are not
+                        // visible here. The wrapper records whether anything inside it runs
+                        // after the stream; a workflow that does not say is assumed to.
+                        hasPostStreamProcessor:
+                          Boolean(
+                            outputProcessors?.some(processor =>
+                              isProcessorWorkflow(processor)
+                                ? processor.__processOutputStep !== false
+                                : 'processLLMResponse' in processor || 'processOutputStep' in processor,
+                            ),
+                          ) ||
+                          // Request-stage processors run `processLLMResponse` after the
+                          // stream too, and a tripwire there bails with no tool calls.
+                          // Workflows are skipped by runProcessLLMResponse, so only plain
+                          // processors count.
+                          getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }).some(
+                            processor => !isProcessorWorkflow(processor) && 'processLLMResponse' in processor,
+                          ),
+                        // `processToolResult` only matters in conjunction with a
+                        // provider-executed tool: that is the one result reaching the hook
+                        // mid-stream, where an abort bails the attempt before the foreach
+                        // would ever start the call. Local results reach the hook after
+                        // adoption, so a hook alone is no reason to hold dispatch back.
+                        hasToolResultProcessor:
+                          Object.values(currentStep.tools ?? {}).some(stepTool => isProviderTool(stepTool)) &&
+                          Boolean(
+                            outputProcessors?.some(processor =>
+                              isProcessorWorkflow(processor)
+                                ? processor.__processToolResult !== false
+                                : 'processToolResult' in processor,
+                            ),
+                          ),
+                        isProviderTool,
+                        getNeedsApprovalFn,
+                        backgroundTaskManager: readScoped(
+                          scopeCtx,
+                          BACKGROUND_TASK_MANAGER_KEY,
+                          'backgroundTaskManager',
+                        ),
+                        agentBackgroundConfig: readScoped(
+                          scopeCtx,
+                          AGENT_BACKGROUND_CONFIG_KEY,
+                          'agentBackgroundConfig',
+                        ),
+                      })
+                    ) {
+                      return;
+                    }
+
+                    eagerCoordinator.start(
+                      toolCall.toolCallId,
+                      async eagerAbortSignal => {
+                        // Raising "did not run" from the stubs below is not enough on its
+                        // own: the throw unwinds through the tool's own body, and a tool
+                        // that wraps its work in try/catch swallows it and returns
+                        // normally. The step would then resolve an ordinary-looking
+                        // envelope, and the foreach would adopt a "result" for a call that
+                        // asked to suspend. This flag is what actually makes the bailout
+                        // fail-safe: whatever the body does with the throw, the settlement
+                        // below is converted back into a rejection, so the call is handed
+                        // to the foreach instead of recorded.
+                        //
+                        // It is created per dispatch rather than kept on the coordinator, so
+                        // a later attempt reusing this toolCallId cannot observe it.
+                        const bailout: EagerToolBailout = {};
+                        const settled = await eagerToolCallStep.execute({
+                          inputData: toolCall,
+                          runId,
+                          mastra,
+                          // The workflow engine always hands the foreach a context; calling the
+                          // step directly does not, and the step reads it unconditionally. The
+                          // raw `loop()` entry point has no request context of its own.
+                          requestContext: requestContext || new RequestContext(),
+                          // The coordinator's own signal, combined with the run's inside the
+                          // step, so eager work can be cancelled when its attempt is discarded
+                          // without the caller having aborted anything.
+                          [EAGER_TOOL_ABORT_SIGNAL]: eagerAbortSignal,
+                          [EAGER_TOOL_BAILOUT]: bailout,
+                          writer: outputWriter,
+                          // The eligibility whitelist excludes every tool shape that can
+                          // suspend or bail, so neither of these should be reachable. They
+                          // stay as a loud, fail-safe assertion: raising "did not run" hands
+                          // the call back to the foreach rather than half-completing it here.
+                          // The flag is recorded before the throw so the bailout survives a
+                          // tool that catches it.
+                          suspend: async () => {
+                            bailout.reason = `"${toolCall.toolName}" requested suspension`;
+                            throw new EagerToolExecutionNotRun(bailout.reason, {
+                              inputAvailableCalled: bailout.inputAvailableCalled,
+                            });
+                          },
+                          bail: async () => {
+                            bailout.reason = `"${toolCall.toolName}" bailed`;
+                            throw new EagerToolExecutionNotRun(bailout.reason, {
+                              inputAvailableCalled: bailout.inputAvailableCalled,
+                            });
+                          },
+                          resumeData: undefined,
+                          tracingContext,
+                          [EAGER_TOOL_EXECUTION_MARKER]: true,
+                        });
+                        if (bailout.reason) {
+                          throw new EagerToolExecutionNotRun(bailout.reason, {
+                            inputAvailableCalled: bailout.inputAvailableCalled,
+                            // A tool that swallowed the suspend throw and returned settles
+                            // here, so the intent has to be carried across or the foreach
+                            // iteration has nothing to raise the real suspension from.
+                            suspension: bailout.suspension,
+                          });
+                        }
+                        return settled;
+                      },
+                      // Enough to write the call back into the conversation if this
+                      // attempt is discarded after the tool has already run.
+                      { toolName: toolCall.toolName, args: toolCall.args },
+                    );
+                  }
+                : undefined,
           });
           toolResultTripwireFromStream = streamToolResultTripwire;
+
+          // Backstop for the paths that never reach a terminal chunk at all: a tripwire,
+          // or a stream that ends without finishing. `onModelFinished` has normally closed
+          // dispatch already, and stopping twice is harmless.
+          //
+          // Queued work dropped here falls back to the foreach when the step reaches it,
+          // which accounts for it against the same limit. Work already running is left
+          // alone rather than cancelled: on a normal terminal finish, and on a per-chunk
+          // stream-processor tripwire, the step still returns its tool calls and the
+          // foreach adopts it — cancelling here would strip the adoption entry and make
+          // the foreach run the body a second time.
+          //
+          // The bail below is the one path where nothing adopts the work, and it cannot
+          // reach here holding any: a `processToolResult` hook is the only thing that
+          // reaches that branch, and a run declaring one does not dispatch early in the
+          // first place (`isEagerlyExecutableToolCall`), unless a hand-built processor
+          // workflow falsifies its own `__processToolResult`. Were it to dispatch, the bail
+          // would start a tool the post-stream pass never starts at all, which is why
+          // the exclusion is up front rather than repaired here.
+          eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {
             return buildTripWireBailResponse({
@@ -2036,6 +2402,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // before abort/error/fallback handling can return or throw.
           cleanupProviderToolSpans(true);
 
+          // Stop dispatching, but do not cancel yet: whether this attempt is discarded is
+          // only known below. A last model with no retry keeps its tool calls, and the
+          // foreach adopts the running work — cancelling it would run the body twice.
+          eagerCoordinator?.stop();
+
           const provider = model?.provider;
           const modelIdStr = model?.modelId;
 
@@ -2052,8 +2423,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               text: runState.state.partialText,
             });
 
+            await settleEagerWorkOnAbort(controller);
+
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
+            return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+          }
+
+          // Settled before deciding, so a call that suspends while still running is seen
+          // by the retry gates below rather than after the attempt was already retried.
+          // After the abort branch, which waits running work out itself.
+          await eagerCoordinator?.settleRunning(runAbortSignal);
+          // The wait ends early when the run aborts; that abort wins over any retry or fallback.
+          if (runAbortSignal?.aborted) {
+            await options?.onAbort?.({
+              steps: inputData?.output?.steps ?? [],
+              text: runState.state.partialText,
+            });
+            await settleEagerWorkOnAbort(controller);
+            safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
@@ -2077,7 +2465,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
-          if (isLastModel) {
+          // A call that already ran up to a runtime suspend() would run that work again in
+          // a retried or failed-over attempt, so the attempt ends here and the foreach
+          // raises the suspension instead.
+          if (isLastModel || eagerCoordinator?.hasSuspendedHandback) {
             // Defer enqueueing the error chunk — processAPIError handlers may intercept it
             // and signal a retry instead.
             runState.setState({
@@ -2138,6 +2529,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               },
             });
 
+            // Retried or failed over: this attempt's calls are dropped either way.
+            await discardAttemptEagerWork();
+            if (runAbortSignal?.aborted) {
+              await options?.onAbort?.({
+                steps: inputData?.output?.steps ?? [],
+                text: runState.state.partialText,
+              });
+              await settleEagerWorkOnAbort(controller);
+              safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            }
+
             if (errorResult.retry && canRetryError) {
               // Signal retry - store on runState so it's handled after the callback returns
               runState.setState({
@@ -2172,6 +2575,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: inputData?.output?.steps ?? [],
             text: runState.state.partialText,
           });
+
+          await settleEagerWorkOnAbort(controller);
 
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
@@ -2250,8 +2655,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let apiErrorRetryResult: { retry: boolean } | undefined = processAPIErrorRetry;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
+        // Settled first so the suspension gate below sees calls still running.
+        await eagerCoordinator?.settleRunning(runAbortSignal);
+        if (runAbortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution();
+        }
         const currentRetryCount = inputData.processorRetryCount || 0;
-        const canRetryError = maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
+        // Never retry an attempt holding a call that already ran up to a runtime suspend().
+        const canRetryError =
+          maxErrorProcessorRetries !== undefined &&
+          currentRetryCount < maxErrorProcessorRetries &&
+          !eagerCoordinator?.hasSuspendedHandback;
         const processorRunner = new ProcessorRunner({
           inputProcessors: inputProcessors || [],
           outputProcessors: outputProcessors || [],
@@ -2306,6 +2727,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           steps: inputData?.output?.steps ?? [],
           text: runState.state.partialText,
         });
+        await settleEagerWorkOnAbort(controller);
         safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
         return bailFromExecution();
       }
@@ -2313,6 +2735,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
         cleanupProviderToolSpans(true);
+        // Same discard as the thrown-error path: this attempt's tool calls are dropped
+        // (the step returns `toolCalls: []`), so its eager work must not survive either.
+        await discardAttemptEagerWork();
+        if (runAbortSignal?.aborted) {
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution();
+        }
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -2616,7 +3050,34 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // assistant message carrying an OpenAI text itemId with no reasoning item to pair with,
       // which OpenAI rejects with a non-retryable 400 on the next turn (issue #22291).
       if (shouldRetry) {
+        // Rolling this attempt's parts back also removes anything an earlier discard
+        // committed under the same id. That record is a side effect that happened, so it
+        // goes back into the carry buffer for the next attempt to write again rather than
+        // disappearing with the rejected response.
+        eagerCoordinator?.recarryCommittedWork(outputStream.messageId);
         messageList.rollbackToStepBoundary(outputStream.messageId, iterationBoundary);
+        // A processor retry throws this attempt away like the error paths do, so it gets
+        // the same treatment: cancel what is still running, keep what finished.
+        //
+        // No path currently reaches here holding eager work, and both halves of that were
+        // checked rather than assumed. A `processOutputStep` processor switches eager
+        // dispatch off for the whole turn, and the other producer of a retrying tripwire —
+        // a `processToolResult` hook firing on a provider-executed result mid-stream —
+        // bails the attempt at the `toolResultTripwireFromStream` return above, and that
+        // bail response carries no `toolResultTripwire`, so the seeding of
+        // `processOutputStepTripwire` from it further down is itself dead. These
+        // two lines are therefore insurance against that arrangement changing, not a live
+        // path: cheap, and the thing they prevent is a second real side effect.
+        await discardAttemptEagerWork();
+        if (runAbortSignal?.aborted) {
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution();
+        }
       }
 
       const retryFeedbackText =

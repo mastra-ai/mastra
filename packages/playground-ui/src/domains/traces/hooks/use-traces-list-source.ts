@@ -1,7 +1,17 @@
-import { toTracesListViewTraces } from '@mastra/playground-ui/domains/traces/components/traces-list-view-adapter';
-import { useTraceQuery } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query';
-import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/playground-ui/domains/traces/hooks/use-trace-query';
 import { useEffect, useState } from 'react';
+import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
+import { useTraceQuery } from './use-trace-query';
+import type { TraceQueryArgs, UseTraceQueryArgs } from './use-trace-query';
+
+export interface UseTracesListSourceArgs {
+  query: (now: Date) => TraceQueryArgs;
+  orderBy?: TraceQueryArgs['orderBy'];
+  rolling?: boolean;
+  initialAutoRefetch?: boolean;
+  withQueryTrace?: boolean;
+  legacyFilters?: UseTraceQueryArgs['legacyFilters'];
+  enabled?: boolean;
+}
 
 export function useTracesListSource({
   query: buildQuery,
@@ -10,14 +20,8 @@ export function useTracesListSource({
   initialAutoRefetch = true,
   withQueryTrace,
   legacyFilters,
-}: {
-  query: (now: Date) => TraceQueryArgs;
-  orderBy?: TraceQueryArgs['orderBy'];
-  rolling?: boolean;
-  initialAutoRefetch?: boolean;
-  withQueryTrace?: boolean;
-  legacyFilters?: UseTraceQueryArgs['legacyFilters'];
-}) {
+  enabled,
+}: UseTracesListSourceArgs) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const result = useTraceQuery({
@@ -26,6 +30,7 @@ export function useTracesListSource({
     refetchOnWindowFocus: autoRefetch,
     withQueryTrace,
     legacyFilters,
+    enabled,
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.

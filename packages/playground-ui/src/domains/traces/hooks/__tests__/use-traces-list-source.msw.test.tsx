@@ -1,65 +1,82 @@
+// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useTracesListSource } from '../hooks/use-traces-list-source';
-import { traceQueryPage } from './fixtures/trace-query';
-import { branchList, traceList } from './fixtures/traces';
+import { useTracesListSource } from '../use-traces-list-source';
+import { lastTraceQueryPage } from './fixtures/trace-query';
+import { lastLegacyTracePage } from './fixtures/trace-query-legacy';
 import { server } from '@/test/msw-server';
 
-const BASE = 'http://localhost:4111/api/observability';
+const BASE_URL = 'http://localhost:4111';
+const OBSERVABILITY_URL = `${BASE_URL}/api/observability`;
 const query = (now: Date) => ({ timeRange: { from: '2026-09-01T00:00:00Z', to: now.toISOString() } });
+
 function wrapper({ children }: { children: ReactNode }) {
   return (
-    <MastraReactProvider baseUrl="http://localhost:4111">
+    <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         {children}
       </QueryClientProvider>
     </MastraReactProvider>
   );
 }
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   focusManager.setFocused(undefined);
 });
+
 function handlers() {
   const post = vi.fn();
   const list = vi.fn();
-  const branches = vi.fn();
   server.use(
-    http.post(`${BASE}/traces/query`, async ({ request }) => {
+    http.post(`${OBSERVABILITY_URL}/traces/query`, async ({ request }) => {
       post(await request.json());
-      return HttpResponse.json(traceQueryPage);
+      return HttpResponse.json(lastTraceQueryPage);
     }),
-    http.get(`${BASE}/traces/light`, () => {
+    http.get(`${OBSERVABILITY_URL}/traces/light`, () => {
       list();
-      return HttpResponse.json(traceList);
-    }),
-    http.get(`${BASE}/traces`, () => {
-      list();
-      return HttpResponse.json(traceList);
-    }),
-    http.get(`${BASE}/branches`, () => {
-      branches();
-      return HttpResponse.json(branchList);
+      return HttpResponse.json(lastLegacyTracePage);
     }),
   );
-  return { post, list, branches };
+  return { post, list };
 }
 
 describe('useTracesListSource', () => {
-  describe('when filters are supported', () => {
+  describe('when the server supports trace query', () => {
     it('loads query rows without requesting the legacy list', async () => {
       const requests = handlers();
       const { result } = renderHook(() => useTracesListSource({ query }), { wrapper });
-      await waitFor(() => expect(result.current.rows[0]?.spanId).toBe('span-a'));
+      await waitFor(() => expect(result.current.rows[0]?.spanId).toBe('span-b'));
       expect(requests.post).toHaveBeenCalledTimes(1);
       expect(requests.list).not.toHaveBeenCalled();
     });
   });
+
+  describe('when the caller opts out of trace query', () => {
+    it('loads rows from the legacy list without requesting trace query', async () => {
+      const requests = handlers();
+      const { result } = renderHook(() => useTracesListSource({ query, withQueryTrace: false }), { wrapper });
+      await waitFor(() => expect(result.current.rows).toHaveLength(lastLegacyTracePage.spans.length));
+      expect(requests.list).toHaveBeenCalled();
+      expect(requests.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the list is disabled', () => {
+    it('does not request any endpoint', async () => {
+      const requests = handlers();
+      renderHook(() => useTracesListSource({ query, enabled: false }), { wrapper });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(requests.post).not.toHaveBeenCalled();
+      expect(requests.list).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when auto refresh is enabled', () => {
     it('advances the time window and stops requests when paused', async () => {
       const requests = handlers();
@@ -72,7 +89,8 @@ describe('useTracesListSource', () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
       expect(requests.post).toHaveBeenCalledTimes(2);
-      expect(requests.post.mock.calls[1]![0].timeRange.to).not.toBe(requests.post.mock.calls[0]![0].timeRange.to);
+      const [[firstBody], [secondBody]] = requests.post.mock.calls;
+      expect(secondBody.timeRange.to).not.toBe(firstBody.timeRange.to);
       act(() => result.current.setAutoRefetch(false));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(20_000);
@@ -87,6 +105,7 @@ describe('useTracesListSource', () => {
       expect(requests.post).toHaveBeenCalledTimes(2);
     });
   });
+
   describe('when automatic refresh starts disabled', () => {
     it.each([true, false])('does not poll or refetch on focus with rolling=%s', async rolling => {
       const requests = handlers();
@@ -108,22 +127,22 @@ describe('useTracesListSource', () => {
       expect(requests.post).toHaveBeenCalledTimes(2);
     });
   });
+
   describe('when the store returns 501', () => {
     it('exposes the query error without requesting a legacy endpoint', async () => {
       const requests = handlers();
       const post = vi.fn();
       server.use(
-        http.post(`${BASE}/traces/query`, () => {
+        http.post(`${OBSERVABILITY_URL}/traces/query`, () => {
           post();
           return HttpResponse.json({ code: 'TRACE_QUERY_UNSUPPORTED', error: 'Unsupported' }, { status: 501 });
         }),
       );
-      const first = renderHook(() => useTracesListSource({ query }), { wrapper });
-      await waitFor(() => expect(first.result.current.error).toBeTruthy());
-      expect(first.result.current.rows).toHaveLength(0);
+      const { result } = renderHook(() => useTracesListSource({ query }), { wrapper });
+      await waitFor(() => expect(result.current.error).toBeTruthy());
+      expect(result.current.rows).toHaveLength(0);
       expect(post).toHaveBeenCalledTimes(1);
       expect(requests.list).not.toHaveBeenCalled();
-      expect(requests.branches).not.toHaveBeenCalled();
     });
   });
 });
