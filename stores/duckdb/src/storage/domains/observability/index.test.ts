@@ -597,6 +597,54 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
     });
 
+    it('batch-stores an event span as a single row that ends when it starts', async () => {
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-batch-event',
+            spanId: 'span-batch-event',
+            parentSpanId: 'span-parent',
+            name: "chunk: 'tool-result'",
+            spanType: SpanType.MODEL_CHUNK,
+            isEvent: true,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt,
+            endedAt: startedAt,
+          },
+        ],
+      });
+
+      const result = await storage.getSpan({ traceId: 'trace-batch-event', spanId: 'span-batch-event' });
+      expect(result!.span.isEvent).toBe(true);
+      expect(result!.span.endedAt?.getTime()).toBe(startedAt.getTime());
+
+      const rows = await store.db.query<{ eventType: string }>(
+        `SELECT eventType FROM span_events WHERE traceId = 'trace-batch-event'`,
+      );
+      expect(rows.map(r => r.eventType)).toEqual(['start']);
+    });
+
     it('does not support span updates for event-sourced tracing', async () => {
       await expect(
         storage.updateSpan({
