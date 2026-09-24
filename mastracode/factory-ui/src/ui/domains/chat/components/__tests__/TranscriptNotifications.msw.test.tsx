@@ -37,7 +37,7 @@ describe('Transcript notifications', () => {
   });
 
   describe('when a notification has an unsupported target URL', () => {
-    it('keeps the message available without exposing the URL', async () => {
+    it('keeps the message on its line without exposing the URL', () => {
       renderEntries([
         {
           kind: 'notification',
@@ -49,14 +49,14 @@ describe('Transcript notifications', () => {
       ]);
 
       const notification = within(screen.getByRole('group', { name: 'Notification: github' }));
-      await userEvent.click(notification.getByRole('button'));
       expect(notification.queryByRole('link')).not.toBeInTheDocument();
-      expect(notification.getAllByText('A work item was updated.')).toHaveLength(2);
+      expect(notification.getByText('A work item was updated.')).toBeVisible();
+      expect(notification.queryByRole('button')).not.toBeInTheDocument();
     });
   });
 
   describe('when pending notifications are summarized', () => {
-    it('keeps the summary expandable in the transcript', async () => {
+    it('puts the summary in the transcript under its own label', () => {
       renderEntries([
         {
           kind: 'notification_summary',
@@ -70,10 +70,8 @@ describe('Transcript notifications', () => {
       ]);
 
       const notification = within(screen.getByRole('group', { name: 'Notification: Notification summary' }));
-      const trigger = notification.getByRole('button');
-      await userEvent.click(trigger);
-      expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      expect(notification.getAllByText('2 pull requests and 1 issue need attention.')).toHaveLength(2);
+      expect(notification.getByText('2 pull requests and 1 issue need attention.')).toBeVisible();
+      expect(notification.queryByRole('button')).not.toBeInTheDocument();
     });
   });
 });

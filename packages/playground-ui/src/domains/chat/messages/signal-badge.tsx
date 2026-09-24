@@ -3,7 +3,7 @@ import type { TaskItem } from '@mastra/core/signals';
 import { NotificationSignalNotice } from './notification-signal-notice';
 import { formatSignalValue, isRecord, isSignalData, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
-import { ChatSignal } from '@/ds/components/ai/chat-event';
+import { SignalActivity } from '@/ds/components/ai/activity';
 
 export type SignalBadgeProps = {
   signal: unknown;
@@ -50,19 +50,16 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   const text = signalContentsToText(value.contents);
 
   if (value.type === 'state') {
-    const taskSignal = getTaskSignalData(value);
-    if (taskSignal) return null;
+    if (getTaskSignalData(value)) return null;
 
     const state = getStateLabel(value);
-    return <ChatSignal variant="card" kind="state" label={state.id} mode={state.mode} message={text} />;
+    return <SignalActivity kind="state" label={state.id} mode={state.mode} message={text} />;
   }
 
-  if (value.type === 'notification') {
-    return <NotificationSignalNotice signal={value} />;
-  }
+  if (value.type === 'notification') return <NotificationSignalNotice signal={value} />;
 
   if (value.type === 'reactive') {
-    return <ChatSignal variant="card" kind="reactive" label={value.tagName ?? 'Signal'} message={text} />;
+    return <SignalActivity kind="reactive" label={value.tagName ?? 'Signal'} message={text} />;
   }
 
   return null;

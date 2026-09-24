@@ -1,5 +1,5 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
@@ -28,7 +28,7 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
   errorText?: string;
 }
 

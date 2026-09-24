@@ -1,17 +1,19 @@
+import { ActivityHeadline } from '@mastra/playground-ui/components/ai/activity';
+import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import {
+  hasToolArguments,
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
   ToolCallArguments,
   ToolCallOutput,
-  ToolCallPresentedHeader,
 } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import { awaitsToolApproval } from '@mastra/playground-ui/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
@@ -34,7 +36,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   suspendPayload?: any;
   toolCalled?: boolean;
   withoutArgs?: boolean;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
 }
 
 export const ToolBadge = ({
@@ -52,7 +54,7 @@ export const ToolBadge = ({
   status = 'idle',
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
-  const { icon, label, detail } = presentTool(toolName, argsObject);
+  const { icon: ToolIcon, label, detail } = presentTool(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
@@ -62,6 +64,12 @@ export const ToolBadge = ({
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
+  const hasBody =
+    hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
+    Boolean(suspendPayload) ||
+    Boolean(resultPretty) ||
+    toolOutput.length > 0 ||
+    awaitsToolApproval({ toolApprovalMetadata, toolCalled });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -71,7 +79,7 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} />}
+      header={<ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />}
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (
@@ -85,44 +93,48 @@ export const ToolBadge = ({
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
-      <ToolCallArguments
-        toolName={toolName}
-        args={argsObject}
-        argsText={argsPretty}
-        hideArguments={withoutArgs}
-        data-testid="tool-args"
-      />
+      {hasBody && (
+        <>
+          <ToolCallArguments
+            toolName={toolName}
+            args={argsObject}
+            argsText={argsPretty}
+            hideArguments={withoutArgs}
+            data-testid="tool-args"
+          />
 
-      {suspendPayload !== undefined && suspendPayload && (
-        <div>
-          <SectionLabel>Suspend payload</SectionLabel>
-          {typeof suspendPayload === 'string' ? (
-            <ToolCallOutput text={suspendPayload} />
-          ) : (
-            <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+          {suspendPayload !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Suspend payload</SectionLabel>
+              {typeof suspendPayload === 'string' ? (
+                <ToolCallOutput text={suspendPayload} />
+              ) : (
+                <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+              )}
+            </div>
           )}
-        </div>
+
+          {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
+
+          {toolOutput.length > 0 && (
+            <div>
+              <SectionLabel>Tool output</SectionLabel>
+              <div className="h-40 overflow-y-auto">
+                <CodeEditor data={toolOutput} data-testid="tool-output" />
+              </div>
+            </div>
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </>
       )}
-
-      {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
-
-      {toolOutput.length > 0 && (
-        <div>
-          <SectionLabel>Tool output</SectionLabel>
-          <div className="h-40 overflow-y-auto">
-            <CodeEditor data={toolOutput} data-testid="tool-output" />
-          </div>
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
     </BadgeWrapper>
   );
 };

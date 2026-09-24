@@ -27,6 +27,23 @@ const renderWithProviders = (node: ReactNode) =>
 afterEach(() => cleanup());
 
 describe('ToolBadge', () => {
+  it('offers nothing to open for a call whose only arguments are internal metadata', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="listAgents"
+        args={{ __mastraMetadata: { source: 'internal' } }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    expect(screen.getByText('ListAgents')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
   it('renders tool arguments as a static code block', () => {
     renderWithProviders(
       <ToolBadge
@@ -44,7 +61,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('SearchDocs'));
+    fireEvent.click(screen.getByRole('button', { name: /SearchDocs/ }));
 
     const toolArgs = screen.getByTestId('tool-args');
 
@@ -70,7 +87,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('GetWeather'));
+    fireEvent.click(screen.getByRole('button', { name: /GetWeather/ }));
 
     const toolResult = screen.getByTestId('tool-result');
 
@@ -92,7 +109,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('CheckAccess'));
+    fireEvent.click(screen.getByRole('button', { name: /CheckAccess/ }));
 
     expect(screen.getByTestId('tool-result').textContent).toBe('false');
   });
@@ -116,7 +133,7 @@ describe('ToolBadge edit body', () => {
         />,
       );
 
-      fireEvent.click(screen.getByText('Edit'));
+      fireEvent.click(screen.getByRole('button', { name: /Edit/ }));
 
       expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
       expect(screen.getByTestId('tool-result').textContent).toBe(result);
@@ -143,7 +160,7 @@ describe('ToolBadge edit body', () => {
         />,
       );
 
-      fireEvent.click(screen.getByText('Run'));
+      fireEvent.click(screen.getByRole('button', { name: /Run/ }));
 
       expect(screen.getByTestId('tool-args').textContent).toContain('"cwd": "/workspace"');
       expect(screen.getByTestId('tool-args').textContent).toContain('"timeout": 30000');
@@ -166,7 +183,7 @@ describe('ToolBadge edit body', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Edit'));
+    fireEvent.click(screen.getByRole('button', { name: /Edit/ }));
 
     expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
     expect(screen.queryByTestId('tool-args')).toBeNull();

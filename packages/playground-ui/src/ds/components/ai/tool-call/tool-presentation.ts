@@ -127,6 +127,26 @@ export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined 
   return undefined;
 }
 
+export interface ToolArgumentsInput {
+  toolName: string;
+  args?: unknown;
+  argsText?: string;
+  hideArguments?: boolean;
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && Object.keys(value).length === 0;
+}
+
+export function visibleToolArgumentsText({ args, argsText, hideArguments }: ToolArgumentsInput): string | undefined {
+  if (hideArguments || isEmptyObject(args)) return undefined;
+  return args === undefined ? argsText : stringifyToolValue(args);
+}
+
+export function hasToolArguments(input: ToolArgumentsInput): boolean {
+  return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
+}
+
 /** Task tools draw in the docked task list, never as a transcript row. */
 const TASK_TOOLS = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 

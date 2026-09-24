@@ -1,11 +1,14 @@
 import {
-  ToolCall as ToolCallRoot,
+  Activity,
+  ActivityContent,
+  ActivityHeadline,
+  ActivityTrigger,
+} from '@mastra/playground-ui/components/ai/activity';
+import {
   ToolCallArguments,
   ToolCallCommand,
-  ToolCallContent,
   ToolCallOutput,
-  ToolCallPresentedHeader,
-  ToolCallTrigger,
+  hasToolArguments,
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
@@ -16,12 +19,19 @@ import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
 import { ToolTime } from '../ToolTime';
 
+function toolResultText(tool: ToolCall): string | undefined {
+  if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
+  return stripSerializedAnsi(stringifyToolValue(tool.result));
+}
+
+function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
+  if (command !== undefined || tool.output) return true;
+  return hasToolArguments(tool) || toolResultText(tool) !== undefined;
+}
+
 function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   const edit = toolEdit(tool.toolName, tool.args);
-  const resultText =
-    tool.status !== 'running' && tool.result !== undefined
-      ? stripSerializedAnsi(stringifyToolValue(tool.result))
-      : undefined;
+  const resultText = toolResultText(tool);
 
   if (edit) {
     return (
@@ -57,20 +67,26 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
 }
 
 export function ToolCard({ tool }: { tool: ToolCall }) {
-  const { icon, label, detail, command } = presentTool(tool.toolName, tool.args);
+  const { icon: ToolIcon, label, detail, command } = presentTool(tool.toolName, tool.args);
 
   return (
-    <ToolCallRoot
+    <Activity
+      foldable={toolHasBody(tool, command)}
       status={toolCallStatus(tool.status)}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
     >
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader leading={<ToolTime at={tool.createdAt} />} icon={icon} label={label} detail={detail} />
-      </ToolCallTrigger>
-      <ToolCallContent>
+      <ActivityTrigger>
+        <ActivityHeadline
+          leading={<ToolTime at={tool.createdAt} />}
+          icon={<ToolIcon aria-hidden />}
+          label={label}
+          detail={detail}
+        />
+      </ActivityTrigger>
+      <ActivityContent>
         <ToolBody tool={tool} command={command} />
-      </ToolCallContent>
-    </ToolCallRoot>
+      </ActivityContent>
+    </Activity>
   );
 }

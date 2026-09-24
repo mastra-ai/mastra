@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { ToolCall, ToolCallCommand, ToolCallContent, ToolCallPresentedHeader, ToolCallTrigger } from './tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../activity';
+import { ToolCallCommand } from './tool-call';
 import { ToolCallArguments } from './tool-call-arguments';
 import { ToolCallGroup } from './tool-call-group';
 import type { ToolCallGroupStep } from './tool-call-group';
 import { ToolCallOutput } from './tool-call-output';
-import { presentTool } from './tool-presentation';
+import { hasToolArguments, presentTool } from './tool-presentation';
 
 interface ToolPreviewProps extends ToolCallGroupStep {
   argsText?: string;
@@ -27,15 +28,17 @@ function ToolPreview({
   maxOutputLength,
   defaultOpen,
 }: ToolPreviewProps) {
-  const presentation = presentTool(toolName, args);
+  const { icon: ToolIcon, label, detail, command } = presentTool(toolName, args);
+  const showsCommand = Boolean(commandOnly && command);
+  const hasBody = showsCommand || output !== undefined || hasToolArguments({ toolName, args, argsText, hideArguments });
   return (
-    <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentation} />
-      </ToolCallTrigger>
-      <ToolCallContent>
-        {commandOnly && presentation.command ? (
-          <ToolCallCommand command={presentation.command} />
+    <Activity status={status} defaultOpen={defaultOpen} foldable={hasBody} aria-label={`Tool: ${toolName}`}>
+      <ActivityTrigger>
+        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
+      </ActivityTrigger>
+      <ActivityContent>
+        {showsCommand && command ? (
+          <ToolCallCommand command={command} />
         ) : (
           <ToolCallArguments toolName={toolName} args={args} argsText={argsText} hideArguments={hideArguments} />
         )}
@@ -44,13 +47,13 @@ function ToolPreview({
             <ToolCallOutput text={output} error={status === 'error'} maxLength={maxOutputLength} />
           </section>
         )}
-      </ToolCallContent>
-    </ToolCall>
+      </ActivityContent>
+    </Activity>
   );
 }
 
 const meta = {
-  title: 'AI/Tool Call Presentation',
+  title: 'AI/Activity/Tool call',
   component: ToolPreview,
   decorators: [
     Story => (
@@ -132,8 +135,17 @@ export const ResultOnly: Story = {
 };
 
 export const EmptyArguments: Story = {
-  args: { args: undefined },
-  parameters: { docs: { description: { story: 'No argument block renders before any input is available.' } } },
+  args: { toolName: 'list_agents', args: {} },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A tool called without arguments has nothing to open, so the line has no disclosure.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('button')).not.toBeInTheDocument();
+  },
 };
 
 export const LongOutput: Story = {

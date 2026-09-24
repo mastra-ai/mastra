@@ -3,7 +3,16 @@ import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { MessageEntry, TimelineEntry } from '../services/transcript';
 import { isRecord } from './transcript-shared';
 
-export { ChatSignal as SignalRow, ChatTimeGap as TimeGap } from '@mastra/playground-ui/components/ai/chat-event';
+import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
+
+export { SignalActivity as SignalRow } from '@mastra/playground-ui/components/ai/activity';
+
+export function TimeGap({ text }: { text: string }) {
+  const [phrase, timestamp] = text.split(' — ');
+  if (!phrase) return null;
+
+  return <TranscriptDivider label={phrase} title={timestamp} />;
+}
 
 export function signalPartsText(entry: MessageEntry): string {
   const { contents } = mastraDBMessageToSignal(entry.message);

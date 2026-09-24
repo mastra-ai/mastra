@@ -4,8 +4,8 @@ import { isRecord } from '../messages/signal-data';
 import { getCodeModeCall } from './code-mode';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { isTaskTool } from '@/ds/components/ai/tool-call';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
 
 /** Which card draws a call. Decided once, shared by the dispatcher and the fold. */
 export type ToolCardKind =
@@ -53,7 +53,7 @@ export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
 
 /** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
-export function badgeStatus(state: string | undefined, chatRunning: boolean): ToolCallStatus {
+export function badgeStatus(state: string | undefined, chatRunning: boolean): ActivityStatus {
   if (state === 'output-error') return 'error';
   if (isSettledState(state) || !chatRunning) return 'idle';
   return 'running';

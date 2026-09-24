@@ -1,5 +1,5 @@
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
@@ -18,7 +18,7 @@ export interface ToolCall {
   createdAt?: number;
 }
 
-export function toolCallStatus(status: ToolCall['status']): ToolCallStatus {
+export function toolCallStatus(status: ToolCall['status']): ActivityStatus {
   return status === 'done' ? 'idle' : status;
 }
 
