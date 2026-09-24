@@ -20,6 +20,7 @@ export interface ToolResult {
 export interface IToolExecutionComponent {
   updateArgs(args: unknown, rebuild?: boolean): void;
   setArgsStreaming?(streaming: boolean): void;
+  stopLiveUpdates?(): void;
   refresh?(): void;
   updateResult(result: ToolResult, isPartial?: boolean): void;
   setBackgroundTaskId?(taskId: string): void;

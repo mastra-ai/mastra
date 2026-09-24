@@ -1,4 +1,4 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -207,5 +207,120 @@ describe('ChatBoundarySpacer', () => {
     expect(lines.join('\n')).toContain('Plan: Untitled plan');
     expect(lines.join('\n')).toContain('.mastracode/plans/test-plan.md');
     expect(lines.filter(line => line === '')).toHaveLength(1);
+  });
+  it('keeps only the latest Thinking placeholder and groups described shell calls into one box in quiet mode', () => {
+    const thinking = () => {
+      const component = new AssistantMessageComponent(
+        {
+          id: 'a',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'hmm' }] },
+        } as never,
+        true,
+      );
+      component.setQuietModeDisplay('quiet');
+      return component;
+    };
+    const shell = (description: string) => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'git log', description, cwd: '/tmp/work' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'out' }], isError: false }, false);
+      return component;
+    };
+
+    const lines = renderSequence([
+      thinking(),
+      shell('Listing later commits'),
+      thinking(),
+      shell('Searching for stdin changes'),
+      shell('Reading changesets'),
+      thinking(),
+    ]).map(line => stripAnsi(line).trimEnd());
+
+    expect(lines).toEqual([
+      expect.stringMatching(/^╭─+╮$/),
+      expect.stringMatching(/^│ \$ \/tmp\/work +│$/),
+      expect.stringMatching(/^├─+┤$/),
+      expect.stringMatching(/^│ ✓ Listing later commits +\d+ms │$/),
+      expect.stringMatching(/^│ ✓ Searching for stdin changes +\d+ms │$/),
+      expect.stringMatching(/^│ ✓ Reading changesets +\d+ms │$/),
+      expect.stringMatching(/^╰─+╯$/),
+      '',
+      expect.stringContaining('Thinking...'),
+    ]);
+  });
+  it('sizes a quiet shell box to its widest row, between a narrow default and the full width', () => {
+    const shell = (description: string) => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'x', description, cwd: '/tmp/w' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+      return component;
+    };
+    const boxWidths = (descriptions: string[], width = 140) => {
+      const container = new Container();
+      descriptions.forEach(description => container.addChild(shell(description)));
+      reconcileChatBoundarySpacers(container);
+      return new Set(container.render(width).map(line => visibleWidth(line.trimEnd())));
+    };
+
+    // Short rows get the narrow default: 76 content columns + "│ " + " │"
+    expect(boxWidths(['Reading changelog', 'Pulling notes'])).toEqual(new Set([80]));
+
+    // One long row widens every row of the shared box to match it
+    const long = 'Comparing every stable mastracode release note against the unreleased changesets in main';
+    expect(boxWidths(['Reading changelog', long])).toEqual(new Set([long.length + 2 + 1 + 'started'.length + 4]));
+
+    // Never wider than the terminal allows
+    const [full] = boxWidths([long.repeat(3)], 100);
+    expect(full).toBeLessThanOrEqual(100);
+    expect(boxWidths([long.repeat(3)], 100).size).toBe(1);
+  });
+  it('keeps one box width across hidden quiet Thinking messages between shell calls', () => {
+    const thinking = () => {
+      const component = new AssistantMessageComponent(
+        {
+          id: 'a',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'hmm' }] },
+        } as never,
+        true,
+      );
+      component.setQuietModeDisplay('quiet');
+      return component;
+    };
+    const shell = (description: string) => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'x', description, cwd: '/tmp/w' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+      return component;
+    };
+
+    const container = new Container();
+    for (const description of [
+      'Listing later commits touching sandbox/command code',
+      'Searching for stdin changes and their releases',
+      'Reading changesets of related commits',
+    ]) {
+      container.addChild(thinking());
+      container.addChild(shell(description));
+    }
+    reconcileChatBoundarySpacers(container);
+
+    const widths = new Set(container.render(140).map(line => visibleWidth(line.trimEnd())));
+    expect(widths.size).toBe(1);
   });
 });

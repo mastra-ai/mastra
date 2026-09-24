@@ -977,6 +977,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
         if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
         const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
+        textComponent.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
       };
@@ -1130,6 +1131,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               },
               isBackgroundPlaceholder,
             );
+            if (!isBackgroundPlaceholder) toolComponent.setRecordedTiming(part.startedAt, part.endedAt);
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {

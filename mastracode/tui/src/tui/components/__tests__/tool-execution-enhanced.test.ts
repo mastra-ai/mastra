@@ -1,7 +1,9 @@
+import { homedir } from 'node:os';
 import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
+import { getSpacingBetweenComponents } from '../chat-spacing.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -28,15 +30,23 @@ describe('completed shell/process background status', () => {
     },
   );
 
-  it('preserves inferred shell errors with and without background identity', () => {
+  it('marks nonzero shell exits as failed with and without background identity', () => {
     for (const background of [false, true]) {
       const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'example' }, {}, ui);
       if (background) component.setBackgroundTaskId('shell-task');
-      component.updateResult({ content: [{ type: 'text', text: 'Error: failed' }], isError: false });
+      component.updateResult({ content: [{ type: 'text', text: 'Error: failed\n\nExit code: 1' }], isError: false });
       const output = stripAnsi(component.render(120).join('\n'));
       expect(output).toContain(background ? '✗ background · shell-task' : '✗');
       if (!background) expect(output).not.toContain('background');
     }
+  });
+
+  it('does not treat error-looking output from a successful command as a failure', () => {
+    const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'grep -n error src' }, {}, ui);
+    component.updateResult({ content: [{ type: 'text', text: '12:  ? { error: envelope.error }' }], isError: false });
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('✓');
+    expect(output).not.toContain('✗');
   });
 });
 
@@ -1193,11 +1203,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.updateResult({ content: [{ type: 'text', text: '1\n2\n3\n4\n5' }], isError: false }, false);
 
     const visible = stripAnsi(component.render(60).join('\n'));
-    expect(visible).toContain('$ seq 1 5');
+    expect(visible).toMatch(/│ ✓ seq 1 5 +\d+ms │/);
     expect(visible).not.toMatch(/^\s*│ [1-5]/m);
     expect(visible).not.toContain('⋯ (+');
-    // top, command line, bottom
-    expect(visible.split('\n')).toHaveLength(3);
+    // top, header, divider, row, bottom
+    expect(visible.split('\n')).toHaveLength(5);
   });
 
   it('expanding a quiet shell tool reveals the full command and output', () => {
@@ -1237,10 +1247,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
 
     const quiet = stripAnsi(component.render(80).join('\n'));
-    expect(quiet).toContain('$ Drilling into the first of 15 failures in /tmp/work');
     expect(quiet).not.toContain('python3');
-    // top, description line, bottom
-    expect(quiet.split('\n')).toHaveLength(3);
+    // No preview lines: a lone call is its own group — header, divider, one status row
+    expect(quiet).toContain('$ /tmp/work');
+    expect(quiet).toMatch(/✓ Drilling into the first of 15 failures +\d+ms/);
+    expect(quiet.split('\n')).toHaveLength(5);
 
     component.setExpanded(true);
     const expanded = stripAnsi(component.render(80).join('\n'));
@@ -1253,6 +1264,178 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const normal = stripAnsi(component.render(80).join('\n'));
     expect(normal).toContain("$ python3 - <<'EOF'");
     expect(normal).not.toContain('Drilling into');
+  });
+
+  describe('grouped quiet shell rows (preview lines = None)', () => {
+    const make = (args: Record<string, unknown>, result?: { text: string; isError?: boolean }, limit = 0) => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        args,
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: limit },
+        ui,
+      );
+      if (result) {
+        component.updateResult({ content: [{ type: 'text', text: result.text }], isError: !!result.isError }, false);
+      }
+      return component;
+    };
+    const lines = (component: ToolExecutionComponentEnhanced, width = 80) =>
+      stripAnsi(component.render(width).join('\n'))
+        .split('\n')
+        .map(line => line.trimEnd());
+
+    it('opens, continues, and closes one shared box across consecutive calls', () => {
+      const first = make({ command: 'git log', description: 'Listing later commits' }, { text: 'abc' });
+      const second = make({ command: 'git show', description: 'Reading the changesets' }, { text: 'def' });
+      expect(first.getChatSpacingKind()).toBe('quiet-compact-tool');
+      expect(getSpacingBetweenComponents(first, second)).toBe(0);
+
+      first.setCompactToolHasFollowingContinuation(true);
+      second.setCompactToolContinuation(true, first.getCompactToolGroupSummary());
+
+      const top = lines(first);
+      expect(top[0]).toMatch(/^╭─+╮$/);
+      expect(top[1]).toMatch(/^│ \$ \S+ +│$/);
+      expect(top[2]).toMatch(/^├─+┤$/);
+      expect(top[3]).toMatch(/^│ ✓ Listing later commits +\d+ms │$/);
+      expect(top).toHaveLength(4);
+
+      const bottom = lines(second);
+      expect(bottom[0]).toMatch(/^│ ✓ Reading the changesets +\d+ms │$/);
+      expect(bottom[1]).toMatch(/^╰─+╯$/);
+      expect(bottom).toHaveLength(2);
+    });
+
+    it('shows the project root in full, paths inside it as ./, and starts a new box per directory', () => {
+      const home = homedir();
+      const root = make({ command: 'ls', description: 'Listing files' }, { text: '' });
+      const root2 = make({ command: 'pwd', description: 'Printing the directory' }, { text: '' });
+      const sub = make({ command: 'ls', description: 'Listing sources', cwd: 'src' }, { text: '' });
+      const cd = make({ command: 'cd /opt/elsewhere && ls', description: 'Listing elsewhere' }, { text: '' });
+      const tilde = make({ command: 'ls', description: 'Listing code', cwd: `${home}/code/project` }, { text: '' });
+      const project = process.cwd().startsWith(home) ? `~${process.cwd().slice(home.length)}` : process.cwd();
+      expect(root.getCompactToolGroupKey()).toBe(`$ ${project}`);
+      expect(sub.getCompactToolGroupKey()).toBe('$ ./src');
+      expect(cd.getCompactToolGroupKey()).toBe('$ /opt/elsewhere');
+      expect(tilde.getCompactToolGroupKey()).toBe('$ ~/code/project');
+      expect(lines(sub, 400)[1]).toContain('│ $ ./src ');
+
+      expect(getSpacingBetweenComponents(root, root2)).toBe(0);
+      expect(getSpacingBetweenComponents(root, sub)).toBe(1);
+    });
+
+    it('shows run time recovered from history, and no fake time when it is unknown', () => {
+      const recorded = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
+      recorded.setRecordedTiming(1_000, 4_078);
+      expect(lines(recorded).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +3\.1s │$/);
+
+      const unknown = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
+      unknown.setRecordedTiming(undefined, undefined);
+      expect(lines(unknown).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +│$/);
+    });
+
+    it('marks failures with a red error line and background calls as started', () => {
+      const failed = make(
+        { command: 'git log v1..HEAD', description: 'Searching for stdin changes' },
+        { text: "fatal: ambiguous argument 'v1..HEAD': unknown revision\nExit code: 128", isError: true },
+      );
+      failed.setCompactToolContinuation(true);
+      failed.setCompactToolHasFollowingContinuation(true);
+      expect(lines(failed)).toEqual([
+        expect.stringMatching(/^│ ✗ Searching for stdin changes +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ fatal: ambiguous argument 'v1\.\.HEAD': unknown revision +│$/),
+      ]);
+
+      // Nonzero exits come back as ordinary output ending in "Exit code: N", not as error results
+      const exited = make(
+        { command: 'echo about to fail && ls /nope', description: 'Running a command that fails on purpose' },
+        { text: 'stdout:\nabout to fail\n\nstderr:\nls: /nope: No such file or directory\n\nExit code: 1' },
+      );
+      exited.setCompactToolContinuation(true);
+      exited.setCompactToolHasFollowingContinuation(true);
+      expect(lines(exited)).toEqual([
+        expect.stringMatching(/^│ ✗ Running a command that fails on purpose +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ ls: \/nope: No such file or directory +│$/),
+      ]);
+
+      const background = make({ command: 'pnpm dev', description: 'Starting the dev server', background: true });
+      background.setBackgroundTaskId('bg-1');
+      background.setCompactToolContinuation(true, background.getCompactToolGroupSummary());
+      background.setCompactToolHasFollowingContinuation(true);
+      expect(lines(background)).toEqual([expect.stringMatching(/^│ ◷ Starting the dev server +started │$/)]);
+    });
+
+    it('ticks a running row every second and stops when the run ends', () => {
+      vi.useFakeTimers();
+      try {
+        const running = make({ command: 'sleep 5', description: 'Waiting for the build' });
+        expect(lines(running)[3]).toMatch(/^│ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Waiting for the build +0s │$/);
+        vi.advanceTimersByTime(2_100);
+        expect(lines(running)[3]).toMatch(/ 2s │$/);
+
+        running.stopLiveUpdates();
+        expect(lines(running)[3]).toMatch(/^│ ■ Waiting for the build +stopped │$/);
+        vi.advanceTimersByTime(5_000);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('uses the command for a row without a description, e.g. one rejected for missing it', () => {
+      const rejected = make(
+        { command: "cd /tmp/work; sed -i '' 's/a/b/' file.ts\ngrep -c b file.ts" },
+        {
+          text: JSON.stringify(
+            {
+              error: true,
+              message: 'Tool input validation failed for execute_command.\n- description: Required',
+              validationErrors: { fields: {} },
+            },
+            null,
+            2,
+          ),
+          isError: true,
+        },
+      );
+      expect(rejected.getChatSpacingKind()).toBe('quiet-compact-tool');
+      rejected.setCompactToolContinuation(true);
+      rejected.setCompactToolHasFollowingContinuation(true);
+      expect(lines(rejected)).toEqual([
+        expect.stringMatching(/^│ ✗ sed -i '' 's\/a\/b\/' file\.ts +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ Tool input validation failed for execute_command\. +│$/),
+      ]);
+    });
+
+    it('keeps its own box with preview lines, or when expanded', () => {
+      const withPreview = make(
+        { command: 'git log', description: 'Listing later commits' },
+        { text: 'out 1\nout 2' },
+        2,
+      );
+      expect(withPreview.getChatSpacingKind()).toBe('quiet-shell-tool');
+      expect(lines(withPreview).join('\n')).toContain('out 2');
+
+      const expanded = make({ command: 'git log', description: 'Listing later commits' }, { text: 'out 1' });
+      expanded.setExpanded(true);
+      expect(expanded.getChatSpacingKind()).toBe('quiet-shell-tool');
+      const text = lines(expanded).join('\n');
+      expect(text).toContain('$ git log');
+      expect(text).toContain('out 1');
+    });
+
+    it('keeps a finished duration fixed when the row is rebuilt later', () => {
+      vi.useFakeTimers();
+      try {
+        const done = make({ command: 'true', description: 'Doing nothing' }, { text: '' });
+        const before = lines(done)[3];
+        vi.advanceTimersByTime(3_000);
+        done.setCompactToolHasFollowingContinuation(true);
+        expect(lines(done)[3]).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('renders the quiet description as plain text instead of shell-highlighting it', () => {

@@ -48,6 +48,8 @@ export class AssistantMessageComponent extends Container {
   private terminalStatus?: AssistantTerminalStatus;
   private renderNodes = new Map<string, OwnedRenderNode>();
   private renderOrder: string[] = [];
+  private quiet = false;
+  private supersededByLaterContent = false;
 
   constructor(message?: MastraDBMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
     super();
@@ -69,6 +71,20 @@ export class AssistantMessageComponent extends Container {
     if (this.hideThinkingBlock === hide) return;
     this.hideThinkingBlock = hide;
     this.reconcileChildren();
+  }
+
+  setQuietModeDisplay(mode: 'quiet' | 'normal'): void {
+    const quiet = mode === 'quiet';
+    if (this.quiet === quiet) return;
+    this.quiet = quiet;
+    this.syncVisibleChildren();
+  }
+
+  /** Set by chat reconciliation when a later assistant message or tool follows this one. */
+  setSupersededByLaterContent(superseded: boolean): void {
+    if (this.supersededByLaterContent === superseded) return;
+    this.supersededByLaterContent = superseded;
+    this.syncVisibleChildren();
   }
 
   getChatSpacingKind(): ChatSpacingKind | undefined {
@@ -122,17 +138,33 @@ export class AssistantMessageComponent extends Container {
       nextOrder.push(node.key);
     }
 
-    const structureChanged =
-      nextOrder.length !== this.renderOrder.length || nextOrder.some((key, index) => key !== this.renderOrder[index]);
-    if (structureChanged) {
-      this.contentContainer.clear();
-      for (const key of nextOrder) {
-        this.contentContainer.addChild(nextNodes.get(key)!.component);
-      }
-    }
-
     this.renderNodes = nextNodes;
     this.renderOrder = nextOrder;
+    this.syncVisibleChildren();
+  }
+
+  /**
+   * Quiet mode keeps only the live "Thinking..." placeholder: once text or a later chat entry
+   * follows it, it is dropped. Works from the owned render nodes so it still applies after
+   * finalizeRenderState() has released the source parts.
+   */
+  private syncVisibleChildren(): void {
+    const lastMarkdownIndex = this.renderOrder.findLastIndex(key => this.renderNodes.get(key)?.kind === 'markdown');
+    const visible = this.renderOrder
+      .filter((key, index) => {
+        if (!this.quiet || !key.includes(':hidden-thinking')) return true;
+        return !this.supersededByLaterContent && index > lastMarkdownIndex;
+      })
+      .map(key => this.renderNodes.get(key)!.component);
+
+    const current = this.contentContainer.children;
+    const changed =
+      current.length !== visible.length || visible.some((component, index) => component !== current[index]);
+    if (!changed) return;
+    this.contentContainer.clear();
+    for (const component of visible) {
+      this.contentContainer.addChild(component);
+    }
   }
 
   private createRenderNode(node: RenderNode): OwnedRenderNode {

@@ -4,6 +4,7 @@
  */
 
 import * as os from 'node:os';
+import { isAbsolute as isAbsolutePath, relative as relativePath, resolve as resolvePath } from 'node:path';
 import { Box, Spacer, Text, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
@@ -106,6 +107,37 @@ export interface ToolExecutionOptions {
 /**
  * Convert absolute path to tilde notation if it's in home directory
  */
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+/** Grouped quiet shell boxes start this narrow and widen, up to the full width, for longer rows. */
+const QUIET_SHELL_MIN_CONTENT_WIDTH = 76;
+
+/** First line of `message` when a failed result is a JSON error object, e.g. a rejected tool input. */
+function parseErrorMessage(output: string): string | undefined {
+  const trimmed = output.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+  try {
+    const message = (JSON.parse(trimmed) as { message?: unknown }).message;
+    return typeof message === 'string'
+      ? message
+          .split('\n')
+          .find(line => line.trim())
+          ?.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `42s`, `2m 4s`, `1h 3m`. */
+function formatMinutes(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  if (minutes < 60) return `${minutes}m ${totalSeconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+/** Room kept for the right-aligned time so a ticking counter never changes the box width. */
+const QUIET_SHELL_TIME_WIDTH = 'started'.length;
+
 function shortenPath(path: string): string {
   const home = os.homedir();
   if (path.startsWith(home)) {
@@ -206,6 +238,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
   private argsStreaming = false;
+  private endTime?: number;
+  /** Set for history entries whose run time could not be recovered, so no fake `0ms` is shown. */
+  private durationUnknown = false;
+  private liveUpdatesStopped = false;
+  private quietShellTicker?: ReturnType<typeof setInterval>;
+  private quietShellGroupWidth?: number;
   private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
   private quietPreviewRowFloor = 0;
@@ -256,7 +294,20 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   updateResult(result: ToolResult, isPartial = false): void {
     this.result = result;
     this.isPartial = isPartial;
+    if (!isPartial) this.endTime ??= Date.now();
     // Keep streaming output for colored display in final result
+    this.rebuild();
+  }
+
+  /** Restores the run time of a tool call rendered from history. */
+  setRecordedTiming(startedAt: number | undefined, endedAt: number | undefined): void {
+    if (startedAt === undefined || endedAt === undefined) {
+      this.durationUnknown = true;
+    } else {
+      this.durationUnknown = false;
+      this.startTime = startedAt;
+      this.endTime = endedAt;
+    }
     this.rebuild();
   }
 
@@ -318,19 +369,82 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   getChatSpacingKind(): ChatSpacingKind {
     if (this.quietDisplayMode === 'quiet') {
-      return this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 'quiet-shell-tool' : 'quiet-compact-tool';
+      if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'quiet-compact-tool';
+      return this.isQuietCompactShell() ? 'quiet-compact-tool' : 'quiet-shell-tool';
     }
     return 'normal-tool';
   }
 
   getCompactToolGroupKey(): string | undefined {
     if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    // Shell calls only share a box when they run in the same directory, so each box has one header.
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) return `$ ${this.getShellHeaderPath()}`;
     return this.getCompactToolLabel();
   }
 
   getCompactToolGroupSummary(): string | undefined {
     if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) return undefined;
     return this.getCompactToolSummary();
+  }
+
+  /**
+   * Split a leading "cd <path>" off the command, since the path is shown separately. Callers bake
+   * this prefix into the command instead of passing `cwd`, and separate it with "&&", ";", or a
+   * bare newline — with quoted paths and leading whitespace also showing up.
+   */
+  private parseShellCommand(): { command: string; cdPath: string } {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const command = argsObj?.command ? String(argsObj.command) : '...';
+    const cdMatch = command.match(/^\s*cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;]+))\s*(?:&&|;|\n)\s*(?=\S)/);
+    if (!cdMatch) return { command, cdPath: '' };
+    return { command: command.slice(cdMatch[0].length), cdPath: cdMatch[1] ?? cdMatch[2] ?? cdMatch[3] ?? '' };
+  }
+
+  /** The directory a quiet shell group shows in its `$ <path>` header: always the full path, so tabs are easy to tell apart. */
+  private getShellHeaderPath(): string {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const raw = argsObj?.cwd ? String(argsObj.cwd) : this.parseShellCommand().cdPath;
+    const expanded = raw === '~' || raw.startsWith('~/') ? os.homedir() + raw.slice(1) : raw;
+    const projectRoot = process.cwd();
+    const resolved = resolvePath(projectRoot, expanded || '.');
+    // The project root shows in full so tabs stay distinguishable; paths inside it stay short.
+    const relative = relativePath(projectRoot, resolved);
+    if (relative && !relative.startsWith('..') && !isAbsolutePath(relative)) return `./${relative}`;
+    return shortenPath(resolved);
+  }
+
+  private getShellDescription(): string {
+    const description = (this.args as Record<string, unknown> | undefined)?.description;
+    return typeof description === 'string' ? description.replace(/\s+/g, ' ').trim() : '';
+  }
+
+  /**
+   * With no quiet preview lines, a described shell call has nothing to show but its one-line
+   * description, so consecutive calls share one box: a `$ <path>` header, then one status row each.
+   */
+  private isQuietCompactShell(): boolean {
+    return (
+      this.quietDisplayMode === 'quiet' &&
+      this.toolName === MC_TOOLS.EXECUTE_COMMAND &&
+      this.quietPreviewLineLimit <= 0 &&
+      !this.expanded
+    );
+  }
+
+  /**
+   * Text for a grouped quiet shell row: the description, `...` while it may still stream in, or the
+   * command's first line when the call has none (e.g. it was rejected for a missing description).
+   */
+  private getQuietShellRowText(): { text: string; isCommand: boolean } {
+    const description = this.getShellDescription();
+    if (description) return { text: description, isCommand: false };
+    if (this.argsStreaming && !this.result) return { text: '...', isCommand: false };
+    const firstLine =
+      this.parseShellCommand()
+        .command.split('\n')
+        .find(line => line.trim()) ?? '...';
+    return { text: firstLine.trim(), isCommand: true };
   }
 
   hasQuietStreamingPreview(): boolean {
@@ -442,6 +556,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   protected rebuildForWidth(_width: number): void {
     this.updateBgColor();
     this.contentBox.clear();
+    if (!this.isQuietCompactShell()) this.syncQuietShellTicker(false);
 
     if (this.quietDisplayMode === 'quiet' && this.toolName !== MC_TOOLS.EXECUTE_COMMAND) {
       this.renderCompactTool();
@@ -1487,24 +1602,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private renderBashToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
-    let command = argsObj?.command ? String(argsObj.command) : '...';
+    const { command, cdPath } = this.parseShellCommand();
     const timeout = argsObj?.timeout as number | undefined;
 
-    // Strip a leading "cd <path>" since we show cwd in the footer. Callers bake this prefix into
-    // the command instead of passing `cwd`, and separate it with "&&", ";", or a bare newline —
-    // with quoted paths and leading whitespace also showing up.
-    const cdMatch = command.match(/^\s*cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;]+))\s*(?:&&|;|\n)\s*(?=\S)/);
-    const cdPath = cdMatch?.[1] ?? cdMatch?.[2] ?? cdMatch?.[3] ?? '';
-    if (cdMatch) {
-      command = command.slice(cdMatch[0].length);
+    if (this.isQuietCompactShell()) {
+      this.renderQuietShellGroupRow();
+      return;
     }
+
     const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : cdPath ? shortenPath(cdPath) : '';
 
     // Quiet mode shows the model's plain-language description in place of the raw command;
     // expanding (ctrl+e) or normal mode shows the command itself. While args are still
     // streaming the description may not have arrived yet, so the command stays hidden
     // rather than flashing before the description replaces it.
-    const description = typeof argsObj?.description === 'string' ? argsObj.description.replace(/\s+/g, ' ').trim() : '';
+    const description = this.getShellDescription();
     const showDescription =
       this.quietDisplayMode === 'quiet' && !this.expanded && (!!description || this.argsStreaming);
     const footerText = showDescription ? description || '...' : command;
@@ -1610,32 +1722,127 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return lines;
     };
 
-    // For errors, use bordered box with error status
-    if (this.result.isError) {
-      const status = this.getStatusIndicator(true);
-      const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
-      return;
-    }
-
-    // Also check if output contains common error patterns
-    const outputText = this.getFormattedOutput();
-    const looksLikeError = outputText.match(
-      /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:/i,
-    );
-    if (looksLikeError) {
-      const status = this.getStatusIndicator(true);
-      const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
-      return;
-    }
-
-    // Success - use bordered box with checkmark
-    const status = this.getStatusIndicator(false);
+    const failed = this.getShellFailureLine() !== undefined;
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    {
-      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
+    renderBorderedShell(this.getStatusIndicator(failed), this.limitQuietShellLines(prepareOutputLines(output)));
+  }
+
+  /**
+   * One call's slice of a shared quiet shell box. The first call in a run opens the box with a
+   * `$ <path>` header, a call in a new directory adds another header, and the last call closes it.
+   */
+  private renderQuietShellGroupRow(): void {
+    const border = (char: string) => this.formatToolBorder(char);
+    const fullWidth = Math.max(20, this.renderWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
+    const naturalWidth = this.quietShellGroupWidth ?? this.getQuietShellNaturalWidth() ?? 0;
+    const contentWidth = Math.min(fullWidth, Math.max(QUIET_SHELL_MIN_CONTENT_WIDTH, naturalWidth));
+    const rule = (left: string, right: string) =>
+      `${border(left)}${border('─'.repeat(contentWidth + 2))}${border(right)}`;
+    const row = (left: string, right = '') => {
+      const rightWidth = visibleWidth(right);
+      const leftText = truncateAnsi(left, Math.max(1, contentWidth - (rightWidth ? rightWidth + 1 : 0)));
+      const padding = ' '.repeat(Math.max(rightWidth ? 1 : 0, contentWidth - visibleWidth(leftText) - rightWidth));
+      return `${border('│')} ${leftText}${padding}${right} ${border('│')}`;
+    };
+
+    const headerPath = this.getShellHeaderPath();
+    const header = row(`${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('muted', headerPath)}`);
+    const lines: string[] = [];
+    if (!this.compactToolContinuation) lines.push(rule('╭', '╮'), header, rule('├', '┤'));
+
+    const rowText = this.getQuietShellRowText();
+    const description = rowText.isCommand ? theme.fg('muted', rowText.text) : rowText.text;
+    const isBackground =
+      !!this.backgroundTaskId || (this.args as Record<string, unknown> | undefined)?.background === true;
+    const running = !this.result || this.isPartial;
+    let mark: string;
+    let time: string;
+    let errorLine: string | undefined;
+    if (isBackground && (this.backgroundTaskId || !running)) {
+      // Background results arrive later as their own chat entry, so this row never updates again.
+      mark = theme.fg('accent', '◷');
+      time = 'started';
+    } else if (running && this.liveUpdatesStopped) {
+      mark = theme.fg('muted', '■');
+      time = 'stopped';
+    } else if (running) {
+      mark = theme.fg('warning', SPINNER_FRAMES[Math.floor(Date.now() / 100) % SPINNER_FRAMES.length]!);
+      time = formatMinutes(Math.floor((Date.now() - this.startTime) / 1000));
+    } else {
+      errorLine = this.getShellFailureLine();
+      mark = errorLine !== undefined ? theme.fg('error', '✗') : theme.fg('success', '✓');
+      time = this.formatDuration();
     }
+    lines.push(row(`${mark} ${description}`, theme.fg('muted', time)));
+    if (errorLine) lines.push(row(theme.fg('error', `  └▸ ${errorLine}`)));
+    if (!this.compactToolHasFollowingContinuation) lines.push(rule('╰', '╯'));
+
+    this.contentBox.addChild(new Text(lines.join('\n'), 0, 0));
+    this.syncQuietShellTicker(running && !isBackground && !this.liveUpdatesStopped);
+  }
+
+  /** `undefined` when the call succeeded; otherwise the most telling line of its output (may be empty). */
+  /**
+   * Returns the line explaining a failed shell call, or `undefined` when it succeeded. Failure comes
+   * from the result itself (an error result, or ordinary output ending in a nonzero "Exit code: N"),
+   * never from the output text, which routinely contains words like "error:" on success.
+   */
+  private getShellFailureLine(): string | undefined {
+    const resultLines = this.getFormattedOutput().split('\n');
+    const exitCode = resultLines
+      .findLast(line => line.trim() !== '')
+      ?.trim()
+      .match(/^Exit code: (-?\d+)$/)?.[1];
+    const failed = this.result?.isError || (exitCode !== undefined && exitCode !== '0');
+    if (!failed) return undefined;
+    const message = parseErrorMessage(resultLines.join('\n'));
+    if (message) return message;
+    const lines = (this.streamingOutput.trim() || resultLines.join('\n'))
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line));
+    const errorPattern = /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:/i;
+    return lines.find(line => errorPattern.test(line)) ?? lines.at(-1) ?? '';
+  }
+
+  /** Keeps a running grouped row's spinner and seconds counter moving between output events. */
+  private syncQuietShellTicker(active: boolean): void {
+    if (!active) {
+      if (this.quietShellTicker) clearInterval(this.quietShellTicker);
+      this.quietShellTicker = undefined;
+      return;
+    }
+    if (this.quietShellTicker) return;
+    this.quietShellTicker = setInterval(() => {
+      this.rebuild();
+      this.ui.requestRender();
+    }, 100);
+    this.quietShellTicker.unref?.();
+  }
+
+  /** Content width this call's rows need; reconciliation gives the whole group the widest one. */
+  getQuietShellNaturalWidth(): number | undefined {
+    if (!this.isQuietCompactShell()) return undefined;
+    const header = 2 + visibleWidth(this.getShellHeaderPath());
+    const rowText = this.getQuietShellRowText();
+    // Raw commands truncate rather than widen the shared box.
+    const textWidth = rowText.isCommand ? 0 : visibleWidth(rowText.text);
+    const row = 2 + textWidth + 1 + QUIET_SHELL_TIME_WIDTH;
+    return Math.max(header, row);
+  }
+
+  setQuietShellGroupWidth(width: number | undefined): void {
+    if (this.quietShellGroupWidth === width) return;
+    this.quietShellGroupWidth = width;
+    if (this.isQuietCompactShell()) this.rebuild();
+  }
+
+  /** Called when the agent run ends without this tool finishing, so nothing keeps animating. */
+  stopLiveUpdates(): void {
+    if (this.liveUpdatesStopped) return;
+    this.liveUpdatesStopped = true;
+    this.syncQuietShellTicker(false);
+    this.rebuild();
   }
 
   private renderProcessToolEnhanced(): void {
@@ -2750,10 +2957,17 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getDurationSuffix(): string {
-    if (this.isPartial) return '';
-    const ms = Date.now() - this.startTime;
-    if (ms < 1000) return theme.fg('muted', ` ${ms}ms`);
-    return theme.fg('muted', ` ${(ms / 1000).toFixed(1)}s`);
+    const duration = this.formatDuration();
+    if (this.isPartial || !duration) return '';
+    return theme.fg('muted', ` ${duration}`);
+  }
+
+  private formatDuration(): string {
+    if (this.durationUnknown) return '';
+    const ms = (this.endTime ?? Date.now()) - this.startTime;
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return formatMinutes(Math.round(ms / 1000));
   }
 
   private getFormattedOutput(): string {

@@ -245,6 +245,31 @@ describe('getAssistantRenderParts', () => {
     ]);
   });
 
+  it('recovers tool run time from the parts around an unstamped tool invocation', () => {
+    const tool = (toolCallId: string) =>
+      ({
+        type: 'tool-invocation',
+        toolInvocation: { toolCallId, toolName: 'execute_command', args: {}, state: 'result', result: 'ok' },
+      }) as never;
+    // Shape of a real persisted shell call: tool data parts stream while it runs, the next step starts after it.
+    const message = assistantMessage([
+      tool('call-1'),
+      { type: 'data-workspace-metadata', data: {}, createdAt: 1_000 } as never,
+      { type: 'data-sandbox-exit', data: {}, createdAt: 4_028 } as never,
+      { type: 'step-start', createdAt: 4_078 } as never,
+      tool('call-2'),
+      { type: 'text', text: 'done', createdAt: 4_500 } as never,
+      tool('call-3'),
+    ]);
+
+    const tools = getAssistantRenderParts(message).filter(part => part.kind === 'tool');
+    expect(tools.map(part => [part.startedAt, part.endedAt])).toEqual([
+      [1_000, 4_078],
+      [4_078, 4_500],
+      [undefined, undefined],
+    ]);
+  });
+
   it('uses canonical tool error metadata for completed tool render items', () => {
     const message = assistantMessage([
       {

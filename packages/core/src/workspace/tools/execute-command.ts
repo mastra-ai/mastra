@@ -48,7 +48,7 @@ const descriptionShape = {
     .string()
     .min(1)
     .describe(
-      'Short plain-language description of what this command does, shown to the user in place of the raw command (5-10 words, e.g. "Running the auth unit tests"). Write it as the next step in an ongoing narrative: it can build on your previous commands implicitly, e.g. after "Searching open PRs for failing CI" the next command can be "Drilling into the first of 15 failures".',
+      'Short plain-language description of what this command does, shown to the user in place of the raw command (5-10 words, e.g. "Running the auth unit tests"). Write it first, before `command` and the other arguments, so the user sees it while the rest of the call streams in. Write it as the next step in an ongoing narrative: it can build on your previous commands implicitly, e.g. after "Searching open PRs for failing CI" the next command can be "Drilling into the first of 15 failures".',
     ),
 };
 

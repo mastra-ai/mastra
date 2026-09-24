@@ -213,4 +213,49 @@ describe('AssistantMessageComponent (DB-native)', () => {
     expect(contentChildren(component)[0]).toBe(child);
     expect(component.render(80)).toEqual(wideBefore);
   });
+  describe('quiet mode', () => {
+    const thinkingLines = (component: AssistantMessageComponent) =>
+      collectText(component)
+        .split('\n')
+        .filter(line => line.includes('Thinking...'));
+
+    it('drops Thinking placeholders once text follows them, keeping the trailing live one', () => {
+      const component = new AssistantMessageComponent(
+        assistantMessage([
+          { type: 'reasoning', reasoning: 'before' } as never,
+          { type: 'text', text: 'visible answer' },
+          { type: 'reasoning', reasoning: 'after' } as never,
+        ]),
+        true,
+      );
+      expect(thinkingLines(component)).toHaveLength(2);
+
+      component.setQuietModeDisplay('quiet');
+      expect(thinkingLines(component)).toHaveLength(1);
+      expect(collectText(component)).toContain('visible answer');
+      expect(countSpacers(component)).toBe(0);
+
+      component.setQuietModeDisplay('normal');
+      expect(thinkingLines(component)).toHaveLength(2);
+    });
+
+    it('hides the trailing Thinking placeholder once later chat content supersedes it', () => {
+      const component = new AssistantMessageComponent(
+        assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as never]),
+        true,
+      );
+      component.setQuietModeDisplay('quiet');
+      expect(thinkingLines(component)).toHaveLength(1);
+      expect(component.getChatSpacingKind()).toBe('assistant-message');
+
+      component.setSupersededByLaterContent(true);
+      expect(thinkingLines(component)).toHaveLength(0);
+      expect(component.getChatSpacingKind()).toBeUndefined();
+
+      // The hiding survives the segment being finalized
+      component.finalizeRenderState();
+      component.setSupersededByLaterContent(false);
+      expect(thinkingLines(component)).toHaveLength(1);
+    });
+  });
 });

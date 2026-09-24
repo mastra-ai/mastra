@@ -1,6 +1,6 @@
 import type { Component, Container } from '@earendil-works/pi-tui';
 import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
-import { getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
+import { getChatSpacingKind, getSpacingBetweenComponents, isToolSpacingKind } from './components/chat-spacing.js';
 import type { CompactToolLabelColor } from './components/tool-execution-interface.js';
 
 interface CompactToolGroupingParticipant {
@@ -10,6 +10,12 @@ interface CompactToolGroupingParticipant {
   setCompactToolGroupLabelColor?(color: CompactToolLabelColor | undefined): void;
   setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;
   setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
+  getQuietShellNaturalWidth?(): number | undefined;
+  setQuietShellGroupWidth?(width: number | undefined): void;
+}
+
+interface SupersedableParticipant {
+  setSupersededByLaterContent?(superseded: boolean): void;
 }
 
 /**
@@ -44,6 +50,16 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   const children = chatContainer.children as Component[];
   const components = children.filter(child => !isChatBoundarySpacer(child));
 
+  // Tell each entry whether an assistant message or tool follows it, before spacing is measured:
+  // quiet assistant messages drop stale "Thinking..." placeholders and may render nothing at all.
+  let hasLaterContent = false;
+  for (let i = components.length - 1; i >= 0; i--) {
+    const component = components[i]!;
+    (component as SupersedableParticipant).setSupersededByLaterContent?.(hasLaterContent);
+    const kind = getChatSpacingKind(component);
+    if (kind === 'assistant-message' || isToolSpacingKind(kind)) hasLaterContent = true;
+  }
+
   // Pool existing spacers for reuse so we keep the same object identity
   // where possible, reducing object churn.
   const spacerPool = children.filter(isChatBoundarySpacer);
@@ -67,8 +83,14 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
 
   const flushCompactRunColor = () => {
     const color = getCompactRunLabelColor(currentCompactRun);
+    // Calls sharing a quiet shell box must agree on its width: the widest row wins.
+    const widths = currentCompactRun
+      .map(participant => participant.getQuietShellNaturalWidth?.())
+      .filter((width): width is number => width !== undefined);
+    const groupWidth = widths.length > 0 ? Math.max(...widths) : undefined;
     for (const participant of currentCompactRun) {
       participant.setCompactToolGroupLabelColor?.(color);
+      participant.setQuietShellGroupWidth?.(groupWidth);
     }
     currentCompactRun = [];
   };
@@ -90,7 +112,9 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
       if (!isContinuation) flushCompactRunColor();
       currentCompactRun.push(participant);
     } else {
-      flushCompactRunColor();
+      // Entries that take no space (e.g. a quiet assistant message with only hidden thinking)
+      // don't break a run, matching the continuation check above.
+      if (getChatSpacingKind(component)) flushCompactRunColor();
       participant.setCompactToolGroupLabelColor?.(undefined);
     }
     if (getChatSpacingKind(component)) {

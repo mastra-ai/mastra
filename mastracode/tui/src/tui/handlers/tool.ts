@@ -39,6 +39,7 @@ function createPostToolAssistantComponent(ctx: EventHandlerContext, toolCallId: 
   const messageId = state.streamingMessage?.id;
   if (!messageId) {
     const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    component.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
     state.streamingComponent = component;
     ctx.addChildBeforeFollowUps(component);
     return component;
@@ -315,7 +316,10 @@ function ensureSubmitPlanComponent(
  * Extracts content from common tool return structures like { content: "...", isError: false }
  */
 function isToolResultError(result: unknown): boolean {
-  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
+  if (typeof result !== 'object' || result === null) return false;
+  const record = result as Record<string, unknown>;
+  // Input validation failures come back as `{ error: true, message }` rather than an error result.
+  return record.isError === true || record.error === true;
 }
 
 export function formatToolResult(result: unknown): string {
@@ -759,7 +763,11 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
 export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
   flushLatestParsedToolArgs(ctx, toolCallId);
   closeToolInputParser(toolCallId);
-  ctx.state.pendingTools.get(toolCallId)?.setArgsStreaming?.(false);
+  const component = ctx.state.pendingTools.get(toolCallId);
+  if (!component?.setArgsStreaming) return;
+  component.setArgsStreaming(false);
+  // An undescribed quiet shell call leaves its bare streaming line for a box, so re-measure spacing.
+  reconcileToolBoundaries(ctx);
 }
 
 export function handleToolEnd(

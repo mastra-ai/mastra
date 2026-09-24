@@ -294,4 +294,15 @@ describe('quiet shell description streaming', () => {
     handleToolInputEnd(ctx, 'call-1');
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('$ git status');
   });
+
+  it('marks a call rejected by input validation as failed', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'git status' });
+    // Validation failures come back as an ordinary result object, not an error result.
+    handleToolEnd(ctx, 'call-1', { error: true, message: 'Tool input validation failed for execute_command.' }, false);
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('✗');
+    expect(output).not.toContain('✓');
+  });
 });
