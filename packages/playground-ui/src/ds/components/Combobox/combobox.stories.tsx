@@ -255,6 +255,7 @@ export const Multiple: Story = {
           placeholder="Select capabilities..."
           searchPlaceholder="Search capabilities..."
           emptyText="No capabilities found."
+          clearLabel="Clear"
           className="w-full"
         />
         <div className="flex flex-wrap gap-1.5">

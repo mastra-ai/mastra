@@ -151,6 +151,7 @@ export function Combobox(props: ComboboxProps) {
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
   const menu = useFluidMenu<HTMLDivElement>();
+  const clearMenu = useFluidMenu<HTMLDivElement>();
   const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
@@ -243,15 +244,17 @@ export function Combobox(props: ComboboxProps) {
                       );
                     }}
                   </BaseCombobox.List>
-                  {selectedValues.length > 0 && clearLabel ? (
-                    <div className="px-1 pb-1">
-                      <div role="separator" className={cn(menuSeparatorClass, 'mt-0')} />
-                      <ComboboxClearItem label={clearLabel} onClear={clearSelection} />
-                    </div>
-                  ) : null}
                 </FluidMenuItems>
               </div>
             </ScrollArea>
+            {selectedValues.length > 0 && clearLabel ? (
+              <div className={cn(clearMenu.containerClassName, 'px-1 pb-1')} {...clearMenu.getContainerProps({})}>
+                <FluidMenuItems menu={clearMenu}>
+                  <div role="separator" className={cn(menuSeparatorClass, 'mt-0')} />
+                  <ComboboxClearItem label={clearLabel} onClear={clearSelection} />
+                </FluidMenuItems>
+              </div>
+            ) : null}
           </BaseCombobox.Popup>
         </BaseCombobox.Positioner>
       </BaseCombobox.Portal>
