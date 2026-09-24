@@ -7,6 +7,7 @@
  */
 export { AgentController } from './agent-controller';
 export { Session } from './session';
+export { SessionStartupCancelledError, isSessionStartupCancelledError } from './errors';
 export type { ReservedThreadMetadataKey, SessionBeforeAgentEndListener } from './session';
 export type { MessageAuthor } from './message-author';
 export {

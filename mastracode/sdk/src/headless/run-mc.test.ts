@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { AgentController } from '@mastra/core/agent-controller';
+import { AgentController, SessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -174,13 +174,24 @@ describe('runMC', () => {
 
   it('reports a cancelled startup as aborted without a startup error', async () => {
     const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('unused') }) });
-    vi.spyOn(session, 'sendMessage').mockRejectedValueOnce(new DOMException('Session startup cancelled', 'AbortError'));
+    vi.spyOn(session, 'sendMessage').mockRejectedValueOnce(new SessionStartupCancelledError());
 
     const result = await runMC({ controller, session, prompt: 'Cancelled startup' }).result;
 
     expect(result.status).toBe('aborted');
     expect(result.exitCode).toBe(1);
     expect(result.error).toBeUndefined();
+  });
+
+  it.each([
+    new DOMException('The operation was aborted.', 'AbortError'),
+    Object.assign(new Error('MCP transport aborted during handshake'), { name: 'AbortError' }),
+  ])('reports an unrelated startup AbortError as a failure: $message', async error => {
+    const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('unused') }) });
+    vi.spyOn(session, 'sendMessage').mockRejectedValueOnce(error);
+    const result = await runMC({ controller, session, prompt: 'Transport failed' }).result;
+    expect(result.status).toBe('error');
+    expect(result.error?.message).toContain(error.message);
   });
 
   it('returns status "aborted" with exit code 1 when aborted', async () => {

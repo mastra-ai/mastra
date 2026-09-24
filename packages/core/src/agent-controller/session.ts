@@ -35,6 +35,7 @@ import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
+import { SessionStartupCancelledError } from './errors';
 import { readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
@@ -3714,7 +3715,7 @@ export class Session<TState = unknown> {
       if (this.#abortGeneration !== submittedAbortGeneration) {
         // A newer signal may already own the session controller. Reject only
         // this obsolete startup, without aborting that newer run.
-        throw new DOMException('Session startup cancelled', 'AbortError');
+        throw new SessionStartupCancelledError();
       }
     };
     const contentOptions = 'content' in input ? input : undefined;

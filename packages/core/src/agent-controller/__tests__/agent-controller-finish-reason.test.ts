@@ -17,6 +17,7 @@ import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 
 import { AgentController } from '../agent-controller';
+import { SessionStartupCancelledError } from '../errors';
 import { describeNonSuccessFinishReason } from '../stream-content';
 import { createMockWorkspace } from '../test-utils';
 
@@ -273,7 +274,7 @@ describe('Session cancellation during startup', () => {
       });
     }
     const pending = session.sendMessage({ content: 'Cancel before model dispatch' });
-    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    const rejection = expect(pending).rejects.toBeInstanceOf(SessionStartupCancelledError);
     await entered.promise;
     session.abort();
     release.resolve();
