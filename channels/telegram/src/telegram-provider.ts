@@ -170,12 +170,20 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   /**
-   * Update runtime provider settings. Telegram has no global auth credential to
-   * clear (per-bot tokens are managed via {@link connect}/{@link disconnect}),
-   * so `null` is a no-op; an object merges `apiBaseUrl`/`baseUrl` overrides.
+   * Update runtime provider settings. Pass `botToken` to change the default
+   * bot token new {@link connect} calls fall back to when none is supplied
+   * per-agent (matching {@link SlackProvider.configure}'s rotation pattern);
+   * pass `apiBaseUrl`/`baseUrl` to point the adapter at a different host.
+   * `null` clears the default `botToken` only — per-bot installs are managed
+   * via {@link connect}/{@link disconnect}.
    */
-  async configure(credentials: { apiBaseUrl?: string; baseUrl?: string } | null): Promise<void> {
-    if (credentials === null) return;
+  async configure(
+    credentials: { apiBaseUrl?: string; baseUrl?: string; botToken?: string } | null,
+  ): Promise<void> {
+    if (credentials === null) {
+      this.#config = { ...this.#config, botToken: undefined };
+      return;
+    }
     const apiBaseUrlChanged =
       credentials.apiBaseUrl !== undefined && credentials.apiBaseUrl !== this.#config.apiBaseUrl;
     this.#config = { ...this.#config, ...credentials };
@@ -212,7 +220,12 @@ export class TelegramProvider implements ChannelProvider {
       throw new Error(`Agent "${agentId}" is already connected to Telegram. Disconnect first to reconnect.`);
     }
 
-    if (!options.botToken) {
+    // Per-call token wins, falling back to the provider-config default so
+    // callers can hold the bot token in `new TelegramProvider({ botToken })`
+    // (or via `channels()` off a Mastra Connect credential) and not repeat it
+    // at every connect() site.
+    const botToken = options.botToken ?? this.#config.botToken;
+    if (!botToken) {
       const installationId = existing?.id ?? randomUUID();
       await store.save({
         id: installationId,
@@ -224,7 +237,7 @@ export class TelegramProvider implements ChannelProvider {
       return { type: 'deep_link', url: BOTFATHER_DEEP_LINK, installationId };
     }
 
-    const me = await getMe(options.botToken, this.#apiBaseUrl());
+    const me = await getMe(botToken, this.#apiBaseUrl());
     const installationId = existing?.id ?? randomUUID();
     const webhookId = existing?.webhookId ?? randomUUID();
     const baseUrl = this.#getBaseUrl();
@@ -241,7 +254,7 @@ export class TelegramProvider implements ChannelProvider {
       agentId,
       webhookId,
       status: 'active',
-      botToken: options.botToken,
+      botToken,
       secretToken: generateSecretToken(),
       username: options.name ?? me.username ?? me.first_name,
       webhookUrl,

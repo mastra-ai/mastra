@@ -11,6 +11,7 @@ import {
   normalizeCommands,
   resolveTelegramAdapterConfig,
 } from './index';
+import { PLATFORM } from './install-store';
 
 const API_ORIGIN = 'https://api.telegram.org';
 const BASE_URL = 'https://bot.example.com';
@@ -209,6 +210,40 @@ describe('TelegramProvider — setMyCommands', () => {
       { command: 'ask', description: 'Run /ask' },
       { command: 'summarize', description: 'Summarize a link' },
     ]);
+  });
+
+  it('falls back to the provider-config botToken when connect() supplies none', async () => {
+    // Regression: mirrors SlackProvider / DiscordProvider — the bot token can
+    // live on `new TelegramProvider({ botToken })` (e.g. filled in by
+    // `channels()` from a Mastra Connect credential) so per-agent connect()
+    // sites don't need to repeat it.
+    const { provider } = makeProvider({ botToken: BOT_TOKEN });
+    stubGetMe(BOT_TOKEN);
+    stubMethod(BOT_TOKEN, 'setWebhook');
+    stubMethod(BOT_TOKEN, 'setMyCommands');
+
+    const result = await provider.connect('agent-1');
+
+    expect(result).toMatchObject({ type: 'immediate' });
+    const installations = await provider.listInstallations();
+    expect(installations).toHaveLength(1);
+    expect(installations[0]).toMatchObject({ agentId: 'agent-1', status: 'active' });
+  });
+
+  it('lets a per-call botToken override the provider-config default', async () => {
+    // The per-agent token wins so an operator can point one Mastra process at
+    // multiple bots when they want to; the config default is just a fallback.
+    const OTHER_TOKEN = '888:XYZ-token-override';
+    const { provider, storage } = makeProvider({ botToken: BOT_TOKEN });
+    stubGetMe(OTHER_TOKEN);
+    stubMethod(OTHER_TOKEN, 'setWebhook');
+    stubMethod(OTHER_TOKEN, 'setMyCommands');
+
+    const result = await provider.connect('agent-1', { botToken: OTHER_TOKEN });
+
+    expect(result).toMatchObject({ type: 'immediate' });
+    const records = await storage.listInstallations(PLATFORM);
+    expect(records[0]!.data.botToken).toBe(OTHER_TOKEN);
   });
 });
 
