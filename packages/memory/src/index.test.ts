@@ -2818,7 +2818,14 @@ describe('Memory', () => {
       const memory = memoryWithOMAndWMState();
       const rc = new RequestContext();
       const processors = await memory.getInputProcessors([], rc);
-      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+      const processor = processors.find(p => p.id === 'observational-memory');
+      expect(processor).toEqual(
+        expect.objectContaining({
+          getHistory: expect.any(Function),
+          getRecord: expect.any(Function),
+          waitForBuffering: expect.any(Function),
+        }),
+      );
     });
 
     it('attaches observational-memory output processor when requestContext has no MastraMemory', async () => {

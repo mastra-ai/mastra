@@ -4,7 +4,13 @@ import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
-import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import {
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  createThreadBranchError,
+  getThreadOMMetadata,
+  setThreadOMMetadata,
+} from '@mastra/core/memory';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
@@ -14,6 +20,8 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import { compareMessageTuples, parseThreadBranchMetadata } from '../../branching/lineage';
+import { getThreadBranchParticipation } from '../../branching/query';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -229,8 +237,10 @@ import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
   getBufferedChunks,
+  getDurableObservedMessageIds,
   getObservableMessages,
   stripThreadTags,
+  withDurableObservationCursor,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
@@ -701,7 +711,13 @@ export class ObservationalMemory {
     // Create internal MessageHistory for message persistence
     // OM handles message saving itself (in processOutputStep) instead of relying on
     // the Memory class's MessageHistory processor
-    this.messageHistory = new MessageHistory({ storage: this.storage });
+    this.messageHistory = new MessageHistory({
+      storage: this.storage,
+      persistMessages: config.memory
+        ? (input, generatedMessageIds) => persistMessagesWithThreadCreation(config.memory!, input, generatedMessageIds)
+        : undefined,
+      persistMessagesCreatesThread: config.memory?.supportsThreadBranching ?? false,
+    });
 
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,
@@ -1172,12 +1188,27 @@ export class ObservationalMemory {
   /**
    * Get thread/resource IDs for storage lookup
    */
-  private getStorageIds(threadId: string, resourceId?: string): { threadId: string | null; resourceId: string } {
+  private async getStorageIds(
+    threadId: string,
+    resourceId?: string,
+  ): Promise<{ threadId: string | null; resourceId: string }> {
+    const resolvedResourceId = resourceId ?? threadId;
     if (this.scope === 'resource') {
-      return {
-        threadId: null,
-        resourceId: resourceId ?? threadId,
-      };
+      const thread = threadId ? await this.storage.getThreadById({ threadId }) : null;
+      const branch = thread ? parseThreadBranchMetadata(thread) : null;
+      if (branch?.state === 'pending') {
+        throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+      }
+      if (branch) {
+        if (branch.observationalMemoryThreadId !== threadId) {
+          throw createThreadBranchError(
+            'BRANCH_LINEAGE_CORRUPT',
+            'Stored thread branch lineage contains an invalid Observational Memory locator.',
+          );
+        }
+        return { threadId, resourceId: resolvedResourceId };
+      }
+      return { threadId: null, resourceId: resolvedResourceId };
     }
     if (!threadId) {
       throw new Error(
@@ -1185,10 +1216,7 @@ export class ObservationalMemory {
           `This is a bug — getThreadContext should have caught this earlier.`,
       );
     }
-    return {
-      threadId,
-      resourceId: resourceId ?? threadId,
-    };
+    return { threadId, resourceId: resolvedResourceId };
   }
 
   /**
@@ -1196,7 +1224,7 @@ export class ObservationalMemory {
    * Returns the existing record if one exists, otherwise initializes a new one.
    */
   async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     // Storage adapters identify thread-scoped records by threadId alone and
     // resource-scoped records by resourceId alone. The single-flight key must
     // mirror that identity so optional resourceId differences cannot split a
@@ -1488,9 +1516,10 @@ export class ObservationalMemory {
     const lastObservedAt = record.lastObservedAt;
     // Safeguard: track message IDs that were already observed to prevent re-observation
     // This handles edge cases like process restarts where lastObservedAt might not capture all messages
-    const observedMessageIds = new Set<string>(
-      Array.isArray(record.observedMessageIds) ? record.observedMessageIds : [],
-    );
+    const observedMessageIds = new Set<string>([
+      ...(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []),
+      ...getDurableObservedMessageIds(record),
+    ]);
 
     // Only exclude buffered chunk message IDs when called from the buffering path.
     // The main agent context should still see buffered messages until activation.
@@ -1540,7 +1569,7 @@ export class ObservationalMemory {
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
-          if (msgDate > lastObservedAt) {
+          if (msgDate >= lastObservedAt) {
             result.push(msg);
           } else {
           }
@@ -1882,6 +1911,7 @@ export class ObservationalMemory {
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
+    generatedMessageIds: readonly string[] = [],
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
@@ -1900,6 +1930,7 @@ export class ObservationalMemory {
     if (filteredMessages.length > 0) {
       await this.messageHistory.persistMessages({
         messages: filteredMessages,
+        generatedMessageIds,
         threadId,
         resourceId,
       });
@@ -1910,54 +1941,77 @@ export class ObservationalMemory {
    * Load messages from storage that haven't been observed yet.
    * Uses cursor-based query with lastObservedAt timestamp for efficiency.
    *
-   * In resource scope mode, loads messages for the entire resource (all threads).
-   * In thread scope mode, loads messages for just the current thread.
+   * Resource scope loads non-branch threads across the resource. A branch participant
+   * loads only its reachable path so parent and sibling tails cannot leak into OM.
    */
   private async loadMessagesFromStorage(
     threadId: string,
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
-    // Add 1ms to lastObservedAt to make the filter exclusive (since dateRange.start is inclusive)
-    // This prevents re-loading the same messages that were already observed
-    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
+    // Reload the cursor timestamp inclusively, then use observed message IDs to remove
+    // processed rows. This avoids losing distinct messages with the same timestamp.
+    const startDate = lastObservedAt;
 
-    let result: { messages: MastraDBMessage[] };
+    const participation = await getThreadBranchParticipation(this.storage, threadId);
+    let messages: MastraDBMessage[];
 
-    if (this.scope === 'resource' && resourceId) {
-      // Resource scope: use the new listMessagesByResourceId method
-      result = await this.storage.listMessagesByResourceId({
-        resourceId,
-        perPage: false, // Get all messages (no pagination limit)
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: startDate
-          ? {
-              dateRange: {
-                start: startDate,
-              },
-            }
-          : undefined,
-      });
-    } else {
-      // Thread scope: use listMessages with threadId
-      result = await this.storage.listMessages({
+    if (participation.participant) {
+      if (!this.memory) {
+        throw createThreadBranchError(
+          'BRANCHING_UNSUPPORTED',
+          'Observational Memory requires branch-aware Memory to load shared history.',
+        );
+      }
+      const result = await this.memory.recall({
         threadId,
-        perPage: false, // Get all messages (no pagination limit)
+        resourceId,
+        perPage: false,
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: startDate
-          ? {
-              dateRange: {
-                start: startDate,
-              },
-            }
-          : undefined,
       });
+      messages = result.messages;
+    } else if (this.scope === 'resource' && resourceId) {
+      const { threads } = await this.storage.listThreads({ filter: { resourceId }, perPage: false });
+      const safeThreads = threads.filter(thread => !thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY]);
+      if (safeThreads.length === threads.length) {
+        const result = await this.storage.listMessagesByResourceId({
+          resourceId,
+          perPage: false,
+          includeTotal: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          filter: startDate ? { dateRange: { start: startDate } } : undefined,
+        });
+        messages = result.messages;
+      } else {
+        const results = await Promise.all(
+          safeThreads.map(thread =>
+            this.storage.listMessages({
+              threadId: thread.id,
+              resourceId,
+              perPage: false,
+              includeTotal: false,
+              orderBy: { field: 'createdAt', direction: 'ASC' },
+              filter: startDate ? { dateRange: { start: startDate } } : undefined,
+            }),
+          ),
+        );
+        messages = results.flatMap(result => result.messages).sort(compareMessageTuples);
+      }
+    } else {
+      const result = await this.storage.listMessages({
+        threadId,
+        perPage: false,
+        includeTotal: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: startDate ? { dateRange: { start: startDate } } : undefined,
+      });
+      messages = result.messages;
     }
 
     // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
     // without explicit messages, buffering token counts) never re-observe stored
     // working memory (#21961).
-    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    return messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
   }
 
   /**
@@ -2254,7 +2308,7 @@ ${formattedMessages}
     if (bufferCursor) {
       candidateMessages = candidateMessages.filter(msg => {
         if (!msg.createdAt) return true; // include messages without timestamps
-        return new Date(msg.createdAt) > bufferCursor;
+        return new Date(msg.createdAt) >= bufferCursor;
       });
     }
 
@@ -2751,20 +2805,35 @@ ${formattedMessages}
    */
   /** @internal Used by ObservationTurn. */
   async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
-    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
+    const currentThread = await this.storage.getThreadById({ threadId: currentThreadId, resourceId });
+    if (currentThread && parseThreadBranchMetadata(currentThread)) return undefined;
+
+    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId }, perPage: false });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
     // Fetch the OM record once so we can fall back to its lastObservedAt
     // for threads whose metadata was never stamped.  See #15265.
     const record = await this.getRecord(currentThreadId, resourceId);
     const recordLastObservedAt = record?.lastObservedAt;
+    const persistedObservedMessageIds = new Set([
+      ...this.observedMessageIds,
+      ...(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []),
+      ...(record ? getDurableObservedMessageIds(record) : []),
+      ...(Array.isArray(record?.bufferedMessageIds) ? record.bufferedMessageIds : []),
+      ...(record ? getBufferedChunks(record).flatMap(chunk => chunk.messageIds ?? []) : []),
+    ]);
 
     for (const thread of allThreads) {
-      if (thread.id === currentThreadId) continue;
+      if (
+        thread.id === currentThreadId ||
+        Object.prototype.hasOwnProperty.call(thread.metadata ?? {}, MASTRA_THREAD_BRANCH_METADATA_KEY)
+      ) {
+        continue;
+      }
 
       const omMetadata = getThreadOMMetadata(thread.metadata);
       const threadLastObservedAt = omMetadata?.lastObservedAt ?? recordLastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
+      const startDate = threadLastObservedAt ? new Date(threadLastObservedAt) : undefined;
 
       const result = await this.storage.listMessages({
         threadId: thread.id,
@@ -2774,7 +2843,7 @@ ${formattedMessages}
       });
 
       const filtered = result.messages.filter(
-        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+        message => !persistedObservedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
       );
 
       if (filtered.length > 0) {
@@ -3247,9 +3316,12 @@ ${formattedMessages}
         candidateMessages = this.getUnobservedMessages(rawMessages, record, { excludeBuffered: true });
       }
 
-      // Apply cursor filtering only for storage-loaded messages.
-      // When messages are provided directly, they're fresh and shouldn't be filtered by cursor.
-      if (!opts.messages) {
+      // Apply cursor filtering only for storage-loaded, non-branch messages. Branch paths
+      // may contain unobserved messages tied at the cursor timestamp, so their ID sets are authoritative.
+      const branchParticipant = !opts.messages
+        ? (await getThreadBranchParticipation(this.storage, threadId)).participant
+        : false;
+      if (!opts.messages && !branchParticipant) {
         let bufferCursor = BufferingCoordinator.lastBufferedAtTime.get(bufferKey) ?? record.lastBufferedAtTime ?? null;
         if (record.lastObservedAt) {
           const lastObserved = new Date(record.lastObservedAt);
@@ -3261,7 +3333,7 @@ ${formattedMessages}
         if (bufferCursor) {
           candidateMessages = candidateMessages.filter(msg => {
             if (!msg.createdAt) return true;
-            return new Date(msg.createdAt) > bufferCursor;
+            return new Date(msg.createdAt) >= bufferCursor;
           });
         }
       }
@@ -3927,7 +3999,7 @@ ${formattedMessages}
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
-        currentRecord: record,
+        currentRecord: withDurableObservationCursor(record),
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
@@ -3990,7 +4062,7 @@ ${formattedMessages}
    * Get current observations for a thread/resource
    */
   async getObservations(threadId: string, resourceId?: string): Promise<string | undefined> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
     return record?.activeObservations;
   }
@@ -3999,7 +4071,7 @@ ${formattedMessages}
    * Get current record for a thread/resource
    */
   async getRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord | null> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     return this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
   }
 
@@ -4025,7 +4097,7 @@ ${formattedMessages}
     resourceId: string | undefined,
     config: Record<string, unknown>,
   ): Promise<void> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
     if (!record) {
       throw new Error(`No observational memory record found for thread ${ids.threadId}`);
@@ -4047,7 +4119,7 @@ ${formattedMessages}
     limit?: number,
     options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     return this.storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, limit, options);
   }
 
@@ -4055,7 +4127,7 @@ ${formattedMessages}
    * Clear all memory for a specific thread/resource
    */
   async clear(threadId: string, resourceId?: string): Promise<void> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     await this.storage.clearObservationalMemory(ids.threadId, ids.resourceId);
     // Clean up static maps to prevent memory leaks
     this.buffering.cleanupStaticMaps(ids.threadId ?? ids.resourceId, ids.resourceId);

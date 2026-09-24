@@ -10,6 +10,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
+import { persistGeneratedMessages } from '../../memory/internal';
 import type { ObservabilityContext } from '../../observability';
 import { createObservabilityContext, InternalSpans, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
@@ -332,28 +333,22 @@ export async function prepareMemoryStep({
   if (typeof messages === 'string') {
     userMessage = messages;
     if (memory) {
-      promises.push(
-        memory.saveMessages({
-          messages: [
-            {
-              id: generateId({
-                idType: 'message',
-                source: 'agent',
-                threadId: thread?.id,
-                resourceId: thread?.resourceId,
-                role: 'user',
-              }),
-              type: 'text',
-              role: 'user',
-              content: { parts: [{ type: 'text', text: messages }], format: 2 },
-              createdAt: new Date(),
-              threadId: thread?.id,
-              resourceId: thread?.resourceId,
-            },
-          ] as MastraDBMessage[],
-          observabilityContext,
+      const message: MastraDBMessage = {
+        id: generateId({
+          idType: 'message',
+          source: 'agent',
+          threadId: thread?.id,
+          resourceId: thread?.resourceId,
+          role: 'user',
         }),
-      );
+        type: 'text',
+        role: 'user',
+        content: { parts: [{ type: 'text', text: messages }], format: 2 },
+        createdAt: new Date(),
+        threadId: thread?.id,
+        resourceId: thread?.resourceId,
+      };
+      promises.push(persistGeneratedMessages(memory, { messages: [message], observabilityContext }, [message.id]));
     }
   } else {
     const messageList = new MessageList({
@@ -367,10 +362,14 @@ export async function prepareMemoryStep({
 
     if (memory) {
       promises.push(
-        memory.saveMessages({
-          messages: messagesToSave,
-          observabilityContext,
-        }),
+        persistGeneratedMessages(
+          memory,
+          {
+            messages: messagesToSave,
+            observabilityContext,
+          },
+          [],
+        ),
       );
     }
 
@@ -441,14 +440,7 @@ export async function prepareMemoryStep({
  * are applied to all messages saved during network execution.
  */
 async function saveMessagesWithProcessors(
-  memory:
-    | {
-        saveMessages: (params: {
-          messages: MastraDBMessage[];
-          observabilityContext?: Partial<ObservabilityContext>;
-        }) => Promise<{ messages: MastraDBMessage[] }>;
-      }
-    | undefined,
+  memory: Awaited<ReturnType<Agent['getMemory']>>,
   messages: MastraDBMessage[],
   processorRunner: ProcessorRunner | null,
   context?: {
@@ -461,7 +453,11 @@ async function saveMessagesWithProcessors(
   const resolved = resolveObservabilityContext(observabilityContext);
 
   if (!processorRunner || messages.length === 0) {
-    await memory.saveMessages({ messages, observabilityContext: resolved });
+    await persistGeneratedMessages(
+      memory,
+      { messages, observabilityContext: resolved },
+      messages.map(message => message.id),
+    );
     return;
   }
 
@@ -475,7 +471,11 @@ async function saveMessagesWithProcessors(
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
-  await memory.saveMessages({ messages: processedMessages, observabilityContext: resolved });
+  await persistGeneratedMessages(
+    memory,
+    { messages: processedMessages, observabilityContext: resolved },
+    processedMessages.map(message => message.id),
+  );
 }
 
 async function saveFinalResultIfProvided({

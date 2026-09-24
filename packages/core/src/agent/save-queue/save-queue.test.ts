@@ -120,4 +120,22 @@ describe('SaveQueueManager', () => {
     expect(savedMessages.length).toBe(3);
     expect(list.drainUnsavedMessages().length).toBe(0);
   });
+
+  it('marks generated response messages when flushing through memory', async () => {
+    const generatedCalls: string[][] = [];
+    mockMemory.__mastraPersistGeneratedMessages = vi.fn(async ({ messages }, generatedMessageIds) => {
+      generatedCalls.push([...generatedMessageIds]);
+      saved.push(...messages);
+      return { messages };
+    });
+    const manager = new SaveQueueManager({ memory: mockMemory });
+    const list = new MessageList({ threadId: 'thread-generated' });
+
+    list.add(makeTestMessage('user', 'thread-generated', 'user', 'Hello'), 'user');
+    list.add(makeTestMessage('assistant', 'thread-generated', 'assistant', 'Hi'), 'response');
+    await manager.flushMessages(list, 'thread-generated');
+
+    expect(generatedCalls).toEqual([['assistant']]);
+    expect(saved.map(message => message.id)).toEqual(['user', 'assistant']);
+  });
 });

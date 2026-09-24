@@ -1,4 +1,5 @@
 export * from './types';
+export * from './branching';
 export * from './load-message-history';
 export * from './message-history-config';
 export * from './memory';

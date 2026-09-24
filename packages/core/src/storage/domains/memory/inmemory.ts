@@ -1107,7 +1107,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Timezone used for observation date formatting
       observedTimezone: currentRecord.observedTimezone,
       // Extensible metadata (optional)
-      metadata: {},
+      metadata: structuredClone(currentRecord.metadata ?? {}),
     };
 
     // Add as first record (most recent)

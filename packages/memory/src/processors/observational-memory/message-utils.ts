@@ -1,6 +1,59 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+const OBSERVATION_CURSOR_METADATA_KEY = '__mastra_observation_cursor';
+
+type DurableObservationCursor = { lastObservedAt: string; messageIds: string[] };
+
+function parseDurableObservationCursor(record: ObservationalMemoryRecord): DurableObservationCursor | undefined {
+  const value = record.metadata?.[OBSERVATION_CURSOR_METADATA_KEY];
+  if (!value || typeof value !== 'object') return undefined;
+  const cursor = value as Partial<DurableObservationCursor>;
+  if (typeof cursor.lastObservedAt !== 'string' || !Array.isArray(cursor.messageIds)) return undefined;
+  if (!cursor.messageIds.every(id => typeof id === 'string')) return undefined;
+  return { lastObservedAt: cursor.lastObservedAt, messageIds: cursor.messageIds };
+}
+
+export function getDurableObservedMessageIds(record: ObservationalMemoryRecord): string[] {
+  const cursor = parseDurableObservationCursor(record);
+  if (!cursor || !record.lastObservedAt) return [];
+  return cursor.lastObservedAt === new Date(record.lastObservedAt).toISOString() ? cursor.messageIds : [];
+}
+
+export function withDurableObservationCursor(record: ObservationalMemoryRecord): ObservationalMemoryRecord {
+  if (!record.lastObservedAt) return record;
+  const lastObservedAt = new Date(record.lastObservedAt).toISOString();
+  const existing = parseDurableObservationCursor(record);
+  const messageIds = [
+    ...new Set([
+      ...(existing?.lastObservedAt === lastObservedAt ? existing.messageIds : []),
+      ...(record.observedMessageIds ?? []),
+    ]),
+  ];
+  return {
+    ...record,
+    metadata: {
+      ...(record.metadata ?? {}),
+      [OBSERVATION_CURSOR_METADATA_KEY]: { lastObservedAt, messageIds },
+    },
+  };
+}
+
+export function remapDurableObservedMessageIds(
+  record: ObservationalMemoryRecord,
+  messageIdMap: Record<string, string>,
+): void {
+  const cursor = parseDurableObservationCursor(record);
+  if (!cursor) return;
+  record.metadata = {
+    ...(record.metadata ?? {}),
+    [OBSERVATION_CURSOR_METADATA_KEY]: {
+      ...cursor,
+      messageIds: cursor.messageIds.map(id => messageIdMap[id]).filter((id): id is string => Boolean(id)),
+    },
+  };
+}
+
 /**
  * Find the index of the last completed observation boundary (end marker) in a message's parts.
  * Returns -1 if no completed observation is found.

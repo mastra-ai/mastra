@@ -102,6 +102,22 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     });
     const vectorIdBefore = vectorsBefore[0]?.id;
     expect(vectorIdBefore).toBeDefined();
+    expect(vectorsBefore[0]?.metadata?.created_at).toBe(originalMessage.createdAt.toISOString());
+
+    await expect(
+      memory.updateMessages({
+        messages: [{ id: originalMessage.id, createdAt: new Date('2000-01-01T00:00:00.000Z') }],
+      }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    const memoryStore = await storage.getStore('memory');
+    const persistedAfterTimestampUpdate = await memoryStore.listMessagesById({ messageIds: [originalMessage.id] });
+    expect(persistedAfterTimestampUpdate.messages[0]?.createdAt).toEqual(originalMessage.createdAt);
+    const vectorsAfterTimestampUpdate = await vector.query({
+      indexName: 'memory_messages_384',
+      queryVector: new Array(384).fill(0.01),
+      topK: 100,
+    });
+    expect(vectorsAfterTimestampUpdate[0]?.metadata?.created_at).toBe(originalMessage.createdAt.toISOString());
 
     // Verify original content has HIGH score for physics query
     // @ts-expect-error - accessing protected method
