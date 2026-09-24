@@ -64,7 +64,7 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 
 ## Quickstart
 
-Semantic recall is disabled by default. To enable it, set `semanticRecall: true` in `options` and provide a `vector` store and `embedder`:
+Semantic recall is disabled by default. To enable it, set `semanticRecall: true` in `options` and provide a `vector` store and an `embedder`. A store that generates embeddings itself, such as MongoDB with Automated Embedding, works without one. See [Server-side embeddings](#server-side-embeddings).
 
 <Tabs>
   <TabItem value="libsql" label="LibSQL" default>
@@ -291,6 +291,40 @@ const options = {
   },
 }
 ```
+
+## Server-side embeddings
+
+Some vector stores generate the embeddings themselves. With one of those, semantic recall runs without an `embedder`: the database embeds each message on write and the search string on arrival, so the embedding provider stays out of your application entirely.
+
+MongoDB does this through [Automated Embedding](/reference/vectors/mongodb): name a Voyage AI model on the vector store and leave the `embedder` out.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Memory } from '@mastra/memory'
+import { MongoDBStore, MongoDBVector } from '@mastra/mongodb'
+
+const memory = new Memory({
+  storage: new MongoDBStore({
+    id: 'agent-storage',
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_DB_NAME,
+  }),
+  vector: new MongoDBVector({
+    id: 'agent-vector',
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_DB_NAME,
+    autoEmbed: { model: 'voyage-4' },
+  }),
+  options: {
+    semanticRecall: { topK: 3, messageRange: 2 },
+  },
+})
+```
+
+Messages are stored as text and MongoDB embeds them, so the model choice and the vector size belong to the index rather than to your application. Recall works the same way through an agent and through [`recall()`](#using-the-recall-method).
+
+MongoDB embeds newly written messages in the background, so a message saved moments ago may not be recallable immediately.
+
+Every other store expects your application to supply the vectors, and keeps requiring an `embedder`. Enabling semantic recall with neither an `embedder` nor a store that embeds server-side raises an error naming both options.
 
 ## Embedder configuration
 

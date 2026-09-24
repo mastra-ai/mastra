@@ -91,6 +91,17 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
     return '_';
   }
 
+  /**
+   * Whether this store generates the embeddings itself from text. Stores that return true
+   * accept text on write and on query and produce the vectors in the backend. The default is
+   * false, for stores that expect the caller to supply vectors.
+   *
+   * Semantic recall reads this to decide whether an embedder is required.
+   */
+  get isSelfEmbedding(): boolean {
+    return false;
+  }
+
   abstract query(params: QueryVectorParams<Filter>): Promise<QueryResult[]>;
   // Adds type checks for positional arguments if used
   abstract upsert(params: UpsertVectorParams): Promise<string[]>;
