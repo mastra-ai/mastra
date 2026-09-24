@@ -68,10 +68,7 @@ export function configureCreateCommand(command: Command) {
       `Model provider (${CREATE_LLM_PROVIDERS.map(provider => provider.value).join(', ')}); cannot be used with --empty or --template`,
       parseCreateLLMProvider,
     )
-    .option(
-      '-k, --llm-api-key <key>',
-      'API key for the model provider; cannot be used with --empty or --template',
-    )
+    .option('-k, --llm-api-key <key>', 'API key for the model provider; cannot be used with --empty or --template')
     .option('--no-skills', 'Do not install Mastra skills')
     .option('--no-git', 'Do not initialize a git repository')
     .option('--no-install', 'Skip installing dependencies')
