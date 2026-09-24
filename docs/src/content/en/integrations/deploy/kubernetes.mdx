@@ -263,6 +263,8 @@ const { output, detach } = await durableAssistant.observe(runId)
 
 request.signal.addEventListener('abort', detach, { once: true })
 
+if (request.signal.aborted) detach()
+
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
 }

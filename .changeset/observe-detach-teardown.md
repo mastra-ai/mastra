@@ -7,6 +7,7 @@ Added `detach()` to `DurableAgent.observe()` so an observer can stop watching a 
 ```ts
 const { output, detach } = await agent.observe(runId);
 request.signal.addEventListener('abort', detach, { once: true });
+if (request.signal.aborted) detach();
 
 for await (const chunk of output.fullStream) {
   send(chunk);

@@ -3433,6 +3433,7 @@ export class DurableAgent<
    * ```ts
    * const { fullStream, detach } = await agent.observe(runId, { offset });
    * req.signal.addEventListener('abort', detach, { once: true });
+   * if (req.signal.aborted) detach();
    * for await (const chunk of fullStream) send(chunk);
    * ```
    *
@@ -3563,9 +3564,19 @@ export class DurableAgent<
         const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
         return new ReadableStream<ChunkType<TOutput>>({
           async pull(controller) {
-            const { done, value } = await reader.read();
-            if (done) controller.close();
-            else controller.enqueue(value);
+            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
+            try {
+              result = await reader.read();
+            } catch (error) {
+              detach();
+              throw error;
+            }
+            if (result.done) {
+              detach();
+              controller.close();
+            } else {
+              controller.enqueue(result.value);
+            }
           },
           cancel(reason) {
             detach();

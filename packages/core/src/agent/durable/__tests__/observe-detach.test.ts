@@ -172,6 +172,31 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     expect(c.topicCleared()).toBe(true);
   });
 
+  it('unsubscribes when the stream ends on its own, even with auto-cleanup disabled', async () => {
+    const noCleanup = createDurableAgent({
+      agent: new Agent({
+        id: 'no-cleanup',
+        name: 'No Cleanup',
+        instructions: 'test',
+        model: new MockLanguageModelV2() as any,
+      }),
+      pubsub,
+      cleanupTimeoutMs: 0,
+    }) as DurableAgent;
+    const runId = 'natural-end';
+    const topic = AGENT_STREAM_TOPIC(runId);
+    const unsubscribe = vi.spyOn(noCleanup.pubsub, 'unsubscribe');
+    const { fullStream } = await noCleanup.observe(runId);
+    const consumed = (async () => {
+      for await (const _ of fullStream) {
+        // drain
+      }
+    })();
+    await emitFinishEvent(noCleanup.pubsub, runId, finishData);
+    expect(await within(consumed)).toBeUndefined();
+    await vi.waitFor(() => expect(unsubscribe.mock.calls.some(([t]) => t === topic)).toBe(true), { timeout: 1000 });
+  });
+
   it('one observer detaching does not affect another observer or replay', async () => {
     const runId = 'multi-observer';
     const s = spies(runId);
