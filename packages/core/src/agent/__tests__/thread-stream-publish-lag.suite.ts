@@ -261,6 +261,7 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
       const types = received.map(c => c.type);
 
       expect(types[0]).toBe('thread-history');
+      expect(types.filter(t => t === 'start')).toHaveLength(1);
       const stored = historyParts(received[0]);
       expect(stored).toContain('tool-invocation');
       expect(types).not.toContain('tool-call');
@@ -312,11 +313,16 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
       });
       const run = drain(await agent.stream('go', { memory: memoryOption }));
       await stepSaved.promise;
-      await vi.waitFor(async () => expect(await topicParts()).not.toContain('tool-call'));
+      await vi.waitFor(async () => {
+        const parts = await topicParts();
+        expect(parts).toContain('start');
+        expect(parts).not.toContain('tool-call');
+      });
 
       const midRun = await topicParts();
       expect(midRun).not.toContain('tool-call');
       expect(midRun).not.toContain('text-delta');
+      expect(midRun).toContain('start');
 
       answerGate.resolve();
       await run;

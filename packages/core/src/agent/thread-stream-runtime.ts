@@ -1645,6 +1645,7 @@ export class AgentThreadStreamRuntime {
     let dropped = 0;
     let published = 0;
     const readers = new Set<{ index: number }>();
+    let startPart: unknown;
     const waiters = new Set<() => void>();
     let started = false;
     let done = false;
@@ -1684,6 +1685,7 @@ export class AgentThreadStreamRuntime {
       const producedAt = getChunkProducedAt(rawPart) ?? Date.now();
       stampPartProducedAt(part, producedAt);
       parts.push(part);
+      if ((part as { type?: string } | null | undefined)?.type === 'start') startPart = part;
       const partType = (part as { type?: string } | null | undefined)?.type;
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
@@ -1692,8 +1694,11 @@ export class AgentThreadStreamRuntime {
         part,
         sourceId: runtime.#getSourceId(),
         producedAt,
-        // Prompts stay on the topic until the run is trimmed as a whole.
-        ...(partType === 'tool-call-approval' || partType === 'tool-call-suspended' ? { pinned: true } : {}),
+        // `start` and prompts stay on the topic until the run is trimmed as a
+        // whole, so a subscriber joining mid-run still sees the run begin.
+        ...(partType === 'start' || partType === 'tool-call-approval' || partType === 'tool-call-suspended'
+          ? { pinned: true }
+          : {}),
       });
       published++;
       if (savedAt !== undefined) trimSaved();
@@ -1844,8 +1849,10 @@ export class AgentThreadStreamRuntime {
     void broadcastFinished.then(stopSaveListener);
 
     const createStream = () => {
-      // A subscriber that joins late starts after parts already dropped as saved.
+      // A subscriber that joins late starts after parts already dropped as
+      // saved, but still gets the run's `start`.
       const reader = { index: dropped };
+      let pendingStart = dropped > 0 ? startPart : undefined;
       let closed = false;
       let waiter: (() => void) | undefined;
       readers.add(reader);
@@ -1853,6 +1860,11 @@ export class AgentThreadStreamRuntime {
         async pull(controller) {
           start();
           while (!closed) {
+            if (pendingStart !== undefined) {
+              controller.enqueue(pendingStart);
+              pendingStart = undefined;
+              return;
+            }
             if (reader.index < dropped) reader.index = dropped;
             if (reader.index - dropped < parts.length) {
               controller.enqueue(parts[reader.index++ - dropped]);
@@ -4113,6 +4125,9 @@ export class AgentThreadStreamRuntime {
             currentRunRequestContext = run.streamOptions.requestContext;
             if (remoteRuns.has(run.streamId)) startRemoteRunLeaseWatch(run.runId, run.streamId);
             let readerReleased = false;
+            // A `start` covered by stored history is held back and sent before the
+            // first live part of this stream, so a mid-run joiner sees the run begin.
+            let heldStart: unknown;
             try {
               while (true) {
                 const { value: part, done: streamDone } = await reader.read();
@@ -4133,7 +4148,15 @@ export class AgentThreadStreamRuntime {
                   ) &&
                   (!historyFilter || historyFilter(typedPart, run.runId))
                 ) {
+                  const isPrompt =
+                    typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended';
+                  if (heldStart !== undefined && typedPart?.type !== 'start' && !isPrompt) {
+                    yield heldStart;
+                  }
+                  if (!isPrompt) heldStart = undefined;
                   yield partWithRunId;
+                } else if (typedPart?.type === 'start' && historyFilter && !storedStreamIds.has(run.streamId)) {
+                  heldStart = partWithRunId;
                 }
                 if (done) break;
                 const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;

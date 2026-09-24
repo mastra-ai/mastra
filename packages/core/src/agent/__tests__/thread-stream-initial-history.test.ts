@@ -152,7 +152,8 @@ describe('subscribeToThread withInitialHistory', () => {
     });
     await nextTicks(10);
 
-    expect(collected.map(p => p.type)).toEqual(['thread-history', 'tool-result']);
+    // The run is still going, so the joiner also gets its `start`.
+    expect(collected.map(p => p.type)).toEqual(['thread-history', 'start', 'tool-result']);
     subscription.unsubscribe();
     await consumed;
   });
