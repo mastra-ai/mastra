@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../index';
+import { aiV5UIMessagesToAIV5ModelMessages } from './output-converter';
 
 const reasoning = (text: string, signature?: string) => ({
   type: 'reasoning' as const,
   reasoning: text,
   details: [{ type: 'text' as const, text }],
+  createdAt: 1_700_000_000_000,
   ...(signature ? { providerMetadata: { bedrock: { signature } } } : {}),
 });
 
@@ -74,6 +76,14 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
     // Signed reasoning from the earlier completed step is still replayed.
     expect(JSON.stringify(prompt)).toContain('"signed"');
     expect(prompt.at(-1)?.role).toBe('user');
+  });
+
+  it('drops unsigned reasoning in prompt-with-suspended mode but keeps it in response mode', () => {
+    const ui = buildList(reasoning('step died before the signature arrived')).get.all.aiV5.ui();
+    const suspended = aiV5UIMessagesToAIV5ModelMessages(ui, [], 'prompt-with-suspended');
+    const response = aiV5UIMessagesToAIV5ModelMessages(ui, [], 'response');
+    expect(JSON.stringify(suspended)).not.toContain('step died before the signature arrived');
+    expect(JSON.stringify(response)).toContain('step died before the signature arrived');
   });
 
   it('keeps a reasoning-only block when its reasoning is signed', () => {

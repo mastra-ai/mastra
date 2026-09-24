@@ -663,10 +663,18 @@ export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspen
  * Providers that require signed thinking (Anthropic, Bedrock) drop such parts,
  * sending `content: []` and failing every later turn with a 400 (#24558).
  */
+const REPLAYABLE_REASONING_KEYS = ['signature', 'redactedData', 'itemId', 'reasoningEncryptedContent'];
+
+function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
+  return Object.values(providerOptions ?? {}).some(
+    value => !!value && typeof value === 'object' && REPLAYABLE_REASONING_KEYS.some(key => key in value),
+  );
+}
+
 function isUnforwardableReasoningOnlyMessage(message: AIV5Type.ModelMessage): boolean {
   if (message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length === 0) return false;
   return message.content.every(
-    part => part.type === 'reasoning' && Object.keys(part.providerOptions ?? {}).length === 0,
+    part => part.type === 'reasoning' && !hasReplayableReasoningMetadata(part.providerOptions),
   );
 }
 
