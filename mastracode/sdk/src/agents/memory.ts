@@ -6,14 +6,14 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { resolveModel } from './model.js';
+import { getActiveMemoryRoute, resolveModel } from './model.js';
 
 /** Route-backed OM fallback entry. */
 type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
@@ -28,14 +28,7 @@ function resolveRouteMemoryModels(
   threadId: string | undefined,
   resolve: (modelId: string) => GatewayLanguageModel,
 ): MemoryModelRouteEntry[] | 'auto' | undefined {
-  const pending = state?.mastracodePendingModelFallback;
-  const sameThreadPending =
-    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
-  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
-  const pendingIndex = sameThreadPending
-    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
-    : -1;
-  const memoryRoute = pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+  const memoryRoute = getActiveMemoryRoute(state, threadId);
   if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
   const seenModelIds = new Set<string>();
   const appearances = new Map<string, number>();

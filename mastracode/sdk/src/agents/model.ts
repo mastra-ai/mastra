@@ -380,6 +380,52 @@ function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelCo
   return { model, id: toMemoryModelId(modelId) };
 }
 
+type MemoryRouteState = {
+  modelRoute?: { entries?: Array<{ id?: unknown; memoryModelId?: unknown }> };
+  mastracodePendingModelFallback?: { toEntryId?: unknown; threadId?: unknown } | null;
+};
+
+/**
+ * The active model route for memory: the session route, starting at a pending
+ * fallback hop captured for this thread.
+ */
+export function getActiveMemoryRoute<TEntry extends { id?: unknown; memoryModelId?: unknown }>(
+  state:
+    | {
+        modelRoute?: { entries?: TEntry[] };
+        mastracodePendingModelFallback?: MemoryRouteState['mastracodePendingModelFallback'];
+      }
+    | undefined,
+  threadId?: string | null,
+): TEntry[] {
+  const pending = state?.mastracodePendingModelFallback;
+  const sameThreadPending =
+    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
+  const pendingIndex = sameThreadPending
+    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
+    : -1;
+  return pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+}
+
+/**
+ * The memory model the active route applies to both OM roles: `'auto'`, the
+ * first concrete memory model, or `undefined` when the route sets none (both
+ * roles then follow their `/om` settings).
+ */
+export function getActiveRouteMemoryModelId(
+  state: Readonly<Record<string, unknown>> | undefined,
+  threadId?: string | null,
+): string | undefined {
+  const route = getActiveMemoryRoute(state as MemoryRouteState | undefined, threadId);
+  if (route[0]?.memoryModelId === 'auto') return 'auto';
+  const entry = route.find(
+    candidate =>
+      typeof candidate.memoryModelId === 'string' && candidate.memoryModelId && candidate.memoryModelId !== 'auto',
+  );
+  return entry?.memoryModelId as string | undefined;
+}
+
 /**
  * Goal judge model resolver for the agent's `goal.judge` config. Resolves the
  * configured goal judge model through mastracode's gateway so provider

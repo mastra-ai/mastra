@@ -19,7 +19,12 @@ import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
-import { createRequestScopedCredentialStore, getDynamicModel, resolveModel } from './model.js';
+import {
+  createRequestScopedCredentialStore,
+  getActiveRouteMemoryModelId,
+  getDynamicModel,
+  resolveModel,
+} from './model.js';
 
 afterEach(() => {
   if (previousEnv.kimiApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -360,5 +365,34 @@ describe('getDynamicModel model route', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5', { route: repeatedRoute }));
 
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
+  });
+});
+
+describe('getActiveRouteMemoryModelId', () => {
+  const entries = [
+    { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+    { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol', memoryModelId: 'openai/gpt-5.4-mini' },
+  ];
+
+  it('returns undefined when the route sets no memory model', () => {
+    expect(getActiveRouteMemoryModelId({ modelRoute: { entries: [entries[0]] } })).toBeUndefined();
+  });
+
+  it('returns Auto only when the first route entry sets memory to Auto', () => {
+    expect(
+      getActiveRouteMemoryModelId({ modelRoute: { entries: [{ ...entries[0], memoryModelId: 'auto' }, entries[1]] } }),
+    ).toBe('auto');
+    expect(getActiveRouteMemoryModelId({ modelRoute: { entries } })).toBe('openai/gpt-5.4-mini');
+  });
+
+  it('honors a pending fallback hop only for its own thread', () => {
+    const state = {
+      modelRoute: {
+        entries: [{ ...entries[0], memoryModelId: 'anthropic/claude-haiku-4-5' }, entries[1]],
+      },
+      mastracodePendingModelFallback: { toEntryId: 'openai', threadId: 'thread-1' },
+    };
+    expect(getActiveRouteMemoryModelId(state, 'thread-1')).toBe('openai/gpt-5.4-mini');
+    expect(getActiveRouteMemoryModelId(state, 'thread-2')).toBe('anthropic/claude-haiku-4-5');
   });
 });

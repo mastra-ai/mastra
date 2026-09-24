@@ -34,7 +34,8 @@ vi.mock('../utils/project.js', () => ({
   getOmScope: getOmScopeMock,
 }));
 
-vi.mock('./model.js', () => ({
+vi.mock('./model.js', async () => ({
+  getActiveMemoryRoute: (await vi.importActual<typeof import('./model.js')>('./model.js')).getActiveMemoryRoute,
   resolveModel: resolveModelMock,
 }));
 
