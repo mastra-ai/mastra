@@ -3,6 +3,9 @@ import { ObservabilityStorage } from './base';
 import {
   STRUCTURED_TRACE_QUERY_MAX_PATH_SEGMENTS,
   createStructuredTraceQueryObservedFieldDescriptor,
+  encodeStructuredTraceQueryCursor,
+  encodeStructuredTraceQueryDeltaCursor,
+  getStructuredTraceQueryDeltaWatermark,
   getStructuredTraceQueryFieldsResponseSchema,
   getStructuredTraceQueryRoot,
   getStructuredTraceQueryValuesResponseSchema,
@@ -21,7 +24,13 @@ import {
   supportsStructuredTraceQueryDiscovery,
   supportsStructuredTraceQueryExecution,
 } from './structured-trace-query';
-import { TraceQueryValidationError } from './trace-query';
+import {
+  TRACE_QUERY_MAX_DEPTH,
+  TRACE_QUERY_MAX_PATH_BYTES,
+  TRACE_QUERY_MAX_STRING_BYTES,
+  TraceQueryCursorError,
+  TraceQueryValidationError,
+} from './trace-query';
 
 const baseTimeRange = {
   from: '2026-08-01T00:00:00Z',
@@ -46,6 +55,12 @@ const structuredComparison = (path: string | readonly ['metadata', string, ...st
   left: { path },
   right: { literal },
 });
+
+function nestedStructuredNotPredicate(depth: number): unknown {
+  let predicate: unknown = structuredComparison('metadata.customer.plan', 'pro');
+  for (let index = 0; index < depth; index += 1) predicate = { op: 'not', arg: predicate };
+  return predicate;
+}
 
 describe('structured trace-query paths', () => {
   it('normalizes canonical dotted paths and preserves exact tuple segments', () => {
@@ -74,6 +89,18 @@ describe('structured trace-query paths', () => {
     ).toBe(false);
     expect(structuredTraceQueryPathSchema.safeParse(['metadata', `${'a'.repeat(129)}.key`]).success).toBe(false);
     expect(structuredTraceQueryPathSchema.safeParse(`metadata.${'a'.repeat(120)}.suffix`).success).toBe(false);
+  });
+
+  it('counts multibyte canonical and exact path limits in UTF-8 bytes', () => {
+    const exactSegmentAtLimit = `${'é'.repeat(58)}.xy`;
+    const canonicalPathAtLimit = `metadata.${'é'.repeat(59)}x`;
+
+    expect(Buffer.byteLength(`metadata.${exactSegmentAtLimit}`, 'utf8')).toBe(TRACE_QUERY_MAX_PATH_BYTES);
+    expect(structuredTraceQueryPathSchema.safeParse(['metadata', exactSegmentAtLimit]).success).toBe(true);
+    expect(structuredTraceQueryPathSchema.safeParse(['metadata', `${exactSegmentAtLimit}z`]).success).toBe(false);
+    expect(Buffer.byteLength(canonicalPathAtLimit, 'utf8')).toBe(TRACE_QUERY_MAX_PATH_BYTES);
+    expect(structuredTraceQueryPathSchema.safeParse(canonicalPathAtLimit).success).toBe(true);
+    expect(structuredTraceQueryPathSchema.safeParse(`${canonicalPathAtLimit}y`).success).toBe(false);
   });
 });
 
@@ -123,14 +150,35 @@ describe('structured trace-query planning', () => {
     expect(plan.structuredRoots).toEqual(['metadata']);
   });
 
-  it('preserves exact literal dotted-key segments in trusted predicates', () => {
-    const plan = planStructuredTraceQuery(
+  it('keeps canonical nesting distinct from exact literal dotted-key segments', () => {
+    const canonical = planStructuredTraceQuery(
       parseStructuredTraceQueryRequest({
         timeRange: baseTimeRange,
-        where: structuredComparison(['metadata', 'customer.plan'], 'legacy'),
+        where: structuredComparison('metadata.customer.plan', 'pro'),
       }),
     );
-    expect(plan.where).toMatchObject({ field: ['metadata', 'customer.plan'], value: 'legacy' });
+    const exact = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({
+        timeRange: baseTimeRange,
+        where: structuredComparison(['metadata', 'customer.plan'], 'pro'),
+      }),
+    );
+
+    expect(canonical.where).toMatchObject({ field: ['metadata', 'customer', 'plan'], value: 'pro' });
+    expect(exact.where).toMatchObject({ field: ['metadata', 'customer.plan'], value: 'pro' });
+    expect(canonical.binding).not.toBe(exact.binding);
+  });
+
+  it('enforces the structured string-literal UTF-8 byte limit', () => {
+    const atLimit = 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2);
+    const request = (literal: string) => ({
+      timeRange: baseTimeRange,
+      where: structuredComparison('metadata.customer.plan', literal),
+    });
+
+    expect(Buffer.byteLength(atLimit, 'utf8')).toBe(TRACE_QUERY_MAX_STRING_BYTES);
+    expect(() => parseStructuredTraceQueryRequest(request(atLimit))).not.toThrow();
+    expect(() => parseStructuredTraceQueryRequest(request(`${atLimit}a`))).toThrow(TraceQueryValidationError);
   });
 
   it('keeps deprecated grouped requests supported', () => {
@@ -223,6 +271,40 @@ describe('structured trace-query planning', () => {
     );
   });
 
+  it('rejects unknown structured roots in thread predicates', () => {
+    expect(() =>
+      planStructuredThreadQuery(
+        parseStructuredQueryThreadsInput({
+          traces: { timeRange: baseTimeRange },
+          where: { traces: { some: structuredComparison('attributes.customer.plan', 'pro') } },
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<TraceQueryValidationError>>({
+        issues: [expect.objectContaining({ code: 'field_not_allowed' })],
+      }),
+    );
+  });
+
+  it('rejects over-complex trace and nested thread predicates through public parsers', () => {
+    const overDepth = nestedStructuredNotPredicate(TRACE_QUERY_MAX_DEPTH + 1);
+
+    for (const parse of [
+      () => parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, where: overDepth }),
+      () =>
+        parseStructuredQueryThreadsInput({
+          traces: { timeRange: baseTimeRange },
+          where: { traces: { some: overDepth } },
+        }),
+    ]) {
+      expect(parse).toThrowError(
+        expect.objectContaining<Partial<TraceQueryValidationError>>({
+          issues: [expect.objectContaining({ code: 'predicate_too_complex' })],
+        }),
+      );
+    }
+  });
+
   it.each([
     { set: ['pro', 'free', 'pro'], expected: ['free', 'pro'] },
     { set: [10, 2, 10], expected: [2, 10] },
@@ -240,6 +322,21 @@ describe('structured trace-query planning', () => {
       operator: 'in',
       values: expected,
     });
+  });
+
+  it('rejects mixed scalar membership types', () => {
+    expect(() =>
+      planStructuredTraceQuery(
+        parseStructuredTraceQueryRequest({
+          timeRange: baseTimeRange,
+          where: { op: 'in', value: { path: 'metadata.membership.value' }, set: ['pro', 1] },
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<TraceQueryValidationError>>({
+        issues: [expect.objectContaining({ code: 'invalid_literal', path: ['where', 'set'] })],
+      }),
+    );
   });
 
   it('normalizes membership sets and object insertion order for stable bindings', () => {
@@ -313,9 +410,105 @@ describe('structured trace-query planning', () => {
       parseGetStructuredTraceQueryFieldsArgs({ timeRange: baseTimeRange, predicateScope: 'trace' }),
       { scope },
     );
+    const values = planStructuredTraceQueryValues(
+      parseGetStructuredTraceQueryValuesArgs({
+        timeRange: baseTimeRange,
+        predicateScope: 'trace',
+        path: ['metadata', 'customer.plan'],
+      }),
+      { scope },
+    );
     expect(trace.scope).toEqual(scope);
     expect(thread.scope).toEqual(scope);
     expect(fields.scope).toEqual(scope);
+    expect(values).toMatchObject({
+      scope,
+      path: ['metadata', 'customer.plan'],
+      structuredRoots: ['metadata'],
+    });
+  });
+});
+
+describe('structured trace-query pagination and cursors', () => {
+  it('produces representative keyset, page, delta, group, and thread plans', () => {
+    const keyset = planStructuredTraceQuery(parseStructuredTraceQueryRequest({ timeRange: baseTimeRange }));
+    const page = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, pagination: { page: 2, perPage: 25 } }),
+    );
+    const delta = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, mode: 'delta' }),
+    );
+    const groups = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, group: { by: ['threadId'] } }),
+    );
+    const threads = planStructuredThreadQuery(
+      parseStructuredQueryThreadsInput({ traces: { timeRange: baseTimeRange }, page: { limit: 25 } }),
+    );
+
+    expect(keyset).toMatchObject({ result: 'traces', paginationMode: 'keyset', limit: 100 });
+    expect(page).toMatchObject({ result: 'traces', paginationMode: 'page', page: 2, perPage: 25 });
+    expect(delta).toMatchObject({ result: 'traces', paginationMode: 'delta' });
+    expect(groups).toMatchObject({ result: 'groups', paginationMode: 'keyset', limit: 100 });
+    expect(threads).toMatchObject({ result: 'threads', limit: 25 });
+  });
+
+  it('round-trips keyset cursors and rejects structured binding mismatches', () => {
+    const where = structuredComparison('metadata.customer.plan', 'pro');
+    const scope = { organizationId: 'org-1', resourceId: 'resource-1' };
+    const options = { scope, authorizationBinding: 'authorization-a' };
+    const plan = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, where }),
+      options,
+    );
+    if (plan.result !== 'traces' || plan.paginationMode !== 'keyset') throw new Error('Expected keyset trace plan');
+    const after = encodeStructuredTraceQueryCursor(plan, {
+      result: 'traces',
+      sortValue: '2026-08-15T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    const resume = (resumeWhere: ReturnType<typeof structuredComparison>, resumeOptions = options) =>
+      planStructuredTraceQuery(
+        parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, where: resumeWhere, page: { after } }),
+        resumeOptions,
+      );
+
+    expect(resume(where).cursor).toEqual({ sortValue: '2026-08-15T00:00:00.000Z', traceId: 'trace-1' });
+    expect(() => resume(structuredComparison(['metadata', 'customer.plan'], 'pro'))).toThrow(TraceQueryCursorError);
+    expect(() => resume(where, { ...options, scope: { organizationId: 'org-2' } })).toThrow(TraceQueryCursorError);
+    expect(() => resume(where, { ...options, authorizationBinding: 'authorization-b' })).toThrow(TraceQueryCursorError);
+    expect(() =>
+      planStructuredTraceQuery(
+        parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, where, page: { after: 'malformed' } }),
+        options,
+      ),
+    ).toThrow(TraceQueryCursorError);
+  });
+
+  it('round-trips delta cursors and rejects path and adapter mismatches', () => {
+    const where = structuredComparison('metadata.customer.plan', 'pro');
+    const page = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, where, pagination: {} }),
+    );
+    if (page.paginationMode !== 'page') throw new Error('Expected numbered-page trace plan');
+    const after = encodeStructuredTraceQueryDeltaCursor(page, 'pg', 'watermark-1');
+    const delta = planStructuredTraceQuery(
+      parseStructuredTraceQueryRequest({ timeRange: baseTimeRange, where, mode: 'delta', after }),
+    );
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta trace plan');
+
+    expect(delta.deltaCursor).toEqual({ adapter: 'pg', watermark: 'watermark-1' });
+    expect(getStructuredTraceQueryDeltaWatermark(delta, 'pg')).toBe('watermark-1');
+    expect(() => getStructuredTraceQueryDeltaWatermark(delta, 'duckdb')).toThrow(TraceQueryCursorError);
+    expect(() =>
+      planStructuredTraceQuery(
+        parseStructuredTraceQueryRequest({
+          timeRange: baseTimeRange,
+          where: structuredComparison(['metadata', 'customer.plan'], 'pro'),
+          mode: 'delta',
+          after,
+        }),
+      ),
+    ).toThrow(TraceQueryCursorError);
   });
 });
 
@@ -359,6 +552,19 @@ describe('structured trace-query discovery', () => {
     expect(fields.structuredRoots).toEqual(['metadata']);
     expect(values.structuredRoots).toEqual(['metadata']);
     expect(values.path).toEqual(['metadata', 'literal.dot']);
+  });
+
+  it('keeps canonical non-metadata value discovery unstructured', () => {
+    const values = planStructuredTraceQueryValues(
+      parseGetStructuredTraceQueryValuesArgs({
+        timeRange: baseTimeRange,
+        predicateScope: 'trace',
+        path: 'environment',
+      }),
+    );
+
+    expect(values.path).toBe('environment');
+    expect(values.structuredRoots).toEqual([]);
   });
 
   it('preserves observed scalar kinds and typed values', () => {
@@ -422,6 +628,16 @@ describe('structured storage capabilities', () => {
     }
   }
 
+  class ThreadStorage extends ObservabilityStorage {
+    getStructuredTraceQueryFeatures() {
+      return ['thread-query-structured-paths'] as const;
+    }
+
+    async queryStructuredThreads() {
+      return { threads: [], page: { next: null } };
+    }
+  }
+
   class DiscoveryStorage extends ObservabilityStorage {
     getStructuredTraceQueryFeatures() {
       return ['trace-query-structured-discovery'] as const;
@@ -433,6 +649,16 @@ describe('structured storage capabilities', () => {
 
     async getStructuredTraceQueryValues() {
       return { values: [], valuesTruncated: false };
+    }
+  }
+
+  class PartialDiscoveryStorage extends ObservabilityStorage {
+    getStructuredTraceQueryFeatures() {
+      return ['trace-query-structured-discovery'] as const;
+    }
+
+    async getStructuredTraceQueryObservedFields() {
+      return { observedFields: [], observedFieldsTruncated: false };
     }
   }
 
@@ -458,11 +684,17 @@ describe('structured storage capabilities', () => {
     expect(supportsStructuredThreadQueryExecution(traceOnly)).toBe(false);
     expect(supportsStructuredTraceQueryDiscovery(traceOnly)).toBe(false);
 
+    const thread = new ThreadStorage();
+    expect(supportsStructuredTraceQueryExecution(thread)).toBe(false);
+    expect(supportsStructuredThreadQueryExecution(thread)).toBe(true);
+    expect(supportsStructuredTraceQueryDiscovery(thread)).toBe(false);
+
     const discovery = new DiscoveryStorage();
     expect(supportsStructuredTraceQueryExecution(discovery)).toBe(false);
     expect(supportsStructuredThreadQueryExecution(discovery)).toBe(false);
     expect(supportsStructuredTraceQueryDiscovery(discovery)).toBe(true);
 
+    expect(supportsStructuredTraceQueryDiscovery(new PartialDiscoveryStorage())).toBe(false);
     expect(supportsStructuredTraceQueryExecution(new FeatureOnlyStorage())).toBe(false);
     expect(supportsStructuredTraceQueryExecution(new MethodOnlyStorage())).toBe(false);
   });

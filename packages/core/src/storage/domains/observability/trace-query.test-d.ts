@@ -2,6 +2,8 @@ import { expectTypeOf, test } from 'vitest';
 import { ObservabilityStorage } from './base';
 import type { ObservabilityStorageFeature } from './base';
 import {
+  encodeStructuredTraceQueryCursor,
+  encodeStructuredTraceQueryDeltaCursor,
   supportsStructuredThreadQueryExecution,
   supportsStructuredTraceQueryDiscovery,
   supportsStructuredTraceQueryExecution,
@@ -12,10 +14,15 @@ import type {
   StructuredThreadQueryExecutionStorage,
   StructuredTraceQueryDiscoveryStorage,
   StructuredTraceQueryExecutionStorage,
+  StructuredTraceQueryFeatureReporter,
   StructuredTraceQueryPath,
   StructuredTraceQueryRequest,
   TrustedStructuredThreadQueryPlan,
+  TrustedStructuredTraceQueryDeltaTracesPlan,
+  TrustedStructuredTraceQueryGroupsPlan,
+  TrustedStructuredTraceQueryKeysetTracesPlan,
   TrustedStructuredTraceQueryObservedFieldsPlan,
+  TrustedStructuredTraceQueryPaginatedTracesPlan,
   TrustedStructuredTraceQueryPlan,
   TrustedStructuredTraceQueryValuesPlan,
 } from './structured-trace-query';
@@ -45,6 +52,25 @@ test('delta cursors accept only numbered-page and delta trace plans', () => {
   expectTypeOf<TrustedTraceQueryKeysetTracesPlan>().not.toExtend<CursorPlan>();
   expectTypeOf<TrustedTraceQueryGroupsPlan>().not.toExtend<CursorPlan>();
   expectTypeOf<TrustedThreadQueryPlan>().not.toExtend<CursorPlan>();
+});
+
+test('structured cursor encoders accept only their intended trusted plans', () => {
+  type CursorPlan = Parameters<typeof encodeStructuredTraceQueryCursor>[0];
+  type DeltaCursorPlan = Parameters<typeof encodeStructuredTraceQueryDeltaCursor>[0];
+
+  expectTypeOf<CursorPlan>().toEqualTypeOf<
+    | TrustedStructuredTraceQueryKeysetTracesPlan
+    | TrustedStructuredTraceQueryGroupsPlan
+    | TrustedStructuredThreadQueryPlan
+  >();
+  expectTypeOf<TrustedStructuredTraceQueryPaginatedTracesPlan>().not.toExtend<CursorPlan>();
+  expectTypeOf<TrustedStructuredTraceQueryDeltaTracesPlan>().not.toExtend<CursorPlan>();
+  expectTypeOf<DeltaCursorPlan>().toEqualTypeOf<
+    TrustedStructuredTraceQueryPaginatedTracesPlan | TrustedStructuredTraceQueryDeltaTracesPlan
+  >();
+  expectTypeOf<TrustedStructuredTraceQueryKeysetTracesPlan>().not.toExtend<DeltaCursorPlan>();
+  expectTypeOf<TrustedStructuredTraceQueryGroupsPlan>().not.toExtend<DeltaCursorPlan>();
+  expectTypeOf<TrustedStructuredThreadQueryPlan>().not.toExtend<DeltaCursorPlan>();
 });
 
 test('legacy trace-query paths and discovery values retain their released types', () => {
@@ -126,12 +152,22 @@ test('structured capability guards narrow independently without changing the bas
   type ThreadGuard = Parameters<typeof supportsStructuredThreadQueryExecution>[0];
   type DiscoveryGuard = Parameters<typeof supportsStructuredTraceQueryDiscovery>[0];
   type TraceOnly = ObservabilityStorage & StructuredTraceQueryExecutionStorage;
+  type ThreadOnly = ObservabilityStorage & StructuredThreadQueryExecutionStorage;
+  type DiscoveryOnly = ObservabilityStorage & StructuredTraceQueryDiscoveryStorage;
+  type PartialDiscovery = ObservabilityStorage &
+    StructuredTraceQueryFeatureReporter &
+    Pick<StructuredTraceQueryDiscoveryStorage, 'getStructuredTraceQueryObservedFields'>;
 
   expectTypeOf<TraceGuard>().toEqualTypeOf<ObservabilityStorage>();
   expectTypeOf<ThreadGuard>().toEqualTypeOf<ObservabilityStorage>();
   expectTypeOf<DiscoveryGuard>().toEqualTypeOf<ObservabilityStorage>();
   expectTypeOf<TraceOnly>().not.toExtend<StructuredThreadQueryExecutionStorage>();
   expectTypeOf<TraceOnly>().not.toExtend<StructuredTraceQueryDiscoveryStorage>();
+  expectTypeOf<ThreadOnly>().not.toExtend<StructuredTraceQueryExecutionStorage>();
+  expectTypeOf<ThreadOnly>().not.toExtend<StructuredTraceQueryDiscoveryStorage>();
+  expectTypeOf<DiscoveryOnly>().not.toExtend<StructuredTraceQueryExecutionStorage>();
+  expectTypeOf<DiscoveryOnly>().not.toExtend<StructuredThreadQueryExecutionStorage>();
+  expectTypeOf<PartialDiscovery>().not.toExtend<StructuredTraceQueryDiscoveryStorage>();
 
   const storage: ObservabilityStorage = new ObservabilityStorage();
   if (supportsStructuredTraceQueryExecution(storage)) {
