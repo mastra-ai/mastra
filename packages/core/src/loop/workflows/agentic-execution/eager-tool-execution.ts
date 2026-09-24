@@ -131,6 +131,12 @@ export class EagerToolExecutionCoordinator {
    * of the side effect happening twice.
    */
   readonly #completed = new Map<string, CompletedEagerWork>();
+  /**
+   * Calls whose eager attempt already ran the body up to a runtime `suspend()`. Retrying
+   * the model would re-emit the call and run that pre-suspend work a second time, so an
+   * attempt holding one of these must not be retried.
+   */
+  readonly #suspended = new Set<string>();
   #running = 0;
   #dispatchSequence = 0;
   #stopped = false;
@@ -148,6 +154,7 @@ export class EagerToolExecutionCoordinator {
     const execution = this.#executions.get(toolCallId);
     this.#executions.delete(toolCallId);
     this.#completed.delete(toolCallId);
+    this.#suspended.delete(toolCallId);
     return execution;
   }
 
@@ -188,36 +195,42 @@ export class EagerToolExecutionCoordinator {
         holdsPermit = true;
         this.#controllers.set(toolCallId, { controller, releasePermit });
         void execute(controller.signal)
-          .then(result => {
-            // Recorded before resolving, so a discard racing the settlement still sees
-            // work that is done rather than work it is entitled to abandon.
-            //
-            // The step resolves an envelope rather than the tool's value, and it resolves
-            // rather than rejects on failure: `{ result, ...call }` when the tool returned,
-            // `{ error, ...call }` when it threw, `{ aborted: true, ...call }` when it was
-            // cancelled. Only the first is worth keeping. A failure or an abort left
-            // nothing the replacement attempt has to be told about, and committing one as
-            // though it were a result would show the next model a success that never
-            // happened. Unwrap here so the caller holds the tool's own output.
-            const envelope = result as { result?: unknown; error?: unknown; aborted?: boolean } | undefined;
-            const succeeded =
-              !!envelope &&
-              typeof envelope === 'object' &&
-              'result' in envelope &&
-              !('error' in envelope) &&
-              !envelope.aborted;
+          .then(
+            result => {
+              // Recorded before resolving, so a discard racing the settlement still sees
+              // work that is done rather than work it is entitled to abandon.
+              //
+              // The step resolves an envelope rather than the tool's value, and it resolves
+              // rather than rejects on failure: `{ result, ...call }` when the tool returned,
+              // `{ error, ...call }` when it threw, `{ aborted: true, ...call }` when it was
+              // cancelled. Only the first is worth keeping. A failure or an abort left
+              // nothing the replacement attempt has to be told about, and committing one as
+              // though it were a result would show the next model a success that never
+              // happened. Unwrap here so the caller holds the tool's own output.
+              const envelope = result as { result?: unknown; error?: unknown; aborted?: boolean } | undefined;
+              const succeeded =
+                !!envelope &&
+                typeof envelope === 'object' &&
+                'result' in envelope &&
+                !('error' in envelope) &&
+                !envelope.aborted;
 
-            if (call && succeeded && !controller.signal.aborted) {
-              this.#completed.set(toolCallId, {
-                toolCallId,
-                toolName: call.toolName,
-                args: call.args,
-                result: envelope.result,
-                sequence,
-              });
-            }
-            resolve(result);
-          }, reject)
+              if (call && succeeded && !controller.signal.aborted) {
+                this.#completed.set(toolCallId, {
+                  toolCallId,
+                  toolName: call.toolName,
+                  args: call.args,
+                  result: envelope.result,
+                  sequence,
+                });
+              }
+              resolve(result);
+            },
+            error => {
+              if (eagerToolCallSuspensionIntent(error)) this.#suspended.add(toolCallId);
+              reject(error);
+            },
+          )
           .finally(() => {
             // Identity-checked: a discarded attempt and its retry can carry the same
             // toolCallId, so the late settlement of the old one must not evict the
@@ -320,10 +333,16 @@ export class EagerToolExecutionCoordinator {
     if (this.#stoppedPermanently) return;
     this.#stopped = false;
     this.#completed.clear();
+    this.#suspended.clear();
     // Anything the previous turn's foreach never adopted is unreachable now, so drop it
     // rather than let the map grow across a long loop. Entries belonging to a cancelled
     // attempt are already gone; these are merely unclaimed.
     this.#executions.clear();
+  }
+
+  /** Whether a call in this attempt has already run up to a runtime `suspend()`. */
+  get hasSuspendedHandback() {
+    return this.#suspended.size > 0;
   }
 
   /** Ids currently held for adoption. Exposed for assertions in tests. */

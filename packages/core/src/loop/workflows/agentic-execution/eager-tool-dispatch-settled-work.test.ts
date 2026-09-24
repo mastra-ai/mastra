@@ -2,6 +2,8 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 
 /**
@@ -244,5 +246,66 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const retryPrompt = JSON.stringify(prompts[1]);
     expect(retryPrompt).toContain('answered-a');
     expect(retryPrompt.split('"call-a"').length - 1).toBe(2);
+  });
+
+  it('never repeats pre-suspend work when a suspended eager attempt is retried', async () => {
+    // A tool that suspends at runtime without a suspendSchema: its eager attempt has already
+    // done the pre-suspend work. Retrying the model must not start that body again.
+    const effects: string[] = [];
+    let attempts = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        attempts += 1;
+        return toolCallThen(async controller => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          if (attempts === 1) {
+            controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+          } else {
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+          }
+          controller.close();
+        });
+      },
+    });
+    const agent = new Agent({
+      id: 'eager-suspend-retry-agent',
+      name: 'Eager suspend retry agent',
+      instructions: 'Call tool-a.',
+      model,
+      errorProcessors: [
+        {
+          id: 'retry-once',
+          processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
+        },
+      ] as never,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Does work, then suspends at runtime',
+          inputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }, options?: any) => {
+            if (options?.agent?.resumeData === undefined) {
+              effects.push(`pre-${value}`);
+              await options?.agent?.suspend?.({ reason: 'needs input' });
+            }
+            return { value };
+          },
+        }),
+      },
+    });
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+    const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
+    const types: string[] = [];
+    for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(attempts).toBe(1);
+    expect(types).toContain('tool-call-suspended');
+    expect(effects).toEqual(['pre-a']);
   });
 });

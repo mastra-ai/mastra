@@ -2414,7 +2414,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
-          if (isLastModel) {
+          // A call that already ran up to a runtime suspend() would run that work again in
+          // a retried or failed-over attempt, so the attempt ends here and the foreach
+          // raises the suspension instead.
+          if (isLastModel || eagerCoordinator?.hasSuspendedHandback) {
             // Defer enqueueing the error chunk — processAPIError handlers may intercept it
             // and signal a retry instead.
             runState.setState({
@@ -2591,7 +2594,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         const currentRetryCount = inputData.processorRetryCount || 0;
-        const canRetryError = maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
+        // Never retry an attempt holding a call that already ran up to a runtime suspend().
+        const canRetryError =
+          maxErrorProcessorRetries !== undefined &&
+          currentRetryCount < maxErrorProcessorRetries &&
+          !eagerCoordinator?.hasSuspendedHandback;
         const processorRunner = new ProcessorRunner({
           inputProcessors: inputProcessors || [],
           outputProcessors: outputProcessors || [],
