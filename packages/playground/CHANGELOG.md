@@ -1,5 +1,18 @@
 # @internal/playground
 
+## 1.31.3-alpha.1
+
+### Patch Changes
+
+- Improved Studio metric cards: they show compact values such as `12.3K` and `$1.2K`, with the full value on hover. Values use an uppercase `K` suffix, and a model cost without a known currency no longer shows as dollars. ([#24979](https://github.com/mastra-ai/mastra/pull/24979))
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`118e50e`](https://github.com/mastra-ai/mastra/commit/118e50e225c95c0fa70ef9194d5dc5bd1dc89166), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`f6a240b`](https://github.com/mastra-ai/mastra/commit/f6a240b3dfb1f51b0456fd838b691c6abe9a21d8), [`9961867`](https://github.com/mastra-ai/mastra/commit/9961867edaf5a09a0341709d7f1ddad017833a46), [`f40a1f0`](https://github.com/mastra-ai/mastra/commit/f40a1f0a9dfe56c5b96bcc5769e3f379ed8bfdfe), [`01d1ff6`](https://github.com/mastra-ai/mastra/commit/01d1ff636b255cec2a09db1b7c8a1aed584e614f), [`c66ed43`](https://github.com/mastra-ai/mastra/commit/c66ed438f268e0b5fab5b6a42d10f3de93a73397), [`0d90187`](https://github.com/mastra-ai/mastra/commit/0d90187e34a0192075ed366bb8ced83df80f3533), [`5189b31`](https://github.com/mastra-ai/mastra/commit/5189b31016e415d673af10beacdc4a9c8e348373), [`ed4b5df`](https://github.com/mastra-ai/mastra/commit/ed4b5df8d29f115d524531ff6591d5deecf501ad), [`67a1033`](https://github.com/mastra-ai/mastra/commit/67a10330650774207ed9eadac45b2acd532678e7), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`c62eeee`](https://github.com/mastra-ai/mastra/commit/c62eeee569aa4d7903c4ce2b2ce6806b7eb86a86)]:
+  - @mastra/core@1.71.0-alpha.1
+  - @mastra/client-js@1.50.0-alpha.1
+  - @mastra/playground-ui@59.0.0-alpha.1
+  - @mastra/ai-sdk@1.10.5-alpha.0
+  - @mastra/react@1.6.3-alpha.1
+
 ## 1.31.3-alpha.0
 
 ### Patch Changes

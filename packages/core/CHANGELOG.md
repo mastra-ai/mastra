@@ -1,5 +1,57 @@
 # @mastra/core
 
+## 1.71.0-alpha.1
+
+### Minor Changes
+
+- Added per-endpoint discovery features that observability storage can declare from `getFeatures()`: `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`, `environment-discovery`, `tag-discovery` and `metric-discovery`. The in-memory observability store now declares `metrics`, `logs` and discovery support. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  Custom observability stores can declare what they support so Studio only calls those APIs:
+
+  ```ts
+  import { ObservabilityStorage } from '@mastra/core/storage';
+
+  class MyObservabilityStore extends ObservabilityStorage {
+    override getFeatures() {
+      return ['logs', 'entity-name-discovery', 'tag-discovery'] as const;
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363))
+
+- Tools now start as soon as their own arguments are complete, instead of waiting for the model to finish streaming the whole step. This is on by default and removes seconds of idle time from steps that call several tools. ([#25005](https://github.com/mastra-ai/mastra/pull/25005))
+
+  ```ts
+  // Default: each tool starts as soon as its call is complete.
+  const eager = await agent.stream('Compare the weather in Paris and Rome');
+
+  // Opt out to restore the previous scheduling.
+  const deferred = await agent.stream('Compare the weather in Paris and Rome', {
+    eagerToolExecution: false,
+  });
+  ```
+
+  These calls still wait for the model to finish: tools that need approval, declare a suspend schema, run on the provider or client, or run in the background, and runs that use the `called` concurrency strategy or output processors that run after the stream. A tool that already finished is never run again and its result is always kept, including on retry, fallback, and abort.
+
+  A tool still running when an attempt is retried, falls back, or is aborted finishes first, and its result is kept.
+
+  A tool that calls `suspend()` at runtime also runs once: the run suspends instead of retrying the model. See the `stream()` reference for the full rules.
+
+- Added a `feedback` observability storage feature so clients can identify whether a store supports the feedback APIs. Storage adapters that implement the feedback methods declare the feature to advertise support. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  import { ObservabilityStorage } from '@mastra/core/storage';
+
+  class MyObservabilityStore extends ObservabilityStorage {
+    public getFeatures() {
+      return ['feedback'] as const;
+    }
+  }
+  ```
+
 ## 1.71.0-alpha.0
 
 ### Minor Changes
