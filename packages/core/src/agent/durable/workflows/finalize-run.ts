@@ -7,8 +7,9 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
+import { resolveProcessedOutputText } from '../../../stream/base/resolve-output-text';
 import type { Agent } from '../../agent';
-import { convertMessages, coreContentToString, MessageList } from '../../message-list';
+import { MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
@@ -46,18 +47,9 @@ function restoreRequestContext(
 }
 
 function resolveOutputText(messageList: MessageList): string {
-  const responseMessages = messageList.get.response.db();
-  const hasCompletionCheckMessages = responseMessages.some(message => message.content?.metadata?.completionResult);
-  if (hasCompletionCheckMessages) {
-    const lastRealMessage = responseMessages.findLast(message => !message.content?.metadata?.completionResult);
-    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
-    const lastConverted = converted.at(-1);
-    return lastConverted ? coreContentToString(lastConverted.content) : '';
-  }
-
-  const converted = messageList.get.response.aiV4.core();
-  const lastResponseMessage = converted.at(-1);
-  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+  // `''` is a processor deliberately clearing the text. Only a missing assistant
+  // message falls back to empty here.
+  return resolveProcessedOutputText(messageList) ?? '';
 }
 
 /**
