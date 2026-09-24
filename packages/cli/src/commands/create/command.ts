@@ -62,22 +62,22 @@ export function configureCreateCommand(command: Command) {
   return command
     .description('Create a new Mastra project')
     .argument('[project-name]', 'Directory name of the project')
-    .option('--empty', 'Create an empty project (cannot be used with --template, --llm, or --llm-api-key)')
+    .option('--empty', 'Create an empty project; cannot be used with --template, --llm, or --llm-api-key')
     .option(
       '-l, --llm <provider>',
-      `Model provider for the default starter; cannot be used with --empty or --template (${CREATE_LLM_PROVIDERS.map(provider => provider.value).join(', ')})`,
+      `Model provider (${CREATE_LLM_PROVIDERS.map(provider => provider.value).join(', ')}); cannot be used with --empty or --template`,
       parseCreateLLMProvider,
     )
     .option(
       '-k, --llm-api-key <key>',
-      'API key for the default starter model provider; cannot be used with --empty or --template',
+      'API key for the model provider; cannot be used with --empty or --template',
     )
     .option('--no-skills', 'Do not install Mastra skills')
     .option('--no-git', 'Do not initialize a git repository')
     .option('--no-install', 'Skip installing dependencies')
     .option(
       '-t, --template [template]',
-      'Create from a template (cannot be used with --empty, --llm, or --llm-api-key)',
+      'Create from a template slug or public GitHub URL, or select interactively when omitted; cannot be used with --empty, --llm, or --llm-api-key',
     )
     .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000);
 }
