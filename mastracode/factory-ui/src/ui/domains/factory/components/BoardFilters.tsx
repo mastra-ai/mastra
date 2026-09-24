@@ -1,6 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
-import type { FilterBarField, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
+import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
 import { ListFilter, Search, Tag, UsersRound } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -79,7 +79,7 @@ export function BoardFilters({
       fields={fields}
       operators={OPERATORS}
       value={boardFilterItems(filters, kind)}
-      onValueChange={items => onFiltersChange(boardFilterStateFromItems(items, kind))}
+      onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
       // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
       createItemId={fieldId => fieldId}
       aria-label="Board filters"

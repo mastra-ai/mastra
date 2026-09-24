@@ -42,14 +42,14 @@ type RequestBody = {
 function makeWrapper({
   preset = '3d',
   filterTokens = [],
+  customRange,
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
 }: {
   preset?: DatePreset;
   filterTokens?: PropertyFilterToken[];
+  customRange?: DateRange;
   queryClient?: QueryClient;
 } = {}) {
-  const customRange: DateRange | undefined = undefined;
-
   return ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -142,6 +142,26 @@ describe('useTokenUsageTimeSeries', () => {
     });
 
     expect(onTimeseries).toHaveBeenCalledTimes(2);
+    expect(onTimeseries.mock.calls.map(([body]) => body.interval)).toEqual(['1h', '1h']);
+  });
+
+  it('uses hourly buckets for a custom range of 48h or less', async () => {
+    const onTimeseries = vi.fn<(body: RequestBody) => void>();
+    server.use(
+      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+        onTimeseries((await request.json()) as RequestBody);
+        return HttpResponse.json(emptyTokenSeries);
+      }),
+    );
+    const customRange = { from: new Date('2026-06-01T00:00:00.000Z'), to: new Date('2026-06-02T12:00:00.000Z') };
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), {
+      wrapper: makeWrapper({ preset: 'custom', customRange }),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.interval).toBe('1h');
+    });
     expect(onTimeseries.mock.calls.map(([body]) => body.interval)).toEqual(['1h', '1h']);
   });
 

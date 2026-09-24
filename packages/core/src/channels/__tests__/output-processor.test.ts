@@ -796,6 +796,31 @@ describe('ChatChannelOutputProcessor', () => {
       expect(edits[1]!.messageId).toBe('m1');
     });
 
+    it('skips the approval card but still returns the chunk when the channels decline to render it', async () => {
+      const { channels, calls, chatThread } = makeChannels({ toolDisplay: 'cards' });
+      const shouldRender = vi.spyOn(channels, 'shouldRenderToolApproval').mockResolvedValue(false);
+      const processor = new ChatChannelOutputProcessor(channels);
+      const render = (channels as any)._buildRenderContext(chatThread, 'test');
+      const requestContext = { get: (key: string) => (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY ? render : undefined) };
+      const state: Record<string, unknown> = {};
+      const approval = {
+        type: 'tool-call-approval',
+        payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+      };
+
+      for (const part of [
+        { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } } },
+        approval,
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      ]) {
+        const returned = await processor.processOutputStream({ part, state, requestContext } as any);
+        expect(returned).toBe(part);
+      }
+
+      expect(shouldRender).toHaveBeenCalledWith(requestContext, 'weather');
+      expect(JSON.stringify(calls)).not.toContain('tool_approve:');
+    });
+
     it("'cards' approval does not push plan/task rows (no flash plan widget)", async () => {
       // The built-in approval handler used to push plan_update + task_update
       // unconditionally before posting the Block Kit card, which produced a

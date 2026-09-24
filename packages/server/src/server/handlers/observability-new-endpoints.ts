@@ -93,11 +93,13 @@ import {
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE,
   assertObservabilityTraceQueryDiscoverySupported,
+  assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
   OBSERVABILITY_LIST_ENDPOINTS,
+  supportsObservabilityTraceQueryRootDuration,
   supportsTraceQueryDiscoveryCore,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
@@ -336,6 +338,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
+      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
         throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
@@ -422,10 +425,15 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
 
     try {
       const observed = await observabilityStore.getTraceQueryObservedFields(plan);
-      return {
-        canonicalFields: coreStorage.getTraceQueryCanonicalFieldDescriptors(predicateScope, search),
-        ...observed,
-      };
+      const canonicalFields = coreStorage
+        .getTraceQueryCanonicalFieldDescriptors(predicateScope, search)
+        .filter(
+          field =>
+            predicateScope !== 'trace' ||
+            field.path !== 'durationMs' ||
+            supportsObservabilityTraceQueryRootDuration(observabilityStore),
+        );
+      return { canonicalFields, ...observed };
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });
@@ -533,6 +541,8 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityThreadQuerySupported(observabilityStore);
+      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
+      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {

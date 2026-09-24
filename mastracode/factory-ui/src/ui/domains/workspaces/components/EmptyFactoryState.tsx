@@ -19,6 +19,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
+import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
@@ -38,7 +39,11 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   },
   'model-provider': {
     title: 'Choose your Factory model.',
-    description: 'Connect a provider and select the default model for Factory runs.',
+    description: 'Connect a shared organization provider and select the default model for Factory runs.',
+  },
+  'personal-provider': {
+    title: 'Connect your personal providers.',
+    description: 'Optionally add personal provider credentials before you start using your Factory.',
   },
 };
 
@@ -132,7 +137,7 @@ export function EmptyFactoryState() {
     }
   };
 
-  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider'];
+  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider', 'personal-provider'];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -202,8 +207,11 @@ export function EmptyFactoryState() {
                 <ModelProviderFactoryStep
                   factoryId={pendingFactory.id}
                   completionError={completionError ?? undefined}
-                  onComplete={() => void finish()}
+                  onComplete={() => goTo('personal-provider')}
                 />
+              )}
+              {step === 'personal-provider' && pendingFactory && (
+                <PersonalProviderFactoryStep onContinue={() => void finish()} />
               )}
             </div>
           </div>

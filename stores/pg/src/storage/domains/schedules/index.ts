@@ -24,6 +24,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { resolveTargets, runPrune } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -373,10 +374,10 @@ export class SchedulesPG extends SchedulesStorage {
     if ('status' in patch && patch.status !== undefined) push('status = ?', patch.status);
     if ('nextFireAt' in patch && patch.nextFireAt !== undefined) push('next_fire_at = ?', patch.nextFireAt);
     if ('target' in patch && patch.target !== undefined) {
-      push('target = ?::jsonb', JSON.stringify(patch.target));
+      push('target = ?::jsonb', toPgJson(patch.target));
     }
     if ('metadata' in patch) {
-      push('metadata = ?::jsonb', patch.metadata != null ? JSON.stringify(patch.metadata) : null);
+      push('metadata = ?::jsonb', patch.metadata != null ? toPgJson(patch.metadata) : null);
     }
     if ('ownerType' in patch) push('owner_type = ?', (patch.ownerType as string | undefined) ?? null);
     if ('ownerId' in patch) push('owner_id = ?', (patch.ownerId as string | undefined) ?? null);

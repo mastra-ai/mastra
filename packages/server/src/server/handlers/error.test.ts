@@ -148,4 +148,21 @@ describe('handleError', () => {
       expect(caught!.status).not.toBe(409);
     });
   });
+
+  describe('OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT', () => {
+    it('maps a superseded review-status update to 409', () => {
+      const err = Object.assign(new Error('feedback changed'), {
+        id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT',
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('feedback changed');
+    });
+  });
 });

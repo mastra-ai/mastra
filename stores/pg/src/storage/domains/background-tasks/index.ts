@@ -17,6 +17,7 @@ import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -29,7 +30,7 @@ function getTableName(schemaName?: string) {
 }
 
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  if (typeof v === 'object' && v != null) return toPgJson(v);
   return v ?? null;
 }
 

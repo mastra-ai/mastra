@@ -36,6 +36,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -672,19 +673,19 @@ export class ObservabilityPG extends ObservabilityStorage {
         // Scope filter (JSONB containment)
         if (filters.scope != null) {
           conditions.push(`r."scope" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.scope));
+          params.push(toPgJson(filters.scope));
         }
 
         // Metadata filter (JSONB containment)
         if (filters.metadata != null) {
           conditions.push(`r."metadata" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.metadata));
+          params.push(toPgJson(filters.metadata));
         }
 
         // Tags filter (all tags must be present)
         if (filters.tags != null && filters.tags.length > 0) {
           conditions.push(`r."tags" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.tags));
+          params.push(toPgJson(filters.tags));
         }
 
         // Status filter (derived from error and endedAt)

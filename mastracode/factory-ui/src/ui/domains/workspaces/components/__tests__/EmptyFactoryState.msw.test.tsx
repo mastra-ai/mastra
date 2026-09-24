@@ -4,7 +4,7 @@
  * calls; a retry after the link step fails must reuse the Factory the first
  * attempt already created instead of creating another one.
  */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -53,6 +53,52 @@ afterEach(() => {
 });
 
 describe('EmptyFactoryState', () => {
+  describe('given organization provider setup completes', () => {
+    it('advances to optional personal providers and finishes only after Continue', async () => {
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+      sessionStorage.setItem(ONBOARDING_FACTORY_KEY, 'fp-1');
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'hello' }] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [{ provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
+          }),
+        ),
+        http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+          HttpResponse.json({ project: { id: 'fp-1', name: 'hello', defaultModelId: 'openai/gpt-5.6-sol' } }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () =>
+          HttpResponse.json({ ok: true, config: {} }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderOnboarding();
+
+      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+      await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
+
+      expect(await screen.findByRole('heading', { name: 'Connect your personal providers.' })).toBeInTheDocument();
+      expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('personal-provider');
+      expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
+
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+      await waitFor(() => expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBeNull());
+      expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
+    });
+  });
+
   describe('given the repository link fails after the Factory was created', () => {
     it('reuses the created Factory when the repository is picked again', async () => {
       sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');

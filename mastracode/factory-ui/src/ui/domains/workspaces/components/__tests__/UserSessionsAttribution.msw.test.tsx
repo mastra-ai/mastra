@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -76,6 +76,18 @@ function renderSection() {
   );
 }
 
+/** The list opens on the viewer's own sessions; attribution is about everyone else's. */
+async function showAllOwners() {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Filter sessions' }));
+  fireEvent.click(await screen.findByRole('combobox', { name: 'Owner' }));
+  const item = await screen.findByRole('option', { name: 'All owners' });
+  fireEvent.pointerDown(item, { pointerType: 'mouse' });
+  fireEvent.click(item, { detail: 1 });
+  await user.keyboard('{Escape}');
+  await screen.findByRole('button', { name: 'Filter sessions, 1 active' });
+}
+
 describe('user session attribution', () => {
   it("sorts the viewer's own sessions first and marks sessions owned by others", async () => {
     // The server lists the other user's org-visible session before the
@@ -102,6 +114,7 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
+    await showAllOwners();
     const user = userEvent.setup();
 
     const mine = await screen.findByRole('button', { name: 'mine' });
@@ -145,6 +158,7 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
+    await showAllOwners();
     const user = userEvent.setup();
 
     const other = await screen.findByRole('button', { name: 'alpha' });

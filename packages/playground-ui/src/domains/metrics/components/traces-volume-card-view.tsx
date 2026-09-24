@@ -121,7 +121,7 @@ export function TracesVolumeCardView({
                 <Tab value="workflows">Workflows</Tab>
                 <Tab value="tools">Tools</Tab>
               </TabList>
-              <TabContent value="agents">
+              <TabContent value="agents" className="pt-3">
                 {data.agentData.length > 0 ? (
                   <VolumeBars
                     data={data.agentData}
@@ -133,7 +133,7 @@ export function TracesVolumeCardView({
                   <MetricsCard.NoData message="No agent data yet" />
                 )}
               </TabContent>
-              <TabContent value="workflows">
+              <TabContent value="workflows" className="pt-3">
                 {data.workflowData.length > 0 ? (
                   <VolumeBars
                     data={data.workflowData}
@@ -145,7 +145,7 @@ export function TracesVolumeCardView({
                   <MetricsCard.NoData message="No workflow data yet" />
                 )}
               </TabContent>
-              <TabContent value="tools">
+              <TabContent value="tools" className="pt-3">
                 {data.toolData.length > 0 ? (
                   <VolumeBars
                     data={data.toolData}

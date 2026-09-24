@@ -1,6 +1,6 @@
 import { MastraNonRetryableError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
-import { Inngest, NonRetriableError } from 'inngest';
+import { Inngest, NonRetriableError, serializeError, StepError } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
@@ -266,6 +266,126 @@ function createNestedResumeFixture(
     suspendedStep,
   };
 }
+
+/**
+ * An engine whose step.run() behaves like a real Inngest server: an error thrown in
+ * the callback is serialized, and the caller gets a StepError rebuilt from it.
+ * `thrown` records what each callback threw, which is what Inngest's retry decision sees.
+ */
+function createInngestLikeEngine() {
+  const thrown: unknown[] = [];
+  const inngestStep = {
+    run: vi.fn(async (id: string, fn: () => Promise<unknown>) => {
+      try {
+        return await fn();
+      } catch (err) {
+        thrown.push(err);
+        throw new StepError(id, serializeError(err));
+      }
+    }),
+    sleep: vi.fn(),
+    sleepUntil: vi.fn(),
+  };
+
+  return { engine: new InngestExecutionEngine(undefined as any, inngestStep as any, 0, {} as any), thrown };
+}
+
+describe('InngestExecutionEngine durable failures', () => {
+  // Inngest applies the function-level `retries` to every step.run() that throws, so
+  // step code must fail its step.run() as NonRetriableError; executeStepWithRetry owns
+  // step retries.
+  it('fails step code as NonRetriableError so Inngest does not retry it', async () => {
+    const { engine, thrown } = createInngestLikeEngine();
+
+    await engine.executeStepWithRetry(
+      'workflow.test.step.failing',
+      async () => {
+        throw new Error('step code failed');
+      },
+      { retries: 0, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(thrown).toHaveLength(1);
+    expect(thrown[0]).toBeInstanceOf(NonRetriableError);
+    expect((thrown[0] as Error).cause).toMatchObject({ status: 'failed', error: { message: 'step code failed' } });
+  });
+
+  it('keeps built-in step error types non-retriable', async () => {
+    const { engine, thrown } = createInngestLikeEngine();
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.type-error',
+      async () => {
+        throw new TypeError('bad input');
+      },
+      { retries: 0, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    // The wrapper's prototype becomes TypeError (so older SDKs report that name), so Inngest
+    // must recognize it through the `NonRetriableError` name, which it also checks.
+    expect((thrown[0] as Error).name).toBe('NonRetriableError');
+    expect((thrown[0] as Error).stack).toMatch(/^TypeError: bad input/);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.error).toMatchObject({ name: 'TypeError', message: 'bad input' });
+    }
+  });
+
+  it('keeps failures of other durable operations retriable', async () => {
+    const { engine, thrown } = createInngestLikeEngine();
+
+    const error = await engine
+      .wrapDurableOperation('workflow.test.span.start', async () => {
+        throw new Error('storage unavailable');
+      })
+      .catch(e => e);
+
+    expect(thrown[0]).not.toBeInstanceOf(NonRetriableError);
+    expect(error).toBeInstanceOf(StepError);
+    expect(error.message).toBe('storage unavailable');
+  });
+
+  it('retries step code until step retries are exhausted', async () => {
+    const { engine } = createInngestLikeEngine();
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.transient',
+      async () => {
+        calls++;
+        throw new Error('temporary failure');
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(4);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.error.message).toBe('temporary failure');
+      expect(result.error.nonRetryable).toBeUndefined();
+    }
+  });
+
+  it('does not retry MastraNonRetryableError step failures', async () => {
+    const { engine } = createInngestLikeEngine();
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.fatal',
+      async () => {
+        calls++;
+        throw new MastraNonRetryableError('permanent failure');
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.nonRetryable).toBe(true);
+    }
+  });
+});
 
 describe('InngestExecutionEngine.executeWorkflowStep', () => {
   it('restores the suspended child path when resuming with only the nested workflow id', async () => {

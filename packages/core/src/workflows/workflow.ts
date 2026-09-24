@@ -809,6 +809,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // we need access to all possible properties
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
+        llmRequestProcessorIds?: ReadonlySet<string>;
         abortSignal?: AbortSignal;
         agent?: Agent;
       };
@@ -848,6 +849,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
+        // Processors whose processLLMRequest runs after this inputStep phase
+        llmRequestProcessorIds,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
         // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
@@ -1144,6 +1147,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         streamParts,
         state: processorState,
         processorStates,
+        llmRequestProcessorIds,
         result: outputResult,
         finishReason,
         providerMetadata,
@@ -1323,6 +1327,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 steps: steps ?? [],
                 messageId: currentMessageId,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                llmRequestStage: llmRequestProcessorIds?.has(processor.id) || undefined,
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {

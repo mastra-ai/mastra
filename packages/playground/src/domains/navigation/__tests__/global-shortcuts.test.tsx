@@ -45,7 +45,6 @@ afterEach(() => {
 describe('GlobalShortcuts', () => {
   describe('when g is followed by a sidebar key', () => {
     it.each([
-      ['i', '/inbox'],
       ['a', '/agents'],
       ['p', '/prompts'],
       ['w', '/workflows'],
@@ -74,10 +73,10 @@ describe('GlobalShortcuts', () => {
   });
 
   describe('when the second key is not bound', () => {
-    it('stays on the current page', async () => {
+    it.each(['z', 'i'])('g then %s stays on the current page', async key => {
       renderAt('/');
 
-      pressGThen('z');
+      pressGThen(key);
 
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(screen.getByTestId('location-probe').textContent).toBe('/');

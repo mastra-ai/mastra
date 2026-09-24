@@ -62,7 +62,7 @@ export function PageLayout({
           <div
             data-slot="page-layout-container"
             className={cn(
-              'mx-auto grid min-h-full w-full max-w-5xl p-4',
+              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-[minmax(0,1fr)] p-4',
               header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
             )}
           >

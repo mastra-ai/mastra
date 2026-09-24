@@ -438,6 +438,14 @@ Returns: `boolean`
     description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
   },
   {
+    name: 'closeOnSuspend',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'When `true`, close the stream when the run suspends (for example for tool approval) so `fullStream`, `text`, and `getFullOutput()` resolve at the suspension boundary instead of staying open, matching non-durable `Agent.stream()`. Useful for callers such as AG-UI or A2A that need the stream to end. Defaults to `false`, which keeps the stream open across suspension so a later resume can continue streaming on the same reader. `resume()`/`resumeStream()` always return a fresh stream.',
+  },
+  {
     name: 'toolCallConcurrency',
     type: 'number',
     isOptional: true,

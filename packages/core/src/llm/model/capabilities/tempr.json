@@ -26,7 +26,14 @@
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemma-4-26b-a4b-it",
-    "google/gemma-4-31b-it"
+    "google/gemma-4-31b-it",
+    "mistral/mistral-large-2512",
+    "mistral/mistral-large-latest",
+    "mistral/mistral-medium-2604",
+    "mistral/mistral-medium-latest",
+    "mistral/mistral-small-2603",
+    "mistral/mistral-small-latest",
+    "mistral/voxtral-small-latest"
   ],
   "temperature": [
     "anthropic/claude-haiku-4-5",
@@ -49,7 +56,16 @@
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemma-4-26b-a4b-it",
-    "google/gemma-4-31b-it"
+    "google/gemma-4-31b-it",
+    "mistral/mistral-large-2512",
+    "mistral/mistral-large-latest",
+    "mistral/mistral-medium-2604",
+    "mistral/mistral-medium-latest",
+    "mistral/mistral-small-2603",
+    "mistral/mistral-small-latest",
+    "mistral/voxtral-small-latest",
+    "mistral/zai-glm-5-2",
+    "mistral/zai-glm-5-3"
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
@@ -78,6 +94,10 @@
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemma-4-26b-a4b-it",
-    "google/gemma-4-31b-it"
+    "google/gemma-4-31b-it",
+    "mistral/mistral-medium-2604",
+    "mistral/mistral-medium-latest",
+    "mistral/zai-glm-5-2",
+    "mistral/zai-glm-5-3"
   ]
 }

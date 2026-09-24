@@ -41,16 +41,22 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
+}
+
 const TRACE_FIELDS = {
   traceId: 'r."traceId"',
   threadId: 'r."threadId"',
   resourceId: 'r."resourceId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
+  durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -171,6 +177,18 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'collection') {
+    // `tags` is `text[] NOT NULL DEFAULT '{}'`, so an empty list is the only "no tags" shape.
+    if (predicate.operator === 'includes' || predicate.operator === 'notIncludes') {
+      const contains = `${field} @> ARRAY[$${parameterOffset}]::text[]`;
+      return {
+        sql: predicate.operator === 'includes' ? contains : `cardinality(${field}) > 0 AND NOT (${contains})`,
+        values: [...fieldValues, predicate.value],
+      };
+    }
+    return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+  }
+
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
@@ -215,6 +233,7 @@ function compileFeedbackScalarPredicate(
   if (predicate.field !== 'value') {
     return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset);
   }
+  if (predicate.type === 'collection') throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
   if (predicate.type === 'presence') {
     const present = `(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)`;
     return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
@@ -422,7 +441,7 @@ function compilePostgresTraceScope(
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
         WHEN s."isPending" THEN NULL
-        ELSE EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000
+        ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",
@@ -688,16 +707,20 @@ export function compilePostgresTraceQueryValues(
     discoveryCollections(plan.predicateScope),
     plan.scope,
   );
-  let field: string;
-  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+  let extracted: string;
+  if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (trace, distinct tag) so the outer count is a per-trace count.
+    extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
+  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
-    field = `COALESCE(
+    extracted = `SELECT COALESCE(
       CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
       CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )`;
+    )::text AS value FROM root_scope r`;
     values.push(plan.path.slice('metadata.'.length));
   } else {
-    field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    extracted = `SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}`;
   }
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower(value), lower($${searchParameter})) > 0` : '';
@@ -705,7 +728,7 @@ export function compilePostgresTraceQueryValues(
   values.push(plan.limit + 1);
   return {
     text: `WITH ${ctes.join(',\n')}, extracted AS (
-  SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}
+  ${extracted}
 )
 SELECT value, count(*)::bigint AS count
 FROM extracted

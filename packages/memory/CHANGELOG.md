@@ -1,5 +1,80 @@
 # @mastra/memory
 
+## 1.32.0
+
+### Minor Changes
+
+- Filter client-echoed history before memory processors load stored messages. ([#24076](https://github.com/mastra-ai/mastra/pull/24076))
+
+  On a thread that already has stored messages, memory now keeps only the new part of the request input: the trailing user messages, plus any tool outcomes the client sends for calls the stored conversation still has pending (results, errors, denials, and approval answers). This works whether the outcome arrives on its own or together with the next user message. An empty thread is still seeded with the full input, with assistant provider metadata stripped.
+
+  When an input message has the same ID as a stored message, the stored message remains the base so its reasoning, provider metadata, ordering, and timestamp are retained. Client tool outcomes only fill in calls that are still pending, so an echo can't overwrite a stored tool result.
+
+  This prevents lossy client echoes from orphaning OpenAI reasoning items, re-persisting user messages with client timestamps, or duplicating assistant text during history replay. Observational Memory uses the same stored-base layering behavior.
+
+  This is a behavior change: on an existing thread, any input message before the last assistant message that isn't stored is removed. That includes few-shot examples and caller-assembled message arrays, not only assistant messages sent to modify the thread or user messages re-sent with a changed `createdAt` to reorder it. Use `memory.saveMessages` or the memory store's `updateMessages` to change stored history.
+
+  To opt out, set the new `retainFullInput` memory option, per call on `memory.options` or agent-wide in the memory constructor options. The request input is then processed exactly as supplied, history still loads, and every input message that isn't already stored is saved to the thread. The `useAgent` structured output path uses it so its replayed request keeps the parent's message prefix.
+
+  Fixes #24052.
+
+### Patch Changes
+
+- Fixed Observational Memory saving its own instructions and system reminders as things the user said. The observer could record lines like "User's current priority is to extract new observations" as the thread's current task, which then misled the agent on later turns. The observer now receives its instructions after the conversation instead of as a separate message before it, and system reminders and signals in the conversation are labeled by their tag (for example `system-reminder` or `notification`) instead of as the user. Fixes [#22195](https://github.com/mastra-ai/mastra/issues/22195). ([#24908](https://github.com/mastra-ai/mastra/pull/24908))
+
+- Thread-scoped Observational Memory now describes observations as memory of the current conversation instead of "past conversations with this user". Agents using the default `scope: 'thread'` will reuse IDs, artifacts, and tool results recorded in observations instead of treating them as coming from a different session. Resource scope keeps its existing wording. Added `getObservationContextPrompt(scope)` for integrations that build the observations context themselves. ([#24889](https://github.com/mastra-ai/mastra/pull/24889))
+
+  ```ts
+  import { getObservationContextPrompt } from '@mastra/memory/processors';
+
+  const preamble = getObservationContextPrompt('thread');
+  // "The following observations block contains your memory of earlier parts of this current conversation. ..."
+  ```
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+
+## 1.32.0-alpha.1
+
+### Patch Changes
+
+- Fixed Observational Memory saving its own instructions and system reminders as things the user said. The observer could record lines like "User's current priority is to extract new observations" as the thread's current task, which then misled the agent on later turns. The observer now receives its instructions after the conversation instead of as a separate message before it, and system reminders and signals in the conversation are labeled by their tag (for example `system-reminder` or `notification`) instead of as the user. Fixes [#22195](https://github.com/mastra-ai/mastra/issues/22195). ([#24908](https://github.com/mastra-ai/mastra/pull/24908))
+
+- Thread-scoped Observational Memory now describes observations as memory of the current conversation instead of "past conversations with this user". Agents using the default `scope: 'thread'` will reuse IDs, artifacts, and tool results recorded in observations instead of treating them as coming from a different session. Resource scope keeps its existing wording. Added `getObservationContextPrompt(scope)` for integrations that build the observations context themselves. ([#24889](https://github.com/mastra-ai/mastra/pull/24889))
+
+  ```ts
+  import { getObservationContextPrompt } from '@mastra/memory/processors';
+
+  const preamble = getObservationContextPrompt('thread');
+  // "The following observations block contains your memory of earlier parts of this current conversation. ..."
+  ```
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
+## 1.32.0-alpha.0
+
+### Minor Changes
+
+- Filter client-echoed history before memory processors load stored messages. ([#24076](https://github.com/mastra-ai/mastra/pull/24076))
+
+  On a thread that already has stored messages, memory now keeps only the new part of the request input: the trailing user messages, plus any tool outcomes the client sends for calls the stored conversation still has pending (results, errors, denials, and approval answers). This works whether the outcome arrives on its own or together with the next user message. An empty thread is still seeded with the full input, with assistant provider metadata stripped.
+
+  When an input message has the same ID as a stored message, the stored message remains the base so its reasoning, provider metadata, ordering, and timestamp are retained. Client tool outcomes only fill in calls that are still pending, so an echo can't overwrite a stored tool result.
+
+  This prevents lossy client echoes from orphaning OpenAI reasoning items, re-persisting user messages with client timestamps, or duplicating assistant text during history replay. Observational Memory uses the same stored-base layering behavior.
+
+  This is a behavior change: on an existing thread, any input message before the last assistant message that isn't stored is removed. That includes few-shot examples and caller-assembled message arrays, not only assistant messages sent to modify the thread or user messages re-sent with a changed `createdAt` to reorder it. Use `memory.saveMessages` or the memory store's `updateMessages` to change stored history.
+
+  To opt out, set the new `retainFullInput` memory option, per call on `memory.options` or agent-wide in the memory constructor options. The request input is then processed exactly as supplied, history still loads, and every input message that isn't already stored is saved to the thread. The `useAgent` structured output path uses it so its replayed request keeps the parent's message prefix.
+
+  Fixes #24052.
+
+### Patch Changes
+
+- Updated dependencies [[`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0-alpha.1
+
 ## 1.31.0
 
 ### Minor Changes

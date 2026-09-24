@@ -1,3 +1,4 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -6,7 +7,14 @@ import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
 import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
-import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
+import type {
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+  ProcessLLMRequestArgs,
+  ProcessLLMRequestResult,
+  ProcessOutputStreamArgs,
+  Processor,
+} from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -67,6 +75,8 @@ const TOKENS_PER_MEDIA_FALLBACK = 258;
 const BYTES_PER_TOKEN = 4;
 
 type MediaPayload = { data: string; mediaType?: string; mimeType?: string };
+
+type PromptMessage = LanguageModelV2Prompt[number];
 
 /**
  * Detects the `{ data, mediaType | mimeType }` shape that tools return for images
@@ -208,17 +218,29 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   }
 
   /**
-   * Process input messages at each step of the agentic loop, before they are sent to the LLM.
-   * Runs at every step (including tool call continuations), preventing the conversation history
-   * from growing unboundedly during multi-step agent workflows.
+   * Input-stage hook. `memory-only` mode always trims stored history here, because
+   * that mode's job is to shrink what memory keeps, not what a single request sends.
    *
-   * System messages are always preserved, and the most recent non-system messages are kept
-   * within the token budget.
+   * The standard trim modes (`best-fit`, `contiguous`) budget the request at
+   * {@link TokenLimiterProcessor.processLLMRequest} when the caller will run it
+   * (`llmRequestStage`): the prompt is the payload the model actually receives,
+   * after every earlier prompt processor has run, and trimming there never deletes
+   * stored messages. Trimming stored messages here would count history that a
+   * later prompt processor (for example `ToolCallFilter`) is about to remove.
+   *
+   * Callers that never run `processLLMRequest` for this processor (legacy
+   * generate/stream, processor workflows) get stored-message trimming here instead.
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<void> {
     const { messageList } = args;
 
-    if (this.trimMode === 'memory-only') return this.trimMemory(messageList, args.requestContext);
+    if (this.trimMode === 'memory-only') {
+      await this.trimMemory(args.messageList, args.requestContext);
+      return;
+    }
+
+    if (args.llmRequestStage) return;
+
     if (!messageList) return;
 
     const messages = messageList.get.all.db();
@@ -231,7 +253,6 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     }
 
     // Budget against the full system message set that will reach the model
-    // (untagged + tagged buckets), not just the untagged view exposed via args.
     const allSystemMessages = messageList.getAllSystemMessages();
     let systemTokens = 0;
     for (const msg of allSystemMessages) {
@@ -256,7 +277,6 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const messagesToKeep: MastraDBMessage[] = [];
     let currentTokens = 0;
 
-    // Iterate through messages in reverse to prioritize recent messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (!message) continue;
@@ -290,6 +310,187 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
     }
+  }
+
+  /**
+   * Enforce the input token budget on the provider prompt, directly before the
+   * model call.
+   *
+   * Running at the prompt stage rather than at the message-list stage is what
+   * makes composition with prompt-shrinking processors work: a processor placed
+   * earlier in the list (for example `ToolCallFilter`) has already rewritten the
+   * prompt, so this limiter counts and trims exactly what the model receives.
+   * Mutations are transient for the same reason the filtering is — stored
+   * messages, memory and UI history keep everything.
+   */
+  async processLLMRequest({ prompt }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
+    if (this.trimMode === 'memory-only') return undefined;
+
+    const groups = this.groupPromptMessages(prompt);
+    const messageCount = groups
+      .filter(group => group[0]?.role !== 'system')
+      .reduce((total, group) => total + group.length, 0);
+
+    // If no messages or empty array, throw TripWire - can't send LLM a request with no messages
+    if (messageCount === 0) {
+      throw new TripWire('TokenLimiterProcessor: No messages to process. Cannot send LLM a request with no messages.', {
+        retry: false,
+      });
+    }
+
+    // Budget against the system messages that will reach the model, including
+    // tagged buckets such as observational memory.
+    const limit = this.maxTokens;
+    let systemTokens = 0;
+    for (const group of groups) {
+      if (group[0]?.role !== 'system') continue;
+      for (const message of group) systemTokens += this.countPromptMessageTokens(message);
+    }
+
+    // If system messages alone exceed the token limit (accounting for conversation overhead),
+    // throw TripWire - can't send LLM a request with only system messages
+    if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
+      throw new TripWire(
+        'TokenLimiterProcessor: System messages alone exceed token limit. Requests cannot be completed by removing system messages.',
+        { retry: false, metadata: { systemTokens, limit } },
+      );
+    }
+
+    // Calculate remaining budget for non-system messages (accounting for conversation overhead)
+    const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
+
+    // Process non-system message groups in reverse order (newest first)
+    const keptGroups = new Set<PromptMessage[]>();
+    let currentTokens = 0;
+
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const group = groups[i];
+      if (!group || group[0]?.role === 'system') continue;
+
+      let groupTokens = 0;
+      for (const message of group) groupTokens += this.countPromptMessageTokens(message);
+
+      if (currentTokens + groupTokens <= remainingBudget) {
+        keptGroups.add(group);
+        currentTokens += groupTokens;
+      } else if (this.trimMode === 'contiguous') {
+        break;
+      }
+      // best-fit → continue (existing behavior)
+    }
+
+    if (keptGroups.size === 0) {
+      throw new TripWire(
+        'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
+        {
+          retry: false,
+          metadata: { systemTokens, limit, remainingBudget, messageCount },
+        },
+      );
+    }
+
+    const trimmedPrompt = groups.filter(group => group[0]?.role === 'system' || keptGroups.has(group)).flat();
+    if (trimmedPrompt.length === prompt.length) return undefined;
+
+    return { prompt: trimmedPrompt };
+  }
+
+  /**
+   * Group prompt messages so a tool call and the results it produced are always
+   * kept or dropped together. Providers reject a request with a tool call that
+   * has no matching result (and vice versa), so trimming must never split them.
+   * Everything else is a single-message group.
+   */
+  private groupPromptMessages(prompt: LanguageModelV2Prompt): PromptMessage[][] {
+    const groups: PromptMessage[][] = [];
+
+    for (let index = 0; index < prompt.length; index++) {
+      const message = prompt[index];
+      if (!message) continue;
+      const group = [message];
+
+      const toolCallIds = new Set<string>();
+      if (message.role === 'assistant') {
+        for (const part of message.content) {
+          if (part.type === 'tool-call') toolCallIds.add(part.toolCallId);
+        }
+      }
+
+      while (toolCallIds.size > 0 && index + 1 < prompt.length) {
+        const next = prompt[index + 1];
+        if (!next || next.role !== 'tool') break;
+        const hasMatchingResult = next.content.some(
+          part => part.type === 'tool-result' && toolCallIds.has(part.toolCallId),
+        );
+        if (!hasMatchingResult) break;
+        group.push(next);
+        index++;
+      }
+
+      groups.push(group);
+    }
+
+    return groups;
+  }
+
+  /**
+   * Count a message of the provider prompt. Mirrors {@link countInputMessageTokens}
+   * so counts stay comparable, but reads the prompt shapes the model actually
+   * receives: `input` for tool call arguments, and tool result outputs with their
+   * text/json/content variants.
+   */
+  private countPromptMessageTokens(message: PromptMessage): number {
+    if (message.role === 'system') {
+      return this.countTokens(message.role + message.content) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    }
+
+    let tokenString: string = message.role;
+    let overhead = 0;
+    // Media is estimated rather than tokenized, so it is accumulated separately.
+    let mediaTokens = 0;
+
+    for (const part of message.content) {
+      if (part.type === 'text' || part.type === 'reasoning') {
+        tokenString += part.text;
+      } else if (part.type === 'tool-call') {
+        tokenString += part.toolName;
+        if (part.input !== undefined) {
+          if (typeof part.input === 'string') {
+            tokenString += part.input;
+          } else {
+            tokenString += JSON.stringify(part.input);
+            overhead -= 12;
+          }
+        }
+      } else if (part.type === 'tool-result') {
+        if (part.output.type === 'text' || part.output.type === 'error-text') {
+          tokenString += part.output.value;
+        } else if (part.output.type === 'json' || part.output.type === 'error-json') {
+          tokenString += JSON.stringify(part.output.value);
+          overhead -= 12;
+        } else {
+          for (const entry of part.output.value) {
+            if (entry.type === 'text') {
+              tokenString += entry.text;
+            } else {
+              const { data, ...rest } = entry;
+              mediaTokens += estimateMediaTokens(data, entry.mediaType);
+              tokenString += JSON.stringify(rest);
+            }
+          }
+          overhead -= 12;
+        }
+      } else if (part.type === 'file') {
+        mediaTokens += estimateMediaTokens(part.data, part.mediaType);
+      }
+    }
+
+    // Each provider-prompt entry is already one message. Unlike persisted
+    // MastraDBMessage parts, a tool result does not need extra overhead here:
+    // conversion has already emitted it as its own `role: 'tool'` message.
+    overhead += TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+
+    return this.countTokens(tokenString) + overhead + mediaTokens;
   }
 
   /**

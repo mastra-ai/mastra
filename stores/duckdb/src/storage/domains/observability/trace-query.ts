@@ -32,16 +32,22 @@ type RelatedCollection = 'spans' | 'scores' | 'feedback';
 
 const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `date_diff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'scalar' },
   threadId: { sql: 'r.threadId', parameterType: 'scalar' },
   resourceId: { sql: 'r.resourceId', parameterType: 'scalar' },
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
+  durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'scalar' },
+  tags: { sql: 'r.tags', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -162,6 +168,21 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'collection') {
+    // Missing, empty, and non-array JSON all mean "no members", so every branch yields a real boolean.
+    const members = `coalesce(TRY_CAST(${field.sql} AS VARCHAR[]), []::VARCHAR[])`;
+    if (!('value' in predicate)) {
+      return { sql: `len(${members}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+    }
+    if (predicate.operator === 'includes') {
+      return { sql: `list_contains(${members}, ?)`, values: [...fieldValues, predicate.value] };
+    }
+    return {
+      sql: `len(${members}) > 0 AND NOT list_contains(${members}, ?)`,
+      values: [...fieldValues, ...fieldValues, predicate.value],
+    };
+  }
+
   if (predicate.type === 'membership') {
     const list = predicate.values.map(() => parameterSql(field.parameterType)).join(', ');
     if (predicate.operator === 'in') {
@@ -206,7 +227,9 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
     const compiled = compileFeedbackScalarPredicate(predicate.arg);
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
-  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  if (predicate.field !== 'value' || predicate.type === 'collection') {
+    return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  }
   if (predicate.type === 'presence') {
     return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
@@ -396,7 +419,7 @@ function compileDuckDBTraceScope(
         END AS provider,
         startedAt,
         endedAt,
-        date_diff('millisecond', startedAt, endedAt) AS durationMs,
+        ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
         CASE WHEN error IS NOT NULL THEN 'error' ELSE 'success' END AS status,
         error,
         entityType,
@@ -636,7 +659,12 @@ export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan)
   const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   let fieldSql: string;
-  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+  let source = discoverySource(plan.predicateScope);
+  if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (current root, distinct tag); unnest of NULL yields no rows.
+    fieldSql = 'unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[])))';
+    source = `${source} WHERE r.tags IS NOT NULL`;
+  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const jsonPath = `$.${JSON.stringify(plan.path.slice('metadata.'.length))}`;
     fieldSql = `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`;
     values.push(jsonPath, jsonPath);
@@ -648,7 +676,7 @@ export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan)
   const search = plan.search ? 'AND strpos(lower(CAST(value AS VARCHAR)), lower(?)) > 0' : '';
   return {
     sql: `WITH ${ctes.join(',\n  ')}, extracted AS (
-  SELECT ${fieldSql} AS value FROM ${discoverySource(plan.predicateScope)}
+  SELECT ${fieldSql} AS value FROM ${source}
 )
 SELECT CAST(value AS VARCHAR) AS value, count(*) AS count
 FROM extracted

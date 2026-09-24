@@ -193,6 +193,13 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /**
+   * When true, this processor will also have processLLMRequest called after
+   * processInputStep. Processors that implement both methods can skip
+   * pre-conversion trimming here and defer it to the prompt stage, where it
+   * accounts for earlier prompt processors (e.g. ToolCallFilter).
+   */
+  llmRequestStage?: boolean;
 
   /**
    * Current model for this step.
@@ -228,6 +235,12 @@ export type RunProcessInputStepArgs = Omit<
   memory?: MastraMemory;
   resourceId?: string;
   threadId?: string;
+  /**
+   * IDs of processors whose processLLMRequest will run for this step.
+   * The runner sets llmRequestStage for these processors, including when they
+   * run inside a processor workflow.
+   */
+  llmRequestProcessorIds?: ReadonlySet<string>;
 };
 
 /**

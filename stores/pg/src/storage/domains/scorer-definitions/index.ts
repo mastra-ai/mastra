@@ -25,6 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -212,7 +213,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
           scorerDefinition.authorId ?? null,
           scorerDefinition.organizationId ?? null,
           scorerDefinition.projectId ?? null,
-          scorerDefinition.metadata ? JSON.stringify(scorerDefinition.metadata) : null,
+          scorerDefinition.metadata ? toPgJson(scorerDefinition.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
@@ -319,7 +320,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingScorer.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -436,7 +437,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -520,12 +521,12 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
           input.name,
           input.description ?? null,
           input.type,
-          input.model ? JSON.stringify(input.model) : null,
+          input.model ? toPgJson(input.model) : null,
           input.instructions ?? null,
-          input.scoreRange ? JSON.stringify(input.scoreRange) : null,
-          input.presetConfig ? JSON.stringify(input.presetConfig) : null,
-          input.defaultSampling ? JSON.stringify(input.defaultSampling) : null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.scoreRange ? toPgJson(input.scoreRange) : null,
+          input.presetConfig ? toPgJson(input.presetConfig) : null,
+          input.defaultSampling ? toPgJson(input.defaultSampling) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

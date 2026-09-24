@@ -42,7 +42,7 @@ interface ObservabilityInstance {
 
 ### `BatchDeleteTracesArgs`
 
-Arguments for `ObservabilityStorage.batchDeleteTraces()`. The method deletes matching traces and spans, then cascades to metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved.
+Arguments for `ObservabilityStorage.batchDeleteTraces()` from `@mastra/core/storage`. The method deletes matching traces and spans, then cascades to metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved. The method accepts at most 1,000 trace IDs per call and returns `Promise<void>`.
 
 ```typescript
 interface BatchDeleteTracesArgs {
@@ -52,9 +52,9 @@ interface BatchDeleteTracesArgs {
 }
 ```
 
-When `organizationId` or `resourceId` is provided, only records matching the scope are deleted. Storage adapters that don't support tenant-scoped trace deletion throw an error rather than applying an unscoped delete.
+When `organizationId` or `resourceId` is provided, only records matching the scope are deleted. ClickHouse vNext, PostgreSQL vNext, DuckDB, and the in-memory store support scoped deletion. Other storage adapters throw `OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_SCOPE_NOT_SUPPORTED` rather than applying an unscoped delete.
 
-For ClickHouse vNext, the method records the complete predicate and waits for lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves. Lightweight deletion is hide-only through ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs, which Mastra OSS doesn't configure by default. Deletion requests aren't purged automatically in Mastra OSS. Automatic retirement will be introduced with future database-agnostic retention configuration.
+For ClickHouse vNext, the method records the deletion predicate and waits for the lightweight delete masks to be applied before it resolves. Lightweight deletion is hide-only through ClickHouse's `_row_exists` mask. Physical removal depends on merges and the retention TTLs you configure. Each request is marked applied once every delete succeeds; if a delete fails, the request stays unapplied and you retry by calling `batchDeleteTraces()` again. Mastra OSS has no background reconciler. See [ClickHouse trace deletion and retention](/integrations/databases/clickhouse#observability-with-vnext-recommended) and [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl).
 
 ### `SpanTypeMap`
 

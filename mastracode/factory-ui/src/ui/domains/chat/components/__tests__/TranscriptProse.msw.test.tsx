@@ -29,6 +29,16 @@ afterEach(() => {
 });
 
 describe('assistant prose', () => {
+  it('ignores malformed empty message parts', () => {
+    const parts: MastraDBMessage['content']['parts'] = [{ type: 'text', text: 'The valid answer remains visible.' }];
+    Reflect.set(parts, 0, undefined);
+    parts.push({ type: 'text', text: 'The valid answer remains visible.' });
+
+    renderEntries([assistant(parts)]);
+
+    expect(screen.getByText('The valid answer remains visible.')).toBeTruthy();
+  });
+
   it('lets the reader collapse and reopen reasoning without hiding the answer', () => {
     renderEntries([
       assistant([

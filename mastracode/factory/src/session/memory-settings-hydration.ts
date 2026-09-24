@@ -81,6 +81,58 @@ export async function applyStoredMemorySettings(
   if (Object.keys(updates).length > 0) await session.state.set(updates);
 }
 
+export interface PersonalMemorySettingsArgs {
+  /** Without the domain there is no personal preference to read. */
+  memorySettings: Pick<MemorySettingsStorage, 'get'> | undefined;
+  orgId: string;
+  /** The human whose settings apply — for a channel session, the linked sender. */
+  userId: string;
+}
+
+/**
+ * Layer a user's own memory-settings row over whatever the session already runs
+ * with, so a personal preference beats the one the project path resolved.
+ *
+ * The row wins only for the knobs the user has actually saved: an unsaved knob
+ * keeps the value already on the session (the project's row, or the
+ * provider-aware fallback resolved from the factory default model). That
+ * distinction matters because `applyStoredMemorySettings` treats a null knob as
+ * "reset to the built-in default", and switching observation onto an
+ * uncredentialed provider would fail every observe cycle.
+ *
+ * Best-effort: a missing row, an uninitialized domain, or a read failure all
+ * mean "no personal preference" and leave the session exactly as it was.
+ */
+export async function applyPersonalMemorySettings(
+  session: OMConfigurableSession,
+  { memorySettings, orgId, userId }: PersonalMemorySettingsArgs,
+): Promise<void> {
+  if (!memorySettings) return;
+  try {
+    const record = await memorySettings.get({ orgId, userId });
+    if (!record) return;
+    const state = session.state.get() ?? {};
+    await applyStoredMemorySettings(session, {
+      ...record,
+      observerModelId: record.observerModelId ?? session.om.observer.modelId() ?? null,
+      reflectorModelId: record.reflectorModelId ?? session.om.reflector.modelId() ?? null,
+      observationThreshold: record.observationThreshold ?? storedNumber(state.observationThreshold),
+      reflectionThreshold: record.reflectionThreshold ?? storedNumber(state.reflectionThreshold),
+      observeAttachments: record.observeAttachments ?? storedObserveAttachments(state.observeAttachments),
+    });
+  } catch (error) {
+    console.warn("[Factory memory-settings hydration] Unable to apply the user's memory settings.", error);
+  }
+}
+
+function storedNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function storedObserveAttachments(value: unknown): 'auto' | boolean | null {
+  return value === 'auto' || typeof value === 'boolean' ? value : null;
+}
+
 export interface MemorySettingsHydrationSession extends OMConfigurableSession {
   readonly identity: { getResourceId(): string };
 }

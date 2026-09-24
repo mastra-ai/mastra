@@ -72,6 +72,7 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
@@ -153,11 +154,11 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * with packages/core/src/memory/working-memory-utils.ts,
  * packages/core/src/memory/system-reminders.ts, and
  * packages/core/src/agent/signals.ts. Those source files also carry
- * compatibility notes that point back here.
+ * compatibility notes that point back here. isSystemReminderMessage lives in
+ * ./system-reminders so observational memory can share it.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
-const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -215,32 +216,6 @@ export function extractWorkingMemoryContent(text: string): string | null {
   if (end === -1) return null;
 
   return text.substring(contentStart, end);
-}
-
-function isSystemReminderMessage(message: MastraDBMessage): boolean {
-  if (!isRecord(message.content)) {
-    return false;
-  }
-
-  const metadata = message.content.metadata;
-  if (message.role === 'signal') {
-    return (
-      isRecord(metadata) &&
-      isRecord(metadata.signal) &&
-      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
-    );
-  }
-
-  if (message.role !== 'user') {
-    return false;
-  }
-
-  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
-    return true;
-  }
-
-  const firstTextPart = message.content.parts.find(part => part.type === 'text');
-  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
 }
 
 // Keep this union and the recall helpers in sync with core without requiring newer peer exports.

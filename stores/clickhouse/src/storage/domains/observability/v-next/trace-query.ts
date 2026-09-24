@@ -41,16 +41,22 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
+function durationMsSql(startedAt: string, endedAt: string): string {
+  return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'String' },
   threadId: { sql: 'r.threadId', parameterType: 'String' },
   resourceId: { sql: 'r.resourceId', parameterType: 'String' },
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
+  tags: { sql: 'r.tags', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -171,6 +177,15 @@ function compileScalarPredicate<TField extends string>(
     return `${predicate.operator === 'exists' ? 'isNotNull' : 'isNull'}(${field.sql})`;
   }
 
+  if (predicate.type === 'collection') {
+    // Arrays are never NULL in ClickHouse; `DEFAULT []` makes missing and empty the same.
+    if (!('value' in predicate)) return `${predicate.operator}(${field.sql})`;
+    const member = parameters.add(predicate.value, field.parameterType);
+    return predicate.operator === 'includes'
+      ? `has(${field.sql}, ${member})`
+      : `notEmpty(${field.sql}) AND NOT has(${field.sql}, ${member})`;
+  }
+
   if (predicate.type === 'membership') {
     const values = predicate.values.map(value => parameters.add(value, field.parameterType)).join(', ');
     const expression = `${field.sql} ${predicate.operator === 'in' ? 'IN' : 'NOT IN'} (${values})`;
@@ -198,6 +213,7 @@ function compileFeedbackScalarPredicate(
     const present = `(isNotNull(s.valueString) OR isNotNull(s.valueNumber))`;
     return predicate.operator === 'exists' ? present : `NOT ${present}`;
   }
+  if (predicate.type === 'collection') throw new Error('Unsupported trusted trace-query field: value');
   const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
   const field =
     typeof sample === 'number'
@@ -341,7 +357,7 @@ function compileClickHouseTraceScope(
       if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
       startedAt,
       endedAt,
-      dateDiff('millisecond', startedAt, endedAt) AS durationMs,
+      ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
       if(isNotNull(error), 'error', 'success') AS status,
       error,
       entityType,
@@ -644,6 +660,9 @@ export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesP
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const key = parameters.add(plan.path.slice('metadata.'.length), 'String');
     field = `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
+  } else if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (root, distinct tag) so the count is traces carrying the tag, not tag occurrences.
+    field = `arrayJoin(arrayDistinct(${TRACE_FIELDS.tags.sql}))`;
   } else {
     field = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
   }

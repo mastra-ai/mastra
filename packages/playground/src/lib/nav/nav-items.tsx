@@ -14,7 +14,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, ClipboardCheck, Inbox, LayoutGrid } from 'lucide-react';
+import { BookIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -56,18 +56,6 @@ const signalsNavItem: NavItem = {
 };
 
 export const mainNav: NavSection[] = [
-  {
-    key: 'inbox',
-    title: '',
-    items: [
-      {
-        name: 'Inbox',
-        url: '/inbox',
-        Icon: Inbox,
-        isOnMastraPlatform: true,
-      },
-    ],
-  },
   {
     key: 'primitives',
     title: 'Primitives',

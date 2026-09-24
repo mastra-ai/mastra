@@ -27,6 +27,7 @@ import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import { SessionOwnerToggle } from './SessionOwnerToggle';
 import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
@@ -71,6 +72,9 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  // Each sessions group starts on the viewer's own sessions and widens on its own, so showing
+  // everyone's sessions in one list never floods the other.
+  const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
@@ -138,7 +142,12 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const all = rows.filter(row => row.review === review).sort(bySessionPriority);
+    const mineOnly = ownerScope[review ? 'review' : 'work'];
+    const all = rows
+      .filter(row => row.review === review)
+      // Unknown viewer (auth disabled) has no "own" sessions, so the scope stays off.
+      .filter(row => !mineOnly || !viewerUserId || row.workspace.userId === viewerUserId)
+      .sort(bySessionPriority);
     const visible = all.slice(0, COLLAPSED_ROW_COUNT);
     // Deep links and board handoffs can open a session that sorts below the fold;
     // show it rather than promote it, so the list never moves under the reader.
@@ -146,6 +155,10 @@ export function WorkspacesSection() {
     if (open && !visible.includes(open)) visible.push(open);
     return { visible, all };
   };
+  // Whether a group exists at all is decided before the owner scope, so an empty filtered
+  // list keeps its heading and toggle instead of stranding the reader with no way back.
+  const hasWorkRows = rows.some(row => !row.review);
+  const hasReviewRows = rows.some(row => row.review);
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
   const pullRequestTargets = [...workRows.visible, ...reviewRows.visible].flatMap(row =>
@@ -186,16 +199,18 @@ export function WorkspacesSection() {
     deleteWorkspace.mutate(confirmDelete, { onSuccess: () => setConfirmDelete(null) });
   };
 
-  if (workRows.all.length === 0 && reviewRows.all.length === 0) return null;
+  if (!hasWorkRows && !hasReviewRows) return null;
 
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
-      {workRows.all.length > 0 && (
+      {hasWorkRows && (
         <WorkspaceGroup
           key="work"
           title="Work Sessions"
           rows={workRows.visible}
           allRows={workRows.all}
+          mineOnly={ownerScope.work}
+          onMineOnlyChange={mineOnly => setOwnerScope(current => ({ ...current, work: mineOnly }))}
           kind="Work session"
           pending={pending}
           mergedByPath={mergedByPath}
@@ -206,12 +221,14 @@ export function WorkspacesSection() {
           onDelete={setConfirmDelete}
         />
       )}
-      {reviewRows.all.length > 0 && (
+      {hasReviewRows && (
         <WorkspaceGroup
           key="review"
           title="Review Sessions"
           rows={reviewRows.visible}
           allRows={reviewRows.all}
+          mineOnly={ownerScope.review}
+          onMineOnlyChange={mineOnly => setOwnerScope(current => ({ ...current, review: mineOnly }))}
           kind="Review session"
           pending={pending}
           mergedByPath={mergedByPath}
@@ -280,6 +297,8 @@ function WorkspaceGroup({
   title,
   rows,
   allRows,
+  mineOnly,
+  onMineOnlyChange,
   kind,
   pending,
   mergedByPath,
@@ -292,6 +311,8 @@ function WorkspaceGroup({
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   allRows: FactoryWorkspaceRow[];
+  mineOnly: boolean;
+  onMineOnlyChange: (mineOnly: boolean) => void;
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
   mergedByPath: Record<string, boolean>;
@@ -306,7 +327,14 @@ function WorkspaceGroup({
   const hiddenCount = allRows.length - rows.length;
   return (
     <section className="flex flex-col gap-1" aria-label={title}>
-      <SidebarSectionHeading icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}>
+      <SidebarSectionHeading
+        icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}
+        action={
+          viewerUserId ? (
+            <SessionOwnerToggle label={`${kind.toLowerCase()}s`} mineOnly={mineOnly} onChange={onMineOnlyChange} />
+          ) : undefined
+        }
+      >
         {title}
       </SidebarSectionHeading>
       <MainSidebar.NavList>
@@ -344,6 +372,11 @@ function WorkspaceGroup({
           />
         ))}
       </MainSidebar.NavList>
+      {visibleRows.length === 0 ? (
+        <Txt as="p" variant="caption" role="status" className="text-muted-foreground m-0 pl-3">
+          No sessions of your own.
+        </Txt>
+      ) : null}
       {hiddenCount > 0 && (
         <button
           type="button"

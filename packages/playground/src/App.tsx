@@ -63,7 +63,6 @@ import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
-import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -317,7 +316,6 @@ export const routes: RouteObject[] = [
         element: <SignalsEntityDetailPage />,
       },
       { path: '/traces', element: <Traces /> },
-      { path: '/inbox', element: <InboxPage /> },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {

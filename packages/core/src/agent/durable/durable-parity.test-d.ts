@@ -69,6 +69,8 @@ type ConsumedDuringPreparation =
   | 'experimentalTransform'
   // Applied to caller-local stream output, never serialized or used to filter generation.
   | 'hideSignals'
+  // Caller-local stream lifecycle; read by DurableAgent.stream()/resume(), never serialized.
+  | 'closeOnSuspend'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during

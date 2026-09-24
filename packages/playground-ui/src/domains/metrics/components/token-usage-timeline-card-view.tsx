@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
-import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
+import { MetricsLineChart, MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '../hooks/use-token-usage-timeseries';
 import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
@@ -53,7 +53,6 @@ export function TokenUsageTimelineCardView({
   const points = data ?? [];
   const chartPoints = points.map(point => ({ ...point }));
   const hasData = points.length > 0;
-  const totalTokens = points.reduce((sum, point) => sum + point.total, 0);
   const costPoints = points.filter(point => point.cost != null && point.cost > 0);
   const costChartPoints = costPoints.map(point => ({ ...point }));
   const uniqueCostUnits = new Set(costPoints.map(point => point.costUnit).filter((unit): unit is string => !!unit));
@@ -76,12 +75,6 @@ export function TokenUsageTimelineCardView({
     <MetricsCard>
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Token usage over time" description={description} />
-        {hasData &&
-          (activeTab === 'cost' && hasCostData ? (
-            <MetricsCard.Summary value={formatCost(totalCost, costUnit)} label="Total cost" />
-          ) : (
-            <MetricsCard.Summary value={formatCompact(totalTokens)} label="Total tokens" />
-          ))}
         {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
@@ -101,16 +94,23 @@ export function TokenUsageTimelineCardView({
               }}
               className="overflow-visible"
             >
-              <TabList>
-                <Tab value="tokens">Tokens</Tab>
-                <Tab value="cost">Cost</Tab>
-              </TabList>
-              <TabContent value="tokens">
-                <MetricsLineChart data={chartPoints} series={tokenSeries} />
+              <div className="flex flex-wrap items-center justify-between gap-2 [&>:first-child]:w-auto">
+                <TabList>
+                  <Tab value="tokens">Tokens</Tab>
+                  <Tab value="cost">Cost</Tab>
+                </TabList>
+                {activeTab === 'tokens' ? (
+                  <MetricsLineChartLegend data={chartPoints} series={tokenSeries} />
+                ) : hasCostData ? (
+                  <MetricsLineChartLegend data={costChartPoints} series={costSeries} />
+                ) : null}
+              </div>
+              <TabContent value="tokens" className="pt-3">
+                <MetricsLineChart data={chartPoints} series={tokenSeries} showLegend={false} />
               </TabContent>
-              <TabContent value="cost">
+              <TabContent value="cost" className="pt-3">
                 {hasCostData ? (
-                  <MetricsLineChart data={costChartPoints} series={costSeries} />
+                  <MetricsLineChart data={costChartPoints} series={costSeries} showLegend={false} />
                 ) : (
                   <MetricsCard.NoData message="No cost data yet" />
                 )}

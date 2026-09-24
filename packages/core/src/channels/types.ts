@@ -85,6 +85,18 @@ export interface ChannelAdapterBaseConfig {
   onAbort?: 'flush' | 'discard';
 
   /**
+   * Whether this adapter can render interactive approval buttons.
+   *
+   * When `false`, runs auto-resume suspended tools (e.g. `requireApproval`
+   * tools or `ask_user`) instead of waiting on an approval the user can't
+   * answer. Only consulted for `toolDisplay: 'hidden'`; `'text'` always
+   * auto-resumes and `'cards'`/`'timeline'`/`'grouped'` imply buttons.
+   *
+   * @default `true` for Slack, Discord, Teams, Google Chat and Telegram; `false` otherwise.
+   */
+  approvalButtons?: boolean;
+
+  /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).
    *

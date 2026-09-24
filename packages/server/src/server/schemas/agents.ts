@@ -780,7 +780,18 @@ export const subscribeAgentThreadBodySchema = z.object({
 });
 
 export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  clearPendingSignals: z.boolean().optional(),
   expectedRunId: z.string().optional(),
+});
+
+export const cancelPendingAgentSignalsBodySchema = subscribeAgentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  signalIds: z.array(z.string().min(1)).min(1).max(1000),
+});
+
+export const cancelPendingAgentSignalsResponseSchema = z.object({
+  cancelledSignalIds: z.array(z.string()),
 });
 
 export const sendToolApprovalBodySchema = z.object({

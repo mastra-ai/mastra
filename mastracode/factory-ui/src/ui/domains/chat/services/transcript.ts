@@ -221,13 +221,18 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         const mappedIndex = entry.sourcePartIndexes?.indexOf(event.event.index);
         if (mappedIndex === -1) return state;
         const partIndex = mappedIndex ?? event.event.index;
+        // Only the append slot sits past the end: a further index would leave a
+        // hole in `parts`, and `find`/`for…of` readers then see that hole as an
+        // undefined part. Dropping the update matches the mapped path; the next
+        // window merge reconciles skipped parts.
+        const outOfRange = mappedIndex === undefined ? partIndex > parts.length : partIndex >= parts.length;
+        if (outOfRange) return state;
         if (event.event.type === 'reasoning-delta') {
           const part = parts[partIndex];
           if (!part || part.type !== 'reasoning') return state;
           const reasoning = part.reasoning + event.event.delta;
           parts[partIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
         } else {
-          if (mappedIndex !== undefined && partIndex >= parts.length) return state;
           parts[partIndex] = event.event.part;
         }
       }

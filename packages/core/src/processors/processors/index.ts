@@ -39,6 +39,18 @@ export {
   type ClassifierProcessorRegisteredOptions,
   type ClassifierResultContext,
 } from './classifier';
+export {
+  ModelSelectionProcessor,
+  type ModelSelectionProcessorOptions,
+  type ModelSelectionSelectOptions,
+  type ModelSelectionInstanceOptions,
+  type ModelSelectionRegisteredOptions,
+  type ModelSelectionSelect,
+  type ModelSelectionChoicesOptions,
+  type ModelChoice,
+  type ModelSelectionDecision,
+  type SelectableModel,
+} from './model-selection';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,

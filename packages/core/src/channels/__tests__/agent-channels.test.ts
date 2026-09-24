@@ -721,6 +721,78 @@ describe('AgentChannels', () => {
       );
     });
 
+    describe('suspended tool auto-resume', () => {
+      async function dispatch(channels: AgentChannels, platform: string) {
+        const memoryStore = new InMemoryMemory({ db: new InMemoryDB() });
+        const mockMastra = {
+          getStorage: () => ({ getStore: () => memoryStore }),
+          getServer: () => null,
+        } as any;
+        await channels.initialize(mockMastra);
+        const chatThread = {
+          id: 'channel-1:thread-1',
+          channelId: 'channel-1',
+          isDM: true,
+          adapter: channels.adapters[platform],
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id: 'message-1',
+          text: 'hi',
+          author: { userId: 'user-1', userName: 'u', fullName: 'U' },
+          attachments: [],
+        } as any;
+        await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        return mockAgent.sendMessage.mock.calls[0][1].ifIdle.streamOptions;
+      }
+
+      function channelsWith(platform: string, config: Record<string, unknown>) {
+        const channels = new AgentChannels({
+          adapters: { [platform]: { adapter: createMockAdapter(platform), ...config } },
+        } as any);
+        channels.__setAgent(mockAgent);
+        return channels;
+      }
+
+      it("auto-resumes with toolDisplay 'hidden' on a platform without approval buttons", async () => {
+        const streamOptions = await dispatch(channelsWith('imessage', { toolDisplay: 'hidden' }), 'imessage');
+        expect(streamOptions.autoResumeSuspendedTools).toBe(true);
+      });
+
+      it("keeps approval flow with toolDisplay 'hidden' on Slack", async () => {
+        const streamOptions = await dispatch(channelsWith('slack', { toolDisplay: 'hidden' }), 'slack');
+        expect('autoResumeSuspendedTools' in streamOptions).toBe(false);
+      });
+
+      it('honors an explicit approvalButtons override', async () => {
+        const streamOptions = await dispatch(
+          channelsWith('custom', { toolDisplay: 'hidden', approvalButtons: true }),
+          'custom',
+        );
+        expect('autoResumeSuspendedTools' in streamOptions).toBe(false);
+      });
+
+      it("auto-resumes with toolDisplay 'text'", async () => {
+        const streamOptions = await dispatch(channelsWith('slack', { toolDisplay: 'text' }), 'slack');
+        expect(streamOptions.autoResumeSuspendedTools).toBe(true);
+      });
+
+      it('warns when an inbound message does not wake a run', async () => {
+        const logger = { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() } as any;
+        const channels = channelsWith('slack', {});
+        channels.__setLogger(logger);
+        mockAgent.sendMessage.mockReturnValueOnce({ accepted: Promise.resolve({ action: 'persist' }) });
+        await dispatch(channels, 'slack');
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('did not start a run (action: persist)'),
+          expect.anything(),
+        );
+      });
+    });
+
     it('skips messages with no text and no attachments', async () => {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });

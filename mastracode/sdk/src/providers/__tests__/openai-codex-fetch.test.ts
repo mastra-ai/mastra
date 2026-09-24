@@ -106,3 +106,37 @@ describe('OpenAI Codex OAuth fetch', () => {
     });
   });
 });
+
+describe('createReasoningEffortMiddleware', () => {
+  it('returns undefined when reasoning effort is unset', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    expect(createReasoningEffortMiddleware('my-provider', undefined)).toBeUndefined();
+  });
+
+  it('injects reasoningEffort under the given provider key', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    const middleware = createReasoningEffortMiddleware('my-provider', 'high');
+    expect(middleware).toBeDefined();
+
+    const params = { providerOptions: { 'my-provider': { existing: 'preserved' } } };
+    const transformed = await middleware!.transformParams!({ params } as any);
+
+    expect(transformed.providerOptions?.['my-provider']).toEqual({
+      existing: 'preserved',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('does not inject Codex-only options and preserves unrelated providers', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    const middleware = createReasoningEffortMiddleware('openai', 'low');
+    const params = { providerOptions: { anthropic: { effort: 'low' } } };
+
+    const transformed = await middleware!.transformParams!({ params } as any);
+
+    expect(transformed.providerOptions?.openai).toEqual({ reasoningEffort: 'low' });
+    expect(transformed.providerOptions?.openai).not.toHaveProperty('instructions');
+    expect(transformed.providerOptions?.openai).not.toHaveProperty('store');
+    expect(transformed.providerOptions?.anthropic).toEqual({ effort: 'low' });
+  });
+});

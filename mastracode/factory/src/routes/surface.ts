@@ -339,7 +339,7 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelPacks'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -371,6 +371,7 @@ export function buildIntegrationContext(
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
+      modelPacks: deps.domains.modelPacks,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady

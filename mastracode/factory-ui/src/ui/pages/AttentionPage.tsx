@@ -141,7 +141,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               size="sm"
               disabled={markAllRead.isPending}
               onClick={() => markAllRead.mutate()}
