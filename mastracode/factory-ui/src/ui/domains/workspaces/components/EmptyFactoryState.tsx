@@ -8,6 +8,7 @@ import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
+  clearOnboardingFactory,
   clearOnboardingFlow,
   ONBOARDING_FACTORY_KEY as FACTORY_KEY,
   persistOnboardingFactory,
@@ -84,6 +85,17 @@ export function EmptyFactoryState() {
     setStep(next);
   };
 
+  const goBack = (previous: Step, from: Step) => {
+    // Rewinding into `vcs` from a later step means the user wants a different
+    // repository. Drop the Factory created for the first pick so the next
+    // choice creates a fresh one instead of linking to the wrong Factory.
+    if (previous === 'vcs' && from !== 'vcs') {
+      setPendingFactory(null);
+      clearOnboardingFactory();
+    }
+    goTo(previous);
+  };
+
   const persistBeforeRedirect = (currentStep: Step) => {
     persistOnboardingStep(currentStep);
     if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
@@ -148,7 +160,7 @@ export function EmptyFactoryState() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => goTo(previousStep)}
+                  onClick={() => goBack(previousStep, step)}
                   aria-label="Go back to previous step"
                 >
                   <ArrowLeft aria-hidden="true" />

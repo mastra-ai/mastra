@@ -99,7 +99,7 @@ export function CreateFactoryWizard() {
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
         onBack={
-          step === 'name'
+          step === 'name' || committing
             ? undefined
             : () => {
                 setTyped(undefined);

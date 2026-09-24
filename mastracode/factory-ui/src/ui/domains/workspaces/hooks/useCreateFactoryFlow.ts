@@ -21,6 +21,10 @@ function isResumableStep(value: string | null): value is Exclude<CreateFactoryFl
   return value !== null && value !== 'name' && CREATE_FACTORY_STEPS.some(step => step === value);
 }
 
+function isKnownStep(value: string | null): value is CreateFactoryFlowStep {
+  return value !== null && CREATE_FACTORY_STEPS.some(step => step === value);
+}
+
 /** A stored step is only honoured while the picks it was reached through are still there. */
 function canResume(step: Exclude<CreateFactoryFlowStep, 'name'>, draft: Omit<CreateFactoryDraft, 'step'>): boolean {
   return step === 'vcs' ? Boolean(draft.name) : Boolean(draft.name && draft.repository);
@@ -88,9 +92,12 @@ function readDraft(): CreateFactoryDraft {
     hostFactoryId: sessionStorage.getItem(HOST_KEY) ?? undefined,
   };
   const step = sessionStorage.getItem(STEP_KEY);
-  if (!isResumableStep(step) || !canResume(step, picks))
-    return { step: 'name', name: picks.name, hostFactoryId: picks.hostFactoryId };
-  return { ...picks, step };
+  // Rewinding to `name` is a legitimate step (via Back), so keep the picks
+  // intact — a follow-up patchDraft merges against them. Only strip picks
+  // when the stored value is unknown or its resume gate fails.
+  if (isKnownStep(step) && (step === 'name' || (isResumableStep(step) && canResume(step, picks))))
+    return { ...picks, step };
+  return { step: 'name', name: picks.name, hostFactoryId: picks.hostFactoryId };
 }
 
 function writeDraft({

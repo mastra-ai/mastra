@@ -104,11 +104,13 @@ describe('platform connect routes', () => {
   });
 
   it('mints a GitLab connect session through the platform registry', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
+    const gitlabSession = { ...SESSION, integrationId: 'gitlab' };
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(gitlabSession, 201));
     const app = buildApp(org1(), fetchImpl);
 
     const response = await app.request('/web/integrations/platform/gitlab/connect-session', { method: 'POST' });
     expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual(gitlabSession);
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://integrations.example.com/v2/integrations/gitlab/connect-sessions',
       expect.objectContaining({ method: 'POST' }),

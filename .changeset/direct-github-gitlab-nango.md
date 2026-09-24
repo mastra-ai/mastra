@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Factory onboarding: connect buttons for GitHub and GitLab now stay in Mastra instead of routing to Mastra Platform. GitHub goes straight to the GitHub App install flow, GitLab uses the same headless Nango auth as Jira and incident.io, and the create-factory wizard gains a per-step back button.
+Added in-app GitHub and GitLab connections during Factory onboarding. Users can connect GitHub through the GitHub App install flow and connect GitLab without routing through Mastra Platform. The create-factory wizard now supports back navigation between steps.
