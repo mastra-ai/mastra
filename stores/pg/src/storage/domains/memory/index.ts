@@ -93,7 +93,7 @@ import type {
   TableRetentionPolicy,
   TABLE_NAMES,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import {
   PgDB,
   resolvePgConfig,
@@ -254,7 +254,7 @@ export class MemoryPG extends MemoryStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema && this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(MemoryPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -294,7 +294,7 @@ export class MemoryPG extends MemoryStorage {
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
     const quotedSchemaName = dbGetSchemaName(schemaName);
 
@@ -341,7 +341,7 @@ export class MemoryPG extends MemoryStorage {
    * Returns default index definitions for this instance's schema.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return MemoryPG.getDefaultIndexDefs(schemaPrefix);
   }
 
