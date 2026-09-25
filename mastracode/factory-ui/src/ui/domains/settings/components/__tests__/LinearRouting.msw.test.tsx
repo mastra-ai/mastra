@@ -159,6 +159,30 @@ describe('LinearRouting board target', () => {
       expect(await within(group).findByText('No matches')).toBeInTheDocument();
     });
 
+    it('shows every remaining source when the search field is hidden', async () => {
+      stub([]);
+      const user = userEvent.setup();
+      const { rerender } = renderMany();
+
+      await user.type(screen.getByRole('textbox', { name: 'Search Linear routing' }), 'release');
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument());
+
+      const remainingProjects = manyProjects.slice(0, 5);
+      rerender(
+        <LinearRouting
+          sourceIds={remainingProjects.map(project => project.id)}
+          projects={manyProjects}
+          teams={[]}
+          factories={factories}
+        />,
+      );
+
+      expect(screen.queryByRole('textbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
+      const group = screen.getByRole('group', { name: 'Linear routing' });
+      expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(5);
+      expect(within(group).getByRole('combobox', { name: 'Factory for Project 1' })).toBeInTheDocument();
+    });
+
     it('saves the binding for a filtered project', async () => {
       const saved = stub([]);
       const user = userEvent.setup();

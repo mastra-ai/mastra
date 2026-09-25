@@ -38,10 +38,10 @@ export function IntakeSourceRouting({
   const bindings = bindingsQuery.data ?? [];
   const busy = saveBinding.isPending;
   const normalizedQuery = query.trim().toLowerCase();
+  const showSearch = sourceIds.length > 5;
   const matchingSources = sourceIds
     .map(sourceId => ({ sourceId, name: sources.find(source => source.id === sourceId)?.name ?? sourceId }))
-    .filter(source => source.name.toLowerCase().includes(normalizedQuery));
-  const showSearch = sourceIds.length > 5;
+    .filter(source => !showSearch || source.name.toLowerCase().includes(normalizedQuery));
 
   const route = (sourceId: string, factoryProjectId: string | null, board: string | null) => {
     saveBinding.mutate(
