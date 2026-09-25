@@ -101,7 +101,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       >
         {labeled ? (
           // Node interiors are always dark (hard-coded radial gradient), so the
-          // name must use a fixed light color — theme tokens like text-icon6
+          // name must use a fixed light color — theme tokens like text-foreground
           // go dark-on-dark in light mode.
           <span
             className={`pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words ${node.isBoundary ? 'text-slate-200' : 'text-purple-100'}`}

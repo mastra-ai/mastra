@@ -98,17 +98,17 @@ function ImportRunDetail({
   return (
     <section
       aria-label="Import run detail"
-      className="border-surface5 bg-surface2 flex min-h-0 flex-col gap-4 rounded-lg border p-4"
+      className="border-border bg-background flex min-h-0 flex-col gap-4 rounded-lg border p-4"
     >
       <header className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <Txt as="h3" variant="ui-lg" className="text-icon6 font-semibold">
+            <Txt as="h3" variant="heading" className="text-foreground font-semibold">
               {run.importerId}
             </Txt>
             <Badge size="xs">{run.status}</Badge>
           </div>
-          <Txt as="p" variant="ui-sm" className="text-icon3 mt-1">
+          <Txt as="p" variant="caption" className="text-muted-foreground mt-1">
             {run.source ?? 'Private source'} · {run.triggerKind} · {elapsed(run)}
           </Txt>
         </div>
@@ -120,21 +120,21 @@ function ImportRunDetail({
       {run.error ? <Notice variant="destructive">{run.error}</Notice> : null}
 
       <div>
-        <Txt as="h4" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+        <Txt as="h4" variant="caption" className="text-foreground mb-2 font-semibold">
           Knowledge activity
         </Txt>
         {activity.length === 0 ? (
-          <Txt as="p" variant="ui-sm" className="text-icon3">
+          <Txt as="p" variant="caption" className="text-muted-foreground">
             This run did not produce visible knowledge changes.
           </Txt>
         ) : (
           <ol className="divide-surface5 divide-y">
             {activity.map(event => (
               <li key={event.id} className="flex justify-between gap-4 py-2 text-sm">
-                <span className="text-icon5">
+                <span className="text-foreground">
                   {event.action} {event.targetType}
                 </span>
-                <time className="text-icon3 text-xs" dateTime={event.createdAt}>
+                <time className="text-muted-foreground text-xs" dateTime={event.createdAt}>
                   {new Date(event.createdAt).toLocaleString()}
                 </time>
               </li>
@@ -157,7 +157,7 @@ function ImportRunDetail({
 
       {transcript ? (
         <div>
-          <Txt as="h4" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+          <Txt as="h4" variant="caption" className="text-foreground mb-2 font-semibold">
             Agent transcript
           </Txt>
           {!transcript.available ? (
@@ -165,16 +165,16 @@ function ImportRunDetail({
           ) : (
             <ol className="flex flex-col gap-2" aria-label="Agent import transcript">
               {transcript.messages.map(message => (
-                <li key={message.id} className="border-surface5 bg-surface3 rounded-md border p-3">
+                <li key={message.id} className="border-border bg-fill rounded-md border p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <Badge size="xs">{message.role}</Badge>
-                    <time className="text-icon3 text-xs" dateTime={message.createdAt}>
+                    <time className="text-muted-foreground text-xs" dateTime={message.createdAt}>
                       {new Date(message.createdAt).toLocaleString()}
                     </time>
                   </div>
-                  <pre className="text-icon4 overflow-x-auto text-xs whitespace-pre-wrap">{message.preview}</pre>
+                  <pre className="text-muted-foreground overflow-x-auto text-xs whitespace-pre-wrap">{message.preview}</pre>
                   {message.truncated ? (
-                    <Txt variant="ui-xs" className="text-icon3 mt-2">
+                    <Txt variant="meta" className="text-muted-foreground mt-2">
                       {formatOmittedBytes(message.omittedBytes)} omitted from this preview.
                     </Txt>
                   ) : null}
@@ -280,7 +280,7 @@ function ImportRuns({
       {runs.isPending ? <SkeletonRows label="Loading import runs" rows={6} /> : null}
       {runs.isError ? <Notice variant="destructive">{runs.error.message}</Notice> : null}
       {runs.data && items.length === 0 ? (
-        <Txt as="p" variant="ui-md" className="text-icon3">
+        <Txt as="p" variant="body" className="text-muted-foreground">
           No import runs match these filters.
         </Txt>
       ) : null}
@@ -290,20 +290,20 @@ function ImportRuns({
             <li key={run.id}>
               <button
                 type="button"
-                className="hover:bg-surface3 flex w-full items-start justify-between gap-4 px-2 py-3 text-left"
+                className="hover:bg-fill-hover flex w-full items-start justify-between gap-4 px-2 py-3 text-left"
                 onClick={() => setSelectedRunId(run.reference)}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-icon5 font-medium">{run.source ?? run.binding}</span>
+                    <span className="text-foreground font-medium">{run.source ?? run.binding}</span>
                     <Badge size="xs">{run.status}</Badge>
                   </div>
-                  <span className="text-icon3 mt-1 block truncate text-xs">
+                  <span className="text-muted-foreground mt-1 block truncate text-xs">
                     {run.triggerKind} · {elapsed(run)}
                   </span>
-                  {run.error ? <span className="text-icon3 mt-1 block truncate text-xs">{run.error}</span> : null}
+                  {run.error ? <span className="text-muted-foreground mt-1 block truncate text-xs">{run.error}</span> : null}
                 </div>
-                <time className="text-icon3 shrink-0 text-xs" dateTime={run.queuedAt}>
+                <time className="text-muted-foreground shrink-0 text-xs" dateTime={run.queuedAt}>
                   {new Date(run.queuedAt).toLocaleString()}
                 </time>
               </button>

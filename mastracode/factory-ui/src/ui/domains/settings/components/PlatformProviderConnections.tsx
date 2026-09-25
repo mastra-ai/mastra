@@ -81,7 +81,7 @@ function ConnectParamsDialog({ provider, title, pending, onSubmit, onClose }: Co
         <DialogBody className="flex flex-col gap-3">
           {fields.map(field => (
             <label key={field.key} className="flex flex-col gap-1.5">
-              <Txt as="span" variant="ui-sm" className="text-icon5">
+              <Txt as="span" variant="caption" className="text-foreground">
                 {field.label}
               </Txt>
               <Input
@@ -94,7 +94,7 @@ function ConnectParamsDialog({ provider, title, pending, onSubmit, onClose }: Co
                 }}
               />
               {field.hint && (
-                <Txt as="span" variant="ui-xs" className="text-icon3">
+                <Txt as="span" variant="meta" className="text-muted-foreground">
                   {field.hint}
                 </Txt>
               )}

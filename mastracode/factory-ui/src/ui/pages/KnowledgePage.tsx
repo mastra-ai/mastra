@@ -149,17 +149,17 @@ function CurationItem({
   const evidenceEntries = [...item.evidence, ...(evidence.data?.pages.flatMap(page => page.evidence) ?? [])];
 
   return (
-    <article className="border-surface5 bg-surface2 flex flex-col gap-2 rounded-lg border border-dashed p-3">
+    <article className="border-border bg-background flex flex-col gap-2 rounded-lg border border-dashed p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <Txt as="h3" variant="ui-md" className="text-icon6 font-medium">
+          <Txt as="h3" variant="body" className="text-foreground font-medium">
             {item.name}
           </Txt>
-          <Txt as="p" variant="ui-xs" className="text-icon3">
+          <Txt as="p" variant="meta" className="text-muted-foreground">
             Version {item.version}
           </Txt>
           {evidenceEntries.length > 0 ? (
-            <ul aria-label={`Evidence for ${item.name}`} className="text-icon3 list-disc pl-4 text-xs">
+            <ul aria-label={`Evidence for ${item.name}`} className="text-muted-foreground list-disc pl-4 text-xs">
               {evidenceEntries.map((entry, index) => (
                 <li key={`${entry.source ?? 'unspecified'}-${index}`}>
                   {entry.source ?? 'unspecified source'}
@@ -188,7 +188,7 @@ function CurationItem({
         </span>
       </div>
       {item.description ? (
-        <Txt as="p" variant="ui-sm" className="text-icon4">
+        <Txt as="p" variant="caption" className="text-muted-foreground">
           {item.description}
         </Txt>
       ) : null}
@@ -216,11 +216,11 @@ function CurationItem({
                 key={target.id}
                 type="button"
                 aria-pressed={target.id === mergeTargetId}
-                className="border-surface5 hover:bg-surface3 flex items-center justify-between rounded border px-2 py-1 text-left text-xs"
+                className="border-border hover:bg-fill-hover flex items-center justify-between rounded border px-2 py-1 text-left text-xs"
                 onClick={() => setMergeTargetId(target.id)}
               >
                 <span>{target.name}</span>
-                <span className="text-icon3">
+                <span className="text-muted-foreground">
                   {target.kind} · v{target.version}
                 </span>
               </button>
@@ -333,15 +333,15 @@ function CurationPanel({
   return (
     <div className="flex flex-col gap-3" data-testid="knowledge-curation-worklist">
       <div>
-        <Txt as="h2" variant="header-sm" className="text-icon6 font-semibold">
+        <Txt as="h2" variant="subheading" className="text-foreground font-semibold">
           Needs curation
         </Txt>
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-muted-foreground">
           Review provisional knowledge before promoting it.
         </Txt>
       </div>
       {items.length === 0 ? (
-        <Txt as="p" variant="ui-md" className="text-icon3">
+        <Txt as="p" variant="body" className="text-muted-foreground">
           No provisional knowledge needs review.
         </Txt>
       ) : null}
@@ -384,11 +384,11 @@ function ScopeTree({
   const [needsCurationOnly, setNeedsCurationOnly] = useState(false);
   const children = tree?.children.filter(scope => !needsCurationOnly || scope.needsCuration) ?? [];
   return (
-    <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
-      <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+    <aside aria-label="Knowledge scopes" className="border-border bg-background w-48 shrink-0 rounded-lg border p-3">
+      <Txt as="h2" variant="caption" className="text-foreground mb-2 font-semibold">
         Scopes
       </Txt>
-      <label className="text-icon4 mb-2 flex items-center gap-2 text-xs">
+      <label className="text-muted-foreground mb-2 flex items-center gap-2 text-xs">
         <input
           type="checkbox"
           checked={needsCurationOnly}
@@ -396,8 +396,8 @@ function ScopeTree({
         />
         Needs curation
       </label>
-      <div className="text-icon4 flex flex-col gap-1 text-xs">
-        <button type="button" className="hover:text-icon6 text-left" onClick={onProjectClick}>
+      <div className="text-muted-foreground flex flex-col gap-1 text-xs">
+        <button type="button" className="hover:text-foreground text-left" onClick={onProjectClick}>
           Project scope
         </button>
         {tree ? (
@@ -406,14 +406,14 @@ function ScopeTree({
               type="button"
               aria-current={tree.scope.id === selectedScopeId ? 'page' : undefined}
               className={cn(
-                'hover:text-icon6 flex w-full items-center justify-between gap-1 rounded-md px-2 py-1 text-left',
-                tree.scope.id === selectedScopeId && 'bg-surface4 text-icon6 font-medium',
+                'hover:text-foreground flex w-full items-center justify-between gap-1 rounded-md px-2 py-1 text-left',
+                tree.scope.id === selectedScopeId && 'bg-fill text-foreground font-medium',
               )}
               onClick={() => onSelectScope(tree.scope.id)}
             >
               <span className="truncate">{tree.scope.name}</span>
               {(tree.scope.memberCount ?? 0) > 0 ? (
-                <span className="text-icon3 shrink-0">
+                <span className="text-muted-foreground shrink-0">
                   {tree.scope.memberCount}
                   {tree.scope.memberCountTruncated ? '+' : ''}
                 </span>
@@ -425,15 +425,15 @@ function ScopeTree({
                 type="button"
                 aria-current={scope.id === selectedScopeId ? 'page' : undefined}
                 className={cn(
-                  'hover:text-icon6 flex w-full items-center justify-between gap-1 rounded-md px-2 py-1 pl-5 text-left',
-                  scope.id === selectedScopeId && 'bg-surface4 text-icon6 font-medium',
-                  scope.needsCuration && 'border-icon3 text-icon3 border-l border-dashed italic',
+                  'hover:text-foreground flex w-full items-center justify-between gap-1 rounded-md px-2 py-1 pl-5 text-left',
+                  scope.id === selectedScopeId && 'bg-fill text-foreground font-medium',
+                  scope.needsCuration && 'border-icon3 text-muted-foreground border-l border-dashed italic',
                 )}
                 onClick={() => onSelectScope(scope.id)}
               >
                 <span className="truncate">{scope.name}</span>
                 {(scope.memberCount ?? 0) > 0 ? (
-                  <span className="text-icon3 shrink-0">
+                  <span className="text-muted-foreground shrink-0">
                     {scope.memberCount}
                     {scope.memberCountTruncated ? '+' : ''}
                   </span>
@@ -545,7 +545,7 @@ function ActivityPanel({
         />
       </div>
       {events.length === 0 ? (
-        <Txt as="p" variant="ui-md" className="text-icon3">
+        <Txt as="p" variant="body" className="text-muted-foreground">
           No knowledge activity matches these filters.
         </Txt>
       ) : (
@@ -553,15 +553,15 @@ function ActivityPanel({
           {events.map(event => (
             <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
               <div>
-                <span className="text-icon5 font-medium">{event.action}</span>
-                <span className="text-icon3 ml-2">{event.targetType}</span>
+                <span className="text-foreground font-medium">{event.action}</span>
+                <span className="text-muted-foreground ml-2">{event.targetType}</span>
                 {event.sourceId && event.importRunId ? (
                   <ImportRunLink importerId={event.sourceId} runId={event.importRunId} onOpen={onOpenRun} />
                 ) : (
-                  <span className="text-icon3 ml-2">{event.sourceType}</span>
+                  <span className="text-muted-foreground ml-2">{event.sourceType}</span>
                 )}
               </div>
-              <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
+              <time className="text-muted-foreground shrink-0 text-xs" dateTime={event.createdAt}>
                 {new Date(event.createdAt).toLocaleString()}
               </time>
             </li>
@@ -641,7 +641,7 @@ function ActiveKnowledgeView({
 function ThreadGone({ onBack }: { onBack: () => void }) {
   return (
     <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
-      <Txt as="p" variant="ui-md" className="text-icon4">
+      <Txt as="p" variant="body" className="text-muted-foreground">
         This session's knowledge is no longer available.
       </Txt>
       <button type="button" className="text-sm text-purple-300 hover:underline" onClick={onBack}>
@@ -663,24 +663,24 @@ function KnowledgeScopeMap({
   return (
     <div
       aria-label="Scope map"
-      className="bg-surface1 absolute inset-0 z-[5] flex flex-wrap content-start gap-4 overflow-auto p-16"
+      className="bg-background absolute inset-0 z-[5] flex flex-wrap content-start gap-4 overflow-auto p-16"
     >
       {lenses.map(lens => (
         <button
           key={lens.scope.id}
           type="button"
-          className="border-surface4 bg-surface2 hover:border-accent1 min-h-40 min-w-64 rounded-[40%] border-2 border-dashed p-6 text-left transition-colors"
+          className="border-border bg-background hover:border-accent1 min-h-40 min-w-64 rounded-[40%] border-2 border-dashed p-6 text-left transition-colors"
           onClick={() => onOpen(lens.scope.id)}
         >
-          <Txt as="span" variant="ui-md" className="text-icon6 block font-medium">
+          <Txt as="span" variant="body" className="text-foreground block font-medium">
             {lens.scope.name}
           </Txt>
-          <Txt as="span" variant="ui-xs" className="text-icon3 mt-1 block">
+          <Txt as="span" variant="meta" className="text-muted-foreground mt-1 block">
             {lens.nodes.length} visible nodes
           </Txt>
           <span className="mt-4 flex max-w-72 flex-wrap gap-1" aria-label={`${lens.scope.name} members`}>
             {lens.nodes.slice(0, 12).map(node => (
-              <span key={node.id} className="bg-surface4 text-icon5 rounded-full px-2 py-1 text-xs">
+              <span key={node.id} className="bg-fill text-foreground rounded-full px-2 py-1 text-xs">
                 {node.name}
               </span>
             ))}
@@ -842,8 +842,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     }
   } else if (!selectedScopeId) {
     body = (
-      <div className="border-surface4 bg-surface2 flex min-h-80 items-center justify-center rounded-lg border">
-        <Txt as="p" variant="ui-md" className="text-icon3 max-w-80 text-center">
+      <div className="border-border bg-background flex min-h-80 items-center justify-center rounded-lg border">
+        <Txt as="p" variant="body" className="text-muted-foreground max-w-80 text-center">
           Select a scope to open its bounded knowledge lens.
         </Txt>
       </div>
@@ -887,12 +887,12 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       >
         <div
           data-testid="knowledge-scope-overlay"
-          className="border-surface4 bg-surface2/90 absolute top-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-md border px-3 py-2"
+          className="border-border bg-background/90 absolute top-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-md border px-3 py-2"
         >
-          <Txt as="span" variant="ui-xs" className="text-icon4">
+          <Txt as="span" variant="meta" className="text-muted-foreground">
             Lens
           </Txt>
-          <Txt as="span" variant="ui-sm" className="text-icon6 font-medium">
+          <Txt as="span" variant="caption" className="text-foreground font-medium">
             {graph.scope.name}
           </Txt>
           {Array.from(
@@ -1034,7 +1034,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                 role="tab"
                 aria-selected={activeView === view}
                 className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                  activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+                  activeView === view ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => setView(view)}
               >

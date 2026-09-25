@@ -106,7 +106,7 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
   if (routingQuery.isError) {
     return (
       <span className="flex items-center gap-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3">
+        <Txt as="span" variant="meta" className="text-muted-foreground">
           Couldn't load sync destinations.
         </Txt>
         <Button size="xs" variant="ghost" onClick={() => void routingQuery.refetch()}>
@@ -161,7 +161,7 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger size="xs" variant="ghost" aria-label={`Sync to: ${summary}`}>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
+        <Txt as="span" variant="meta" className="text-muted-foreground">
           Sync to
         </Txt>
         {summary}
@@ -220,11 +220,11 @@ function ConnectionRow({
           aria-hidden
           className={`h-1.5 w-1.5 shrink-0 rounded-full ${needsReauth ? 'bg-red-400' : 'bg-emerald-400'}`}
         />
-        <Txt as="span" variant="ui-sm" className="text-icon5 truncate">
+        <Txt as="span" variant="caption" className="text-foreground truncate">
           {label}
         </Txt>
         {connectedAt && (
-          <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+          <Txt as="span" variant="meta" className="text-muted-foreground shrink-0">
             · {connectedAt}
           </Txt>
         )}
@@ -277,7 +277,7 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
       <header className="flex min-w-0 items-center gap-3">
         <IntegrationLogo provider={provider} displayName={meta.displayName} logoUrl={logoUrl ?? undefined} />
         <div className="min-w-0 flex-1">
-          <Txt as="h4" variant="ui-md" className="text-icon6 font-semibold">
+          <Txt as="h4" variant="body" className="text-foreground font-semibold">
             {meta.displayName}
           </Txt>
         </div>
@@ -290,18 +290,18 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           />
         )}
       </header>
-      <Txt as="p" variant="ui-xs" className="text-icon3">
+      <Txt as="p" variant="meta" className="text-muted-foreground">
         {description}
       </Txt>
 
       {isLoading && (
-        <Txt as="span" variant="ui-xs" className="text-icon3 mt-auto border-t border-border1 pt-3">
+        <Txt as="span" variant="meta" className="text-muted-foreground mt-auto border-t border-border pt-3">
           Loading connection status…
         </Txt>
       )}
       {isError && !unavailable && (
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border1 pt-3">
-          <Txt as="span" variant="ui-xs" className="text-icon3">
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
+          <Txt as="span" variant="meta" className="text-muted-foreground">
             Couldn't load connections.
           </Txt>
           <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
@@ -310,12 +310,12 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
         </div>
       )}
       {isError && unavailable && (
-        <Txt as="span" variant="ui-xs" className="text-icon3 mt-auto border-t border-border1 pt-3">
+        <Txt as="span" variant="meta" className="text-muted-foreground mt-auto border-t border-border pt-3">
           Platform connect isn't available in this deployment.
         </Txt>
       )}
       {!isLoading && !isError && isConnected && (
-        <ul className="mt-auto flex flex-col gap-1 border-t border-border1 pt-2">
+        <ul className="mt-auto flex flex-col gap-1 border-t border-border pt-2">
           {liveConnections.map(connection => (
             <ConnectionRow
               key={connection.id}
