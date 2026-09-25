@@ -634,13 +634,13 @@ describe('AgentChannels', () => {
     });
 
     describe('approval requester check', () => {
-      async function setup(record: Record<string, unknown>) {
+      async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
         const adapter = createMockAdapter('discord');
         const channels = new AgentChannels({ adapters: { discord: adapter } });
         channels.__setAgent(mockAgent);
         const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
         channels.__setLogger(logger as any);
-        await channels.initialize(makeMastra());
+        await channels.initialize(mastra);
         (channels as any).findThreadMapping = vi
           .fn()
           .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
@@ -677,6 +677,38 @@ describe('AgentChannels', () => {
 
       it('lets the requester approve', async () => {
         const { dispatchApproval, click } = await setup({ requesterId: 'alice' });
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('checks the requester when the approval is recovered from stored messages', async () => {
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          {
+            role: 'user',
+            content: {
+              providerMetadata: { mastra: { channels: { discord: { author: { userId: 'alice' } } } } },
+            },
+          },
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+
         await click('tool_approve:tool-call-1', 'alice');
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });

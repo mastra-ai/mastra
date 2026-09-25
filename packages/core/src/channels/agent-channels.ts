@@ -579,17 +579,7 @@ export class AgentChannels {
               let toolArgs: Record<string, unknown> | undefined;
 
               const stashed = this.pendingApprovalCards.get(toolCallId);
-              // Only the user whose message triggered the tool call may answer
-              // its approval card. Skip the check when either identity is unknown.
-              const requesterId = stashed?.requesterId;
-              const actorId = event.user?.userId;
-              if (requesterId && actorId && requesterId !== actorId) {
-                this.log(
-                  'info',
-                  `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer toolCallId=${toolCallId}`,
-                );
-                return;
-              }
+              let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
@@ -607,7 +597,7 @@ export class AgentChannels {
                   orderBy: { field: 'createdAt', direction: 'DESC' },
                 });
 
-                for (const msg of messages) {
+                for (const [index, msg] of messages.entries()) {
                   const pending = msg.content?.metadata?.pendingToolApprovals as
                     | Record<
                         string,
@@ -626,6 +616,15 @@ export class AgentChannels {
                         runId = toolData.parentRunId ?? toolData.runId;
                         toolName = toolData.toolName;
                         toolArgs = toolData.args;
+                        // The card's owner is the author of the closest earlier
+                        // user message (messages are newest-first).
+                        const requestMessage = messages.slice(index + 1).find(m => m.role === 'user');
+                        const author = (
+                          requestMessage?.content?.providerMetadata?.mastra as
+                            | { channels?: Record<string, { author?: { userId?: string } }> }
+                            | undefined
+                        )?.channels?.[platform]?.author;
+                        requesterId = author?.userId;
                         break;
                       }
                     }
@@ -636,6 +635,17 @@ export class AgentChannels {
 
               if (!runId) {
                 this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
+                return;
+              }
+
+              // Only the user whose message triggered the tool call may answer
+              // its approval card. Skip the check when either identity is unknown.
+              const actorId = event.user?.userId;
+              if (requesterId && actorId && requesterId !== actorId) {
+                this.log(
+                  'info',
+                  `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer toolCallId=${toolCallId}`,
+                );
                 return;
               }
 
@@ -680,7 +690,7 @@ export class AgentChannels {
                 const { requestContext } = handlerContext;
                 requestContext.set('channel', channelContext);
 
-                const renderContext = this._buildRenderContext(chatThread, platform, undefined, stashed?.requesterId);
+                const renderContext = this._buildRenderContext(chatThread, platform, undefined, requesterId);
                 requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
                 try {
@@ -736,7 +746,7 @@ export class AgentChannels {
                 chatThread,
                 platform,
                 { toolCallId, messageId },
-                stashed?.requesterId,
+                requesterId,
               );
               requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
