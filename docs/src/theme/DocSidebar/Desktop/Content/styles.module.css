@@ -54,7 +54,7 @@
     margin-bottom: var(--docusaurus-announcement-bar-height);
   }
 
-  .scrollFade {
+  .scroll-fade {
     position: absolute;
     bottom: 1rem;
     left: 1rem;

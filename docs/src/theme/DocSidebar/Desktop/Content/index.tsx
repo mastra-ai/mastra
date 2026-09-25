@@ -172,7 +172,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
         )}
       </nav>
       {hasMoreBelow && (
-        <div className={styles.scrollFade} aria-hidden="true">
+        <div className={styles['scroll-fade']} aria-hidden="true">
           <svg
             width="16"
             height="16"
