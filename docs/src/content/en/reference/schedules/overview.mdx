@@ -96,7 +96,7 @@ const schedule = await mastra.schedules.create({
     type: 'number | Date',
     isOptional: true,
     description:
-      'Fire the schedule once at this time (epoch milliseconds or `Date`). After it fires, the schedule moves to `completed`. A past `runAt` fires on the next scheduler tick.',
+      'Fire the schedule once at this time (epoch milliseconds or `Date`). After it fires, the schedule moves to `completed`. Must be in the future.',
   },
   {
     name: 'endAt',
@@ -215,7 +215,7 @@ const schedule = await mastra.schedules.create({
     type: 'number | Date',
     isOptional: true,
     description:
-      'Fire the schedule once at this time (epoch milliseconds or `Date`). After it fires, the schedule moves to `completed`. A past `runAt` fires on the next scheduler tick.',
+      'Fire the schedule once at this time (epoch milliseconds or `Date`). After it fires, the schedule moves to `completed`. Must be in the future.',
   },
   {
     name: 'endAt',

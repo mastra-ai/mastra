@@ -93,6 +93,7 @@ describe('validateScheduleTiming', () => {
 
   it('rejects invalid dates', () => {
     expect(() => validateScheduleTiming({ runAt: new Date('nope') })).toThrow(/runAt/);
+    expect(() => validateScheduleTiming({ runAt: Date.now() - 1000 })).toThrow(/future/);
   });
 });
 

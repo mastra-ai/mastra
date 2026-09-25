@@ -75,8 +75,8 @@ export function computeNextFire(
 }
 
 /**
- * Validate the timing fields of a schedule: exactly one of `cron` or `runAt`,
- * `endAt` only alongside `cron` and in the future. Throws on invalid input.
+ * Validate the timing fields of a schedule: exactly one of `cron` or a future
+ * `runAt`, `endAt` only alongside `cron` and in the future. Throws on invalid input.
  */
 export function validateScheduleTiming(input: {
   cron?: string;
@@ -90,8 +90,12 @@ export function validateScheduleTiming(input: {
     throw new Error('Schedule must specify exactly one of `cron` or `runAt`.');
   }
   if (hasRunAt) {
-    if (!Number.isFinite(toEpochMs(input.runAt!))) {
+    const runAt = toEpochMs(input.runAt!);
+    if (!Number.isFinite(runAt)) {
       throw new Error('Schedule `runAt` must be a valid date or ms epoch timestamp.');
+    }
+    if (runAt <= Date.now()) {
+      throw new Error('Schedule `runAt` must be in the future.');
     }
     if (input.endAt !== undefined) {
       throw new Error('Schedule `endAt` is only allowed together with `cron`.');
