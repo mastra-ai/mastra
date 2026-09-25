@@ -1,7 +1,10 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
-import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
-import { format, formatDistanceToNow } from 'date-fns';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { type ReactNode, useMemo } from 'react';
 import type { ExperimentMetrics } from '../hooks/use-experiment-metrics';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -24,17 +27,6 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
       </DataKeysAndValues.Value>
     </>
   );
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`;
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = Math.round((ms % 60_000) / 1000);
-  if (minutes < 60) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remMinutes = minutes % 60;
-  return remMinutes > 0 ? `${hours}h ${remMinutes}m` : `${hours}h`;
 }
 
 /**
@@ -62,8 +54,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
     if (experiment.status === 'running') return 'Running…';
     if (!experiment.startedAt || !experiment.completedAt) return '—';
     const ms = new Date(experiment.completedAt).getTime() - new Date(experiment.startedAt).getTime();
-    if (ms < 0) return '—';
-    return formatDuration(ms);
+    return formatDuration(ms) ?? '—';
   })();
 
   return (
@@ -98,9 +89,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
 
       <MetaRow label="Started">
         {startedDate ? (
-          <span title={formatDistanceToNow(startedDate, { addSuffix: true })}>
-            {format(startedDate, 'MMM d, h:mm a')}
-          </span>
+          <span title={formatRelativeTime(startedDate)}>{formatDate(startedDate, 'date-time')}</span>
         ) : (
           <span>—</span>
         )}
@@ -117,7 +106,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
               <span className="text-muted-foreground">—</span>
             ) : (
               <>
-                <span>{formatCompact(metrics.data.totalTokens)}</span>
+                <span>{formatCompactNumber(metrics.data.totalTokens)}</span>
                 {metrics.data.estimatedCost != null && (
                   <span className="text-muted-foreground">
                     · {formatCost(metrics.data.estimatedCost, metrics.data.costUnit)}
@@ -132,7 +121,9 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
             {metrics.data?.avgAgentDurationMs == null ? (
               <span className="text-muted-foreground">—</span>
             ) : (
-              <span>{formatDuration(Math.round(metrics.data.avgAgentDurationMs))}</span>
+              <Txt as="span" variant="body-sm" font="mono">
+                {formatDuration(Math.round(metrics.data.avgAgentDurationMs))}
+              </Txt>
             )}
           </MetaRow>
         </>

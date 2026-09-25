@@ -1,5 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import type { ChannelProviderRegistration } from './providers/channel-provider.js';
+import { CHANNELS as CHANNELS_LIST } from './providers/channels.js';
 import { PROVIDERS as GENERATED_PROVIDERS } from './providers/index.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
@@ -27,8 +29,25 @@ export type ProviderRegistration = ProxyProviderRegistration | McpProviderRegist
  * Providers with checked-in HTTP toolsets. MCP-backed providers are discovered
  * from the Platform integration catalog at runtime.
  */
-export const PROVIDERS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
+export const TOOLS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
+
+/**
+ * @deprecated Use `TOOLS`. This alias is retained for one release cycle so
+ * downstream consumers keep working; it will be removed in the next minor.
+ */
+export const PROVIDERS: readonly ProviderRegistration[] = TOOLS;
 
 export function findRegistration(integrationId: string): ProviderRegistration | undefined {
-  return PROVIDERS.find(p => p.integrationId === integrationId);
+  return TOOLS.find(p => p.integrationId === integrationId);
+}
+
+/**
+ * Channel-capable providers with a hand-maintained `channels()` registration.
+ * The launch ships three (Slack, Telegram, Discord); the provider generator
+ * grows to cover new entries when a fourth lands.
+ */
+export const CHANNELS: readonly ChannelProviderRegistration[] = CHANNELS_LIST;
+
+export function findChannelRegistration(integrationId: string): ChannelProviderRegistration | undefined {
+  return CHANNELS.find(c => c.integrationId === integrationId);
 }

@@ -77,6 +77,9 @@ vi.mock('@mastra/otel-exporter', () => {
         'gen_ai.provider.name': span.attributes?.provider,
         'gen_ai.usage.input_tokens': span.attributes?.usage?.inputTokens,
         'gen_ai.usage.output_tokens': span.attributes?.usage?.outputTokens,
+        ...(span.attributes?.usage?.outputDetails?.reasoning !== undefined
+          ? { 'gen_ai.usage.reasoning_tokens': span.attributes.usage.outputDetails.reasoning }
+          : {}),
         'mastra.span.type': span.type,
         ...(span.metadata
           ? Object.fromEntries(Object.entries(span.metadata).map(([k, v]) => [`mastra.metadata.${k}`, v]))
@@ -513,6 +516,25 @@ describe('LangfuseExporter', () => {
       expect(attrs['gen_ai.output.messages']).toBe(JSON.stringify({ text: 'Hi there' }));
       expect(attrs['langfuse.observation.input']).toBeUndefined();
       expect(attrs['langfuse.observation.output']).toBeUndefined();
+    });
+
+    it('uses the Langfuse semconv key for inclusive reasoning usage', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'gpt-6-luna',
+            provider: 'azure.openai.responses',
+            usage: { inputTokens: 39_056, outputTokens: 2_023, outputDetails: { reasoning: 1_632 } },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['gen_ai.usage.output_tokens']).toBe(2_023);
+      expect(attrs['gen_ai.usage.reasoning.output_tokens']).toBe(1_632);
+      expect(attrs['gen_ai.usage.reasoning_tokens']).toBeUndefined();
     });
 
     it('maps root-span input/output to langfuse.trace.input/output', async () => {

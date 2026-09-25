@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { ChannelSessionRejectedError } from '@mastra/core/channels';
 import type {
   ChannelHandler,
   ChannelHandlerContext,
@@ -16,6 +17,7 @@ import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import {
   createSourceControlSessionLookup,
+  FactorySourceControlConflictError,
   hydrateFactorySession,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
@@ -53,6 +55,8 @@ type HandlerMessage = Parameters<ChannelHandler>[1];
 const SLACK_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_WORK_ITEM_TITLE_CHARS = 80;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+class SlackSessionStartError extends Error {}
 
 /**
  * A card is titled with what the sender wrote. Cutting counts graphemes, not
@@ -341,9 +345,23 @@ function threadBranch(threadId: string): string {
  * factory has a repository gets a Factory user-session id — the controller
  * session then materializes the repo sandbox via the factory's dynamic
  * workspace (clone + PAT), the session shows up in the web Sessions list, and
- * View Session deep-links land on the normal workspace route. Everything else
- * (unlinked, unrouted, repo-less, or no source control) keeps the chat-only
- * `defaultResourceId`.
+ * View Session deep-links land on the normal workspace route.
+ *
+ * A gated deployment refuses a thread it cannot place, rather than falling back
+ * to a chat-only session: a repo-backed thread is the whole point of the
+ * integration, and answering in a chat-only one would run the sender's request
+ * in no project, on the SDK's built-in defaults. A linked sender whose project
+ * cannot start a session gets an actionable error in Slack; the dispatch gate
+ * handles unlinked or unrouted senders before this hook runs.
+ * The hook only runs when a NEW thread is actually created (`getOrCreateThread`
+ * resolves the owner lazily), so an established conversation is never touched:
+ * it keeps its session, its model, and its history.
+ *
+ * The chat-only `channel:...` id survives for two cases where refusing would be
+ * wrong: a deployment that cannot produce a repo-backed thread at all (no
+ * account linking, no projects, or no source-control integration registered),
+ * and a message carrying no sender id. In both, a `channel:` thread is the only
+ * shape a session can take.
  *
  * Pure lookups only — cards for unlinked/unrouted senders are the dispatch
  * gate's job; this hook must never post.
@@ -358,16 +376,30 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
     // default is the per-USER memory key. Chat-only fallbacks must stay
     // per-thread, so reproduce the controller default here.
     const chatOnlyResourceId = `channel:${thread.id}`;
+    // A deployment with no account linking, no projects, or no source-control
+    // integration cannot produce a repo-backed thread at all, so a `channel:`
+    // thread is the only shape it has. Every refusal below is a different thing
+    // entirely: a sender the bot cannot place, in a deployment that can.
     if (!accountLinks || !projects || sourceControls.length === 0) return chatOnlyResourceId;
+    // No sender id at all — a malformed message, not a sender the host turned
+    // away. There is nothing to place, so give it the per-thread memory key.
+    if (!message.author.userId) return chatOnlyResourceId;
+
+    const externalTeamId = rawTeamId(message.raw);
+    if (!externalTeamId) {
+      throw new ChannelSessionRejectedError('No Slack workspace id on the message — the sender cannot be identified');
+    }
     try {
-      const externalTeamId = rawTeamId(message.raw);
-      if (!externalTeamId) return chatOnlyResourceId;
       const link = await accountLinks.getAccountLink({
         platform,
         externalTeamId,
         externalUserId: message.author.userId,
       });
-      if (!link) return chatOnlyResourceId;
+      if (!link) {
+        throw new ChannelSessionRejectedError(
+          `Slack sender ${message.author.userId} is not linked to a Factory account`,
+        );
+      }
 
       // Same chain as `resolveFactoryForLink`, minus prompts/stamping: the
       // dispatch gate has already run (and stamped a lone factory) by the
@@ -380,12 +412,33 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
         const factories = await projects.list({ orgId });
         if (factories.length === 1) factoryProjectId = factories[0]!.id;
       }
-      if (!factoryProjectId) return chatOnlyResourceId;
+      if (!factoryProjectId) {
+        throw new ChannelSessionRejectedError(`Linked Slack sender ${message.author.userId} has no Factory project`);
+      }
 
+      // Linked and routed, so a repo-backed session is not a preference: with no
+      // repository to work in there is no thread to start, and starting one
+      // anyway would answer in a project the sender never picked, on the SDK's
+      // built-in defaults.
       const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
-      if (!sourceControl) return chatOnlyResourceId;
+      if (!sourceControl) {
+        const connections = await Promise.all(
+          sourceControls.map(sourceControl => sourceControl.connections.list({ orgId, factoryProjectId })),
+        );
+        throw new SlackSessionStartError(
+          connections.some(rows => rows.length > 0)
+            ? 'Could not start a session: link a repository to this Factory project.'
+            : 'Could not start a session: connect source control to this Factory project.',
+        );
+      }
       const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
-      if (!repo.found) return chatOnlyResourceId;
+      if (!repo.found) {
+        throw new SlackSessionStartError(
+          repo.reason === 'connection'
+            ? 'Could not start a session: connect source control to this Factory project.'
+            : 'Could not start a session: link a repository to this Factory project.',
+        );
+      }
 
       const branch = threadBranch(thread.id);
       // Attributed to the Slack sender, not to whoever connected the repository:
@@ -408,9 +461,17 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       });
       return session.sessionId;
     } catch (error) {
-      // Fall back to a chat-only session rather than dropping the message.
-      console.warn('[slack] repo-backed session resolution failed for thread', thread.id, error);
-      return chatOnlyResourceId;
+      if (error instanceof ChannelSessionRejectedError || error instanceof SlackSessionStartError) throw error;
+      if (error instanceof FactorySourceControlConflictError) {
+        throw new SlackSessionStartError(
+          'Could not start a session: this Factory project has repositories from more than one source-control provider.',
+          { cause: error },
+        );
+      }
+      console.error('[slack] failed to start repo-backed session for thread', thread.id, error);
+      throw new SlackSessionStartError('Could not start a session right now. Please try again later.', {
+        cause: error,
+      });
     }
   };
 }

@@ -480,6 +480,7 @@ describe('PlatformGithubIntegration', () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(json(pullRequest))
+      .mockResolvedValueOnce(json({ connected: false, githubUsername: null }))
       .mockResolvedValueOnce(
         json({
           id: 91,
@@ -509,9 +510,84 @@ describe('PlatformGithubIntegration', () => {
       actingUserId: 'user-42',
     });
 
-    for (const call of fetchImpl.mock.calls) {
-      expect((call[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
-    }
+    expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+    expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+  });
+
+  it('assigns a PR to the verified GitHub account of its opener', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      if (url.includes('/user-connection?')) return json({ connected: true, githubUsername: 'grace' });
+      if (url.endsWith('/token')) return json({ token: 'installation-token' });
+      if (url.endsWith('/issues/34/assignees')) return json({ assignees: [{ login: 'grace' }] });
+      throw new Error(`Unexpected request: ${url} ${init?.method}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const created = await integration.versionControl.createPullRequest({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      title: 'Ship intake',
+      baseBranch: 'main',
+      headBranch: 'feat/intake',
+      actingUserId: 'user-42',
+    });
+
+    expect(created.assignees).toEqual(['grace']);
+    expect(fetchImpl.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls',
+      'https://platform.example.com/v1/server/github-app/user-connection?userId=user-42',
+      'https://platform.example.com/v1/server/github-app/installations/7/token',
+      'https://api.github.com/repos/acme/app/issues/34/assignees',
+    ]);
+    expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toEqual({
+      repositories: ['app'],
+      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+    });
+    expect(JSON.parse(String((fetchImpl.mock.calls[3]?.[1] as RequestInit).body))).toEqual({ assignees: ['grace'] });
+  });
+
+  it('does not claim an assignment when GitHub silently ignores the requested user', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      if (url.includes('/user-connection?')) return json({ connected: true, githubUsername: 'grace' });
+      if (url.endsWith('/token')) return json({ token: 'installation-token' });
+      if (url.endsWith('/issues/34/assignees')) return json({ assignees: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const created = await integration.versionControl.createPullRequest({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      title: 'Ship intake',
+      baseBranch: 'main',
+      headBranch: 'feat/intake',
+      actingUserId: 'user-42',
+    });
+    expect(created.assignees).toEqual([]);
+  });
+
+  it('keeps a created PR when assignment fails', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      if (url.includes('/user-connection?')) return json({ connected: true, githubUsername: 'grace' });
+      if (url.endsWith('/token')) return json({ token: 'installation-token' });
+      if (url.endsWith('/issues/34/assignees')) return json({ message: 'Forbidden' }, 403);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    await expect(
+      integration.versionControl.createPullRequest({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        title: 'Ship intake',
+        baseBranch: 'main',
+        headBranch: 'feat/intake',
+        actingUserId: 'user-42',
+      }),
+    ).resolves.toMatchObject({ id: '34', url: pullRequest.htmlUrl });
   });
 
   it('maps every version-control operation to its platform endpoint', async () => {

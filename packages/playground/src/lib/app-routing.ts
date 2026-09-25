@@ -1,7 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { redirect } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 
 export const agentThreadsIndexLoader = ({ params }: LoaderFunctionArgs) =>
   redirect(`/agents/${params.agentId}/threads/new`);
@@ -79,4 +79,6 @@ export const paths: LinkComponentProviderProps['paths'] = {
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
   experimentItemLink: (experimentId: string, itemId: string) =>
     `/experiments/${experimentId}/items/${encodeURIComponent(itemId)}`,
+  traceLink: (traceId: string, spanId?: string) =>
+    `/traces?traceId=${encodeURIComponent(traceId)}${spanId ? `&spanId=${encodeURIComponent(spanId)}` : ''}`,
 };

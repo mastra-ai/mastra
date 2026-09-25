@@ -74,6 +74,7 @@ export class TelegramProvider implements ChannelProvider {
   /** Cached sync view of whether any active bot is registered (for {@link getInfo}). */
   #configured = false;
   #initPromise: Promise<void> | null = null;
+  #connectingBotTokens = new Set<string>();
 
   constructor(config: TelegramProviderConfig = {}) {
     this.#config = config;
@@ -128,7 +129,8 @@ export class TelegramProvider implements ChannelProvider {
         properties: {
           botToken: {
             type: 'string',
-            description: 'BotFather bot token. Omit to receive a BotFather deep link instead.',
+            description:
+              'BotFather bot token. Omit to use the provider default token. If neither is set, returns a BotFather deep link.',
           },
           name: {
             type: 'string',
@@ -170,12 +172,18 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   /**
-   * Update runtime provider settings. Telegram has no global auth credential to
-   * clear (per-bot tokens are managed via {@link connect}/{@link disconnect}),
-   * so `null` is a no-op; an object merges `apiBaseUrl`/`baseUrl` overrides.
+   * Update runtime provider settings. Pass `botToken` to change the default
+   * bot token new {@link connect} calls fall back to when none is supplied
+   * per-agent (matching {@link SlackProvider.configure}'s rotation pattern);
+   * pass `apiBaseUrl`/`baseUrl` to point the adapter at a different host.
+   * `null` clears the default `botToken` only — per-bot installs are managed
+   * via {@link connect}/{@link disconnect}.
    */
-  async configure(credentials: { apiBaseUrl?: string; baseUrl?: string } | null): Promise<void> {
-    if (credentials === null) return;
+  async configure(credentials: { apiBaseUrl?: string; baseUrl?: string; botToken?: string } | null): Promise<void> {
+    if (credentials === null) {
+      this.#config = { ...this.#config, botToken: undefined };
+      return;
+    }
     const apiBaseUrlChanged =
       credentials.apiBaseUrl !== undefined && credentials.apiBaseUrl !== this.#config.apiBaseUrl;
     this.#config = { ...this.#config, ...credentials };
@@ -199,10 +207,10 @@ export class TelegramProvider implements ChannelProvider {
   /**
    * Connect an agent to a Telegram bot.
    *
-   * - With `options.botToken`: validate via `getMe`, mint a per-bot webhook
-   *   secret, persist the installation, register the transport (webhook or
-   *   polling), and return `{ type: 'immediate' }`.
-   * - Without a token: persist a pending installation and return
+   * - With `options.botToken` or a provider default token: validate via `getMe`,
+   *   mint a per-bot webhook secret, persist the installation, register the
+   *   transport (webhook or polling), and return `{ type: 'immediate' }`.
+   * - Without either token: persist a pending installation and return
    *   `{ type: 'deep_link' }` pointing at BotFather.
    */
   async connect(agentId: string, options: TelegramConnectOptions = {}): Promise<ChannelConnectResult> {
@@ -212,7 +220,12 @@ export class TelegramProvider implements ChannelProvider {
       throw new Error(`Agent "${agentId}" is already connected to Telegram. Disconnect first to reconnect.`);
     }
 
-    if (!options.botToken) {
+    // Per-call token wins, falling back to the provider-config default so
+    // callers can hold the bot token in `new TelegramProvider({ botToken })`
+    // (or via `channels()` off a Mastra Connect credential) and not repeat it
+    // at every connect() site.
+    const botToken = options.botToken ?? this.#config.botToken;
+    if (!botToken) {
       const installationId = existing?.id ?? randomUUID();
       await store.save({
         id: installationId,
@@ -224,9 +237,6 @@ export class TelegramProvider implements ChannelProvider {
       return { type: 'deep_link', url: BOTFATHER_DEEP_LINK, installationId };
     }
 
-    const me = await getMe(options.botToken, this.#apiBaseUrl());
-    const installationId = existing?.id ?? randomUUID();
-    const webhookId = existing?.webhookId ?? randomUUID();
     const baseUrl = this.#getBaseUrl();
     const mode = this.#resolveMode(baseUrl);
     if (mode === 'webhook' && !baseUrl) {
@@ -234,30 +244,52 @@ export class TelegramProvider implements ChannelProvider {
         'TelegramProvider needs a baseUrl to register a webhook. Set `baseUrl`, configure the Mastra server, or use `mode: "polling"`.',
       );
     }
-    const webhookUrl = mode === 'webhook' ? `${baseUrl}/${PLATFORM}/events/${webhookId}` : undefined;
-    const commands = normalizeCommands(options.commands ?? this.#config.commands ?? DEFAULT_COMMANDS);
-    const installation: TelegramInstallation = {
-      id: installationId,
-      agentId,
-      webhookId,
-      status: 'active',
-      botToken: options.botToken,
-      secretToken: generateSecretToken(),
-      username: options.name ?? me.username ?? me.first_name,
-      webhookUrl,
-      commands: commands.length ? commands : undefined,
-      installedAt: existing?.installedAt ?? new Date(),
-    };
+    if (mode === 'webhook') {
+      if (this.#connectingBotTokens.has(botToken)) {
+        throw new Error('This Telegram bot is already being connected. Wait for that connection to finish.');
+      }
+      // Reserve before the storage lookup so concurrent calls cannot both register a webhook.
+      this.#connectingBotTokens.add(botToken);
+    }
+    try {
+      if (mode === 'webhook') {
+        const duplicate = (await store.list()).find(i => i.status === 'active' && i.botToken === botToken);
+        if (duplicate) {
+          throw new Error(
+            `This Telegram bot is already connected to agent "${duplicate.agentId}". Disconnect it before connecting another agent.`,
+          );
+        }
+      }
+      const me = await getMe(botToken, this.#apiBaseUrl());
+      const installationId = existing?.id ?? randomUUID();
+      const webhookId = existing?.webhookId ?? randomUUID();
+      const webhookUrl = mode === 'webhook' ? `${baseUrl}/${PLATFORM}/events/${webhookId}` : undefined;
+      const commands = normalizeCommands(options.commands ?? this.#config.commands ?? DEFAULT_COMMANDS);
+      const installation: TelegramInstallation = {
+        id: installationId,
+        agentId,
+        webhookId,
+        status: 'active',
+        botToken,
+        secretToken: generateSecretToken(),
+        username: options.name ?? me.username ?? me.first_name,
+        webhookUrl,
+        commands: commands.length ? commands : undefined,
+        installedAt: existing?.installedAt ?? new Date(),
+      };
 
-    // Register the transport before persisting so a Bot API failure surfaces to
-    // the caller instead of leaving a half-connected install.
-    await this.#registerTransport(installation, mode);
-    await this.#registerCommands(installation);
-    await store.save(installation);
-    await this.#activateInstallation(installation);
-    this.#configured = true;
-    await this.#config.onInstall?.(installation);
-    return { type: 'immediate', installationId };
+      // Register the transport before persisting so a Bot API failure surfaces to
+      // the caller instead of leaving a half-connected install.
+      await this.#registerTransport(installation, mode);
+      await this.#registerCommands(installation);
+      await store.save(installation);
+      await this.#activateInstallation(installation);
+      this.#configured = true;
+      await this.#config.onInstall?.(installation);
+      return { type: 'immediate', installationId };
+    } finally {
+      if (mode === 'webhook') this.#connectingBotTokens.delete(botToken);
+    }
   }
 
   /** Disconnect an agent from Telegram, removing its webhook and installation. */

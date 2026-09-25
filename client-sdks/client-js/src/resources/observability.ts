@@ -1,6 +1,6 @@
 import type { SpanType } from '@mastra/core/observability';
 import type { QueryThreadsInput, QueryThreadsResult, TraceQueryPredicate } from '@mastra/core/storage';
-import type { ClientOptions, ListFeedbackResponse } from '../types';
+import type { ClientOptions, GetObservabilityCapabilitiesResponse, ListFeedbackResponse } from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 import type {
@@ -712,5 +712,12 @@ export class Observability extends BaseResource {
   getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
     const queryString = toQueryParams(params);
     return this.request(`/observability/discovery/tags${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Returns which optional observability APIs the configured observability storage supports.
+   */
+  getCapabilities(): Promise<GetObservabilityCapabilitiesResponse> {
+    return this.request('/observability/capabilities');
   }
 }

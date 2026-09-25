@@ -1,10 +1,10 @@
 import type { EntityLearningProgressStatus, ThemeLearningEntity } from '@mastra/client-js';
+import { formatDate } from '@/utils/date-format';
 
 export type TraceIntelligenceEntitySort = 'default' | 'entity-asc' | 'entity-desc';
 export type TraceIntelligenceEntityView = 'compact' | 'list';
 
 const numberFormatter = new Intl.NumberFormat('en-US');
-const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 
 export type EntityIndexMetadata = {
   traceCount: string;
@@ -40,7 +40,7 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
         ? '—'
         : `${readySignalCount} of ${enabledSignalCount}`,
     status: entity.status,
-    updatedAt: entity.updatedAt === undefined ? '—' : dateFormatter.format(new Date(entity.updatedAt)),
+    updatedAt: formatDate(entity.updatedAt, 'date-time') ?? '—',
   };
 }
 

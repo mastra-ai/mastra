@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { CompactNumber } from '../CompactNumber';
 import { MetricsKpiCard } from './metrics-kpi-card';
 
 const meta: Meta<typeof MetricsKpiCard> = {
@@ -18,8 +19,10 @@ export const WithPositiveChange: Story = {
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
-          <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
-          <MetricsKpiCard.Change changePct={15.3} prevValue="10.7k" />
+          <MetricsKpiCard.Value>
+            <CompactNumber value={12310} />
+          </MetricsKpiCard.Value>
+          <MetricsKpiCard.Change changePct={15.3} prevValue="10,676" />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
     </div>
@@ -46,8 +49,10 @@ export const LowerIsBetter: Story = {
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Model Cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
-          <MetricsKpiCard.Value>$42.50</MetricsKpiCard.Value>
-          <MetricsKpiCard.Change changePct={-8.2} prevValue="$46.30" lowerIsBetter />
+          <MetricsKpiCard.Value>
+            <CompactNumber value={1284.37} currency="USD" />
+          </MetricsKpiCard.Value>
+          <MetricsKpiCard.Change changePct={-8.2} prevValue="$1,399.12" lowerIsBetter />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
     </div>
@@ -74,8 +79,10 @@ export const GridOfCards: Story = {
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
-          <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
-          <MetricsKpiCard.Change changePct={15.3} prevValue="10.7k" />
+          <MetricsKpiCard.Value>
+            <CompactNumber value={12310} />
+          </MetricsKpiCard.Value>
+          <MetricsKpiCard.Change changePct={15.3} prevValue="10,676" />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>

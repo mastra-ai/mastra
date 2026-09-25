@@ -255,10 +255,14 @@ vi.mock('@mastra/core/agent-controller', () => ({
 }));
 
 const streamErrorRetryProcessorConstructorMock = vi.fn();
+const agentsMdInjectorConstructorMock = vi.fn();
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
+    constructor(options?: unknown) {
+      agentsMdInjectorConstructorMock(options);
+    }
   },
   createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
   isBadRequestError: (error: unknown) =>
@@ -530,6 +534,7 @@ describe('createMastraCode', () => {
     updateThreadPeerAdvertisementMock.mockReset();
     updateThreadPeerAdvertisementMock.mockReturnValue(true);
     streamErrorRetryProcessorConstructorMock.mockReset();
+    agentsMdInjectorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
     for (const key of Object.keys(providerRegistryMock)) {
@@ -1303,6 +1308,20 @@ describe('createMastraCode', () => {
       'prefill-error-handler',
       'mastracode-account-rotation',
     ]);
+  });
+
+  it('scopes AGENTS.md reminder lookup to the session project path', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as
+      | { getBasePath?: (args: { requestContext?: { get: (key: string) => unknown } }) => string | undefined }
+      | undefined;
+    expect(options?.getBasePath).toBeTypeOf('function');
+    const withProjectPath = { get: () => ({ getState: () => ({ projectPath: '/work/target' }) }) };
+    expect(options?.getBasePath?.({ requestContext: withProjectPath })).toBe('/work/target');
+    expect(options?.getBasePath?.({ requestContext: undefined })).toBe(process.cwd());
   });
 
   it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {

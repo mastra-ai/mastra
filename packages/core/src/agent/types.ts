@@ -57,6 +57,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
+  ThreadHistoryChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -469,13 +470,23 @@ export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
+  /**
+   * Start the stream with one `thread-history` chunk holding the thread's stored
+   * messages (newest `perPage`, default 40, oldest first), then emit only parts
+   * newer than that history, then live parts. Pending approval and suspension
+   * chunks are always emitted.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
+  /** Request context used to resolve the agent's memory when loading initial history. */
+  requestContext?: RequestContext;
 }
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentThreadSubscription<OUTPUT = unknown> {
-  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+  /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
+  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
