@@ -3094,7 +3094,11 @@ ${formattedMessages}
    * or `maxIterations` is reached. Each chunk runs under the same thread/resource lock as
    * `observe()`, and the threshold bypass applies to this call only — nothing is written to the
    * record's config. When a `messageList` is given, compacted messages are removed from it so a
-   * retried model call sends the smaller context.
+   * retried model call sends the smaller context. The list's in-flight input and response
+   * messages are saved first and always kept in the list.
+   *
+   * In resource scope, each pass observes every pending message across the resource's threads,
+   * so `maxChunkTokens` does not bound a pass.
    *
    * @example
    * ```ts
@@ -3111,9 +3115,12 @@ ${formattedMessages}
     messageList?: MessageList;
     /** Messages to compact when no `messageList` is given. Defaults to unobserved messages in storage. */
     messages?: MastraDBMessage[];
-    /** Stop once pending tokens are at or below this value. Defaults to half the observation threshold. */
+    /** Stop once pending tokens are at or below this value. Defaults to 0 (compact everything pending). */
     targetTokens?: number;
-    /** Maximum tokens of messages sent to the Observer per pass. Defaults to the observation threshold. */
+    /**
+     * Maximum tokens of messages sent to the Observer per pass. Defaults to the observation threshold.
+     * Not applied in resource scope, where each pass observes every pending message across the resource's threads.
+     */
     maxChunkTokens?: number;
     /** Maximum number of observation passes. Defaults to 10. */
     maxIterations?: number;
@@ -3143,6 +3150,15 @@ ${formattedMessages}
     const currentMessages = () => (messageList ? getObservableMessages(messageList) : opts.messages);
     const compactedIds = new Set<string>();
 
+    // The failed request's in-flight messages (the user's prompt, any partial response) may be
+    // observed below, but the retry still needs them and they are not saved yet. Persist them
+    // first and protect them from cleanup by identity, as step-0 observation does.
+    const pending = messageList ? [...messageList.get.input.db(), ...messageList.get.response.db()] : [];
+    if (pending.length > 0) {
+      await this.persistMessages(pending, threadId, resourceId);
+    }
+    const preserveMessageIds = pending.map(message => message.id);
+
     await BufferingCoordinator.awaitBuffering(threadId, resourceId ?? null, this.scope);
 
     const initialStatus = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
@@ -3162,7 +3178,9 @@ ${formattedMessages}
     let status = activated
       ? await this.getStatus({ threadId, resourceId, messages: currentMessages() })
       : initialStatus;
-    const targetTokens = opts.targetTokens ?? Math.floor(status.threshold / 2);
+    // A context-overflow error means OM's estimate is already too low, so a threshold-relative
+    // target could make the recovery a no-op. Compact everything pending by default.
+    const targetTokens = opts.targetTokens ?? 0;
     const maxChunkTokens = opts.maxChunkTokens ?? status.threshold;
     let pendingTokens = status.pendingTokens;
     let iterations = 0;
@@ -3220,11 +3238,12 @@ ${formattedMessages}
     }
 
     if (messageList && compactedIds.size > 0) {
-      await this.cleanupObservedContext({
-        messageList,
+      await this.cleanupMessages({
         threadId,
         resourceId,
+        messages: messageList,
         observedMessageIds: [...compactedIds],
+        preserveMessageIds,
       });
     }
 
@@ -3910,6 +3929,7 @@ ${formattedMessages}
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     /**
+     * @internal Used by `compact()`, which is the public way to force observation.
      * Observe even when unobserved tokens are below the observation threshold.
      * Applies to this call only; nothing is written to the record's config.
      */

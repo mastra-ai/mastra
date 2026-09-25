@@ -8,12 +8,14 @@
  */
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { MessageList } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import type { Processor } from '@mastra/core/processors';
+import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { filterObservedMessages } from '../message-utils';
+import { Memory } from '../../../index';
+import { filterObservedMessages, findObservationMarkerTargetIndex } from '../message-utils';
 import { ObservationalMemory } from '../observational-memory';
 import type { ObserveHooks } from '../types';
 
@@ -223,6 +225,18 @@ describe('observation marker placement (#21657)', () => {
     expect(partTypes(response)).toEqual(['data-om-observation-start', 'data-om-observation-end']);
   });
 
+  it('finds no target when every message in the view is newer than an absent anchor', () => {
+    const emptyAssistant: MastraDBMessage = {
+      ...textMessage('seed', 'assistant', 5),
+      content: { format: 2, parts: [] },
+    };
+    const index = findObservationMarkerTargetIndex([emptyAssistant, textMessage('later-user', 'user', 6)], {
+      id: 'not-in-view',
+      createdAt: new Date(baseTime),
+    });
+    expect(index).toBe(-1);
+  });
+
   it('marks the newest assistant when observing the whole thread', async () => {
     const messages = issueThread();
     await seed(messages);
@@ -274,7 +288,8 @@ describe('compact() (#21657)', () => {
     expect(observeResult.observed).toBe(false);
     const thresholdBefore = (await om.getStatus({ threadId, resourceId })).threshold;
 
-    const result = await om.compact({ threadId, resourceId, targetTokens: 0 });
+    // Default target: compact everything pending, however far below the threshold it is.
+    const result = await om.compact({ threadId, resourceId });
 
     expect(result.compacted).toBe(true);
     expect(result.reachedTarget).toBe(true);
@@ -350,7 +365,7 @@ describe('compact() (#21657)', () => {
     const om = createOM(100_000);
     await storage.saveMessages({ messages: conversation(4) });
 
-    const result = await om.compact({ threadId, resourceId });
+    const result = await om.compact({ threadId, resourceId, targetTokens: 1_000_000 });
 
     expect(result).toMatchObject({ compacted: false, iterations: 0, reachedTarget: true });
   });
@@ -377,5 +392,123 @@ describe('compact() (#21657)', () => {
     expect(partTypes((await storedMessages()).find(message => message.id === 'm3'))).toContain(
       'data-om-observation-end',
     );
+  });
+
+  it('keeps and saves the in-flight prompt when compacting a failed request', async () => {
+    const om = createOM(100_000);
+    const history = conversation(4);
+    await storage.saveMessages({ messages: history });
+    const prompt = textMessage('prompt', 'user', 10);
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(history, 'memory');
+    messageList.add(prompt, 'input');
+
+    const result = await om.compact({ threadId, resourceId, messageList });
+
+    expect(result.compacted).toBe(true);
+    expect(messageList.get.all.db().map(message => message.id)).toEqual(['prompt']);
+    expect(messageList.get.input.db().map(message => message.id)).toEqual(['prompt']);
+    expect((await storedMessages()).map(message => message.id)).toEqual(['m0', 'm1', 'm2', 'm3', 'prompt']);
+  });
+
+  it('observes every pending message of the resource in one pass in resource scope', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { model: createObserverModel(), messageTokens: 100_000, bufferTokens: false },
+      reflection: { model: createObserverModel(), observationTokens: 50_000 },
+    });
+    const messages = conversation(8);
+    await storage.saveMessages({ messages });
+    const pairTokens = await pairTokenCount(om, messages);
+
+    const result = await om.compact({ threadId, resourceId, maxChunkTokens: pairTokens, maxIterations: 1 });
+
+    expect(result.iterations).toBe(1);
+    expect(result.pendingTokens).toBe(0);
+    expect(await om.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
+  });
+});
+
+describe('compact() from processAPIError (#21657)', () => {
+  it('retries with the user prompt kept and saved after compacting on a context-overflow error', async () => {
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: { model: createObserverModel(), messageTokens: 100_000, bufferTokens: false },
+          reflection: { model: createObserverModel(), observationTokens: 50_000 },
+        },
+      },
+    });
+    const memoryStore = await store.getStore('memory');
+    await memoryStore!.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'thread',
+        createdAt: new Date(baseTime),
+        updatedAt: new Date(baseTime),
+      },
+    });
+    await memoryStore!.saveMessages({ messages: conversation(4) });
+
+    const prompts: string[] = [];
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        calls++;
+        if (calls === 1) throw new Error('This model maximum context length exceeded');
+        prompts.push(JSON.stringify(prompt));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{ type: 'text', text: 'Here is the answer.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const compactResults: boolean[] = [];
+    const recovery: Processor = {
+      id: 'context-overflow-recovery',
+      async processAPIError({ error, retryCount, messageList, requestContext }) {
+        if (retryCount > 0 || !(error instanceof Error) || !/context length/.test(error.message)) return;
+        const om = await memory.omEngine;
+        const context = om?.getThreadContext(requestContext, messageList);
+        if (!om || !context) return;
+        const result = await om.compact({ ...context, messageList, requestContext });
+        compactResults.push(result.compacted);
+        return { retry: result.compacted };
+      },
+    };
+
+    const agent = new Agent({
+      id: 'compact-agent',
+      name: 'Compact agent',
+      instructions: 'Answer the question.',
+      model,
+      memory,
+      errorProcessors: [recovery],
+    });
+
+    const result = await agent.generate('What is the current question?', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    expect(result.text).toBe('Here is the answer.');
+    expect(compactResults).toEqual([true]);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('What is the current question?');
+    expect(prompts[0]).not.toContain('m0 xxx');
+    expect(prompts[0]).toContain('Observed older conversation');
+
+    const stored = (await memoryStore!.listMessages({ threadId, perPage: false })).messages;
+    expect(
+      stored.some(message => message.role === 'user' && JSON.stringify(message.content).includes('current question')),
+    ).toBe(true);
   });
 });

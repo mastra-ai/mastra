@@ -1176,7 +1176,7 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 `compact()` observes pending messages even when Observational Memory's token estimate is below the observation threshold. Use it to recover when a provider rejects a request for exceeding its context window: provider-side token counts can be higher than Observational Memory's local estimate, and `observe()` does nothing below the threshold.
 
-`compact()` activates any buffered observations, then observes the oldest pending messages in chunks until pending tokens drop to `targetTokens`, a pass makes no progress, or `maxIterations` is reached. The threshold bypass applies to this call only and isn't saved to the record's config. When you pass a `messageList`, compacted messages are removed from it, so a retried model call sends the smaller context.
+`compact()` activates any buffered observations, then observes the oldest pending messages in chunks until pending tokens drop to `targetTokens` (all pending messages by default), a pass makes no progress, or `maxIterations` is reached. The threshold bypass applies to this call only and isn't saved to the record's config. When you pass a `messageList`, compacted messages are removed from it, so a retried model call sends the smaller context. The request's in-flight messages, such as the user's current prompt, are saved to storage and stay in the list.
 
 Call it from an [error processor](/docs/agents/processors#api-error-handling) and retry once:
 
@@ -1223,7 +1223,7 @@ Register it with `errorProcessors: [createContextOverflowRecovery(om)]` on the a
     name: 'messageList',
     type: 'MessageList',
     description:
-      'Live message list of the failed request. Pending messages are read from it, and compacted messages are removed from it.',
+      'Live message list of the failed request. Pending messages are read from it, and compacted messages are removed from it. Its input and response messages are saved and kept.',
     isOptional: true,
   },
   {
@@ -1238,13 +1238,13 @@ Register it with `errorProcessors: [createContextOverflowRecovery(om)]` on the a
     type: 'number',
     description: 'Stop once pending tokens are at or below this value.',
     isOptional: true,
-    defaultValue: 'Half the observation threshold',
+    defaultValue: '0',
   },
   {
     name: 'maxChunkTokens',
     type: 'number',
     description:
-      'Maximum tokens of messages sent to the Observer in one pass. A single message larger than this is still observed on its own.',
+      "Maximum tokens of messages sent to the Observer in one pass. A single message larger than this is still observed on its own. Not applied with `scope: 'resource'`, where each pass observes every pending message across the resource's threads.",
     isOptional: true,
     defaultValue: 'The observation threshold',
   },

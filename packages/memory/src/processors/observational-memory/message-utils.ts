@@ -238,6 +238,8 @@ export function findObservationMarkerTargetIndex(
           break;
         }
       }
+      // Every message in the view is newer than the anchor.
+      if (boundary === -1) return -1;
     }
 
     while (boundary + 1 < messages.length && hasOnlyLifecycleParts(messages[boundary + 1])) {
