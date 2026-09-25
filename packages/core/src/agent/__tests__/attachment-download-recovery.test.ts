@@ -292,7 +292,7 @@ describe('attachment download recovery', () => {
       expect(requests).toBe(1);
     });
 
-    it('records an unavailable attachment on a later message that sends it again', async () => {
+    it('records an unavailable attachment on its own message and fetches a later message again', async () => {
       const { run, memory, prompts } = setup({ durable });
       expect((await run(attachment())).text).toBe('ok');
       await waitForHistory(memory);
@@ -300,10 +300,17 @@ describe('attachment download recovery', () => {
       expect((await run('Continue')).text).toBe('ok');
       const fetched = requests;
 
+      // The recorded message is not fetched again.
+      failure = undefined;
+      expect((await run('Continue')).text).toBe('ok');
+      expect(requests).toBe(fetched);
+
+      // A new message sending the same URL is its own attempt, so it is fetched.
+      failure = '404';
       const resent = await run(attachment());
       expect(resent.errors).toEqual([]);
       expect(resent.text).toBe('ok');
-      expect(requests).toBe(fetched);
+      expect(requests).toBeGreaterThan(fetched);
       expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual([
         '[Attachment unavailable: application/pdf]',
         '[Attachment unavailable: application/pdf]',
@@ -316,6 +323,22 @@ describe('attachment download recovery', () => {
           expect(message.content.metadata?.mastra).toMatchObject({ unavailableAttachments: [url] });
         }
       });
+    });
+
+    it('sends an attachment again when a later message re-sends a recorded URL and it downloads', async () => {
+      const { run, prompts } = setup({ durable });
+      failure = '404';
+      expect((await run(attachment())).text).toBe('ok');
+      expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+
+      failure = undefined;
+      const recovered = await run(attachment());
+      expect(recovered.errors).toEqual([]);
+      expect(recovered.text).toBe('ok');
+      // The recorded message keeps its placeholder; the new message carries the attachment.
+      const latest = promptAttachments(prompts.at(-1)!);
+      expect(latest.files).toHaveLength(1);
+      expect(latest.placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
     });
 
     it('replaces an undecodable data URL in history with a placeholder right away', async () => {
@@ -461,7 +484,7 @@ describe('attachment download recovery', () => {
       expect(files).toHaveLength(1);
     });
 
-    it('records the attachment on stored messages that carry a URL recorded elsewhere in history', async () => {
+    it('keeps a stored message downloadable when another message recorded the same URL', async () => {
       const { run, memory, prompts } = setup({ durable });
       await memory.saveThread({
         thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
@@ -487,13 +510,13 @@ describe('attachment download recovery', () => {
       const result = await run('Continue');
       expect(result.errors).toEqual([]);
       expect(result.text).toBe('ok');
-      expect(requests).toBe(0);
-      expect(promptAttachments(prompts[0]!).placeholders).toHaveLength(2);
+      // Only the message that recorded the URL skips the download.
+      expect(requests).toBe(1);
+      const { files, placeholders } = promptAttachments(prompts[0]!);
+      expect(files).toHaveLength(1);
+      expect(placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
       const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
-      expect(messages.find(message => message.id === 'unrecorded')?.content.metadata?.mastra).toEqual({
-        sealed: true,
-        unavailableAttachments: [url],
-      });
+      expect(messages.find(message => message.id === 'unrecorded')?.content.metadata?.mastra).toEqual({ sealed: true });
     });
   });
 

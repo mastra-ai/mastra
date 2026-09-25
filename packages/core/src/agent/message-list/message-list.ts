@@ -38,6 +38,8 @@ import { isSendableFileData } from './prompt/image-utils';
 import {
   getMessageAttachmentUrls,
   getUnavailableAttachmentUrls,
+  unavailableAttachmentPlaceholder,
+  withUnavailableAttachmentPlaceholders,
   withUnavailableAttachmentUrls,
 } from './prompt/unavailable-attachments';
 import { MessageStateManager } from './state';
@@ -935,7 +937,7 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        const promptMessages = this.getMessagesForModelPrompt();
+        const promptMessages = this.getMessagesForModelPrompt().map(withUnavailableAttachmentPlaceholders);
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
@@ -991,11 +993,8 @@ export class MessageList {
           this.messages,
         );
 
-        const unavailableUrls = new Set(
-          this.messages.filter(message => message.role === 'user').flatMap(getUnavailableAttachmentUrls),
-        );
-        // A message that re-sends a recorded URL gets the placeholder too, so record it there as well.
-        for (const url of unavailableUrls) this.recordUnavailableAttachment(url);
+        // Attachments that failed to download while building this prompt.
+        const unavailableUrls = new Set<string>();
         const downloadedAssets = await downloadAssetsFromMessages({
           messages: modelMessages,
           downloadConcurrency: options?.downloadConcurrency,
@@ -1003,7 +1002,7 @@ export class MessageList {
           supportedUrls: options?.supportedUrls,
           cache: this.assetDownloads,
           // Invalid inline content gets the placeholder below; don't try to decode it first.
-          isUnavailable: url => unavailableUrls.has(url) || (url.startsWith('data:') && !isSendableFileData(url)),
+          isUnavailable: url => url.startsWith('data:') && !isSendableFileData(url),
           onUnavailable: (url, error) => {
             const isDataUrl = url.startsWith('data:');
             // A network download failure goes to error processors and fallback models first.
@@ -1049,7 +1048,7 @@ export class MessageList {
                     }
                     if (unsendable || (assetUrl && unavailableUrls.has(assetUrl))) {
                       const name = (part.type === 'file' && part.filename) || part.mediaType || part.type;
-                      return { type: 'text' as const, text: `[Attachment unavailable: ${name}]` };
+                      return { type: 'text' as const, text: unavailableAttachmentPlaceholder(name) };
                     }
                     return convertImageFilePart(part, downloadedAssets);
                   }
