@@ -32,7 +32,8 @@ function makeConnection(
 
 type CredentialMap = Record<
   string,
-  { type: 'oauth2'; accessToken: string; expiresAt?: string | null } | { type: 'api_key'; apiKey: string }
+  | { type: 'oauth2'; accessToken: string; refreshToken?: string; expiresAt?: string | null }
+  | { type: 'api_key'; apiKey: string }
 >;
 
 type ContextMap = Record<
@@ -185,6 +186,28 @@ describe('channels()', () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack' })],
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_REFRESH_TOKEN, expiresAt: null } },
+    });
+    const { channels: channelsFn } = await import('../channels.js');
+    const providers = await channelsFn(options(fetchMock));
+    expect(providers.slack).toBeInstanceOf(FakeChannelProvider);
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'slack',
+      expect.objectContaining({ refreshToken: SLACK_REFRESH_TOKEN }),
+    );
+  });
+
+  it('prefers the credential refreshToken over accessToken for slack', async () => {
+    vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack' })],
+      credentials: {
+        c_slack: {
+          type: 'oauth2',
+          accessToken: 'xoxe.xoxp-fake-slack-access',
+          refreshToken: SLACK_REFRESH_TOKEN,
+          expiresAt: null,
+        },
+      },
     });
     const { channels: channelsFn } = await import('../channels.js');
     const providers = await channelsFn(options(fetchMock));

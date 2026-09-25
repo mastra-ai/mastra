@@ -12,6 +12,20 @@ function credentialToken(credential: ConnectionCredential): string {
   return credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
 }
 
+/**
+ * Slack's `SlackProvider` consumes an App Configuration *refresh* token
+ * (`xoxe-1-...`) — it rotates it via `tooling.tokens.rotate` before every
+ * manifest call. Prefer the credential's dedicated `refreshToken` when the
+ * platform provides one; fall back to the legacy behavior of reading
+ * `accessToken` for platforms that store the refresh token there.
+ */
+function slackRefreshToken(credential: ConnectionCredential): string {
+  if (credential.type === 'oauth2' && credential.refreshToken) {
+    return credential.refreshToken;
+  }
+  return credentialToken(credential);
+}
+
 function missingPeerError(integrationId: string, packageName: string, error: unknown): MastraConnectError {
   const reason = error instanceof Error ? error.message : String(error);
   return new MastraConnectError(
@@ -95,7 +109,7 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
 const slackChannel: ChannelProviderRegistration = {
   integrationId: 'slack',
   async build(credential, options) {
-    const refreshToken = credentialToken(credential);
+    const refreshToken = slackRefreshToken(credential);
     let mod: { SlackProvider: new (config: Record<string, unknown>) => ChannelProvider };
     try {
       mod = (await import('@mastra/slack')) as {
