@@ -483,6 +483,12 @@ export interface InngestAgent<TOutput = undefined> {
   getDurableWorkflows(): Workflow<any, any, any, any, any, any, any>[];
 
   /**
+   * Storage workflow name of the agentic-loop snapshot (`inngest:durable-agentic-loop`).
+   * Server handlers and suspended-run discovery use it to locate this agent's runs.
+   */
+  readonly durableLoopWorkflowName: string;
+
+  /**
    * Set the Mastra instance for observability.
    * Called by Mastra during agent registration.
    * @internal
@@ -823,11 +829,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | '__fork'
     | 'getDurableWorkflows'
+    | 'durableLoopWorkflowName'
     | '__setMastra'
   > = {
     get id() {
       return agentId;
     },
+
+    durableLoopWorkflowName: InngestDurableStepIds.AGENTIC_LOOP,
 
     get name() {
       return agentName;

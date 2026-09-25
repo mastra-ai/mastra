@@ -6,7 +6,7 @@
  * the same workflow infrastructure with complete Inngest integration.
  */
 
-import { Agent } from '@mastra/core/agent';
+import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import {
   AGENT_CONTROL_TOPIC,
   AGENT_STREAM_TOPIC,
@@ -112,6 +112,23 @@ describe('createInngestAgent factory function', () => {
     expect(Array.isArray(workflows)).toBe(true);
     expect(workflows.length).toBe(1);
     expect(workflows[0].id).toBe(InngestDurableStepIds.AGENTIC_LOOP);
+  });
+
+  // Issue #25154: server approval guards and suspended-run discovery look up
+  // snapshots under this name, so it must match the registered loop workflow.
+  it('advertises its namespaced loop workflow name', () => {
+    const agent = new Agent({
+      id: 'loop-name-test',
+      name: 'Loop Name Test',
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    expect(durableAgent.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    expect(durableAgent.durableLoopWorkflowName).toBe(durableAgent.getDurableWorkflows()[0].id);
+    expect(isDurableAgentLike(durableAgent)).toBe(true);
   });
 
   it('should prepare for durable execution', async () => {
