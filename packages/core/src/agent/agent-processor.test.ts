@@ -2068,13 +2068,17 @@ describe('New Processor Features', () => {
         expect(prompts[i]!.filter(msg => msg.role === 'system')).toHaveLength(1);
       }
 
+      // The abort reason is sent verbatim as the last message.
+      const feedbackText = '<system-reminder>Response quality too low, please improve</system-reminder>';
+      const feedback = { role: 'user', content: [expect.objectContaining({ type: 'text', text: feedbackText })] };
       const feedbackCount = (prompt: LanguageModelV2Prompt) =>
-        prompt.filter(msg => msg.role === 'user' && JSON.stringify(msg.content).includes('Response quality too low'))
-          .length;
+        prompt.filter(
+          msg => msg.role === 'user' && msg.content.some(part => part.type === 'text' && part.text === feedbackText),
+        ).length;
       expect(feedbackCount(prompts[2]!)).toBe(1);
-      expect(JSON.stringify(prompts[2]!.at(-1))).toContain('Response quality too low');
+      expect(wire(prompts[2]!).at(-1)).toEqual(feedback);
       expect(feedbackCount(prompts[4]!)).toBe(2);
-      expect(JSON.stringify(prompts[4]!.at(-1))).toContain('Response quality too low');
+      expect(wire(prompts[4]!).at(-1)).toEqual(feedback);
     });
 
     it('should increment retryCount on each retry', async () => {

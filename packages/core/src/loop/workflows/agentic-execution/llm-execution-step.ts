@@ -1410,8 +1410,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         ? `${messageIdPassed}-${currentIteration}`
         : inputData.messageId || messageIdPassed;
 
-      // Feedback from a processor-requested retry goes at the end of the conversation as a
-      // reminder signal, so the retry reuses the cached prompt prefix. A system message would
+      // The abort reason from a processor-requested retry goes at the end of the conversation,
+      // verbatim, as a reminder signal, so the retry reuses the cached prompt prefix. A system message would
       // sit ahead of the whole conversation and invalidate it. The response message id is
       // rotated first so the retry streams into a new message after the signal; this happens
       // before the boundary is opened so that boundary belongs to the retry's own message.
@@ -1422,7 +1422,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             type: 'reactive',
             tagName: 'system-reminder',
             contents: inputData.processorRetryFeedback,
-            attributes: { type: 'processor-retry-feedback' },
           }),
         );
         safeEnqueue(controller, feedbackSignal.toDataPart());
@@ -3065,10 +3064,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
-      const retryFeedbackText =
-        shouldRetry && processOutputStepTripwire
-          ? `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`
-          : undefined;
+      const retryFeedbackText = shouldRetry && processOutputStepTripwire ? processOutputStepTripwire.message : undefined;
 
       const messages = {
         all: messageList.get.all.aiV5.model(),
