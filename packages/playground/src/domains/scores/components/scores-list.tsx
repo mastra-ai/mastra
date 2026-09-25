@@ -1,10 +1,10 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { ScoreDataPanel } from '@mastra/playground-ui/domains/scores';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScoresColumnsState } from '@/domains/scores/hooks/use-scores-columns';
-import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 
 type ScoresListProps = {
   selectedScoreId?: string;

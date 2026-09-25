@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "59.0.0",
+  "version": "60.0.0-alpha.2",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -104,16 +104,6 @@
         "default": "./dist/lib/*.cjs.js"
       }
     },
-    "./store/*": {
-      "import": {
-        "types": "./dist/store/*.d.ts",
-        "default": "./dist/store/*.es.js"
-      },
-      "require": {
-        "types": "./dist/store/*.d.ts",
-        "default": "./dist/store/*.cjs.js"
-      }
-    },
     "./hooks/*": {
       "import": {
         "types": "./dist/hooks/*.d.ts",
@@ -179,6 +169,8 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
+    "@autoform/core": "^3.0.0",
+    "@autoform/react": "^4.0.0",
     "@base-ui/react": "^1.7.0",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-javascript": "^6.2.5",
@@ -190,8 +182,10 @@
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
+    "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
+    "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.22",
     "@uiw/codemirror-theme-dracula": "^4.25.11",
@@ -201,9 +195,11 @@
     "date-fns": "catalog:",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-markdown": "^2.1.2",
+    "nanoid": "^5.1.16",
     "prettier": "^3.9.5",
     "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.1",
+    "react-hook-form": "^7.81.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.7.3",
     "recharts": "^3.10.1",
@@ -211,9 +207,9 @@
     "remend": "^1.3.0",
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
+    "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
-    "zod": "^3.25.0",
-    "zustand": "^5.0.12"
+    "zod": "^3.25.0"
   },
   "peerDependencies": {
     "@mastra/client-js": "workspace:^",
@@ -232,6 +228,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
     "@storybook/addon-mcp": "^10.6.0",
@@ -261,6 +258,7 @@
     "msw": "^2.12.11",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-router": "^8.0.0",
     "rollup-plugin-node-externals": "^8.1.2",
     "storybook": "^10.6.0",
     "tailwind-merge": "^3.5.0",

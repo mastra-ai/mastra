@@ -5,6 +5,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
@@ -36,6 +37,8 @@ function toRecord(task: BackgroundTask): Record<string, any> {
     startedAt: task.startedAt ?? new Date(0),
     suspendedAt: task.suspendedAt ?? new Date(0),
     completedAt: task.completedAt ?? new Date(0),
+    ownerId: task.ownerId ?? null,
+    leaseExpiresAt: task.leaseExpiresAt ?? null,
   };
 }
 
@@ -57,6 +60,12 @@ function fromRecord(row: Record<string, any>): BackgroundTask {
     row.suspendedAt instanceof Date ? row.suspendedAt : row.suspendedAt ? new Date(row.suspendedAt) : undefined;
   const completedAt =
     row.completedAt instanceof Date ? row.completedAt : row.completedAt ? new Date(row.completedAt) : undefined;
+  const leaseExpiresAt =
+    row.leaseExpiresAt instanceof Date
+      ? row.leaseExpiresAt
+      : row.leaseExpiresAt
+        ? new Date(row.leaseExpiresAt)
+        : undefined;
 
   return {
     id: String(row.id),
@@ -78,6 +87,8 @@ function fromRecord(row: Record<string, any>): BackgroundTask {
     startedAt: startedAt && startedAt.getTime() > 0 ? startedAt : undefined,
     suspendedAt: suspendedAt && suspendedAt.getTime() > 0 ? suspendedAt : undefined,
     completedAt: completedAt && completedAt.getTime() > 0 ? completedAt : undefined,
+    ownerId: row.ownerId != null && row.ownerId !== '' ? String(row.ownerId) : undefined,
+    leaseExpiresAt,
   };
 }
 
@@ -104,7 +115,7 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
     });
   }
 
@@ -120,7 +131,7 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const values: Record<string, IntoSql> = {};
     if ('status' in update) values.status = update.status!;
@@ -131,10 +142,24 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     if ('startedAt' in update) values.startedAt = update.startedAt?.getTime() ?? 0;
     if ('suspendedAt' in update) values.suspendedAt = update.suspendedAt?.getTime() ?? 0;
     if ('completedAt' in update) values.completedAt = update.completedAt?.getTime() ?? 0;
+    if ('ownerId' in update) values.ownerId = update.ownerId ?? null;
+    if ('leaseExpiresAt' in update) values.leaseExpiresAt = update.leaseExpiresAt?.getTime() ?? null;
     if (Object.keys(values).length === 0) return false;
 
     const conditions = [`id = '${escapeStr(taskId)}'`];
     if (options?.expectedStatus) conditions.push(`status = '${escapeStr(options.expectedStatus)}'`);
+    if (options?.expectedOwnerId !== undefined) {
+      conditions.push(
+        options.expectedOwnerId === null ? 'ownerId IS NULL' : `ownerId = '${escapeStr(options.expectedOwnerId)}'`,
+      );
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      conditions.push(
+        options.expectedLeaseExpiresAt === null
+          ? 'leaseExpiresAt IS NULL'
+          : `leaseExpiresAt = ${options.expectedLeaseExpiresAt.getTime()}`,
+      );
+    }
 
     const table = await this.client.openTable(TABLE_BACKGROUND_TASKS);
     const result = await table.update({ where: conditions.join(' AND '), values });

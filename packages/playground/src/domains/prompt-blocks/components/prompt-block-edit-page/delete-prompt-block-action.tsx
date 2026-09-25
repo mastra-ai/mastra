@@ -1,11 +1,11 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { useStoredPromptBlockMutations } from '../../hooks/use-stored-prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 
 interface DeletePromptBlockActionProps {
   blockId: string;

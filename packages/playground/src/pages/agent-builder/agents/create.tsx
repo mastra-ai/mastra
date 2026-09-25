@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { useBuilderAgentAccess, useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -7,7 +8,7 @@ import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 const AGENT_BUILDER_AGENTS_ROUTE = '/agent-builder/agents';
 
@@ -21,7 +22,7 @@ export default function AgentBuilderCreate() {
   const features = useBuilderAgentFeatures();
   useTools({ enabled: canWrite && features.tools });
   useAgents({ enabled: canWrite && features.agents });
-  useWorkflows({ enabled: canWrite && features.workflows });
+  useWorkflows({ requestContext: usePlaygroundStore().requestContext, enabled: canWrite && features.workflows });
   useStoredSkills({ enabled: canWrite && features.skills });
   // Prefetch and seed the ['builder-available-models'] cache (return value
   // ignored) so the starter/model picker render instantly instead of waiting on

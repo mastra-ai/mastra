@@ -1970,16 +1970,13 @@ describe('New Processor Features', () => {
       // Should have made 2 calls to the model
       expect(callCount).toBe(2);
 
-      // The second call should include the retry feedback message as a system message
+      // The retry feedback is appended after the conversation (not added as a system message),
+      // so the retry keeps the previous request's prompt prefix.
       const secondCallMessages = receivedMessages[1];
-      const hasRetryFeedback = secondCallMessages.some((msg: any) => {
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' ? msg.content : '';
-          return content.includes('Response quality too low');
-        }
-        return false;
-      });
-      expect(hasRetryFeedback).toBe(true);
+      expect(secondCallMessages.filter((msg: any) => msg.role === 'system')).toHaveLength(1);
+      const feedbackMessage = secondCallMessages.at(-1);
+      expect(feedbackMessage.role).toBe('user');
+      expect(JSON.stringify(feedbackMessage.content)).toContain('Response quality too low');
 
       // Final result text should only include the accepted response
       // The rejected step has tripwire data, so its text returns empty
@@ -1993,6 +1990,95 @@ describe('New Processor Features', () => {
       expect((result.steps[0] as any).tripwire.reason).toBe('Response quality too low, please improve');
       // Second step should not have tripwire (accepted)
       expect((result.steps[1] as any).tripwire).toBeUndefined();
+    });
+
+    it('should only append to the prompt on retries so the provider prompt cache is reused', async () => {
+      const prompts: LanguageModelV2Prompt[] = [];
+      const turns = [
+        { tool: 'a' },
+        { text: 'bad response' },
+        { tool: 'b' },
+        { text: 'bad response' },
+        { text: 'good response' },
+      ];
+      const mockModel = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          const turn = turns[prompts.length - 1]!;
+          const usage = { inputTokens: 5, outputTokens: 5, totalTokens: 10 };
+          const chunks =
+            'tool' in turn
+              ? [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: turn.tool,
+                    toolName: 'lookup',
+                    input: JSON.stringify({ key: turn.tool }),
+                  },
+                  { type: 'finish' as const, finishReason: 'tool-calls' as const, usage },
+                ]
+              : [
+                  { type: 'text-start' as const, id: 't' },
+                  { type: 'text-delta' as const, id: 't', delta: turn.text },
+                  { type: 'text-end' as const, id: 't' },
+                  { type: 'finish' as const, finishReason: 'stop' as const, usage },
+                ];
+          return { rawCall: { rawPrompt: null, rawSettings: {} }, stream: convertArrayToReadableStream(chunks) };
+        },
+      });
+
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look up a value',
+        inputSchema: z.object({ key: z.string() }),
+        execute: async ({ key }) => ({ value: key }),
+      });
+
+      const qualityChecker = {
+        id: 'quality-checker',
+        processOutputStep: async ({ text, abort, retryCount, messageList }: any) => {
+          if (retryCount === 0 && text?.includes('bad response')) {
+            abort('Response quality too low, please improve', { retry: true });
+          }
+          return messageList;
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'retry-prompt-cache-agent',
+        name: 'Retry Prompt Cache Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        tools: { lookup },
+        outputProcessors: [qualityChecker],
+        maxProcessorRetries: 3,
+      });
+
+      const result = await agent.stream('Hello', { maxSteps: 10 });
+      expect(await result.text).toBe('good response');
+      expect(prompts).toHaveLength(5);
+
+      // Mastra stamps `providerOptions.mastra` on prompt parts; providers don't send it.
+      const wire = (prompt: LanguageModelV2Prompt) =>
+        JSON.parse(JSON.stringify(prompt), (key, value) => (key === 'mastra' ? undefined : value));
+
+      // Each request extends the previous one, including across two retries with the same feedback.
+      for (let i = 1; i < prompts.length; i++) {
+        expect(wire(prompts[i]!).slice(0, prompts[i - 1]!.length)).toEqual(wire(prompts[i - 1]!));
+        expect(prompts[i]!.filter(msg => msg.role === 'system')).toHaveLength(1);
+      }
+
+      // The abort reason is sent verbatim as the last message.
+      const feedbackText = '<system-reminder>Response quality too low, please improve</system-reminder>';
+      const feedback = { role: 'user', content: [expect.objectContaining({ type: 'text', text: feedbackText })] };
+      const feedbackCount = (prompt: LanguageModelV2Prompt) =>
+        prompt.filter(
+          msg => msg.role === 'user' && msg.content.some(part => part.type === 'text' && part.text === feedbackText),
+        ).length;
+      expect(feedbackCount(prompts[2]!)).toBe(1);
+      expect(wire(prompts[2]!).at(-1)).toEqual(feedback);
+      expect(feedbackCount(prompts[4]!)).toBe(2);
+      expect(wire(prompts[4]!).at(-1)).toEqual(feedback);
     });
 
     it('should increment retryCount on each retry', async () => {
@@ -2155,11 +2241,11 @@ describe('New Processor Features', () => {
       });
       expect(hasRejectedResponse).toBe(false);
 
-      // The retry feedback should be present as a system message
-      const hasRetryFeedback = retryPrompt.some(
-        msg => msg.role === 'system' && msg.content.includes('Fabrication detected'),
-      );
-      expect(hasRetryFeedback).toBe(true);
+      // The retry feedback is appended as the last message, not added as a system message
+      expect(retryPrompt.filter(msg => msg.role === 'system')).toHaveLength(1);
+      const feedbackMessage = retryPrompt.at(-1)!;
+      expect(feedbackMessage.role).toBe('user');
+      expect(JSON.stringify(feedbackMessage.content)).toContain('Fabrication detected');
 
       // Final result should be the corrected response
       expect(result.text).toBe('corrected response');

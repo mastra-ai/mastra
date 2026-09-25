@@ -1,3 +1,4 @@
+export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
 
@@ -169,6 +170,11 @@ async function writeTraceQueryFixture(
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
       organizationId: span.organizationId,
+      serviceName: span.serviceName ?? null,
+      executionSource: span.executionSource ?? null,
+      userId: span.userId ?? null,
+      sessionId: span.sessionId ?? null,
+      experimentId: span.experimentId ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,

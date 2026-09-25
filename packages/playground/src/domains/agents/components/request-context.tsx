@@ -4,8 +4,10 @@ import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor'
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -15,11 +17,9 @@ import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, ExternalLink, X, Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
-import { useLinkComponent } from '@/lib/framework';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 interface RequestContextProps {

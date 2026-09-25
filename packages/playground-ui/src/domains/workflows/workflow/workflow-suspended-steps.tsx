@@ -1,0 +1,214 @@
+import type { GetWorkflowResponse } from '@mastra/client-js';
+import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
+import { useState } from 'react';
+import type { CSSProperties } from 'react';
+import { parse } from 'superjson';
+import { z } from 'zod';
+import { panelSurfaceStyle } from '../components/workflow-layout';
+import type { SuspendedStep } from './use-workflow-trigger';
+import { WorkflowInputData } from './workflow-input-data';
+import { ActivityWick } from '@/ds/components/Activity';
+import { Badge } from '@/ds/components/Badge';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
+import { cn } from '@/utils/cn';
+import { toast } from '@/utils/toast';
+
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+
+export interface ResumeStepParams {
+  stepId: string | string[];
+  runId: string;
+  resumeData: Record<string, unknown>;
+}
+
+export interface WorkflowSuspendedStepsProps {
+  suspendedSteps: SuspendedStep[];
+  workflow: GetWorkflowResponse;
+  isStreaming: boolean;
+  onResume: (step: ResumeStepParams) => Promise<void>;
+}
+
+function formatPayloadSize(payload: unknown): string {
+  const size = new Blob([JSON.stringify(payload ?? null)]).size;
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  return `${(size / 1024).toFixed(1)} KB`;
+}
+
+function getPayloadLabel(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const keys = Object.keys(payload);
+    const [onlyKey] = keys;
+    if (keys.length === 1 && onlyKey) {
+      return onlyKey;
+    }
+  }
+  return fallback;
+}
+
+export function WorkflowSuspendedSteps({
+  suspendedSteps,
+  workflow,
+  isStreaming,
+  onResume,
+}: WorkflowSuspendedStepsProps) {
+  if (isStreaming || suspendedSteps.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      className={cn(panelSurfaceStyle, 'pointer-events-auto relative isolate')}
+      data-testid="workflow-suspended-steps"
+      aria-label="Step suspended"
+    >
+      <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-background px-5 py-4">
+          <Txt as="h2" variant="column" tone="ink" className="flex items-center gap-2">
+            <Icon>
+              <CirclePause />
+            </Icon>
+            Step suspended
+          </Txt>
+          <Badge variant="orange" emphasis="muted">
+            Needs input
+          </Badge>
+        </div>
+
+        {suspendedSteps.map(step => {
+          const stepDefinition = workflow.allSteps[step.stepId];
+          if (!stepDefinition || stepDefinition.isWorkflow) return null;
+
+          const stepSchema = stepDefinition?.resumeSchema
+            ? jsonSchemaToZodRuntime(parse(stepDefinition.resumeSchema))
+            : z.record(z.string(), z.any());
+
+          return (
+            <SuspendedStepCard
+              key={`${step.runId}-${step.stepId}`}
+              step={step}
+              stepSchema={stepSchema}
+              description={stepDefinition.description}
+              onResume={onResume}
+            />
+          );
+        })}
+      </div>
+      <ActivityWick status="ready" label="Needs input" className="before:hidden" style={suspendedWickStyle} />
+    </section>
+  );
+}
+
+interface SuspendedStepCardProps {
+  step: SuspendedStep;
+  stepSchema: z.ZodSchema;
+  description?: string;
+  onResume: WorkflowSuspendedStepsProps['onResume'];
+}
+
+function SuspendedStepCard({ step, stepSchema, description, onResume }: SuspendedStepCardProps) {
+  const [isPayloadOpen, setIsPayloadOpen] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+
+  const resumeWithResponse = async (resumeData: Record<string, unknown>) => {
+    setIsResuming(true);
+    try {
+      await onResume({ stepId: step.stepId.split('.'), runId: step.runId, resumeData });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error resuming workflow');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border/50">
+      <div className="space-y-2">
+        <Txt as="p" variant="subheading" tone="ink" className="break-words">
+          {step.stepId}
+        </Txt>
+        {description && (
+          <Txt as="p" variant="caption" tone="muted">
+            {description}
+          </Txt>
+        )}
+      </div>
+
+      {step.suspendPayload !== undefined && (
+        <div className="space-y-2">
+          <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
+            <Icon>
+              <MoveDownLeft />
+            </Icon>
+            The step is asking
+          </Txt>
+
+          <Collapsible open={isPayloadOpen} onOpenChange={setIsPayloadOpen}>
+            <CollapsibleTrigger
+              className={cn(
+                raisedSurfaceStyle,
+                'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5',
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Icon>
+                  <ChevronRight
+                    className={cn('text-muted-foreground transition-transform', {
+                      'rotate-90 transform': isPayloadOpen,
+                    })}
+                  />
+                </Icon>
+                <Txt as="span" variant="body" tone="ink" className="truncate">
+                  {getPayloadLabel(step.suspendPayload, step.stepId)}
+                </Txt>
+              </span>
+              <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+                {formatPayloadSize(step.suspendPayload)}
+              </Txt>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div data-testid="suspended-payload" className="pt-2">
+                <CodeEditor
+                  value={JSON.stringify(step.suspendPayload, null, 2)}
+                  editable={false}
+                  className="w-full overflow-x-auto p-2"
+                  showCopyButton={false}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
+          <Icon>
+            <MoveUpRight />
+          </Icon>
+          Your response
+        </Txt>
+
+        <div className="-mx-5">
+          <WorkflowInputData
+            schema={stepSchema}
+            isSubmitLoading={isResuming}
+            submitButtonLabel="Resume"
+            submitButtonVariant="primary"
+            submitButtonIcon={<Play />}
+            submitButtonFullWidth
+            collapsible={false}
+            hideHeading
+            hideInputTypeLabel
+            onSubmit={resumeWithResponse}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

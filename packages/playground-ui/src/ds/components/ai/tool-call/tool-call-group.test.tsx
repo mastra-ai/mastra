@@ -129,6 +129,29 @@ describe('ToolCallGroup', () => {
     expect(screen.getByText('step cards')).toBeTruthy();
   });
 
+  it('names a running command by its description, keeping it grouped under Run', () => {
+    const steps = [
+      view('a.ts'),
+      {
+        toolName: 'execute_command',
+        args: { description: 'Running the unit tests', command: 'pnpm test' },
+        status: 'running' as const,
+      },
+      view('b.ts'),
+    ];
+    render(
+      <ToolCallGroup steps={steps}>
+        <span>step cards</span>
+      </ToolCallGroup>,
+    );
+
+    const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+    // Prose, like the row; monospace is for commands and paths.
+    expect(within(group).getByText('Running the unit tests').className).not.toContain('font-mono');
+    expect(within(group).queryByText('pnpm test')).toBeNull();
+    expect(within(group).getByRole('img', { name: 'Read, Run' })).toBeTruthy();
+  });
+
   it('marks a settled group as failed when any step failed', () => {
     render(
       <ToolCallGroup steps={[view('a.ts'), { ...view('b.ts'), status: 'error' }, view('c.ts')]}>

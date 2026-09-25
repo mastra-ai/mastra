@@ -1,5 +1,13 @@
 # @mastra/codemod
 
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Fixed the v1 evals codemod to migrate legacy scores imports. ([#25108](https://github.com/mastra-ai/mastra/pull/25108))
+
+- Fixed v1 message type migrations to use valid agent and memory exports. ([#25104](https://github.com/mastra-ai/mastra/pull/25104))
+
 ## 1.1.4
 
 ### Patch Changes

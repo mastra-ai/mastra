@@ -33,6 +33,7 @@ import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
@@ -244,6 +245,14 @@ const jira =
       ? new PlatformJiraIntegration()
       : undefined;
 
+// Direct incident.io follow-up intake for self-hosted / local deploys. A
+// single deployment-global API key wires the integration; the constructor
+// throws without one, so construction is gated on the env var. When the key
+// is absent, the factory installs the Platform-backed integration itself if
+// Platform credentials are configured.
+const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
+const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
+
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
 // commands run against untrusted repo checkouts. PATH is always added by the
@@ -344,6 +353,7 @@ const integrations = [
   ...(gitlab ? [gitlab] : []),
   ...(linear ? [linear] : []),
   ...(jira ? [jira] : []),
+  ...(incidentio ? [incidentio] : []),
   ...(slack ? [slack] : []),
 ];
 

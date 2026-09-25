@@ -25,6 +25,8 @@ export interface PendingApprovalRecord {
   runId?: string;
   toolName?: string;
   args?: Record<string, unknown>;
+  /** Platform user id of the person whose message triggered the tool call. */
+  requesterId?: string;
 }
 
 /**

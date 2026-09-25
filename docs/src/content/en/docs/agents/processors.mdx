@@ -889,7 +889,7 @@ const agent = new Agent({
 The retry mechanism:
 
 - Works in `processOutputStep()` and `processInputStep()` methods
-- Replays the step with the abort reason added as context for the LLM
+- Replays the step with the abort reason appended verbatim to the end of the conversation as a system reminder. The retry keeps the previous request as its prefix, which preserves provider prompt caching
 - Tracks retry count via the `retryCount` parameter
 - Requires an explicit `maxProcessorRetries` limit on the agent or call
 

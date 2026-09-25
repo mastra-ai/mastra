@@ -59,65 +59,210 @@ export function formatGapBetweenDates(prevDate: Date, currDate: Date): string | 
   }
 }
 
+/** A calendar span: a single day has `start` and `end` on the same day. */
+export interface DateSpan {
+  start: Date;
+  end: Date;
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+const MONTH = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?`;
+const DAY = String.raw`\d{1,2}(?:st|nd|rd|th)?`;
+const YEAR = String.raw`(?:19|20|21)\d{2}(?!\d)`;
+const MERIDIEM = String.raw`(?:[AaPp]\.[Mm]\.|[AaPp][Mm]\b)`;
+const TIME = String.raw`(?:,?\s+(?:at\s+)?\d{1,2}:\d{2}(?:\s*${MERIDIEM})?|\s+at\s+\d{1,2}\s*${MERIDIEM})`;
+const QUALIFIER = String.raw`(?:(?:early|mid|late)[- ](?:to[- ](?:early|mid|late)[- ])?)`;
+const RANGE_SEP = String.raw`(?:\s*[–—]\s*|\s*-\s*|\s+(?:to|through|until)\s+)`;
+
+/**
+ * Dates written into observation text that carry their own year, longest forms first:
+ * "Mar 1 - Mar 18, 2025", "May 27-28, 2023", "January 10, 2024 at 3:00 PM",
+ * "June–July 2022", "Dec 2021 – June 2023", "late April 2023".
+ * Bare years, dates without a year, and ISO dates (often part of model IDs, API versions,
+ * paths and branch names) are deliberately not matched.
+ */
+const FREE_TEXT_DATE = new RegExp(
+  [
+    String.raw`\b${MONTH}\s+${DAY}(?:,?\s+${YEAR})?${RANGE_SEP}${MONTH}\s+${DAY},?\s+${YEAR}${TIME}?`,
+    String.raw`\b${MONTH}\s+${DAY}${RANGE_SEP}${DAY},?\s+${YEAR}`,
+    String.raw`\b${MONTH}\s+${DAY},?\s+${YEAR}${TIME}?`,
+    String.raw`\b${QUALIFIER}?${MONTH}(?:\s+${YEAR})?${RANGE_SEP}${QUALIFIER}?${MONTH}\s+${YEAR}`,
+    String.raw`\b${QUALIFIER}?${MONTH}\s+${YEAR}`,
+  ].join('|'),
+  'g',
+);
+
+interface PartialDate {
+  qualifier?: 'early' | 'mid' | 'late';
+  month?: number;
+  day?: number;
+  year?: number;
+}
+
+const ENDPOINT = new RegExp(
+  String.raw`^(?:(early|mid|late)\s*)?(?:(${MONTH})\s*)?(?:(\d{1,2})(?:st|nd|rd|th)?)?,?\s*(?:(${YEAR}))?$`,
+  'i',
+);
+
+function parseEndpoint(text: string): PartialDate | null {
+  const match = ENDPOINT.exec(text.trim());
+  if (!match || !match[0]) return null;
+  const [, qualifier, month, day, year] = match;
+  return {
+    ...(qualifier ? { qualifier: qualifier.toLowerCase() as PartialDate['qualifier'] } : {}),
+    ...(month ? { month: MONTH_INDEX[month.slice(0, 3).toLowerCase()] } : {}),
+    ...(day ? { day: Number(day) } : {}),
+    ...(year ? { year: Number(year) } : {}),
+  };
+}
+
+const QUALIFIER_DAY = { early: 7, mid: 15, late: 23 } as const;
+const QUALIFIER_MONTH = { early: [1, 15], mid: [6, 1], late: [10, 15] } as const;
+
+/** Earliest and latest local day an endpoint can mean; null when it has no year or is not a real date. */
+function endpointBounds(date: PartialDate): [Date, Date] | null {
+  const { qualifier, month, day, year } = date;
+  if (year === undefined) return null;
+  if (month === undefined) {
+    if (day !== undefined) return null;
+    if (qualifier) {
+      const [m, d] = QUALIFIER_MONTH[qualifier];
+      return [new Date(year, m, d), new Date(year, m, d)];
+    }
+    return [new Date(year, 0, 1), new Date(year, 11, 31)];
+  }
+  if (day !== undefined) {
+    const point = new Date(year, month, day);
+    if (point.getMonth() !== month) return null;
+    return [point, point];
+  }
+  if (qualifier) {
+    const point = new Date(year, month, QUALIFIER_DAY[qualifier]);
+    return [point, point];
+  }
+  return [new Date(year, month, 1), new Date(year, month + 1, 0)];
+}
+
+/** Parses one alternative: a single date or a two-ended range, filling each end's missing parts from the other. */
+function parseSpanAlternative(text: string): DateSpan | null {
+  const ends = text.split(new RegExp(`${RANGE_SEP}(?=\\S)`)).filter(Boolean);
+  if (ends.length === 0 || ends.length > 2) return null;
+
+  const parsed = ends.map(parseEndpoint);
+  if (parsed.some(end => end === null)) return null;
+  const [first, second = first] = parsed as PartialDate[];
+  const from = { ...first! };
+  const to = { ...second };
+
+  const fromYearInferred = from.year === undefined;
+  const toYearInferred = to.year === undefined;
+  from.year ??= to.year;
+  to.year ??= from.year;
+  if (from.month === undefined && (from.day !== undefined || from.qualifier) && to.month !== undefined) {
+    from.month = to.month;
+  }
+  if (to.month === undefined && to.day !== undefined && from.month !== undefined) to.month = from.month;
+
+  // A range that crosses New Year with one stated year ("Dec 27 – Jan 3, 2025") puts the other end in the adjacent year.
+  if (from.month !== undefined && to.month !== undefined && from.month > to.month && from.year === to.year) {
+    if (fromYearInferred) from.year! -= 1;
+    else if (toYearInferred) to.year! += 1;
+  }
+
+  const fromBounds = endpointBounds(from);
+  const toBounds = endpointBounds(to);
+  if (!fromBounds || !toBounds) return null;
+  const span = { start: fromBounds[0], end: toBounds[1] };
+  return span.start <= span.end ? span : null;
+}
+
+function normalizeDateText(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(?:approx(?:\.|imately)?|about|around|circa|c\.|~)\s*/i, '')
+    .replace(/^(?:by|in|until|before|after)\s+/i, '')
+    .replace(/\b(?:the\s+)?end\s+of\s+/gi, 'late ')
+    .replace(/\b(?:the\s+)?(?:start|beginning)\s+of\s+/gi, 'early ')
+    .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (whole, y: string, m: string, d: string) => {
+      const month = Object.keys(MONTH_INDEX)[Number(m) - 1];
+      return month ? `${month} ${Number(d)}, ${y}` : whole;
+    })
+    .replace(new RegExp(TIME, 'g'), '')
+    .replace(/\b(early|mid|late|to)-/gi, '$1 ')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Parses the whole of `text` as a date or date range. Accepts "May 30, 2023",
+ * "Mar 22, 2025 at 18:08", "May 27-28, 2023", "Dec 27–31, 2021", "Mar 1 - Mar 18, 2025",
+ * "Aug 1, 2024 - Feb 28, 2025", "August 2024", "June–July 2022", "late April 2023",
+ * "mid-to-late May 2023", "late 2023", "2035", "2021–2026", an "approx." prefix, and
+ * "A or B" alternatives (their union). Returns null when no year is known.
+ */
+export function parseDateSpan(text: string): DateSpan | null {
+  const alternatives = normalizeDateText(text)
+    .split(/\s+or\s+/i)
+    .map(parseSpanAlternative);
+  if (alternatives.length === 0 || alternatives.some(span => span === null)) return null;
+  const spans = alternatives as DateSpan[];
+  return {
+    start: new Date(Math.min(...spans.map(span => span.start.getTime()))),
+    end: new Date(Math.max(...spans.map(span => span.end.getTime()))),
+  };
+}
+
+const QUALIFIED_YEAR = new RegExp(
+  String.raw`\b(?:by|in|until|before|after|(?:the\s+)?(?:early|mid|late|end\s+of|start\s+of|beginning\s+of))\s+${YEAR}`,
+  'gi',
+);
+
+/**
+ * Like `parseDateSpan`, but falls back to the first dated expression inside longer text,
+ * then to a year on its own ("by late 2027", "$500 in 2024"). Only for text known to be a date.
+ */
+function findDateSpan(text: string): DateSpan | null {
+  const whole = parseDateSpan(text);
+  if (whole) return whole;
+  for (const pattern of [FREE_TEXT_DATE, QUALIFIED_YEAR]) {
+    for (const match of text.matchAll(pattern)) {
+      const span = parseDateSpan(match[0]);
+      if (span) return span;
+    }
+  }
+  return null;
+}
+
 /**
  * Parses a date string like "May 30, 2023", "May 27-28, 2023", "late April 2023", etc.
- * Returns the parsed Date or null if unparseable.
+ * Returns the start of the date or range, or null if unparseable or the year is unknown.
  */
 export function parseDateFromContent(dateContent: string): Date | null {
-  let targetDate: Date | null = null;
+  return findDateSpan(dateContent)?.start ?? null;
+}
 
-  // Try simple date format first: "May 30, 2023"
-  const simpleDateMatch = dateContent.match(/([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
-  if (simpleDateMatch) {
-    const parsed = new Date(`${simpleDateMatch[1]} ${simpleDateMatch[2]}, ${simpleDateMatch[3]}`);
-    if (!isNaN(parsed.getTime())) {
-      targetDate = parsed;
-    }
-  }
-
-  // Try range format: "May 27-28, 2023" - use first date
-  if (!targetDate) {
-    const rangeMatch = dateContent.match(/([A-Z][a-z]+)\s+(\d{1,2})-\d{1,2},?\s+(\d{4})/);
-    if (rangeMatch) {
-      const parsed = new Date(`${rangeMatch[1]} ${rangeMatch[2]}, ${rangeMatch[3]}`);
-      if (!isNaN(parsed.getTime())) {
-        targetDate = parsed;
-      }
-    }
-  }
-
-  // Try "late/early/mid Month Year" format
-  if (!targetDate) {
-    const vagueMatch = dateContent.match(
-      /(late|early|mid)[- ]?(?:to[- ]?(?:late|early|mid)[- ]?)?([A-Z][a-z]+)\s+(\d{4})/i,
-    );
-    if (vagueMatch) {
-      const month = vagueMatch[2];
-      const year = vagueMatch[3];
-      const modifier = vagueMatch[1]!.toLowerCase();
-      let day = 15; // default to middle
-      if (modifier === 'early') day = 7;
-      if (modifier === 'late') day = 23;
-      const parsed = new Date(`${month} ${day}, ${year}`);
-      if (!isNaN(parsed.getTime())) {
-        targetDate = parsed;
-      }
-    }
-  }
-
-  // Try "Month to Month Year" format (cross-month range)
-  if (!targetDate) {
-    const crossMonthMatch = dateContent.match(/([A-Z][a-z]+)\s+to\s+(?:early\s+)?([A-Z][a-z]+)\s+(\d{4})/i);
-    if (crossMonthMatch) {
-      // Use the middle of the range - approximate with second month
-      const parsed = new Date(`${crossMonthMatch[2]} 1, ${crossMonthMatch[3]}`);
-      if (!isNaN(parsed.getTime())) {
-        targetDate = parsed;
-      }
-    }
-  }
-
-  return targetDate;
+/** Relative time for a span: "3 weeks ago", or "7 months ago to 4 weeks ago" when the ends differ. */
+export function formatRelativeSpan(span: DateSpan, currentDate: Date): string {
+  const start = formatRelativeTime(span.start, currentDate);
+  const end = formatRelativeTime(span.end, currentDate);
+  if (start === end) return start;
+  if (!end.startsWith('in ')) return `${start} to ${end}`;
+  return start.startsWith('in ') ? `${start} to ${end.slice(3)}` : `${start} to ${end.slice(3)} from now`;
 }
 
 /**
@@ -140,75 +285,74 @@ export function isFutureIntentObservation(line: string): boolean {
 
 /**
  * Expand inline estimated dates with relative time.
- * Matches patterns like "(estimated May 27-28, 2023)" or "(meaning May 30, 2023)"
- * and expands them to "(meaning May 30, 2023 - which was 3 weeks ago)"
+ * Matches patterns like "(estimated May 27-28, 2023)" or "(meaning May 30, 2023 at 3:00 PM)"
+ * and expands them to "(meaning May 30, 2023 - 3 weeks ago)". Notes without a year are left alone.
  */
 export function expandInlineEstimatedDates(observations: string, currentDate: Date): string {
-  // Match patterns like:
-  // (estimated May 27-28, 2023)
-  // (meaning May 30, 2023)
-  // (estimated late April to early May 2023)
-  // (estimated mid-to-late May 2023)
-  // These should now be at the END of observation lines
-  const inlineDateRegex = /\((estimated|meaning)\s+([^)]+\d{4})\)/gi;
+  const inlineDateRegex = /\((estimated|meaning)\s([^()]*)\)/gi;
 
-  return observations.replace(inlineDateRegex, (match, prefix: string, dateContent: string, offset: number) => {
-    const targetDate = parseDateFromContent(dateContent);
+  return observations.replace(inlineDateRegex, (match, prefix: string, noteText: string, offset: number) => {
+    const dateContent = noteText.trimStart();
+    const span = findDateSpan(dateContent);
+    if (!span) return match;
 
-    if (targetDate) {
-      const relative = formatRelativeTime(targetDate, currentDate);
+    const relative = formatRelativeSpan(span, currentDate);
 
-      // Check if this is a future-intent observation that's now in the past
-      // We need to look at the text BEFORE this match to determine intent
-      const lineStart = observations.lastIndexOf('\n', offset) + 1;
-      const lineBeforeDate = observations.slice(lineStart, offset);
-
-      const isPastDate = targetDate < currentDate;
-      const isFutureIntent = isFutureIntentObservation(lineBeforeDate);
-
-      if (isPastDate && isFutureIntent) {
-        // This was a planned action that should have happened by now
-        return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
-      }
-
-      return `(${prefix} ${dateContent} - ${relative})`;
+    // A planned action whose date has passed has likely happened; the intent is in the text before the note.
+    const lineStart = observations.lastIndexOf('\n', offset) + 1;
+    const lineBeforeDate = observations.slice(lineStart, offset);
+    if (span.end < currentDate && isFutureIntentObservation(lineBeforeDate)) {
+      return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
     }
 
-    // Couldn't parse, return original
-    return match;
+    return `(${prefix} ${dateContent} - ${relative})`;
+  });
+}
+
+/**
+ * Annotates dates written into observation text, e.g. "exam on January 10, 2024" becomes
+ * "exam on January 10, 2024 (5 months ago)". Only dates that state their year are annotated;
+ * "Date:" headers and "(meaning/estimated …)" notes are handled separately and skipped here.
+ */
+export function annotateObservationTextDates(observations: string, currentDate: Date): string {
+  const regex = new RegExp(
+    String.raw`^Date:.*$|\((?:[Ee]stimated|[Mm]eaning)\b[^()]*\)|${FREE_TEXT_DATE.source}`,
+    'gm',
+  );
+  return observations.replace(regex, (match, offset: number) => {
+    if (match.startsWith('Date:') || match.startsWith('(')) return match;
+    const span = parseDateSpan(match);
+    if (!span) return match;
+    const relative = formatRelativeSpan(span, currentDate);
+    // A date closing a parenthetical takes the "(… - 3 weeks ago)" form rather than nesting parentheses.
+    return observations[offset + match.length] === ')' ? `${match} - ${relative}` : `${match} (${relative})`;
   });
 }
 
 /**
  * Add relative time annotations to observations.
- * Transforms "Date: May 15, 2023" headers to "Date: May 15, 2023 (5 days ago)"
- * and expands inline estimated dates with relative time context.
+ * Transforms "Date: May 15, 2023" headers to "Date: May 15, 2023 (5 days ago)", range headers such as
+ * "Date: Aug 1, 2024 - Feb 28, 2025" to "(7 months ago to 4 weeks ago)", and annotates inline dates.
  */
 export function addRelativeTimeToObservations(observations: string, currentDate: Date): string {
-  // First, expand inline estimated dates with relative time
-  const withInlineDates = expandInlineEstimatedDates(observations, currentDate);
+  const withInlineDates = annotateObservationTextDates(
+    expandInlineEstimatedDates(observations, currentDate),
+    currentDate,
+  );
 
-  // Match date headers like "Date: May 15, 2023" or "Date: January 1, 2024"
-  const dateHeaderRegex = /^(Date:\s*)([A-Z][a-z]+ \d{1,2}, \d{4})$/gm;
+  const dateHeaderRegex = /^(Date:[ \t]*)(.*)$/gm;
 
-  // First pass: collect all dates in order
-  const dates: { index: number; date: Date; match: string; prefix: string; dateStr: string }[] = [];
+  // First pass: collect every header that parses as a date or range, in order
+  const dates: { index: number; span: DateSpan; match: string; prefix: string; dateStr: string }[] = [];
   let regexMatch: RegExpExecArray | null;
   while ((regexMatch = dateHeaderRegex.exec(withInlineDates)) !== null) {
-    const dateStr = regexMatch[2]!;
-    const parsed = new Date(dateStr);
-    if (!isNaN(parsed.getTime())) {
-      dates.push({
-        index: regexMatch.index,
-        date: parsed,
-        match: regexMatch[0],
-        prefix: regexMatch[1]!,
-        dateStr,
-      });
+    const dateStr = regexMatch[2]!.trimEnd();
+    const span = parseDateSpan(dateStr);
+    if (span) {
+      dates.push({ index: regexMatch.index, span, match: regexMatch[0], prefix: regexMatch[1]!, dateStr });
     }
   }
 
-  // If no dates found, return the inline-expanded version
   if (dates.length === 0) {
     return withInlineDates;
   }
@@ -221,25 +365,21 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
     const curr = dates[i]!;
     const prev = i > 0 ? dates[i - 1]! : null;
 
-    // Add text before this date header
     result += withInlineDates.slice(lastIndex, curr.index);
 
-    // Add gap marker if there's a significant gap from previous date
+    // The gap runs from where the previous header's span ends to where this one starts
     if (prev) {
-      const gap = formatGapBetweenDates(prev.date, curr.date);
+      const gap = formatGapBetweenDates(prev.span.end, curr.span.start);
       if (gap) {
         result += `\n${gap}\n\n`;
       }
     }
 
-    // Add the date header with relative time
-    const relative = formatRelativeTime(curr.date, currentDate);
-    result += `${curr.prefix}${curr.dateStr} (${relative})`;
+    result += `${curr.prefix}${curr.dateStr} (${formatRelativeSpan(curr.span, currentDate)})`;
 
     lastIndex = curr.index + curr.match.length;
   }
 
-  // Add remaining text after last date header
   result += withInlineDates.slice(lastIndex);
 
   return result;

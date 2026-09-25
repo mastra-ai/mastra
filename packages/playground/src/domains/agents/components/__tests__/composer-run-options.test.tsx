@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -7,7 +8,6 @@ import { MemoryRouter } from 'react-router';
 import { stringify } from 'superjson';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { TracingSettingsProvider } from '../../../observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '../../../request-context/context/schema-request-context';
 import { AgentEditFormProvider } from '../../context/agent-edit-form-context';
 import type { AgentFormValues } from '../agent-edit-page/utils/form-validation';

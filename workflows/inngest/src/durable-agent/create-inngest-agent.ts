@@ -175,7 +175,7 @@ export interface CreateInngestAgentOptions {
   /**
    * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
    * InngestAgent (a warning is logged if set). Inngest's step memoization and
-   * replay own durability, so InngestAgent pins a `suspended`-only snapshot
+   * replay own durability, so InngestAgent pins a suspended-and-terminal snapshot
    * policy — Mastra snapshots exist purely for human-in-the-loop resume.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
@@ -483,6 +483,12 @@ export interface InngestAgent<TOutput = undefined> {
   getDurableWorkflows(): Workflow<any, any, any, any, any, any, any>[];
 
   /**
+   * Storage workflow name of the agentic-loop snapshot (`inngest:durable-agentic-loop`).
+   * Server handlers and suspended-run discovery use it to locate this agent's runs.
+   */
+  readonly durableLoopWorkflowName: string;
+
+  /**
    * Set the Mastra instance for observability.
    * Called by Mastra during agent registration.
    * @internal
@@ -650,7 +656,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     console.warn(
       `InngestAgent '${idOverride ?? agent.id}': ignoring the shouldPersistSnapshot option. ` +
         `Inngest's step memoization/replay owns durability, so InngestAgent always persists ` +
-        `'suspended' snapshots only (for human-in-the-loop resume).`,
+        `only 'suspended' and terminal snapshots (for human-in-the-loop resume).`,
     );
   }
 
@@ -823,11 +829,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | '__fork'
     | 'getDurableWorkflows'
+    | 'durableLoopWorkflowName'
     | '__setMastra'
   > = {
     get id() {
       return agentId;
     },
+
+    durableLoopWorkflowName: InngestDurableStepIds.AGENTIC_LOOP,
 
     get name() {
       return agentName;

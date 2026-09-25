@@ -12,7 +12,7 @@ const result = await runEvals({ target: myAgent, scorers: [scorer], data: inputs
 // Multiple calls
 const result2 = await runEvals({ target: myAgent, scorers: [scorer], data: inputs });
 
-// Test multiple imports with aliases from same package
+// Test legacy and partially migrated imports with aliases
 import { runEvals as runExp } from '@mastra/core/evals';
 import { runEvals as experiment } from '@mastra/core/evals';
 

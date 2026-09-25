@@ -49,12 +49,15 @@ function createSlackChannel(): SlackChannelMock {
 function createMockMastra(options: {
   storage?: ReturnType<typeof createMockStorage> | null;
   channels?: Record<string, SlackChannelMock>;
+  /** When set, the mock exposes `resolveChannels()` like a resolver-configured Mastra. */
+  resolveChannels?: ReturnType<typeof vi.fn>;
   registeredAgentIds?: string[];
 }) {
   const registered = new Set(options.registeredAgentIds ?? []);
   return {
     getStorage: vi.fn().mockReturnValue(options.storage ?? null),
     channels: options.channels ?? {},
+    ...(options.resolveChannels ? { resolveChannels: options.resolveChannels } : {}),
     getAgentById: vi.fn().mockImplementation((id: string) => (registered.has(id) ? { id } : undefined)),
   };
 }
@@ -438,6 +441,69 @@ describe('Channel Handlers RBAC', () => {
       }).catch(() => {});
 
       expect(slackChannel.disconnect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('channels resolver support', () => {
+    it('prefers resolveChannels() over the static snapshot, picking up post-boot connections', async () => {
+      // Snapshot is empty — the provider exists only via the resolver, as it
+      // would when a platform connection was added after boot.
+      const resolveChannels = vi.fn().mockResolvedValue({ slack: slackChannel });
+      const mastraWithResolver = createMockMastra({
+        storage,
+        channels: {},
+        resolveChannels,
+        registeredAgentIds: ['agent-owned-by-alice'],
+      });
+      const ctx = asAuthenticatedUser(createContext(mastraWithResolver), 'alice');
+
+      const result = await CONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+        options: undefined,
+      });
+
+      expect(resolveChannels).toHaveBeenCalled();
+      expect(slackChannel.connect).toHaveBeenCalledWith('agent-owned-by-alice', undefined);
+      expect(result).toMatchObject({ type: 'oauth', installationId: 'inst-1' });
+    });
+
+    it('404s with the resolver-provided channel list when the platform is unknown', async () => {
+      const resolveChannels = vi.fn().mockResolvedValue({ slack: slackChannel });
+      const mastraWithResolver = createMockMastra({
+        storage,
+        channels: {},
+        resolveChannels,
+        registeredAgentIds: ['agent-owned-by-alice'],
+      });
+      const ctx = asAuthenticatedUser(createContext(mastraWithResolver), 'alice');
+
+      const error = await CONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'telegram',
+        agentId: 'agent-owned-by-alice',
+        options: undefined,
+      }).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+      expect(error.message).toContain('slack');
+    });
+
+    it('falls back to the static snapshot when resolveChannels is absent (older core)', async () => {
+      // All other tests in this file exercise the fallback implicitly; this
+      // one pins it as intended behavior.
+      const ctx = asAuthenticatedUser(createContext(mastra), 'alice');
+
+      await CONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+        options: undefined,
+      });
+
+      expect(slackChannel.connect).toHaveBeenCalledWith('agent-owned-by-alice', undefined);
     });
   });
 });
