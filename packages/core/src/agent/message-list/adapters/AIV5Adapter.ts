@@ -420,8 +420,14 @@ export class AIV5Adapter {
               : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
           // Provider file IDs (e.g. OpenAI "file-...") ride the url branch untouched so
-          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
-          if ((categorized.type === 'url' || categorized.type === 'providerFileId') && typeof fileData === 'string') {
+          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API. So do raw
+          // strings that aren't base64 (relative paths), instead of becoming undecodable data URLs.
+          if (
+            typeof fileData === 'string' &&
+            (categorized.type === 'url' ||
+              categorized.type === 'providerFileId' ||
+              (categorized.type === 'raw' && !isBase64Like(fileData)))
+          ) {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
               url: fileData,

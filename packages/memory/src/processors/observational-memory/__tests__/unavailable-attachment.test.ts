@@ -1,8 +1,8 @@
 /**
- * A stored attachment that can't be downloaded (here: a relative path persisted
- * as a malformed base64 data URL, see #23705) must not break the thread. The OM
- * observer replaces it with a placeholder and carries on, instead of failing the
- * turn after minutes of retries.
+ * A stored attachment that can't be downloaded (a relative or protocol-relative path, or one persisted
+ * as a malformed base64 data URL by older versions, see #23705) must not break the
+ * thread. The OM observer replaces it with a placeholder and carries on, instead of
+ * failing the turn after minutes of retries.
  */
 
 import { Agent } from '@mastra/core/agent';
@@ -104,20 +104,29 @@ function createObserverModel() {
   return model;
 }
 
-const malformedDataUrl = 'data:image/png;base64,/relative/path.png';
+const relativePath = '/relative/path.png';
+const malformedDataUrl = `data:image/png;base64,${relativePath}`;
+const protocolRelativeUrl = '//cdn.example.com/foo.png';
 
 describe('OM observer with an undownloadable stored attachment', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it.each(['thread', 'resource'] as const)(
-    'is skipped by the OM observer instead of failing the turn (%s scope)',
-    async scope => {
+  it.each([
+    ['thread', 'malformed data URL', malformedDataUrl, relativePath],
+    ['resource', 'malformed data URL', malformedDataUrl, relativePath],
+    ['thread', 'relative path', relativePath, relativePath],
+    ['resource', 'relative path', relativePath, relativePath],
+    ['thread', 'protocol-relative URL', protocolRelativeUrl, protocolRelativeUrl],
+    ['resource', 'protocol-relative URL', protocolRelativeUrl, protocolRelativeUrl],
+  ] as const)(
+    'is skipped by the OM observer instead of failing the turn (%s scope, %s)',
+    async (scope, _label, storedData, path) => {
       const realFetch = globalThis.fetch;
       let assetFetches = 0;
       vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-        if (String(input) === malformedDataUrl) assetFetches++;
+        if (String(input).includes(path)) assetFetches++;
         return realFetch(input, init);
       });
 
@@ -148,7 +157,7 @@ describe('OM observer with an undownloadable stored attachment', () => {
           format: 2,
           parts: [
             { type: 'text', text: 'Here is a screenshot of the dashboard I mentioned earlier today.' },
-            { type: 'file', data: malformedDataUrl, mimeType: 'image/png' },
+            { type: 'file', data: storedData, mimeType: 'image/png' },
           ],
         },
       };
@@ -180,7 +189,9 @@ describe('OM observer with an undownloadable stored attachment', () => {
 
       expect(result.tripwire).toBeUndefined();
       expect(result.text).toBe('Done.');
-      expect(assetFetches).toBeGreaterThan(0);
+      // A malformed data URL is decoded (and fails) locally; a path without a scheme is never fetched.
+      if (storedData.startsWith('data:')) expect(assetFetches).toBeGreaterThan(0);
+      else expect(assetFetches).toBe(0);
       expect(elapsedMs).toBeLessThan(10_000);
 
       expect(observerModel.calls).toBeGreaterThan(0);
@@ -189,7 +200,7 @@ describe('OM observer with an undownloadable stored attachment', () => {
       expect(firstObserverPrompt).toContain('[Attachment unavailable: image/png]');
 
       for (const prompt of [...actorModel.prompts, ...observerModel.prompts]) {
-        expect(JSON.stringify(prompt)).not.toContain('/relative/path.png');
+        expect(JSON.stringify(prompt)).not.toContain(path);
       }
 
       const memoryStore = await storage.getStore('memory');
