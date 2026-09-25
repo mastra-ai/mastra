@@ -87,7 +87,7 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
           <DataList.Cell>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
               <Txt as="span" variant="caption" font="mono">
-                {s.cron}
+                {s.cron ?? (s.runAt ? `once @ ${new Date(s.runAt).toLocaleString()}` : '—')}
               </Txt>
               {s.timezone ? <span className="text-meta text-muted-foreground">{s.timezone}</span> : null}
             </span>

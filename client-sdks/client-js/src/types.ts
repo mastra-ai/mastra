@@ -2229,7 +2229,7 @@ export type ListBackgroundTasksResponse = GeneratedResponse<'GET /background-tas
 
 export type StreamBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /background-tasks/stream'>>;
 
-export type ScheduleStatus = 'active' | 'paused';
+export type ScheduleStatus = 'active' | 'paused' | 'completed';
 
 export interface ScheduleRunSummary {
   status: WorkflowRunStatus;
