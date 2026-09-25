@@ -546,6 +546,15 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_URL;
   });
 
+  it('hands the host session-resource authorization to the controller', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const authorizeSessionResource = vi.fn(async () => true);
+
+    await createMastraCode({ authorizeSessionResource });
+
+    expect(controllerConstructorMock.mock.calls[0]![0].authorizeSessionResource).toBe(authorizeSessionResource);
+  });
+
   it('omits background task infrastructure unless background tools are enabled', async () => {
     const { createMastraCode } = await import('../index.js');
 
