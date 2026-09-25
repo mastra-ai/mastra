@@ -65,7 +65,7 @@ export function LifelinePoint({
       {tooltipPosition
         ? createPortal(
             <ChartTooltip
-              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full px-2 py-1 font-mono whitespace-nowrap tabular-nums"
+              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full px-2 py-1 whitespace-nowrap tabular-nums"
               id={tooltipId}
               role="tooltip"
               style={{ left: tooltipPosition.left, top: tooltipPosition.top }}

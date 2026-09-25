@@ -10,6 +10,7 @@ import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types'
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 export function SignalLifelines({
   signalName,
@@ -32,7 +33,7 @@ export function SignalLifelines({
 
   return (
     <section aria-label={`${label} lifelines`} className="min-w-0">
-      <h3 className="font-mono text-column tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
+      <Txt as="h3" variant="column" className="uppercase" style={{ color: nodeColor(hue) }}>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -53,9 +54,11 @@ export function SignalLifelines({
           </TooltipTrigger>
           <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
         </Tooltip>
-      </h3>
+      </Txt>
       {isCollapsed ? undefined : rows.length === 0 ? (
-        <p className="mt-2 text-caption text-muted-foreground">No themes in these landmarks.</p>
+        <Txt variant="caption" tone="muted" className="mt-2">
+          No themes in these landmarks.
+        </Txt>
       ) : (
         <ul className="mt-2 space-y-0.5">
           {rows.map(row => (

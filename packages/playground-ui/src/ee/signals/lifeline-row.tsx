@@ -5,6 +5,7 @@ import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { nodeColor } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -119,9 +120,9 @@ export function LifelineRow({
           );
         })}
       </div>
-      <span className="w-9 shrink-0 font-mono text-caption text-muted-foreground tabular-nums">
+      <Txt as="span" variant="caption" tone="muted" className="w-9 shrink-0 tabular-nums">
         {row.points.length}/{snapshots.length}
-      </span>
+      </Txt>
     </li>
   );
 }
