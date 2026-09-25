@@ -17,6 +17,7 @@
     "node": ">=20",
     "pnpm": ">=11.0.0"
   },
+  "packageManager": "pnpm@11.21.0",
   "dependencies": {
     "@fastify/otel": "0.9.4",
     "@mastra/core": "latest",
@@ -25,7 +26,7 @@
     "@mastra/otel-bridge": "latest",
     "@mastra/server": "latest",
     "@opentelemetry/api": "1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "0.67.0",
+    "@opentelemetry/auto-instrumentations-node": "0.80.0",
     "@opentelemetry/exporter-trace-otlp-http": "0.208.0",
     "@opentelemetry/host-metrics": "0.37.0",
     "@opentelemetry/instrumentation": "0.208.0",
@@ -47,6 +48,6 @@
     "prettier": "3.6.2",
     "ts-node": "10.9.2",
     "typescript": "5.9.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.11"
   }
 }

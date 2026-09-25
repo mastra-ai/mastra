@@ -29,9 +29,39 @@ export const server = setupServer(
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
+  // A server without the JIRA_* env group mounts no Jira routes; the ambient
+  // 404 mirrors that and the Jira service degrades to a disabled status.
+  // Jira-specific tests override these with `server.use(...)`.
+  http.get('*/web/jira/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  http.get('*/web/jira/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  http.get('*/web/jira/issues', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  // A server without Platform machine credentials mounts no platform connect
+  // routes; the ambient 404 hides the provider sections. Provider connection
+  // tests override these with `server.use(...)`.
+  http.get('*/web/integrations/platform/:provider/connections', () =>
+    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+  ),
+  // Ambient per-connection knowledge import routing — an older server (no
+  // routing storage domain wired) mounts no routing routes; the control
+  // hides on 404. Routing tests override with `server.use(...)`.
+  http.get('*/web/integrations/platform/:provider/connections/:connectionId/routing', () =>
+    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+  ),
+  // Ambient platform integration catalog. A deployment without Platform
+  // credentials doesn't mount the catalog route at all — 404 mirrors that
+  // reality so the `usePlatformCatalogQuery` retry-off gate hides logo
+  // errors as expected. Tests that assert logo/display-name plumbing must
+  // override this with `server.use(...)` — anything else means a real
+  // catalog regression would silently pass with an "empty catalog" default.
+  http.get('*/web/integrations/platform/catalog', () =>
+    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+  ),
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
+  // GitLab intake is optional; feature tests override these ambient 404s.
+  http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/attention', () =>

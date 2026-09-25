@@ -427,7 +427,8 @@ const stream = await agent.stream('message for agent')
                     name: 'instructions',
                     type: 'string',
                     isOptional: true,
-                    description: 'Additional instructions for the structured output model.',
+                    description:
+                      'Additional instructions for the structured output model. With `jsonPromptInjection` and no structuring `model`, this text is injected into the prompt in place of the serialized schema.',
                   },
                 ],
               },
@@ -541,7 +542,7 @@ const stream = await agent.stream('message for agent')
                     type: '(title: string) => void | Promise<void>',
                     isOptional: true,
                     description:
-                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends, unless `generateTitle.emitEvent` is enabled — then the title is also emitted as a `data-thread-title` chunk on the stream before `finish`. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
                   },
                 ],
               },
@@ -704,6 +705,13 @@ const stream = await agent.stream('message for agent')
               'Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.',
           },
           {
+            name: 'eagerToolExecution',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Defaults to `true`. A tool call whose arguments have finished streaming starts executing immediately, instead of waiting for the model to finish the whole step. Set it to `false` to restore the previous scheduling. Tool results and message history keep their model-call order either way. Only server-side tools are started early: approval-gated, suspend-schema-declaring, provider-executed, client-side, background-dispatched (by argument or by `backgroundTasks` config), missing and inactive tools are left to the post-stream pass, as is any run using `autoResumeSuspendedTools` or an output processor that runs after the stream completes. That last case is wider than it sounds: a processor workflow you build yourself counts whatever it contains, because its contents are not inspected, and so does `structuredOutput` when given an explicit `model`. A processor implementing `processToolResult` is excluded too when a provider-executed tool is configured: that hook runs inside the stream when a provider result arrives there, and its abort bails the turn before the post-stream pass, so starting a tool early would change whether it runs, not just when. Without a provider tool, the hook only sees results after the pass and early dispatch stays on. Also left to the post-stream pass is any run using `toolCallConcurrency.strategy: 'called'` (the full set of called tools is not known until the step finishes). Eager executions honour the same `toolCallConcurrency` limit (they are counted separately from the post-stream pass, so the limit constrains each rather than being pooled across both) and aborting the run waits for work already running, then keeps its result, as the post-stream pass does. A tool that already ran is never run again, and its finished result is never thrown away. If the last model fails mid-stream with no retry, its calls still run through the post-stream pass, which adopts eager work instead of restarting it. If the attempt is retried or failed over, tools still running are allowed to finish, and every started call's result or error is written into the conversation before the replacement attempt begins, even if the retry never runs. A tool that calls `suspend()` at runtime without declaring a suspend schema cannot be detected in advance; the early attempt hands its suspension back to that call's own post-stream iteration, which raises the real suspension with the tool's own payload, so the tool body runs exactly once — the same as it would without early execution. Because that pre-suspend work already happened, an attempt holding such a call is never retried or failed over: the run suspends on that call instead, so resuming it is the only way the tool runs again. Not supported by durable agents, which reject an explicit `true`.",
+          },
+          {
             name: 'providerOptions',
             type: 'Record<string, Record<string, JSONValue>>',
             isOptional: true,
@@ -793,6 +801,13 @@ const stream = await agent.stream('message for agent')
             properties: [
               {
                 parameters: [
+                  {
+                    name: 'rootSpanName',
+                    type: 'string',
+                    isOptional: true,
+                    description:
+                      "Display name for the root span of this trace, replacing the default `workflow run: '<id>'` or `agent run: '<id>'` name. Use it to tell runs apart in trace lists.",
+                  },
                   {
                     name: 'metadata',
                     type: 'Record<string, any>',

@@ -1,17 +1,5 @@
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useContext } from 'react';
-import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowDebugModeSwitch } from './workflow-debug-mode-switch';
 
 export const WorkflowRunOptions = () => {
-  const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
-  return (
-    <>
-      <Txt as="h3" variant="ui-md" className="text-neutral3">
-        Debug Mode
-      </Txt>
-
-      <Checkbox checked={debugMode} onCheckedChange={value => setDebugMode(value)} />
-    </>
-  );
+  return <WorkflowDebugModeSwitch />;
 };

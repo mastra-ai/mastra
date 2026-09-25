@@ -3,12 +3,12 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ScorerSummary {
   scorerId: string;
@@ -58,9 +58,9 @@ export function ComparisonSideHeader({
         </Badge>
         {experiment && (
           <Button
-            as={Link}
-            size="xs"
-            href={`/experiments/${experiment.id}`}
+            render={<Link href={`/experiments/${experiment.id}`} />}
+            size="sm"
+
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>
@@ -69,7 +69,7 @@ export function ComparisonSideHeader({
       </div>
 
       {experiment && (
-        <div className="text-ui-sm text-neutral3 flex flex-wrap gap-x-4 gap-y-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
           {experiment.name && (
             <TextAndIcon>
               <HashIcon /> {shortId}
@@ -93,7 +93,7 @@ export function ComparisonSideHeader({
           </span>
           {createdAt && (
             <TextAndIcon>
-              <CalendarIcon /> {format(createdAt, 'MMM d, yyyy HH:mm')}
+              <CalendarIcon /> {formatDate(createdAt, 'date-time')}
             </TextAndIcon>
           )}
         </div>

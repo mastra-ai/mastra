@@ -1,21 +1,9 @@
-import type { ClientScoreRowData } from '@mastra/client-js';
+import type { ClientScoreRowData, MastraClient } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-
-/**
- * Hook to list experiments for a dataset with optional pagination.
- */
-export const useDatasetExperiments = (datasetId: string, pagination?: { page?: number; perPage?: number }) => {
-  const client = useMastraClient();
-  return useQuery({
-    queryKey: ['dataset-experiments', datasetId, pagination],
-    queryFn: () => client.listDatasetExperiments(datasetId, pagination),
-    enabled: Boolean(datasetId),
-  });
-};
 
 /**
  * Hook to fetch a single dataset experiment with polling while running
@@ -39,10 +27,15 @@ export const useDatasetExperiment = (datasetId: string, experimentId: string) =>
 
 const RESULTS_PER_PAGE = 100;
 
+export type ExperimentResultsOrderBy = NonNullable<
+  NonNullable<Parameters<MastraClient['listDatasetExperimentResults']>[2]>['orderBy']
+>;
+
 interface UseDatasetExperimentResultsParams {
   datasetId: string;
   experimentId: string;
   experimentStatus?: ExperimentStatus;
+  orderBy?: ExperimentResultsOrderBy;
 }
 
 /**
@@ -53,16 +46,18 @@ export const useDatasetExperimentResults = ({
   datasetId,
   experimentId,
   experimentStatus,
+  orderBy,
 }: UseDatasetExperimentResultsParams) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['dataset-experiment-results', datasetId, experimentId, experimentStatus],
+    queryKey: ['dataset-experiment-results', datasetId, experimentId, experimentStatus, orderBy],
     queryFn: async ({ pageParam }) => {
       return client.listDatasetExperimentResults(datasetId, experimentId, {
         page: pageParam,
         perPage: RESULTS_PER_PAGE,
+        orderBy,
       });
     },
     initialPageParam: 0,

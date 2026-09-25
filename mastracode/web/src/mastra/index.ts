@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Knowledge } from '@mastra/core/knowledge';
 import type { MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
+import { importers as platformImporters } from '@mastra/connect';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -32,9 +33,12 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, factoryProjectScopes, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
+import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -97,7 +101,14 @@ function credentialEncryption() {
 // in favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev)
 // the in-process default applies.
 const redisUrl = process.env.REDIS_URL;
-const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
+// Backstop TTL for idle streams: every write (publish, group creation, nack
+// retry) refreshes it — reads do not — so actively written topics never
+// expire. Open-ended topics (per-thread streams, feed
+// topics) are never clearTopic'd, and topics whose eager cleanup was missed
+// (e.g. a crashed run, or a reply landing after the requester's clearTopic)
+// would otherwise stay in Redis forever.
+const STREAM_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
+const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl, streamIdleTtlMs: STREAM_IDLE_TTL_MS }) : undefined;
 if (redisUrl) {
   // Redact credentials before logging (REDIS_URL may embed a password).
   let redisTarget = 'redis';
@@ -146,11 +157,22 @@ if (authDisabled) {
 }
 const secretEncryption = auth === null ? undefined : credentialEncryption();
 
+// Platform-backed integrations are installed by the factory only when Platform
+// credentials are present — the same check it makes internally.
+const platformCredentialsConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
+
 // Direct GitHub App fallback: when the platform-backed integration isn't in
 // play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
 // a GithubIntegration so the app still gets a real GitHub connection — Connect
 // GitHub in onboarding, the repo picker, and webhooks. A partial group stays
 // disabled so the status route can report exactly what's missing.
+//
+// This integration carries the deployment's GitHub event-rule overrides. When
+// the group is absent the factory installs the Platform-backed integration
+// instead, and `platform.github` (below) hands it the same overrides — only one
+// of the two is ever installed.
 const githubAppId = process.env.GITHUB_APP_ID?.trim();
 const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
 const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
@@ -171,6 +193,22 @@ const github =
       })
     : undefined;
 
+// Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
+// and Group Access Tokens use the same API/Git authentication; the explicit
+// type records the credential's reach for diagnostics and setup guidance.
+const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlabAccessTokenType = process.env.GITLAB_ACCESS_TOKEN_TYPE?.trim();
+const gitlab = gitlabAccessToken
+  ? new GitLabIntegration({
+      accessToken: gitlabAccessToken,
+      ...(gitlabAccessTokenType === 'personal' || gitlabAccessTokenType === 'group'
+        ? { accessTokenType: gitlabAccessTokenType }
+        : {}),
+      ...(process.env.GITLAB_BASE_URL?.trim() ? { baseUrl: process.env.GITLAB_BASE_URL.trim() } : {}),
+      ...(process.env.GITLAB_WEBHOOK_SECRET?.trim() ? { webhookSecret: process.env.GITLAB_WEBHOOK_SECRET.trim() } : {}),
+    })
+  : undefined;
+
 // Direct Linear OAuth fallback for self-hosted / local deploys. As with the
 // GitHub fallback, only a complete credential group enables the integration;
 // partial configuration remains available to the diagnostics routes.
@@ -183,6 +221,32 @@ const linear =
         clientSecret: linearClientSecret,
       })
     : undefined;
+
+// Jira Cloud intake. A complete direct Basic-auth credential group takes
+// precedence. Otherwise Platform credentials enable automatic discovery of
+// visible `jira` connections. Partial direct configuration falls back
+// to Platform Jira when Platform credentials are available.
+const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraEmail = process.env.JIRA_EMAIL?.trim();
+const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
+if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
+  // A partial group silently disables direct Jira (no /web/jira routes mount),
+  // so tell the operator which knob is missing instead of showing nothing.
+  console.warn(
+    'Direct Jira intake is disabled: JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN must all be set together.',
+  );
+}
+const jira =
+  jiraBaseUrl && jiraEmail && jiraApiToken
+    ? new JiraIntegration({
+        baseUrl: jiraBaseUrl,
+        email: jiraEmail,
+        apiToken: jiraApiToken,
+      })
+    : platformCredentialsConfigured
+      ? new PlatformJiraIntegration()
+      : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -255,11 +319,55 @@ const demoRepositoryMatch = /^([^/]+)\/([^/]+)$/.exec(demoRepository);
 if (demoKnowledgeEnabled && !demoRepositoryMatch) {
   throw new Error('MASTRACODE_DEMO_GITHUB_REPOSITORY must use the form owner/repository.');
 }
+// If the platform env is present, wire the five Connect importers (Notion,
+// Confluence, Linear, Zendesk, Fireflies) into the demo Knowledge.
+// Each source syncs into its own sub-scope under the project — the same
+// topology as the GitHub repository scope — so sources show up as distinct
+// nodes in the knowledge graph. Missing connections warn-and-skip inside
+// `importers()` — safe to leave enabled unconditionally.
+const platformImportersEnabled = Boolean(
+  (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()) &&
+    process.env.MASTRA_PROJECT_ID?.trim(),
+);
+// Destination scopes are resolved dynamically at each cron fire via
+// `factoryProjectScopes`: one `resource:<projectId>:<provider>:<connectionId>`
+// sub-scope per Factory project per connected account (filtered by any
+// per-connection routing selection), materialized on demand, so new projects
+// start syncing without a restart. The parameterized access grant
+// (`resource:$projectId:<provider>:$accountId`) makes each sub-scope
+// writable. The project Importers tab resolves these dynamic destinations at
+// request time, so a connected importer is listed before its first run. The
+// `knowledge` thunk late-binds `demoKnowledge` (declared below) — it's only
+// invoked at cron fire, long after module init.
+const demoImportersResolver = (() => {
+  if (!demoKnowledgeEnabled || !platformImportersEnabled) return undefined;
+  const scopes = factoryProjectScopes(storage, { knowledge: () => demoKnowledge });
+  const integrationConfig = (integrationId: string, role: 'owner' | 'edit') =>
+    ({ access: { [`resource:$projectId:${integrationId}:$accountId`]: role }, scopes }) as const;
+  try {
+    return platformImporters({
+      integrations: {
+        notion: integrationConfig('notion', 'owner'),
+        confluence: integrationConfig('confluence', 'owner'),
+        // Document-shaped sources (Linear Documents, Zendesk Help Center
+        // articles) own their nodes so archived/draft content gets removed.
+        linear: integrationConfig('linear', 'owner'),
+        zendesk: integrationConfig('zendesk', 'owner'),
+        fireflies: integrationConfig('fireflies', 'edit'),
+      },
+    });
+  } catch (error) {
+    console.warn('[demo-knowledge] Skipping Connect importers:', error instanceof Error ? error.message : error);
+    return undefined;
+  }
+})();
+
 const demoKnowledge = demoKnowledgeEnabled
   ? new Knowledge({
       id: 'mastra',
       description: 'Local Factory demo knowledge imported from the latest GitHub pull requests.',
       storage: storage.getMastraStorage(),
+      ...(demoImportersResolver ? { importers: demoImportersResolver } : {}),
     })
   : undefined;
 const demoImportRuns = new Map<string, Promise<void>>();
@@ -583,7 +691,13 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+const integrations = [
+  ...(github ? [github] : []),
+  ...(gitlab ? [gitlab] : []),
+  ...(linear ? [linear] : []),
+  ...(jira ? [jira] : []),
+  ...(slack ? [slack] : []),
+];
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 
@@ -641,6 +755,19 @@ export const factory = new MastraFactory({
             contextualScopeAddress: builtInScopes.resource.address,
             parameters: { repository: demoRepository },
           };
+          // Materialize the parent scopes (org → resource) in dependency
+          // order BEFORE returning the profile. Factory's own pass over the
+          // profile fans out `materializeScope` calls concurrently across the
+          // whole scope set, so if `resource:<projectId>` doesn't already
+          // exist the demo's `resource:*:github:*` child would race its
+          // parent and fail with "Knowledge parent scope does not exist".
+          // Idempotent on subsequent visits.
+          if (!(await knowledge.resolveScopeAddress(builtInScopes.org.address))) {
+            await knowledge.materializeScope(builtInScopes.org);
+          }
+          if (!(await knowledge.resolveScopeAddress(builtInScopes.resource.address))) {
+            await knowledge.materializeScope(builtInScopes.resource);
+          }
           await configureDemoKnowledgeProject({
             knowledge,
             projectId,

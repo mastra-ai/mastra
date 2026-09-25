@@ -2204,6 +2204,11 @@
       "source": "/docs/evals/datasets/running-experiments",
       "destination": "/docs/evals/experiments",
       "permanent": true
+    },
+    {
+      "source": "/docs/connections/connect-mcp-client",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
     }
   ]
 }

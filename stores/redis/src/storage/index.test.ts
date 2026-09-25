@@ -393,4 +393,53 @@ describe('Redis ordering regression tests', () => {
     const contents = result.messages.map(message => message.content.content);
     expect(contents).toEqual(['Two', 'Three', 'Four']);
   });
+
+  it('merges and sorts messages across multiple threads (parallel zRange fan-out)', async () => {
+    const thread1 = createThread();
+    const thread2 = createThread();
+    await memory.saveThread({ thread: thread1 });
+    await memory.saveThread({ thread: thread2 });
+
+    const baseTime = Date.now();
+    await memory.saveMessages({
+      messages: [
+        createMessage({
+          threadId: thread1.id,
+          resourceId: thread1.resourceId,
+          createdAt: new Date(baseTime + 1000),
+          content: 'A',
+        }),
+        createMessage({
+          threadId: thread1.id,
+          resourceId: thread1.resourceId,
+          createdAt: new Date(baseTime + 3000),
+          content: 'C',
+        }),
+      ],
+    });
+    await memory.saveMessages({
+      messages: [
+        createMessage({
+          threadId: thread2.id,
+          resourceId: thread2.resourceId,
+          createdAt: new Date(baseTime + 2000),
+          content: 'B',
+        }),
+        createMessage({
+          threadId: thread2.id,
+          resourceId: thread2.resourceId,
+          createdAt: new Date(baseTime + 4000),
+          content: 'D',
+        }),
+      ],
+    });
+
+    const result = await memory.listMessages({
+      threadId: [thread1.id, thread2.id],
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const contents = result.messages.map(message => message.content.content);
+    expect(contents).toEqual(['A', 'B', 'C', 'D']);
+  });
 });

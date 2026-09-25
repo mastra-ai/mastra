@@ -68,6 +68,7 @@ function renderPanel(
     <Wrapper>
       <TestLinkProvider>
         <ExperimentResultPanel
+          open
           result={result}
           onClose={() => {}}
           onTagsChange={onTagsChange}
@@ -251,7 +252,7 @@ describe('ExperimentResultPanel trace usage', () => {
     expect(screen.getByText('Output tokens')).toBeDefined();
     expect(screen.getByText('—')).toBeDefined();
     expect(screen.getByText('Cost')).toBeDefined();
-    expect(screen.getByText('$0.0010')).toBeDefined();
+    expect(screen.getByText('<$0.01')).toBeDefined();
   });
 
   it('skips usage for a workflow trace', async () => {

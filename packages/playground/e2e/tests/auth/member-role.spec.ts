@@ -15,6 +15,7 @@ import { test, expect } from '@playwright/test';
 import { setupMemberAuth, setupMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
 import { expectCurrentBreadcrumb } from '../__utils__/route-header';
+import { revealFoldedSidebarItems } from '../__utils__/sidebar';
 
 test.describe('Member Role', () => {
   test.afterEach(async () => {
@@ -32,6 +33,7 @@ test.describe('Member Role', () => {
       // Member should see main navigation links
       await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
       await expect(page.getByRole('link', { name: /^Workflows$/i })).toBeVisible();
+      await revealFoldedSidebarItems(page);
       await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
     });
 
@@ -163,8 +165,8 @@ test.describe('Member Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Member should see the trigger/run workflow controls
-      const triggerButton = page.getByRole('button', { name: /run|trigger|execute/i });
-      await expect(triggerButton.first()).toBeVisible();
+      const triggerButton = page.getByRole('button', { name: 'Run', exact: true });
+      await expect(triggerButton).toBeVisible();
     });
 
     test('member workflow execution button is not disabled', async ({ page }) => {
@@ -172,7 +174,7 @@ test.describe('Member Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Look for run/execute button
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
 
       // Wait for button to be visible
       await expect(runButton).toBeVisible();
@@ -312,7 +314,7 @@ test.describe('Member Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Member should see run button enabled
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(runButton).toBeVisible();
       await expect(runButton).not.toBeDisabled();
 

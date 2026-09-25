@@ -1,18 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { usePromptBlockVersions } from '../hooks/use-prompt-block-versions';
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export interface PromptBlockVersionComboboxProps {
   blockId: string;
@@ -52,7 +42,7 @@ export function PromptBlockVersionCombobox({
       return {
         label: `v${version.versionNumber}`,
         value: version.id,
-        description: formatTimestamp(version.createdAt),
+        description: formatDate(version.createdAt, 'date-time') ?? '',
         end: isPublished ? (
           <Badge variant="green">Published</Badge>
         ) : isDraft ? (

@@ -1,4 +1,4 @@
-import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
 import { isToolPart, readToolPart } from '../tool-part';
@@ -10,6 +10,40 @@ const invocation = (fields: Partial<ToolInvocationPart['toolInvocation']>): Tool
   }) as never;
 
 describe('readToolPart', () => {
+  describe('when a delegation fails after producing partial output', () => {
+    it.each([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'agent-head',
+          toolCallId: 'failed-call',
+          state: 'output-error',
+          args: {},
+          result: { text: 'Partial research' },
+          errorText: 'Delegation failed',
+        },
+      },
+      {
+        type: 'dynamic-tool',
+        toolName: 'agent-head',
+        toolCallId: 'failed-call',
+        state: 'output-error',
+        input: {},
+        output: { text: 'Partial research' },
+        errorText: 'Delegation failed',
+      },
+    ] satisfies MessageFactoryPart[])('preserves the error and output from $type', part => {
+      expect(isToolPart(part)).toBe(true);
+      if (!isToolPart(part)) throw new Error('Expected a tool part');
+      expect(readToolPart(part)).toMatchObject({
+        toolName: 'agent-head',
+        state: 'output-error',
+        errorText: 'Delegation failed',
+        output: { text: 'Partial research' },
+      });
+    });
+  });
+
   describe('when a legacy result carries protocol error metadata', () => {
     it.each([
       { isError: true, state: 'output-error' },
@@ -55,6 +89,69 @@ describe('readToolPart', () => {
         output: 2,
       }),
     ).toEqual({ toolName: 'view', toolCallId: 'call-2', state: 'output-available', input: 1, output: 2 });
+  });
+
+  describe('when a persisted tool result has model output metadata', () => {
+    it('includes the model output used by the assistant', () => {
+      const part: ToolInvocationPart = {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'createImage',
+          toolCallId: 'call-image',
+          state: 'result',
+          args: {},
+          result: { data: [] },
+        },
+        providerMetadata: {
+          mastra: { modelOutput: { type: 'content', value: [{ type: 'media', data: 'image-data' }] } },
+        },
+      };
+
+      expect(readToolPart(part).modelOutput).toEqual({
+        type: 'content',
+        value: [{ type: 'media', data: 'image-data' }],
+      });
+    });
+  });
+
+  describe('when a streamed tool result has separate call and result metadata', () => {
+    it('uses the result model output', () => {
+      const part = Object.assign(
+        {
+          type: 'dynamic-tool' as const,
+          toolName: 'createImage',
+          toolCallId: 'call-image',
+          state: 'output-available',
+          input: {},
+          output: { data: [] },
+        },
+        {
+          callProviderMetadata: { mastra: { modelOutput: { type: 'text', value: 'calling' } } },
+          resultProviderMetadata: { mastra: { modelOutput: { type: 'text', value: 'complete' } } },
+        },
+      );
+
+      expect(readToolPart(part).modelOutput).toEqual({ type: 'text', value: 'complete' });
+    });
+  });
+
+  describe('when tool result metadata has no Mastra metadata object', () => {
+    it('does not expose model output', () => {
+      const emptyMetadata: unknown = JSON.parse('null');
+      const part = Object.assign(
+        {
+          type: 'dynamic-tool' as const,
+          toolName: 'createImage',
+          toolCallId: 'call-image',
+          state: 'output-available',
+          input: {},
+          output: { data: [] },
+        },
+        { resultProviderMetadata: { mastra: emptyMetadata } },
+      );
+
+      expect(readToolPart(part).modelOutput).toBeUndefined();
+    });
   });
 
   it('names a typed v5 part after its type when it carries no tool name, and gives it an empty id', () => {

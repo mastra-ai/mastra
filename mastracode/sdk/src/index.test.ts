@@ -67,6 +67,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  createBackgroundWorkSignalProcessor: () => ({}),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -106,6 +107,13 @@ vi.mock('./auth/storage.js', () => ({
     }
     loadStoredApiKeysIntoEnv() {}
   },
+  getOAuthProviders: () => [
+    { id: 'anthropic' },
+    { id: 'openai-codex' },
+    { id: 'github-copilot' },
+    { id: 'kimi-for-coding' },
+    { id: 'xai' },
+  ],
 }));
 
 vi.mock('./hooks/index.js', () => ({ HookManager: class {} }));
@@ -122,6 +130,7 @@ vi.mock('./onboarding/om-settings.js', () => ({
 }));
 
 vi.mock('./onboarding/settings.js', () => ({
+  OBSERVABILITY_AUTH_PREFIX: 'observability:',
   getCustomProviderId: vi.fn(),
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
@@ -236,7 +245,12 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
-  });
+    // Almost all of this test's wall time is transforming and importing the
+    // entry module graph, not the startup path it asserts on: measured at
+    // ~9s on an idle machine and ~57s under heavy load, for the same code.
+    // A tight budget here fails on that import cost rather than on the
+    // ordering contract, so give it room for a contended runner.
+  }, 60_000);
 });
 
 describe('Kimi startup access', () => {
@@ -423,5 +437,42 @@ describe('AgentController session id and ownerId wiring', () => {
 
     expect(createSessionCalls).toHaveLength(2);
     expect(createSessionCalls[0]!.id).not.toBe(createSessionCalls[1]!.id);
+  });
+});
+
+describe('resolveCloudObservabilityConfig', () => {
+  const settings = () => ({ observability: { resources: {}, localTracing: false } }) as any;
+  const noAuth = { getStoredApiKey: () => undefined } as any;
+
+  it('returns undefined when nothing is configured so no platform exporter is constructed', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', {})).toBeUndefined();
+  });
+
+  it('ignores the host project MASTRA_* env vars loaded from the cwd .env', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const env = { MASTRA_CLOUD_ACCESS_TOKEN: 'tok', MASTRA_PROJECT_ID: 'ae68feda-c5e2-4637-a148-4d0a020b5de5' };
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', env)).toBeUndefined();
+  });
+
+  it('reads MASTRACODE_* env vars', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const env = { MASTRACODE_CLOUD_ACCESS_TOKEN: 'tok', MASTRACODE_PROJECT_ID: 'proj_1' };
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', env)).toEqual({
+      accessToken: 'tok',
+      projectId: 'proj_1',
+    });
+  });
+
+  it('prefers per-resource settings over env vars', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const s = settings();
+    s.observability.resources.res = { projectId: 'proj_settings', configuredAt: 0 };
+    const auth = { getStoredApiKey: (k: string) => (k === 'observability:res' ? 'stored' : undefined) } as any;
+    const env = { MASTRACODE_CLOUD_ACCESS_TOKEN: 'tok', MASTRACODE_PROJECT_ID: 'proj_env' };
+    expect(resolveCloudObservabilityConfig(s, auth, 'res', env)).toEqual({
+      accessToken: 'stored',
+      projectId: 'proj_settings',
+    });
   });
 });

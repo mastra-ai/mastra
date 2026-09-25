@@ -11,6 +11,7 @@ import {
   CircleUserRound,
   GitBranch,
   Inbox,
+  Network,
   Palette,
   Search,
   SlidersHorizontal,
@@ -18,6 +19,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
@@ -102,6 +104,13 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
       },
       {
+        id: 'knowledge',
+        label: SETTINGS_SECTION_LABELS.knowledge,
+        icon: Network,
+        searchText:
+          'knowledge importers notion confluence linear zendesk fireflies sync sources documents transcripts',
+      },
+      {
         id: 'connections',
         label: SETTINGS_SECTION_LABELS.connections,
         icon: Cable,
@@ -123,6 +132,16 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
   },
 ];
 
+/**
+ * Server features that hide individual nav items. Currently just knowledge —
+ * a deploy without `MASTRA_PLATFORM_ACCESS_TOKEN` (or with the flag
+ * explicitly off) shouldn't advertise a Knowledge page that immediately
+ * bounces the user back to preferences.
+ */
+const FEATURE_GATED_SECTIONS: Partial<Record<SettingsSection, keyof NonNullable<ReturnType<typeof useServerFeatures>['data']>>> = {
+  knowledge: 'knowledge',
+};
+
 export function SettingsNavigation() {
   const section = useSettingsSection();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -130,10 +149,16 @@ export function SettingsNavigation() {
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
   const [query, setQuery] = useState('');
+  const features = useServerFeatures();
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
     ...group,
-    items: normalizedQuery ? group.items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : group.items,
+    items: group.items
+      .filter(({ id }) => {
+        const featureKey = FEATURE_GATED_SECTIONS[id];
+        return featureKey ? features.data?.[featureKey] === true : true;
+      })
+      .filter(({ searchText }) => (normalizedQuery ? searchText.includes(normalizedQuery) : true)),
   })).filter(group => group.items.length > 0);
 
   if (!factoryId) return null;
@@ -141,7 +166,7 @@ export function SettingsNavigation() {
   return (
     <>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild size="default" link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
             <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
@@ -150,7 +175,7 @@ export function SettingsNavigation() {
       </MainSidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon>
               <Search aria-hidden="true" />
             </InputGroupAddon>
@@ -181,7 +206,6 @@ export function SettingsNavigation() {
                     <MainSidebar.NavLink
                       key={id}
                       asChild
-                      size="default"
                       isActive={isActive}
                       link={{ name: label, url: '#', icon: <Icon /> }}
                     >
@@ -202,7 +226,7 @@ export function SettingsNavigation() {
           );
         })
       ) : (
-        <Txt as="p" variant="ui-sm" role="status" className="px-3 py-2">
+        <Txt as="p" variant="caption" role="status" className="px-3 py-2">
           No settings found.
         </Txt>
       )}

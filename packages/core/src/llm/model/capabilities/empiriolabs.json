@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4-1-flash",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
     "fugu-ultra-v2-0",
@@ -12,6 +13,9 @@
     "kimi-k2-7-code-highspeed",
     "kimi-k3",
     "mimo-v2-5",
+    "mimo-v2-6-flash",
+    "mimo-v2-6-pro",
+    "mimo-v2-6-pro-ultraspeed",
     "minimax-m3",
     "mistral-small-4",
     "muse-glimmer-30b",
@@ -35,15 +39,18 @@
     "qwen3-8-flash",
     "qwen3-8-max",
     "qwen3-8-max-0902",
+    "qwen3-8-omni-flash",
     "seed-2-0-code",
     "seed-2-0-lite",
     "seed-2-0-mini",
     "seed-2-0-pro",
     "seed-2-1-turbo",
-    "step-3-7-flash"
+    "step-3-7-flash",
+    "step-5-preview"
   ],
   "temperature": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -60,6 +67,9 @@
     "kimi-k2-6",
     "mimo-v2-5",
     "mimo-v2-5-pro",
+    "mimo-v2-6-flash",
+    "mimo-v2-6-pro",
+    "mimo-v2-6-pro-ultraspeed",
     "minimax-m2-7",
     "minimax-m2-7-highspeed",
     "minimax-m3",
@@ -88,6 +98,7 @@
     "qwen3-8-flash",
     "qwen3-8-max",
     "qwen3-8-max-0902",
+    "qwen3-8-omni-flash",
     "qwen3-max",
     "seed-2-0-code",
     "seed-2-0-lite",
@@ -96,10 +107,12 @@
     "seed-2-1-turbo",
     "step-3-5-flash",
     "step-3-5-flash-2603",
-    "step-3-7-flash"
+    "step-3-7-flash",
+    "step-5-preview"
   ],
   "structuredOutput": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -122,6 +135,9 @@
     "kimi-k3",
     "mimo-v2-5",
     "mimo-v2-5-pro",
+    "mimo-v2-6-flash",
+    "mimo-v2-6-pro",
+    "mimo-v2-6-pro-ultraspeed",
     "minimax-m2-7",
     "minimax-m2-7-highspeed",
     "minimax-m3",
@@ -150,6 +166,7 @@
     "qwen3-8-flash",
     "qwen3-8-max",
     "qwen3-8-max-0902",
+    "qwen3-8-omni-flash",
     "qwen3-max",
     "seed-2-0-code",
     "seed-2-0-lite",
@@ -158,6 +175,7 @@
     "seed-2-1-turbo",
     "step-3-5-flash",
     "step-3-5-flash-2603",
-    "step-3-7-flash"
+    "step-3-7-flash",
+    "step-5-preview"
   ]
 }

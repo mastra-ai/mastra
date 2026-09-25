@@ -2,11 +2,40 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SettingsContainer, SettingsGroup, SettingsHeader, SettingsRow, SettingsTitle } from './index';
+import {
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsRow,
+  SettingsTitle,
+} from './index';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 
 afterEach(cleanup);
 
 describe('Settings', () => {
+  it('uses the Marvin text hierarchy and row layout', () => {
+    render(
+      <SettingsGroup>
+        <SettingsHeader action={<button type="button">Save</button>}>
+          <SettingsTitle>General</SettingsTitle>
+          <SettingsDescription>Stored in this browser.</SettingsDescription>
+        </SettingsHeader>
+        <SettingsContainer>
+          <SettingsRow label="Theme" description="Color scheme for the interface" />
+        </SettingsContainer>
+      </SettingsGroup>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-subheading');
+    expect(screen.getByText('Stored in this browser.').classList).toContain('text-caption');
+    expect(screen.getByText('Theme').classList).toContain('text-label');
+    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
+    expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
+    expect(document.querySelector('header')?.classList).toContain('sm:items-center');
+  });
+
   describe('when multiple groups render on the same page', () => {
     it('names each group with its own heading', () => {
       render(
@@ -52,6 +81,44 @@ describe('Settings', () => {
       expect(
         new FormData(screen.getByRole<HTMLFormElement>('form', { name: 'Connection settings' })).get('apiPrefix'),
       ).toBe('/custom-api');
+    });
+  });
+
+  describe('when a setting is required', () => {
+    it('announces the requirement in the control name', () => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" required>
+          <input id="model" />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByText('*', { selector: '[aria-hidden]' })).toBeTruthy();
+      expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
+    });
+  });
+
+  describe('when a setting has an error', () => {
+    it('shows the message as an alert the control can describe itself with', () => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" errorMsg="Choose the model this agent runs on.">
+          <input id="model" aria-describedby={fieldErrorId('model')} />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByRole('alert').textContent).toBe('Choose the model this agent runs on.');
+      expect(screen.getByRole('textbox', { name: 'Model' }).getAttribute('aria-describedby')).toBe(
+        screen.getByRole('alert').id,
+      );
+    });
+
+    it.each([false, ''])('renders no alert when the message is %j', errorMsg => {
+      render(
+        <SettingsRow label="Model" htmlFor="model" errorMsg={errorMsg}>
+          <input id="model" />
+        </SettingsRow>,
+      );
+
+      expect(screen.queryByRole('alert')).toBeNull();
     });
   });
 

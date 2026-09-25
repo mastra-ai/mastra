@@ -11,6 +11,9 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { IMastraAuthProvider } from './auth';
 
+export type { MiddlewareHandler, Handler, Context } from 'hono';
+export type { DescribeRouteOptions } from 'hono-openapi';
+
 type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';

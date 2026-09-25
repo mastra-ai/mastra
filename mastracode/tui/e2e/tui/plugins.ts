@@ -828,9 +828,10 @@ function createGithubInstallScenario(
   };
 }
 
-export const pluginsGithubInstallPnpm10Scenario = createGithubInstallScenario('10', '10.24.0');
-export const pluginsGithubInstallPnpm11Scenario = createGithubInstallScenario('11', '11.8.0');
-export const pluginsGithubInstallMissingCorepackScenario = createGithubInstallScenario('10', '10.24.0', {
+export const pluginsGithubInstallPnpm10Scenario = createGithubInstallScenario('10', '10.34.5');
+export const pluginsGithubInstallPnpm11Scenario = createGithubInstallScenario('11', '11.27.1');
+export const pluginsGithubInstallPnpm12Scenario = createGithubInstallScenario('11', '12.6.0');
+export const pluginsGithubInstallMissingCorepackScenario = createGithubInstallScenario('10', '10.35.5', {
   missingCorepack: true,
 });
 

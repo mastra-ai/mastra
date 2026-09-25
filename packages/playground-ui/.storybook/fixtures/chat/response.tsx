@@ -1,4 +1,4 @@
-import type { TextPart } from '@mastra/react';
+import type { TextPart } from '@mastra/react/ui';
 import { editArgs, plan, reviewTools } from './data';
 import type { Phase, Turn } from './data';
 import { ReviewTool } from './tool';

@@ -915,4 +915,110 @@ describe('Span Filtering', () => {
       await tracing.shutdown();
     });
   });
+
+  describe('span output processor contract', () => {
+    it('should drop a span with a logged error when a processor returns a copy instead of the live span', async () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanOutputProcessors: [
+          {
+            name: 'copying-processor',
+            process: span => (span ? ({ ...span, input: '[REDACTED]' } as unknown as typeof span) : undefined),
+            shutdown: async () => {},
+          },
+        ],
+      });
+
+      // Must not throw out of startSpan (previously: TypeError: processedSpan?.exportSpan is not a function)
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        input: 'secret-input',
+      });
+      agentSpan.end({ output: 'secret-output' });
+      await tracing.flush();
+
+      // Never exported (neither the copy nor the unredacted original)
+      expect(testExporter.events).toHaveLength(0);
+
+      expect(mockConsole.error).toHaveBeenCalledWith(
+        expect.stringContaining('Processor error [name=copying-processor]'),
+      );
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('not a copy'));
+
+      await tracing.shutdown();
+    });
+
+    it('should drop a span with a logged error when a processor returns a copy that forwards exportSpan', async () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanOutputProcessors: [
+          {
+            name: 'forwarding-processor',
+            process: span =>
+              span
+                ? ({ ...span, input: '[REDACTED]', exportSpan: span.exportSpan.bind(span) } as unknown as typeof span)
+                : undefined,
+            shutdown: async () => {},
+          },
+        ],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        input: 'secret-input',
+      });
+      agentSpan.end({ output: 'secret-output' });
+      await tracing.flush();
+
+      // A forwarding copy passes a method-presence check but exportSpan is bound
+      // to the original, so it would export the unredacted span. Must be dropped.
+      expect(testExporter.events).toHaveLength(0);
+
+      expect(mockConsole.error).toHaveBeenCalledWith(
+        expect.stringContaining('Processor error [name=forwarding-processor]'),
+      );
+
+      await tracing.shutdown();
+    });
+
+    it('should export spans when a processor mutates in place and returns the same instance', async () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanOutputProcessors: [
+          {
+            name: 'mutating-processor',
+            process: span => {
+              if (span) span.input = '[REDACTED]';
+              return span;
+            },
+            shutdown: async () => {},
+          },
+        ],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        input: 'secret-input',
+      });
+      agentSpan.end();
+      await tracing.flush();
+
+      const ended = testExporter.events.find(e => e.type === 'span_ended');
+      expect(ended?.exportedSpan.input).toBe('[REDACTED]');
+
+      await tracing.shutdown();
+    });
+  });
 });

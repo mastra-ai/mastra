@@ -13,6 +13,7 @@ import {
   inferFactoryResponseShape,
 } from '../../scripts/generate-api-cli-route-metadata.js';
 import { buildAttentionRoutes } from './attention.js';
+import { buildAutomationRunRoutes } from './automation-runs.js';
 import {
   attentionQuerySchema,
   createProjectBodySchema,
@@ -58,7 +59,14 @@ function registeredFactoryRoutes() {
     workItems: workItems as never,
     resolveProject: async () => ({}) as never,
   });
-  return [...projects, ...work, ...attention, ...supervisor];
+  const automationRuns = buildAutomationRunRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    workItems,
+    configVersion: 'test',
+  } as never);
+  return [...projects, ...work, ...attention, ...supervisor, ...automationRuns];
 }
 
 describe('Factory route contracts', () => {

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../e2e/ui/render';
 import {
+  normalizePlanPath,
   useArtifactListing,
   useDirectoryListing,
   useWorkspaceFile,
@@ -258,5 +259,56 @@ describe('useWorkspaceFile', () => {
     expect(seenWorkspacePath).toBe('/home/user/project');
     expect(seenPath).toBe('.artifacts/understand-pr/HISTORY.md');
     expect(result.current.data?.content).toBe('notes');
+  });
+});
+
+describe('normalizePlanPath', () => {
+  const ROOT = '/leadrvision/.artifacts';
+
+  it('passes through a workspace-relative artifacts path unchanged', () => {
+    expect(normalizePlanPath('.artifacts/plans/issue.md', ROOT)).toBe('.artifacts/plans/issue.md');
+    // Relative paths do not require the rendered root.
+    expect(normalizePlanPath('.artifacts/plans/issue.md', undefined)).toBe('.artifacts/plans/issue.md');
+  });
+
+  it('normalizes an absolute path inside the artifacts root', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', ROOT)).toBe('.artifacts/plans/issue.md');
+  });
+
+  it('tolerates a trailing slash on the root', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', `${ROOT}/`)).toBe('.artifacts/plans/issue.md');
+  });
+
+  it('rejects an absolute path outside the artifacts root', () => {
+    expect(normalizePlanPath('/leadrvision/secrets/issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('/other/.artifacts/plans/issue.md', ROOT)).toBeUndefined();
+  });
+
+  it('rejects the artifacts root itself (not a plan file)', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts', ROOT)).toBeUndefined();
+  });
+
+  it('rejects traversal, backslash, and NUL inputs', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/../secrets.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans\\issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/\0issue.md', ROOT)).toBeUndefined();
+  });
+
+  it('rejects malformed relative .artifacts paths', () => {
+    expect(normalizePlanPath('.artifacts/../secret.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('.artifacts/plans\\issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('.artifacts/plans/\0issue.md', ROOT)).toBeUndefined();
+  });
+
+  it('returns undefined for an absolute path when the root is unknown', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for a non-artifacts relative path', () => {
+    expect(normalizePlanPath('.mastracode/plans/local.md', ROOT)).toBeUndefined();
+  });
+
+  it('returns undefined for an empty path', () => {
+    expect(normalizePlanPath(undefined, ROOT)).toBeUndefined();
   });
 });

@@ -13,6 +13,9 @@ import {
 } from '../../handlers/observability';
 import {
   QUERY_TRACES,
+  QUERY_THREADS,
+  GET_TRACE_QUERY_FIELDS,
+  GET_TRACE_QUERY_VALUES,
   LIST_METRICS,
   LIST_LOGS,
   LIST_SCORES,
@@ -43,6 +46,7 @@ import {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 } from '../../handlers/observability-new-endpoints';
 
 export const OBSERVABILITY_ROUTES = [
@@ -60,6 +64,9 @@ export const OBSERVABILITY_ROUTES = [
   LIST_SCORES_BY_SPAN_ROUTE,
   // New observability routes
   QUERY_TRACES,
+  QUERY_THREADS,
+  GET_TRACE_QUERY_FIELDS,
+  GET_TRACE_QUERY_VALUES,
   LIST_METRICS,
   LIST_LOGS,
   LIST_SCORES,
@@ -90,4 +97,5 @@ export const OBSERVABILITY_ROUTES = [
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
+  GET_CAPABILITIES,
 ] as const;

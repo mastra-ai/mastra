@@ -1,3 +1,5 @@
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
@@ -6,8 +8,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { WorkflowsList } from '../workflows-list';
 import { originWorkflowsFixture, runCountsFixture, workflowsFixture } from './fixtures/workflows';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -300,6 +300,59 @@ describe('WorkflowsList', () => {
       // Indices stay contiguous across only the interactive rows.
       const indices = interactiveRows().map(row => Number(row.dataset.rowIndex));
       expect(indices).toEqual(indices.map((_, i) => i));
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when sorted from the Name column', () => {
+    const rootNames = () =>
+      Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-row-index] > a')).map(link =>
+        link.getAttribute('href')?.replace('/workflows/', ''),
+      );
+
+    it('orders root workflows A to Z, then Z to A when the header is toggled', async () => {
+      useRunCountsHandler();
+      const onSortChange = vi.fn();
+      const { queryClient, rerender } = renderList({ onSortChange });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Name, not sorted, sort ascending' }));
+      expect(onSortChange).toHaveBeenCalledWith('asc', 'name');
+
+      rerender(
+        <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
+          <WorkflowsList
+            workflows={workflowsFixture}
+            isLoading={false}
+            sort={{ key: 'name', direction: 'asc' }}
+            onSortChange={onSortChange}
+          />
+        </LinkComponentProvider>,
+      );
+      expect(rootNames()).toEqual([
+        'engRunner',
+        'loopA',
+        'loopB',
+        'prdFixProduct',
+        'prdGroomProduct',
+        'prdShipProduct',
+      ]);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Name, sorted ascending, sort descending' }));
+      expect(onSortChange).toHaveBeenLastCalledWith('desc', 'name');
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when sorted from the Running column', () => {
+    it('puts the workflow with the most running runs first when descending', async () => {
+      useRunCountsHandler();
+      const { queryClient } = renderList({ sort: { key: 'running', direction: 'desc' }, onSortChange: () => {} });
+
+      await screen.findByLabelText('3 runs in progress');
+      const firstRow = document.querySelector<HTMLElement>('[data-row-index="0"]');
+      expect(firstRow?.textContent).toContain('eng-runner');
 
       await waitForMutationsIdle(queryClient);
     });

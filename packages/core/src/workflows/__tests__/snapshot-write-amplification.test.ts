@@ -126,6 +126,10 @@ async function measureRun(toolIterations: number): Promise<WriteStats> {
     agents: { 'amplification-agent': durableAgent as any },
     logger: false,
     storage: store,
+    // `running` checkpoints are only persisted when crash recovery is enabled
+    // (issue #23915). This test measures the amplification of those recovery
+    // writes, so it must opt in.
+    recovery: { durableAgents: 'auto' },
   });
 
   const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))! as any;

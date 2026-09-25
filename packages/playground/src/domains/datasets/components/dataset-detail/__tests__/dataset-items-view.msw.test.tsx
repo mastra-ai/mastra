@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DatasetItemsView } from '../dataset-items-view';
@@ -16,17 +17,29 @@ const itemsResponse: Awaited<ReturnType<MastraClient['listDatasetItems']>> = {
   pagination: { total: items.length, page: 0, perPage: 10, hasMore: false },
 };
 
+let itemsRequests: URL[] = [];
+
 beforeEach(() => {
+  itemsRequests = [];
   server.use(
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([dataset]))),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () => HttpResponse.json(dataset)),
-    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items`, () => HttpResponse.json(itemsResponse)),
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items`, ({ request }) => {
+      itemsRequests.push(new URL(request.url));
+      return HttpResponse.json(itemsResponse);
+    }),
   );
 });
 
-function renderView() {
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+}
+
+function renderView(initialEntry = `/datasets/${DATASET_ID}`) {
   return renderWithProviders(
     <TestLinkProvider>
+      <LocationProbe />
       <DatasetItemPanelProvider datasetId={DATASET_ID} items={items} isLoadingItems={false}>
         <DatasetItemsView
           datasetId={DATASET_ID}
@@ -36,11 +49,41 @@ function renderView() {
         />
       </DatasetItemPanelProvider>
     </TestLinkProvider>,
-    { router: { initialEntries: [`/datasets/${DATASET_ID}`] } },
+    { router: { initialEntries: [initialEntry] } },
   );
 }
 
 describe('DatasetItemsView', () => {
+  describe('when items are sorted from the Created column', () => {
+    it('does not ask the server for a sort by default', async () => {
+      renderView();
+      await screen.findByText('item-a');
+
+      expect(itemsRequests[0].searchParams.get('orderBy[field]')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Created, not sorted, sort ascending' })).not.toBeNull();
+    });
+
+    it('asks the server for oldest-first and writes it to the URL', async () => {
+      renderView();
+      await screen.findByText('item-a');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Created, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(itemsRequests.at(-1)?.searchParams.get('orderBy[field]')).toBe('createdAt'));
+      expect(itemsRequests.at(-1)?.searchParams.get('orderBy[direction]')).toBe('ASC');
+      expect(screen.getByTestId('location').textContent).toBe(`/datasets/${DATASET_ID}?sort=createdAt&dir=asc`);
+    });
+
+    it('restores the sort from the URL', async () => {
+      renderView(`/datasets/${DATASET_ID}?sort=createdAt&dir=desc`);
+      await screen.findByText('item-a');
+
+      expect(itemsRequests[0].searchParams.get('orderBy[field]')).toBe('createdAt');
+      expect(itemsRequests[0].searchParams.get('orderBy[direction]')).toBe('DESC');
+      expect(screen.getByRole('button', { name: 'Created, sorted descending, sort ascending' })).not.toBeNull();
+    });
+  });
+
   it('renders the dataset items and the right slot', async () => {
     renderView();
 

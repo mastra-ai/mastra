@@ -27,6 +27,7 @@ export interface MessageEntry {
   id: string;
   message: MastraDBMessage;
   runtimeTools?: Record<string, ToolCall>;
+  sourcePartIndexes?: number[];
   streaming?: boolean;
   steer?: boolean;
   deliveryStatus?: 'pending' | 'delivered' | 'failed';
@@ -200,15 +201,60 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return { ...state, pending: false };
 
     case 'message_start':
+      return upsertMessage(state, event.message, true, viewerId);
+
     case 'message_update': {
-      const message = event.message;
-      const next = upsertMessage(state, message, true, viewerId);
-      if (message.role !== 'assistant') return next;
-      return hasAssistantText(next) ? { ...next, pending: false } : next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const parts = [...entry.message.content.parts];
+      if (event.event.type === 'text-delta') {
+        if (event.event.delta.length === 0) return state;
+        const partIndex = parts.findLastIndex(part => part.type === 'text');
+        const part = parts[partIndex];
+        if (!part || part.type !== 'text') return state;
+        parts[partIndex] = { ...part, text: part.text + event.event.delta };
+      } else {
+        const mappedIndex = entry.sourcePartIndexes?.indexOf(event.event.index);
+        if (mappedIndex === -1) return state;
+        const partIndex = mappedIndex ?? event.event.index;
+        // Only the append slot sits past the end: a further index would leave a
+        // hole in `parts`, and `find`/`for…of` readers then see that hole as an
+        // undefined part. Dropping the update matches the mapped path; the next
+        // window merge reconciles skipped parts.
+        const outOfRange = mappedIndex === undefined ? partIndex > parts.length : partIndex >= parts.length;
+        if (outOfRange) return state;
+        if (event.event.type === 'reasoning-delta') {
+          const part = parts[partIndex];
+          if (!part || part.type !== 'reasoning') return state;
+          const reasoning = part.reasoning + event.event.delta;
+          parts[partIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+        } else {
+          parts[partIndex] = event.event.part;
+        }
+      }
+
+      const message = { ...entry.message, content: { ...entry.message.content, parts } };
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+      );
+      const next = { ...state, entries };
+      return message.role === 'assistant' && hasAssistantText(next) ? { ...next, pending: false } : next;
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false, viewerId);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, streaming: false } : candidate,
+      );
+      return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
 
     case 'tool_input_start':
@@ -375,10 +421,42 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.flatMap(message => [
-    toMessageEntry(message, { streaming: false }),
-    ...persistedSuspensionPrompts(message),
-  ]);
+  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+}
+
+function persistedPrompts(message: MastraDBMessage): Array<ApprovalPrompt | SuspensionPrompt> {
+  return [...persistedApprovalPrompts(message), ...persistedSuspensionPrompts(message)];
+}
+
+function persistedApprovalPrompts(message: MastraDBMessage): ApprovalPrompt[] {
+  const pendingToolApprovals = message.content.metadata?.pendingToolApprovals;
+  if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object' || Array.isArray(pendingToolApprovals)) {
+    return [];
+  }
+
+  return Object.values(pendingToolApprovals).flatMap(approval => {
+    if (
+      !approval ||
+      typeof approval !== 'object' ||
+      Array.isArray(approval) ||
+      !('toolCallId' in approval) ||
+      !('toolName' in approval) ||
+      typeof approval.toolCallId !== 'string' ||
+      typeof approval.toolName !== 'string'
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        kind: 'approval' as const,
+        id: `approval-${approval.toolCallId}`,
+        toolCallId: approval.toolCallId,
+        toolName: approval.toolName,
+        args: 'args' in approval ? approval.args : undefined,
+      },
+    ];
+  });
 }
 
 function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[] {
@@ -727,13 +805,16 @@ function upsertMessage(
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage =
+  const filtered =
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
-      : preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+      : undefined;
+  const nextMessage = filtered?.message ?? preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // Changing the entry id remounts open cards.
-  const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
+  const entry = prevEntry
+    ? { ...canonicalEntry, id: prevEntry.id, sourcePartIndexes: filtered?.sourcePartIndexes }
+    : { ...canonicalEntry, sourcePartIndexes: filtered?.sourcePartIndexes };
 
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
@@ -745,7 +826,7 @@ function withoutToolPartsDrawnElsewhere(
   message: MastraDBMessage,
   entries: TimelineEntry[],
   own: number,
-): MastraDBMessage {
+): { message: MastraDBMessage; sourcePartIndexes?: number[] } {
   const drawnElsewhere = new Set<string>();
   for (const [index, entry] of entries.entries()) {
     if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
@@ -754,15 +835,14 @@ function withoutToolPartsDrawnElsewhere(
       if (toolCallId) drawnElsewhere.add(toolCallId);
     }
   }
-  if (drawnElsewhere.size === 0) return message;
-
-  const parts = message.content.parts.filter(part => {
+  const sourcePartIndexes = message.content.parts.flatMap((part, index) => {
     const toolCallId = toolCallIdForPart(part);
-    return !toolCallId || !drawnElsewhere.has(toolCallId);
+    return toolCallId && drawnElsewhere.has(toolCallId) ? [] : [index];
   });
-  if (parts.length === message.content.parts.length) return message;
+  if (sourcePartIndexes.length === message.content.parts.length) return { message };
 
-  return { ...message, content: { ...message.content, parts } };
+  const parts = sourcePartIndexes.map(index => message.content.parts[index]!);
+  return { message: { ...message, content: { ...message.content, parts } }, sourcePartIndexes };
 }
 
 function preserveOptimisticUserContent(
@@ -789,7 +869,13 @@ function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBM
   const parts = [...message.content.parts];
   const existingToolIds = new Set(parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)));
 
-  for (const part of previous.content.parts) {
+  for (const [index, part] of previous.content.parts.entries()) {
+    const currentPart = parts[index];
+    if (part.type === 'text' && currentPart?.type === 'text' && currentPart.text === '' && part.text) {
+      parts[index] = part;
+      continue;
+    }
+
     const toolCallId = toolCallIdForPart(part);
     if (toolCallId && !existingToolIds.has(toolCallId)) {
       parts.push(part);

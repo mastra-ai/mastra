@@ -180,3 +180,42 @@ export function buildTenancyQuery(tenancy?: { organizationId?: string; projectId
   const queryString = searchParams.toString();
   return queryString ? `?${queryString}` : '';
 }
+
+/**
+ * Merges multiple optional abort signals into one. Returns `undefined` when no
+ * signals are provided, the single signal when only one is provided, and a
+ * combined signal otherwise. Uses `AbortSignal.any` when available and falls
+ * back to a manual listener merge for runtimes that lack it.
+ */
+export function mergeAbortSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const defined = signals.filter((signal): signal is AbortSignal => signal !== undefined);
+  if (defined.length === 0) return undefined;
+  if (defined.length === 1) return defined[0];
+
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(defined);
+  }
+
+  const controller = new AbortController();
+  const alreadyAborted = defined.find(signal => signal.aborted);
+  if (alreadyAborted) {
+    controller.abort(alreadyAborted.reason);
+    return controller.signal;
+  }
+
+  // Detach from every source on the first abort so long-lived signals (e.g. the
+  // client-wide one) don't retain a listener + controller per merged request.
+  const cleanup = () => {
+    for (const signal of defined) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  };
+  function onAbort(this: AbortSignal) {
+    cleanup();
+    controller.abort(this.reason);
+  }
+  for (const signal of defined) {
+    signal.addEventListener('abort', onAbort);
+  }
+  return controller.signal;
+}

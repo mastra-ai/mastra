@@ -4,7 +4,7 @@
  */
 
 import * as os from 'node:os';
-import { Box, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
+import { Box, Spacer, Text, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
@@ -200,6 +200,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private isPartial = true;
   private ui: TUI;
   private result?: ToolResult;
+  private backgroundTaskId?: string;
+  private backgroundCancelled = false;
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
@@ -248,6 +250,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     this.result = result;
     this.isPartial = isPartial;
     // Keep streaming output for colored display in final result
+    this.rebuild();
+  }
+
+  setBackgroundTaskId(taskId: string): void {
+    this.backgroundTaskId = taskId;
+    this.rebuild();
+  }
+
+  getBackgroundTaskId(): string | undefined {
+    return this.backgroundTaskId;
+  }
+
+  cancelBackground(): void {
+    this.backgroundCancelled = true;
+    this.isPartial = false;
     this.rebuild();
   }
 
@@ -375,11 +392,37 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
+  /**
+   * Quiet shell output follows the same rule as every other tool's preview:
+   * `quietPreviewLineLimit` output lines (the tail, since that is where errors
+   * land), or none at all when the limit is 0. Expanding (ctrl+e) shows everything.
+   */
   private limitQuietShellLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || lines.length <= 15) {
-      return lines;
-    }
-    return lines.slice(-15);
+    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
+    const limit = this.quietPreviewLineLimit;
+    if (limit <= 0) return [];
+    if (this.fitsQuietLimit(lines.length, limit)) return lines;
+    return [this.quietHiddenLinesMarker(lines.length - limit), ...lines.slice(-limit)];
+  }
+
+  /**
+   * The command is the shell tool's header, so at least one line always shows;
+   * the rest of a long command (heredocs, inline scripts) is capped like output.
+   */
+  private limitQuietShellCommandLines(lines: string[]): string[] {
+    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
+    const limit = Math.max(1, this.quietPreviewLineLimit);
+    if (this.fitsQuietLimit(lines.length, limit)) return lines;
+    return [...lines.slice(0, limit), this.quietHiddenLinesMarker(lines.length - limit)];
+  }
+
+  /** A `⋯ (+1 line)` marker costs the same row as the line it hides, so just show the line. */
+  private fitsQuietLimit(count: number, limit: number): boolean {
+    return count <= limit + 1;
+  }
+
+  private quietHiddenLinesMarker(hidden: number): string {
+    return theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`);
   }
 
   /**
@@ -421,6 +464,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.KILL_PROCESS:
         this.renderProcessToolEnhanced();
         break;
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        this.renderAgentSignalSendEnhanced();
+        break;
       case 'task_write':
         this.renderTaskWriteEnhanced();
         break;
@@ -460,9 +506,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
-        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
-          -this.quietPreviewLineLimit,
-        );
+        // Signal messages lead with the request, so show their opening lines instead of the latest output.
+        const wrapped =
+          this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND
+            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2)).slice(
+                0,
+                this.quietPreviewLineLimit,
+              )
+            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.quietPreviewLineLimit);
 
         lines = wrapped.map(line => {
           const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
@@ -658,6 +709,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return lines;
   }
 
+  private wrapAgentSignalMessageLines(message: string, width: number): string[] {
+    return message.split('\n').flatMap(line => (line.length === 0 ? [''] : wrapTextWithAnsi(line, width)));
+  }
+
   private getCompactToolSummaryLines(): string[] {
     const status = this.getCompactStatusIndicator();
     const toolLabel = this.getCompactToolLabel();
@@ -679,6 +734,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getCompactStatusIndicator(): string {
+    const backgroundStatus = this.getBackgroundStatusIndicator();
+    if (backgroundStatus) return backgroundStatus;
     return this.isErrorResult() ? theme.fg('error', ' ✗') : '';
   }
 
@@ -773,6 +830,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         return this.formatSearchDetail();
       case MC_TOOLS.LSP_INSPECT:
         return this.getFirstLineArg('match', 80);
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        return this.formatAgentSignalSendPreview();
       default:
         return this.formatQuietGenericResultPreview();
     }
@@ -1118,6 +1177,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.GET_PROCESS_OUTPUT:
       case MC_TOOLS.KILL_PROCESS:
         return this.getFirstStringArg('pid');
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        return this.formatAgentSignalSendSummary();
       case 'skill':
         return this.getFirstStringArg('name');
       case 'subagent':
@@ -1153,6 +1214,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         return 'kill';
       case MC_TOOLS.AST_SMART_EDIT:
         return 'ast_edit';
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        return 'send';
       default:
         return this.toolName;
     }
@@ -1451,11 +1514,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.contentBox.addChild(new Text(displayOutput, 0, 0));
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
-      const footerWrapWidth = Math.max(1, contentWidth - 4);
-      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
+      const footerPromptWidth = visibleWidth(footerPrompt);
+      const footerWrapWidth = Math.max(1, contentWidth - 2 - footerPromptWidth);
+      const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(command, footerWrapWidth));
       const footerSuffixWidth = visibleWidth(footerSuffix);
+      const continuationIndent = ' '.repeat(footerPromptWidth);
       footerLines.forEach((footerLine, index) => {
-        const prefix = index === 0 ? footerPrompt : '  ';
+        const prefix = index === 0 ? footerPrompt : continuationIndent;
         const isLast = index === footerLines.length - 1;
         const suffixFits = isLast && visibleWidth(footerLine) + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
@@ -1471,7 +1536,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (visibleWidth(lastFooterLine) + footerSuffixWidth > footerWrapWidth) {
         this.contentBox.addChild(
           new Text(
-            renderLine(`  ${footerSuffix}`, value => value),
+            renderLine(`${continuationIndent}${footerSuffix}`, value => value),
             0,
             0,
           ),
@@ -1518,7 +1583,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     // For errors, use bordered box with error status
     if (this.result.isError) {
-      const status = theme.fg('error', ' ✗');
+      const status = this.getStatusIndicator(true);
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
       renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
@@ -1530,14 +1595,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:/i,
     );
     if (looksLikeError) {
-      const status = theme.fg('error', ' ✗');
+      const status = this.getStatusIndicator(true);
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
       renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
     }
 
     // Success - use bordered box with checkmark
-    const status = theme.fg('success', ' ✓');
+    const status = this.getStatusIndicator(false);
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
     {
       renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
@@ -1589,7 +1654,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return;
     }
 
-    const status = this.result.isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
+    const status = this.getStatusIndicator(this.result.isError);
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
     {
       renderBorderedProcess(status, prepareOutputLines(output));
@@ -2423,6 +2488,63 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return raw;
   }
 
+  private formatAgentSignalSendSummary(): string {
+    const args = this.args as Record<string, unknown> | undefined;
+    const target = sanitizeAnsiForRendering(typeof args?.targetId === 'string' ? args.targetId : 'unknown peer');
+    const priority = sanitizeAnsiForRendering(typeof args?.priority === 'string' ? args.priority : 'medium');
+    const reply = args?.expectsReply === true ? 'reply expected' : 'no reply expected';
+    return `${target} · ${priority} · ${reply}`;
+  }
+
+  private formatAgentSignalSendPreview(): string {
+    const message = sanitizeAnsiForRendering(this.getFirstStringArg('message'));
+    if (message) return message;
+
+    const outcome = sanitizeAnsiForRendering(this.getFormattedOutput());
+    return outcome ? `Outcome: ${outcome}` : '';
+  }
+
+  private renderAgentSignalSendEnhanced(): void {
+    const border = (char: string) => this.formatToolBorder(char);
+    const maxLineWidth = Math.max(10, this.renderWidth - BOX_INDENT * 2 - 4);
+    const args = this.args as Record<string, unknown> | undefined;
+    const target = sanitizeAnsiForRendering(typeof args?.targetId === 'string' ? args.targetId : 'unknown peer');
+    const priority = sanitizeAnsiForRendering(typeof args?.priority === 'string' ? args.priority : 'medium');
+    const expectsReply = args?.expectsReply === true ? 'yes' : 'no';
+    const message = sanitizeAnsiForRendering(this.getFirstStringArg('message'));
+    const outcome = sanitizeAnsiForRendering(this.getFormattedOutput());
+    const status = this.getStatusIndicator();
+    const footerText = `${theme.bold(theme.fg('toolTitle', MC_TOOLS.AGENT_SIGNAL_SEND))}${status}`;
+
+    const renderField = (label: string, value: string, preserveMessageFormatting = false): void => {
+      const displayValue = value || '—';
+      const lines = preserveMessageFormatting
+        ? this.wrapAgentSignalMessageLines(displayValue, maxLineWidth)
+        : this.wrapPreviewLines(displayValue, maxLineWidth, maxLineWidth);
+      this.contentBox.addChild(new Text(`${border('│')} ${theme.fg('toolArgs', `${label}:`)}`, 0, 0));
+      for (const line of lines) {
+        this.contentBox.addChild(new Text(`${border('│')}   ${theme.fg('text', line)}`, 0, 0));
+      }
+    };
+
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+    renderField('target', target);
+    this.contentBox.addChild(
+      new Text(
+        `${border('│')} ${theme.fg('toolArgs', 'priority:')} ${theme.fg('text', priority)}  ${theme.fg('toolArgs', 'expects reply:')} ${theme.fg('text', expectsReply)}`,
+        0,
+        0,
+      ),
+    );
+    this.contentBox.addChild(new Text(border('│'), 0, 0));
+    renderField('message', message, true);
+    if (outcome) {
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      renderField('outcome', outcome);
+    }
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+  }
+
   private renderGenericToolEnhanced(): void {
     const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
@@ -2583,12 +2705,19 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return ' ' + theme.fg('toolArgs', parts.join(', '));
   }
 
-  private getStatusIndicator(): string {
-    return this.isPartial
-      ? theme.fg('muted', ' ⋯')
-      : this.isErrorResult()
-        ? theme.fg('error', ' ✗')
-        : theme.fg('success', ' ✓');
+  private getBackgroundStatusIndicator(isError = this.isErrorResult()): string {
+    if (!this.backgroundTaskId) return '';
+    if (this.backgroundCancelled) return theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`);
+    if (this.isPartial) return theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`);
+    return isError
+      ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
+      : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`);
+  }
+
+  private getStatusIndicator(isError = this.isErrorResult()): string {
+    const backgroundStatus = this.getBackgroundStatusIndicator(isError);
+    if (backgroundStatus) return backgroundStatus;
+    return this.isPartial ? theme.fg('muted', ' ⋯') : isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
   }
 
   private getDurationSuffix(): string {

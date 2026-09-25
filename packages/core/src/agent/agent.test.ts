@@ -5402,6 +5402,142 @@ describe('Agent Tests', () => {
     });
   });
 
+  describe('structuredOutput with a top-level array of primitives (#23980)', () => {
+    const responseText = '{"elements":["alpha","beta","gamma"]}';
+
+    function createArrayModel(deltas: string[]) {
+      let capturedResponseFormat: any;
+      const model = new MockLanguageModelV2({
+        doGenerate: async options => {
+          capturedResponseFormat = options.responseFormat;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: deltas.join('') }],
+            warnings: [],
+          };
+        },
+        doStream: async options => {
+          capturedResponseFormat = options.responseFormat;
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: 'text-1' },
+              ...deltas.map(delta => ({ type: 'text-delta' as const, id: 'text-1', delta })),
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          };
+        },
+      });
+      return { model, getResponseFormat: () => capturedResponseFormat };
+    }
+
+    it('generate() returns the array of strings and sends the wrapped schema to the model', async () => {
+      const { model, getResponseFormat } = createArrayModel([responseText]);
+      const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
+
+      const result = await agent.generate('List greek letters', {
+        structuredOutput: { schema: z.array(z.string()) },
+      });
+
+      expect(result.object).toEqual(['alpha', 'beta', 'gamma']);
+      expect(result.text).toBe(responseText);
+      expect(getResponseFormat()).toMatchObject({
+        type: 'json',
+        schema: {
+          type: 'object',
+          properties: { elements: { type: 'array', items: { type: 'string' } } },
+          required: ['elements'],
+        },
+      });
+    });
+
+    it('generate() returns an array of numbers', async () => {
+      const { model } = createArrayModel(['{"elements":[1,2,3]}']);
+      const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
+
+      const result = await agent.generate('Count', { structuredOutput: { schema: z.array(z.number()) } });
+
+      expect(result.object).toEqual([1, 2, 3]);
+    });
+
+    it('stream() resolves object, objectStream and textStream for an array of strings split across deltas', async () => {
+      const { model } = createArrayModel(['{"elements":["al', 'pha","be', 'ta",', '"gamma"]}']);
+      const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
+
+      const stream = await agent.stream('List greek letters', {
+        structuredOutput: { schema: z.array(z.string()) },
+      });
+
+      const partials: string[][] = [];
+      for await (const partial of stream.objectStream) {
+        partials.push(partial as string[]);
+      }
+
+      // Partial arrays only ever contain completed elements and grow monotonically
+      for (const partial of partials) {
+        expect(['alpha', 'beta', 'gamma'].slice(0, partial.length)).toEqual(partial);
+      }
+      expect(partials.at(-1)).toEqual(['alpha', 'beta', 'gamma']);
+      expect(await stream.object).toEqual(['alpha', 'beta', 'gamma']);
+      expect(await stream.text).toBe(responseText);
+    });
+
+    it('stream() textStream emits the unwrapped JSON array', async () => {
+      const { model } = createArrayModel(['{"elements":[1', '23,4', '5]}']);
+      const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
+
+      const stream = await agent.stream('Count', { structuredOutput: { schema: z.array(z.number()) } });
+
+      let text = '';
+      for await (const chunk of stream.textStream) {
+        text += chunk;
+      }
+
+      expect(JSON.parse(text)).toEqual([123, 45]);
+      expect(await stream.object).toEqual([123, 45]);
+    });
+
+    it('rejects elements that fail the item schema', async () => {
+      const { model } = createArrayModel(['{"elements":[1,"two"]}']);
+      const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
+
+      await expect(agent.generate('Count', { structuredOutput: { schema: z.array(z.number()) } })).rejects.toThrow(
+        /Structured output validation failed/,
+      );
+    });
+
+    it('works with a separate structuring model', async () => {
+      const { model: structuringModel } = createArrayModel([responseText]);
+      const agent = new Agent({
+        id: 'array-agent',
+        name: 'array-agent',
+        instructions: 'list',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'The greek letters are alpha, beta and gamma.' }],
+            warnings: [],
+          }),
+        }),
+      });
+
+      const result = await agent.generate('List greek letters', {
+        structuredOutput: { schema: z.array(z.string()), model: structuringModel },
+      });
+
+      expect(result.object).toEqual(['alpha', 'beta', 'gamma']);
+    });
+  });
+
   describe('prepareStep', () => {
     it('should allow adding new tools via prepareStep', async () => {
       let capturedTools: any;

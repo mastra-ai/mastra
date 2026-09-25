@@ -96,12 +96,15 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
       entry: {
         style: resolve(srcDir, 'style.ts'),
         tokens: resolve(srcDir, 'ds/tokens/index.ts'),
+        'lib/framework': resolve(srcDir, 'lib/framework.tsx'),
         ...fileEntries('src/utils', 'utils'),
         ...fileEntries('src/domains', 'domains'),
         ...fileEntries('src/ee', 'ee'),
         ...fileEntries('src/ds/primitives', 'primitives'),
         ...fileEntries('src/lib/resize', 'resize'),
         ...fileEntries('src/lib/keyboard', 'keyboard'),
+        ...fileEntries('src/lib/sort', 'sort'),
+        ...fileEntries('src/components', 'components'),
         ...fileEntries('src/store', 'store'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
@@ -116,7 +119,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     target: 'esnext',
     minify: false,
     rollupOptions: {
-      external: ['motion/react'],
       output: {
         hoistTransitiveImports: false,
       },

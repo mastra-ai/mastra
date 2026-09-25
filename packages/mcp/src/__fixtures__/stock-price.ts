@@ -1,6 +1,6 @@
 import { Server } from '@modelcontextprotocol/server';
 import type { Tool } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v3';
 import zodToJsonSchema from 'zod-to-json-schema';
 
@@ -122,7 +122,6 @@ server.setRequestHandler('tools/call', async request => {
 });
 
 // Start the server
-const transport = new StdioServerTransport();
-await server.connect(transport);
+serveStdio(() => server, { legacy: 'reject' });
 
 export { server };

@@ -1,5 +1,7 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const matcherCache = new Map();
 const BASE_REF = process.env.BASE_REF || 'origin/main';
@@ -7,9 +9,12 @@ const DOCS_DIR = 'docs/src/content';
 const VERCEL_JSON_PATH = 'docs/vercel.json';
 
 // Get list of deleted MDX files
-function getDeletedMdxFiles() {
+export function getDeletedMdxFiles(baseRef = BASE_REF, execute = execFileSync) {
   try {
-    const diff = execSync(`git diff --name-status ${BASE_REF}...HEAD -- ${DOCS_DIR}`, {
+    const baseCommit = execute('git', ['rev-parse', '--verify', '--end-of-options', `${baseRef}^{commit}`], {
+      encoding: 'utf-8',
+    }).trim();
+    const diff = execute('git', ['diff', '--name-status', `${baseCommit}...HEAD`, '--', DOCS_DIR], {
       encoding: 'utf-8',
     });
 
@@ -160,4 +165,6 @@ function main() {
   process.exit(1);
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main();
+}

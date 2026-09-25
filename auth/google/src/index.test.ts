@@ -1,5 +1,3 @@
-import { generateKeyPairSync } from 'node:crypto';
-
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -313,6 +311,49 @@ describe('MastraAuthGoogle', () => {
       expect(jwtVerify).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps SSO sessions valid for cookieMaxAge after the Google ID token expires', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const cookieMaxAge = 24 * 60 * 60;
+        const auth = new MastraAuthGoogle({
+          clientSecret: 'test-client-secret',
+          allowedDomains: 'example.com',
+          session: { cookiePassword, cookieMaxAge },
+        }) as any;
+        const parsed = new URL(await auth.getLoginUrl('http://localhost/callback', 'test-state'));
+
+        mockFetch.mockResolvedValueOnce(
+          new Response(JSON.stringify({ access_token: 'access-token', id_token: 'id-token', expires_in: 3600 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+        (jwtVerify as any).mockResolvedValueOnce({
+          payload: {
+            sub: 'google-user-123',
+            email: 'user@example.com',
+            hd: 'example.com',
+            nonce: parsed.searchParams.get('nonce'),
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          },
+        });
+        const sessionCreatedAt = Date.now();
+        const callbackResult = await auth.handleCallback('code', parsed.searchParams.get('state')!);
+        const cookie = callbackResult.cookies![0]!.split(';')[0]!;
+        const request = () => new Request('http://localhost', { headers: { Cookie: cookie } });
+
+        vi.setSystemTime(sessionCreatedAt + cookieMaxAge * 1000 - 1000);
+        const user = await auth.getCurrentUser(request());
+        expect(user?.id).toBe('google-user-123');
+        expect(auth.authorizeUser(user!)).toBe(true);
+
+        vi.setSystemTime(sessionCreatedAt + cookieMaxAge * 1000 + 1000);
+        await expect(auth.getCurrentUser(request())).resolves.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('falls back to Bearer ID token verification', async () => {
       (jwtVerify as any).mockResolvedValueOnce({
         payload: {
@@ -551,12 +592,20 @@ describe('MastraRBACGoogle', () => {
   });
 
   it('signs service-account JWTs and normalizes escaped private keys', async () => {
-    const { privateKey } = generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-    });
-    const escapedKey = (privateKey as string).replace(/\n/g, '\\n');
+    const keyPair = await globalThis.crypto.subtle.generateKey(
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      },
+      true,
+      ['sign', 'verify'],
+    );
+    const privateKey = `-----BEGIN PRIVATE KEY-----\n${Buffer.from(
+      await globalThis.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
+    ).toString('base64')}\n-----END PRIVATE KEY-----\n`;
+    const escapedKey = privateKey.replace(/\n/g, '\\n');
 
     mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -587,6 +636,19 @@ describe('MastraRBACGoogle', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch.mock.calls[0]![0]).toBe('https://oauth2.googleapis.com/token');
     expect(mockFetch.mock.calls[0]![1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    const tokenRequest = mockFetch.mock.calls[0]![1] as RequestInit;
+    const assertion = new URLSearchParams(tokenRequest.body as URLSearchParams).get('assertion');
+    expect(assertion).toBeTruthy();
+    const [encodedHeader, encodedClaim, encodedSignature] = assertion!.split('.');
+    expect(JSON.parse(Buffer.from(encodedHeader!, 'base64url').toString())).toMatchObject({ alg: 'RS256', typ: 'JWT' });
+    await expect(
+      globalThis.crypto.subtle.verify(
+        'RSASSA-PKCS1-v1_5',
+        keyPair.publicKey,
+        Buffer.from(encodedSignature!, 'base64url'),
+        new TextEncoder().encode(`${encodedHeader}.${encodedClaim}`),
+      ),
+    ).resolves.toBe(true);
     expect(mockFetch.mock.calls[1]![1]).toEqual(
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer service-account-token' }),

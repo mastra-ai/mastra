@@ -7,7 +7,7 @@ description: "Browse Alibaba Token Plan model IDs, capabilities, and context win
 
 # <img src="https://models.dev/logos/alibaba-token-plan.svg" alt="Alibaba Token Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba Token Plan
 
-Access 26 Alibaba Token Plan models through Mastra's model router. Authentication is handled automatically using the `ALIBABA_TOKEN_PLAN_API_KEY` environment variable.
+Access 28 Alibaba Token Plan models through Mastra's model router. Authentication is handled automatically using the `ALIBABA_TOKEN_PLAN_API_KEY` environment variable.
 
 Learn more in the [Alibaba Token Plan documentation](https://www.alibabacloud.com/help/en/model-studio/token-plan-overview).
 
@@ -106,6 +106,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "alibaba-token-plan/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "alibaba-token-plan/glm-5",
     "imageInput": false,
     "audioInput": false,
@@ -131,6 +143,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "alibaba-token-plan/glm-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "alibaba-token-plan/glm-5.3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,

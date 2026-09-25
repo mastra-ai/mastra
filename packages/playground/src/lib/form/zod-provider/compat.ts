@@ -98,6 +98,15 @@ export function getArrayElement(schema: AnySchema): AnySchema | undefined {
 }
 
 /**
+ * Get the value schema of a ZodRecord.
+ * v3: schema._def.valueType
+ * v4: schema._zod.def.valueType
+ */
+export function getRecordValueSchema(schema: AnySchema): AnySchema | undefined {
+  return getDef(schema)?.valueType;
+}
+
+/**
  * Get literal value(s) from a ZodLiteral schema.
  * v3: schema._def.value (single value)
  * v4: schema._zod.def.values (array or single value)

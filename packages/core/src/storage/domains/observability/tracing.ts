@@ -595,7 +595,7 @@ export const lightSpanRecordSchema = z
     // may omit it entirely, and they must still validate.
     status: traceStatusField.nullable().optional(),
 
-    // Entity context (needed by TraceKeysAndValues on root span)
+    // Entity context (needed by TraceSummaryDescription on root span)
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,
@@ -745,6 +745,7 @@ export const BRANCH_SPAN_TYPES = [
   SpanType.RAG_INGESTION,
   SpanType.TOOL_CALL,
   SpanType.MCP_TOOL_CALL,
+  SpanType.MCP_SERVER_REQUEST,
   SpanType.PROVIDER_TOOL_CALL,
 ] as const satisfies readonly SpanType[];
 

@@ -1,11 +1,13 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { SettingsNavigation } from '../SettingsNavigation';
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
 
 const STORAGE_KEY = 'settings-navigation-test';
 
@@ -73,6 +75,8 @@ describe('SettingsNavigation', () => {
         .getAllByRole('link')
         .map(link => link.textContent),
     ).toEqual(['Repositories', 'Work Intake', 'Connections']);
+    // Knowledge is feature-gated — hidden by default (features.knowledge=false).
+    expect(within(sources).queryByRole('link', { name: 'Knowledge' })).not.toBeInTheDocument();
 
     const agent = screen.getByRole('region', { name: 'Agent' });
     expect(within(agent).getByRole('link', { name: 'Models' })).toHaveAttribute(
@@ -95,5 +99,41 @@ describe('SettingsNavigation', () => {
     expect(screen.getByRole('link', { name: 'Repositories' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Work Intake' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Agent' })).not.toBeInTheDocument();
+  });
+
+  describe('when the knowledge feature is enabled', () => {
+    function enableKnowledgeFeature() {
+      server.use(http.get(`${TEST_BASE_URL}/web/config/features`, () => HttpResponse.json({ knowledge: true })));
+    }
+
+    it('adds a Knowledge link between Work Intake and Connections in the Sources group', async () => {
+      enableKnowledgeFeature();
+      renderNavigation();
+
+      const knowledgeLink = await screen.findByRole('link', { name: 'Knowledge' });
+      expect(knowledgeLink).toHaveAttribute('href', '/factories/fp-1/settings/knowledge');
+
+      const sources = screen.getByRole('region', { name: 'Sources' });
+      expect(
+        within(sources)
+          .getAllByRole('link')
+          .map(link => link.textContent),
+      ).toEqual(['Repositories', 'Work Intake', 'Knowledge', 'Connections']);
+    });
+
+    it('surfaces the Knowledge link when searching for a provider name', async () => {
+      enableKnowledgeFeature();
+      const user = userEvent.setup();
+      renderNavigation();
+
+      // The link is populated asynchronously via the features query — wait for it
+      // to land before typing, otherwise the search runs before the item exists.
+      await screen.findByRole('link', { name: 'Knowledge' });
+
+      await user.type(screen.getByRole('searchbox', { name: 'Search settings' }), 'notion');
+
+      expect(screen.getByRole('link', { name: 'Knowledge' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Repositories' })).not.toBeInTheDocument();
+    });
   });
 });

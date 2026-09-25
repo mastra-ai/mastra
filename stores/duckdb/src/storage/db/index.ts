@@ -217,6 +217,37 @@ export class DuckDBConnection extends MastraBase {
     }
   }
 
+  /** Delete one bounded retention batch and return the number of rows removed. */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: string;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    if (!identifier.test(tableName) || !identifier.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+
+    const rows = await this.query(
+      `DELETE FROM ${tableName}
+       WHERE rowid IN (
+         SELECT rowid FROM ${tableName}
+         WHERE ${column} < ?
+         ORDER BY ${column}
+         LIMIT ?
+       )
+       RETURNING 1 AS deleted`,
+      [cutoff, limit],
+    );
+    return rows.length;
+  }
+
   /** Execute parameterized statements atomically using a single DuckDB connection. */
   async executeTransaction(statements: readonly { sql: string; params?: readonly unknown[] }[]): Promise<void> {
     if (statements.length === 0) return;

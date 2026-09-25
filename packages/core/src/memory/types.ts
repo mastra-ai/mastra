@@ -80,6 +80,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Thread metadata flag marking the title as user-pinned. Set by
+ * `session.thread.rename()` so Observational Memory's title extractor never
+ * overwrites a manual rename, and cleared (set to `false`) when the user
+ * explicitly regenerates the title via `generateThreadTitle()`.
+ */
+export const TITLE_PINNED_THREAD_METADATA_KEY = 'titlePinned';
+
+/**
+ * Whether the thread's title is pinned against automatic updates.
+ */
+export function isThreadTitlePinned(threadMetadata?: Record<string, unknown>): boolean {
+  return threadMetadata?.[TITLE_PINNED_THREAD_METADATA_KEY] === true;
+}
+
+/**
  * Helper to get OM metadata from a thread's metadata object.
  * Returns undefined if not present or if the structure is invalid.
  */
@@ -783,7 +798,6 @@ export interface ObservationalMemoryReflectionConfig {
  *
  * // Custom configuration
  * observationalMemory: {
- *   scope: 'resource',
  *   model: 'google/gemini-2.5-flash',
  *   observation: {
  *     messageTokens: 20_000,
@@ -829,6 +843,11 @@ export interface ObservationalMemoryOptions {
    * - 'thread': Observations are per-thread (default)
    *
    * @default 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -951,8 +970,24 @@ type BaseMemoryConfig = {
    * lastMessages: 5 // Include last 5 messages
    * lastMessages: false // Disable conversation history
    * ```
+   * @deprecated Counting messages is a poor proxy for context size. Prefer `messageHistory`
+   * to bound history by a token budget. `lastMessages: false` still disables history.
    */
   lastMessages?: number | false;
+
+  /**
+   * Token budget for conversation history. When set, remembered messages are trimmed
+   * oldest-first until the context fits; system instructions and the current turn are never removed.
+   * Trimmed history stays in storage but is excluded from context on later turns.
+   * When set without a numeric `lastMessages`, history is limited by tokens only.
+   *
+   * @example
+   * ```typescript
+   * messageHistory: { maxTokens: 8000 } // frees 25% of the budget when exceeded
+   * messageHistory: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
+   * ```
+   */
+  messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1028,7 +1063,9 @@ type BaseMemoryConfig = {
   /**
    * Automatically generate descriptive thread titles based on the first user message.
    * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
-   * Title generation runs asynchronously and doesn't affect response time.
+   * Title generation runs asynchronously and doesn't affect response time — unless
+   * `emitEvent` is set on a stream run, in which case the final `finish` chunk is held
+   * until the title is generated and persisted.
    *
    * @default false
    * @example
@@ -1047,13 +1084,35 @@ type BaseMemoryConfig = {
          * Language model to use for title generation.
          * Can be static or a function that receives request context for dynamic selection.
          * Accepts both Mastra models and standard AI SDK LanguageModelV1/V2.
+         * Defaults to the agent's own model when omitted.
          */
-        model: DynamicArgument<MastraModelConfig>;
+        model?: DynamicArgument<MastraModelConfig>;
         /**
          * Custom instructions for title generation.
          * Can be static or a function that receives request context for dynamic customization.
          */
         instructions?: DynamicArgument<string>;
+        /**
+         * Minimum number of messages in the thread (user + assistant) before
+         * a title is generated.
+         * @default 1
+         */
+        minMessages?: number;
+        /**
+         * Emit the generated title as a transient `data-thread-title` chunk
+         * (`{ threadId, title }`) on the run's stream immediately before the
+         * `finish` chunk, so HTTP/stream consumers receive it on the same run.
+         * Only applies to `stream()` runs; `generate()` and durable/evented agents
+         * keep persist-only behavior.
+         *
+         * Trade-off: the `finish` chunk (and therefore the response's completion)
+         * is delayed until the title is generated and persisted. If the run is
+         * aborted during that wait, `finish` is released immediately and title
+         * generation continues in the background.
+         *
+         * @default false
+         */
+        emitEvent?: boolean;
       };
 
   /**
@@ -1074,6 +1133,30 @@ type BaseMemoryConfig = {
    * ```
    */
   filterIncompleteToolCalls?: boolean;
+
+  /**
+   * Whether the request input is processed in full instead of being trimmed to the part
+   * stored history does not already cover.
+   *
+   * By default, when memory loads thread history, only the new messages in the input are
+   * used: the input is trimmed back to the last assistant message (or, when the input ends
+   * with an assistant message, to that message's trailing tool results), and the stored
+   * history is layered underneath. Set this to true when the caller assembled the input
+   * itself and needs the exact message sequence preserved — for example a nested
+   * `useAgent` structuring pass that deliberately replays the parent request so its prompt
+   * keeps the parent's message prefix.
+   *
+   * This controls trimming only. When a memory-sourced message and an input message share
+   * an id, the stored copy stays authoritative: only tool outcomes for calls it still has
+   * pending are taken from the input. Input text, reasoning, and metadata are ignored.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * retainFullInput: true // Process the request input exactly as supplied
+   * ```
+   */
+  retainFullInput?: boolean;
 
   /**
    * Thread management configuration.
@@ -1277,6 +1360,9 @@ export type SerializedMemoryConfig = {
     /** Number of recent messages to include, or false to disable */
     lastMessages?: number | false;
 
+    /** Token budget for conversation history */
+    messageHistory?: import('./message-history-config').MessageHistoryConfig;
+
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;
 
@@ -1284,10 +1370,14 @@ export type SerializedMemoryConfig = {
     generateTitle?:
       | boolean
       | {
-          /** Model ID in format provider/model-name */
-          model: ModelRouterModelId;
+          /** Model ID in format provider/model-name; omitted to use the agent's own model */
+          model?: ModelRouterModelId;
           /** Custom instructions for title generation */
           instructions?: string;
+          /** Minimum number of messages in the thread before a title is generated */
+          minMessages?: number;
+          /** Emit a transient `data-thread-title` chunk before `finish` on stream runs */
+          emitEvent?: boolean;
         };
   };
 
@@ -1319,7 +1409,11 @@ export type SerializedObservationalMemoryConfig = {
   /** Model ID for both Observer and Reflector (e.g., "google/gemini-2.5-flash") */
   model?: string;
 
-  /** Memory scope: 'resource' or 'thread' */
+  /**
+   * Memory scope: 'resource' or 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release, leaving
+   * `'thread'` (already the default) as the only scope. Omit this option to use thread scope.
+   */
   scope?: 'resource' | 'thread';
 
   /** Inactivity TTL before forcing buffered observation activation */

@@ -55,6 +55,8 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsPartialThreadUpdate?: boolean = false;
 
+  private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -126,6 +128,38 @@ export abstract class MemoryStorage extends StorageDomain {
       ...(title !== undefined ? { title } : {}),
       ...(metadata !== undefined ? { metadata } : {}),
     });
+  }
+
+  /**
+   * Serializes a metadata read-modify-write for one thread within this storage instance.
+   * Transaction-capable adapters may override this to provide cross-process atomicity.
+   */
+  async updateThreadMetadata({
+    id,
+    resourceId,
+    update,
+  }: {
+    id: string;
+    resourceId?: string;
+    update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+  }): Promise<StorageThreadType | null> {
+    const previous = this.threadMetadataUpdateQueues.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.threadMetadataUpdateQueues.set(id, current);
+
+    await previous.catch(() => {});
+    try {
+      const thread = await this.getThreadById({ threadId: id, resourceId });
+      if (!thread) return null;
+      const metadata = update(thread);
+      return metadata ? await this.patchThread({ id, metadata }) : thread;
+    } finally {
+      release();
+      if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
+    }
   }
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;

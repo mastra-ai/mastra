@@ -5,6 +5,7 @@ import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
 import type { AgentController } from '../agent-controller/agent-controller';
 import type { Session } from '../agent-controller/session';
+import type { AgentControllerRequestContext } from '../agent-controller/types';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';
@@ -306,7 +307,13 @@ export class AgentControllerChannels extends AgentChannels {
         ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
-      { requestContext },
+      // Await the agent's real acceptance decision. Stream setup (workspace,
+      // instructions, tools, model resolution) runs before the run span opens
+      // and before the user message is persisted; without this, a throw there
+      // rejects after the next tick and the message vanishes with no trace,
+      // no log, and no reply. Rejecting here reaches handleChatMessage's
+      // error boundary, which tells the sender.
+      { requestContext, requireDelivery: true },
     );
     await result.accepted;
   }
@@ -440,6 +447,26 @@ export class AgentControllerChannels extends AgentChannels {
     }
     await this.runSessionStartHook(session, thread, requestContext);
     return session;
+  }
+
+  /**
+   * Only render Approve/Deny controls when the session actually arms a human
+   * gate. `allow` tools auto-approve and `deny` tools auto-decline inside the
+   * session run, so a card for them would offer a decision nobody is waiting
+   * on. The session is looked up in the controller's live registry and must
+   * match the run's session id; otherwise controls are rendered as a fallback.
+   *
+   * @internal
+   */
+  override async shouldRenderToolApproval(
+    requestContext: RequestContext | undefined,
+    toolName: string,
+  ): Promise<boolean> {
+    const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
+    if (!this.controller || !ctx?.resourceId || !ctx.session?.id) return true;
+    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope);
+    if (!session || session.identity.getId() !== ctx.session.id) return true;
+    return session.resolveToolApproval(toolName) === 'ask';
   }
 
   /**

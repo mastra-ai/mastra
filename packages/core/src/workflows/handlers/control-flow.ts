@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fastq from 'fastq';
 import type { done as DoneCallback } from 'fastq';
 import type { ActorSignal } from '../../auth/ee';
@@ -100,6 +99,8 @@ function executeChildEntry(
       return engine.executeAgent({ ...params, entry: child });
     case 'tool':
       return engine.executeTool({ ...params, entry: child });
+    case 'classifier':
+      return engine.executeClassifier({ ...params, entry: child });
     case 'mapping':
       return engine.executeMapping({ ...params, entry: child });
   }
@@ -435,7 +436,7 @@ export async function executeConditional(
             writer: new ToolStream(
               {
                 prefix: 'workflow-step',
-                callId: randomUUID(),
+                callId: globalThis.crypto.randomUUID(),
                 name: 'conditional',
                 runId,
               },
@@ -749,7 +750,7 @@ export async function executeLoop(
           },
         },
       });
-      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      return { status: 'canceled' };
     }
 
     const stepExecResult = await executeChildEntry(engine, step, {
@@ -814,7 +815,7 @@ export async function executeLoop(
           },
         },
       });
-      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      return { status: 'canceled' };
     }
 
     const evalSpan = await engine.createChildSpan({
@@ -858,7 +859,7 @@ export async function executeLoop(
           writer: new ToolStream(
             {
               prefix: 'workflow-step',
-              callId: randomUUID(),
+              callId: globalThis.crypto.randomUUID(),
               name: 'loop',
               runId,
             },
@@ -896,7 +897,7 @@ export async function executeLoop(
           },
         },
       });
-      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      return { status: 'canceled' };
     }
   } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
@@ -1164,7 +1165,7 @@ export async function executeForeach(
             status: 'canceled',
             output: results,
             endedAt: Date.now(),
-          } as unknown as StepResult<any, any, any, any>;
+          };
         }
         killQueue();
         inFlight--;
@@ -1303,12 +1304,7 @@ export async function executeForeach(
         output: results,
       },
     });
-    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
-      any,
-      any,
-      any,
-      any
-    >;
+    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() };
   }
 
   // Handle error result first (matches previous behavior of returning on first error)

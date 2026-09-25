@@ -1,8 +1,12 @@
 /**
  * Factory function to create an EventedAgent that wraps an existing Agent.
  *
- * This creates a durable agent that uses fire-and-forget execution via
- * the built-in workflow engine with startAsync().
+ * This creates a durable agent that runs its agentic loop on the built-in
+ * evented workflow engine: execution is fire-and-forget (the run is started
+ * without being awaited) and driven by events on the Mastra host's pubsub.
+ *
+ * The returned agent must be registered on a `Mastra` instance (with storage)
+ * before use; calling it unregistered fails with a clear `MastraError`.
  *
  * @example
  * ```typescript
@@ -26,6 +30,7 @@
 
 import type { MastraServerCache } from '../../cache/base';
 import type { PubSub } from '../../events/pubsub';
+import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { Agent } from '../agent';
 
 import { EventedAgent } from './evented-agent';
@@ -73,16 +78,27 @@ export interface CreateEventedAgentOptions<
    * regardless of this option.
    */
   shouldCache?: (topic: string) => boolean;
+
+  /**
+   * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
+   * EventedAgent (a warning is logged if set). The evented engine requires
+   * the full snapshot set (`pending | paused | suspended | running`): the
+   * initial `running` write creates the base row that suspend-merges and
+   * multi-worker coordination build on.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
 
 /**
  * Create an EventedAgent that wraps an existing Agent.
  *
  * This factory function creates an EventedAgent instance with fire-and-forget
- * execution via the built-in workflow engine.
+ * execution via the built-in evented workflow engine. Runs survive process
+ * death: over the same storage, a fresh process can resume in-flight runs via
+ * `recover(runId)` / `recoverActiveRuns()`.
  *
  * @param options - Configuration options
- * @returns An EventedAgent instance
+ * @returns An EventedAgent instance (register it on a `Mastra` host before use)
  *
  * @example
  * ```typescript
@@ -104,7 +120,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
 
   return new EventedAgent({
     agent,
@@ -112,6 +128,7 @@ export function createEventedAgent<
     cache,
     maxSteps,
     shouldCache,
+    shouldPersistSnapshot,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

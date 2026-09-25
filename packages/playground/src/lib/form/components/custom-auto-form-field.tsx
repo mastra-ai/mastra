@@ -2,6 +2,7 @@ import type { ParsedField } from '@autoform/core';
 import { getLabel } from '@autoform/core';
 import type { AutoFormFieldProps } from '@autoform/react';
 import { getPathInObject, useAutoForm } from '@autoform/react';
+import { fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import React, { useMemo } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { CustomArrayField } from './custom-array-field';
@@ -63,6 +64,8 @@ export const CustomAutoFormField: React.FC<{
         inputProps={{
           required: field.required,
           error: error,
+          'aria-invalid': error ? true : undefined,
+          'aria-describedby': error ? fieldErrorId(fullPath) : undefined,
           key: `${fullPath}-input`,
           ...field.fieldConfig?.inputProps,
           ...register(fullPath),

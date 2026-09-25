@@ -7,12 +7,11 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import { getPackageInfo } from 'local-pkg';
 import * as resolve from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { getPackageRootPath } from '../package-info';
+import { getPackageRootPath, getPackageInfo } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
@@ -175,7 +174,7 @@ async function getInputPlugins(
     ),
     tsConfigPaths(),
     protocolExternalResolver(),
-    subpathExternalsResolver(externals),
+    subpathExternalsResolver(externals, workspaceMap),
     transpilePackagesMap.size
       ? esbuild({
           format: 'esm',

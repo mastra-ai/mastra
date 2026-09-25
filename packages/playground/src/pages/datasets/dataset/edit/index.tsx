@@ -1,21 +1,26 @@
 import { Card } from '@mastra/playground-ui/components/Card';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { EditDatasetForm } from '@/domains/datasets/components/edit-dataset-form';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-edit', label: 'Edit dataset' }];
 
 function EditDatasetPageShell({ children }: { children?: ReactNode }) {
   return (
-    <PageLayout height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Edit dataset</h1>
       <div />
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+      <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
   );
 }
@@ -48,18 +53,20 @@ function EditDatasetPage() {
   if (error || !dataset) {
     return (
       <EditDatasetPageShell>
-        <ErrorState
-          title="Failed to load dataset"
-          message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+        <EmptyState
+          tone="error"
+          titleSlot="Failed to load dataset"
+          descriptionSlot={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
         />
       </EditDatasetPageShell>
     );
   }
 
   return (
-    <PageLayout height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Edit dataset</h1>
       <div />
-      <PageLayout.MainArea isCentered>
+      <div className="flex h-full items-center justify-center">
         <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">
           <MainHeader className="mb-6 p-0">
             <MainHeader.Column>
@@ -85,7 +92,7 @@ function EditDatasetPage() {
             />
           </Card>
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

@@ -705,6 +705,55 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('should read Anthropic cache creation TTL buckets from the raw API usage', () => {
+      // @ai-sdk/anthropic exposes the split as `cache_creation` on providerMetadata.anthropic.usage
+      // and on usage.raw, never as `cacheCreation`.
+      const cache_creation = { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 6 };
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'end_turn' },
+        usage: {
+          inputTokens: { total: 100, noCache: 94, cacheRead: 0, cacheWrite: 6 },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+          raw: { input_tokens: 94, output_tokens: 20, cache_creation_input_tokens: 6, cache_creation },
+        },
+        providerMetadata: {
+          anthropic: { cacheCreationInputTokens: 6, usage: { cache_creation_input_tokens: 6, cache_creation } },
+        },
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
+        expect(result.payload.output.usage.cacheCreationInputTokens5m).toBe(0);
+        expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(6);
+      }
+    });
+
+    it('should read Anthropic cache creation TTL buckets from usage.raw without provider metadata', () => {
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'end_turn' },
+        usage: {
+          inputTokens: { total: 100, noCache: 94, cacheRead: 0, cacheWrite: 6 },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+          raw: { cache_creation: { ephemeral_5m_input_tokens: 2, ephemeral_1h_input_tokens: 4 } },
+        },
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.cacheCreationInputTokens5m).toBe(2);
+        expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(4);
+      }
+    });
+
     it('should preserve providerMetadata for AI SDK v6 finish chunks', () => {
       const providerMetadata = {
         anthropic: {
@@ -742,6 +791,42 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(2);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
+      }
+    });
+
+    it('should unwrap usage and finish reason re-nested by the AI SDK v2 compatibility shim', () => {
+      // Shape produced when ai@7 `wrapLanguageModel` wraps a model that advertises
+      // 'v2' but already emits V3/V4 chunks (e.g. Mastra's model router).
+      const chunk = {
+        type: 'finish',
+        finishReason: { unified: { unified: 'stop', raw: 'STOP' }, raw: undefined },
+        usage: {
+          inputTokens: {
+            total: { total: 17754, noCache: 5950, cacheRead: 12088, cacheWrite: 3 },
+            noCache: undefined,
+            cacheRead: undefined,
+            cacheWrite: undefined,
+          },
+          outputTokens: { total: { total: 20, text: 15, reasoning: 5 }, text: undefined, reasoning: undefined },
+        },
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.stepResult.rawReason).toBe('STOP');
+        expect(result.payload.output.usage).toMatchObject({
+          inputTokens: 17754,
+          outputTokens: 20,
+          totalTokens: 17774,
+          reasoningTokens: 5,
+          cachedInputTokens: 12088,
+          cacheCreationInputTokens: 3,
+        });
       }
     });
 

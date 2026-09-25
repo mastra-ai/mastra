@@ -1,12 +1,11 @@
 import type { GetScoresScorers_Response, GetSystemPackagesResponse } from '@mastra/client-js';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, Route, Routes } from 'react-router';
+import { Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ScorersPage from '..';
-import { LinkComponentProvider } from '@/lib/framework';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
+import { Link } from '@/lib/link';
 import { stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -46,13 +45,10 @@ const renderPage = () =>
   renderWithProviders(
     // Real react-router Link so the C shortcut's synthetic click navigates the MemoryRouter.
     <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
-      <RouteHeaderActionsProvider>
-        <RouteHeaderActionsSlot />
-        <Routes>
-          <Route path="/scorers" element={<ScorersPage />} />
-          <Route path="/cms/scorers/create" element={<div>Create scorer page</div>} />
-        </Routes>
-      </RouteHeaderActionsProvider>
+      <Routes>
+        <Route path="/scorers" element={<ScorersPage />} />
+        <Route path="/cms/scorers/create" element={<div>Create scorer page</div>} />
+      </Routes>
     </LinkComponentProvider>,
     { router: { initialEntries: ['/scorers'] } },
   );

@@ -1,14 +1,13 @@
+import { DisabledFeatureButton } from '@mastra/playground-ui/components/DisabledFeatureButton';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { ExternalLink, FlaskConical, ClipboardCheck, GitBranch, MessageSquare } from 'lucide-react';
-
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { GitBranch, MessageSquare } from 'lucide-react';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
+export type AgentPageTab = 'chat' | 'versions' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
@@ -16,69 +15,17 @@ interface AgentPageTabsProps {
   activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-  reviewBadge?: number;
-  rightSlot?: React.ReactNode;
 }
 
-function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
+function AgentTab({ value, icon, label }: { value: AgentPageTab; icon: React.ReactNode; label: string }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-inherit underline hover:text-white"
-    >
-      {children}
-      <ExternalLink className="size-3" />
-    </a>
-  );
-}
-
-function AgentTab({
-  value,
-  icon,
-  label,
-  badge,
-  disabled,
-  disabledReason,
-}: {
-  value: AgentPageTab;
-  icon: React.ReactNode;
-  label: string;
-  badge?: number;
-  disabled?: boolean;
-  disabledReason?: React.ReactNode;
-}) {
-  const tabContent = (
-    <>
-      <Icon size="sm">{icon}</Icon>
-      <Txt variant="ui-sm" className="text-inherit">
+    <Tab value={value}>
+      <Icon size="xs">{icon}</Icon>
+      <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>
-      {badge !== undefined && badge > 0 && (
-        <span className="bg-accent1 text-ui-sm ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center leading-[18px] font-medium text-white">
-          {badge}
-        </span>
-      )}
-    </>
+    </Tab>
   );
-
-  if (disabled) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span tabIndex={0} className="inline-flex">
-            <Tab value={value} disabled>
-              {tabContent}
-            </Tab>
-          </span>
-        </TooltipTrigger>
-        {disabledReason && <TooltipContent side="bottom">{disabledReason}</TooltipContent>}
-      </Tooltip>
-    );
-  }
-
-  return <Tab value={value}>{tabContent}</Tab>;
 }
 
 export function AgentPageTabs({
@@ -86,29 +33,12 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
-  reviewBadge,
-  rightSlot,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
-
-  const playgroundDisabledReason = !showPlayground ? (
-    <p>
-      Configure <code>@mastra/editor</code> to use the Editor.{' '}
-      <DocsLink href="https://mastra.ai/docs/editor/overview">Learn more</DocsLink>
-    </p>
-  ) : undefined;
-  const observabilityDisabledReason = !showObservability ? (
-    <p>
-      Add <code>@mastra/observability</code> to enable this tab.{' '}
-      <DocsLink href="https://mastra.ai/docs/observability/overview">Learn more</DocsLink>
-    </p>
-  ) : undefined;
 
   const hrefMap: Record<AgentPageTab, string> = {
     chat: `/agents/${agentId}/threads/new`,
     versions: `/agents/${agentId}/editor`,
-    evaluate: `/agents/${agentId}/evaluate`,
-    review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
   };
 
@@ -118,49 +48,38 @@ export function AgentPageTabs({
   };
 
   return (
-    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
-    // when the full tab list no longer fits, so the tabs keep the full row width.
-    <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
-      <Tabs
-        value={activeTab}
-        defaultTab={activeTab}
-        onValueChange={handleTabChange}
-        className="min-w-0 flex-1 max-lg:flex-auto"
-      >
+    <div className="flex min-w-0 items-center justify-between gap-2 p-1.5">
+      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="min-w-0">
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
-          <AgentTab
-            value="versions"
-            icon={<GitBranch />}
-            label="Editor"
-            disabled={!showPlayground}
-            disabledReason={playgroundDisabledReason}
-          />
-          <AgentTab
-            value="evaluate"
-            icon={<FlaskConical />}
-            label="Evaluate"
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <AgentTab
-            value="review"
-            icon={<ClipboardCheck />}
-            label="Review"
-            badge={reviewBadge}
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <AgentTab
-            value="traces"
-            icon={<TraceIcon />}
-            label="Agent traces"
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
+          {showObservability && <AgentTab value="traces" icon={<TraceIcon />} label="Traces" />}
+          {showPlayground && <AgentTab value="versions" icon={<GitBranch />} label="Editor" />}
         </TabList>
       </Tabs>
-      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
+      {(!showObservability || !showPlayground) && (
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {!showObservability && (
+            <DisabledFeatureButton
+              icon={<TraceIcon />}
+              label="Traces"
+              tooltipContent={
+                <>
+                  Add <code>@mastra/observability</code> to enable Traces.
+                </>
+              }
+              docsHref="https://mastra.ai/docs/observability/overview"
+            />
+          )}
+          {!showPlayground && (
+            <DisabledFeatureButton
+              icon={<GitBranch />}
+              label="Editor"
+              tooltipContent="Add @mastra/editor to enable the Editor."
+              docsHref="https://mastra.ai/docs/editor/overview"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

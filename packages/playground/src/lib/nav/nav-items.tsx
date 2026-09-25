@@ -1,7 +1,6 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
-import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
 import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
@@ -14,7 +13,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, ClipboardCheck, Inbox, LayoutGrid } from 'lucide-react';
+import { BookIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -27,6 +26,8 @@ export interface NavItem {
   activePaths?: string[];
   /** When true, the item stays in the registry (so breadcrumbs/routes can resolve it) but is hidden from the sidebar and command palette. */
   hidden?: boolean;
+  /** When true, the sidebar folds the item under "More" unless it was visited recently or the server reports it is in use. */
+  foldable?: boolean;
 }
 
 export interface NavSection {
@@ -55,18 +56,6 @@ const signalsNavItem: NavItem = {
 
 export const mainNav: NavSection[] = [
   {
-    key: 'inbox',
-    title: '',
-    items: [
-      {
-        name: 'Inbox',
-        url: '/inbox',
-        Icon: Inbox,
-        isOnMastraPlatform: true,
-      },
-    ],
-  },
-  {
     key: 'primitives',
     title: 'Primitives',
     items: [
@@ -93,24 +82,28 @@ export const mainNav: NavSection[] = [
         url: '/processors',
         Icon: ProcessorIcon,
         isOnMastraPlatform: false,
+        foldable: true,
       },
       {
         name: 'MCP Servers',
         url: '/mcps',
         Icon: McpServerIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
       {
         name: 'Tools',
         url: '/tools',
         Icon: ToolsIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
       {
         name: 'Workspaces',
         url: '/workspaces',
         Icon: WorkspacesIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
       {
         name: 'Request Context',
@@ -124,12 +117,6 @@ export const mainNav: NavSection[] = [
     key: 'evaluation',
     title: 'Evaluation',
     items: [
-      {
-        name: 'Overview',
-        url: '/evaluation',
-        Icon: HomeIcon,
-        isOnMastraPlatform: true,
-      },
       {
         name: 'Scorers',
         url: '/scorers',

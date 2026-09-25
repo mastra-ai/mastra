@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { linearClaimKey } from './claim.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';
 import { LinearRules } from './rules.js';
@@ -42,12 +43,12 @@ async function setup(overrides?: LinearRuleOverrides, boards = createBoardRegist
 describe('LinearRules', () => {
   it.each([
     { name: 'the bound custom board initial phase', sourceId: 'proj-release', board: 'release', stage: 'queued' },
-    { name: 'Work triage when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'triage' },
+    { name: 'Work Intake when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'intake' },
     {
-      name: 'Work triage when the bound board is not installed',
+      name: 'Work Intake when the bound board is not installed',
       sourceId: 'proj-gone',
       board: 'work',
-      stage: 'triage',
+      stage: 'intake',
     },
   ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
     const { project, service, workItems } = await setup(
@@ -64,6 +65,120 @@ describe('LinearRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { type: 'upsertLinkedWorkItem', board, stage } },
     ]);
+  });
+
+  it('does not mint a second card while another Factory holds a live card for the issue', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-factory',
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+
+  it('ingests an issue again once the other Factory finished its card', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-factory',
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        decision: {
+          type: 'upsertLinkedWorkItem',
+          sourceKey: `linear:${issue.identifier}`,
+          claimKey: linearClaimKey(issue.id),
+        },
+      },
+    ]);
+  });
+
+  it('finds the held card by stable issue id after Linear renamed the identifier', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-factory',
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:OLD-1', url: issue.url },
+        claimKey: linearClaimKey(issue.id),
+        title: 'OLD-1: Fix intake sync',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it("ingests when the other Factory's card finished on its own board's terminal phase", async () => {
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const { project, service, workItems } = await setup(undefined, boards);
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-factory',
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        claimKey: linearClaimKey(issue.id),
+        board: 'release',
+        stages: ['shipped'],
+        title: `${issue.identifier}: ${issue.title}`,
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
   });
 
   it('accepts installed custom linked targets and preserves committed ingress after uninstall', async () => {
@@ -288,7 +403,7 @@ describe('LinearRules', () => {
     },
   );
 
-  it('commits one triage decision and replays an unchanged observation', async () => {
+  it('commits one Intake decision and replays an unchanged observation', async () => {
     const { project, service, workItems } = await setup();
     const input = { orgId: 'org-1', factoryProjectId: project.id, userId: 'user-1', issues: [issue] };
 
@@ -303,7 +418,7 @@ describe('LinearRules', () => {
         type: 'upsertLinkedWorkItem',
         source: 'linear-issue',
         sourceKey: 'linear:ENG-42',
-        stage: 'triage',
+        stage: 'intake',
       },
     });
   });

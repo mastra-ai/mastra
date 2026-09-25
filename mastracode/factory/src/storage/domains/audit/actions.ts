@@ -15,7 +15,7 @@ export const AUDIT_ACTIONS = {
     'comment_mentioned',
     'labels_reconciled',
   ],
-  run: ['started', 'ended', 'approved', 'dismissed', 'retry'],
+  run: ['started', 'ended', 'approved', 'dismissed', 'retry', 'queued', 'rejected'],
   git: ['commit', 'push', 'pr_opened'],
   agent: ['commit', 'push', 'pr_opened', 'signaled'],
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],

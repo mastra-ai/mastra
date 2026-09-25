@@ -3,13 +3,22 @@ import { posix } from 'node:path';
 import type {
   CommandResult,
   ExecuteCommandOptions,
+  FilesystemMountConfig,
   MastraSandboxOptions,
+  MountManager,
+  MountResult,
   ProviderStatus,
   SandboxFileInput,
   SandboxInfo,
+  WorkspaceFilesystem,
 } from '@mastra/core/workspace';
 import { MastraSandbox, assertModesUnsupported } from '@mastra/core/workspace';
-import { CloudflareSandboxBridgeClient, type CloudflareSandboxBridgeClientOptions } from './bridge-client';
+import {
+  CloudflareSandboxBridgeClient,
+  type CloudflareMountBucketRequest,
+  type CloudflarePersistWorkspaceOptions,
+  type CloudflareSandboxBridgeClientOptions,
+} from './bridge-client';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const WORKSPACE_ROOT = '/workspace';
@@ -17,8 +26,86 @@ const WORKSPACE_ROOT = '/workspace';
 type InstructionsOption = string | ((options: { defaultInstructions: string }) => string);
 type BridgeClient = Pick<
   CloudflareSandboxBridgeClient,
-  'createSandbox' | 'isRunning' | 'deleteSandbox' | 'writeFile' | 'exec'
+  | 'createSandbox'
+  | 'isRunning'
+  | 'deleteSandbox'
+  | 'writeFile'
+  | 'readFile'
+  | 'persistWorkspace'
+  | 'hydrateWorkspace'
+  | 'mountBucket'
+  | 'unmountBucket'
+  | 'exec'
 >;
+
+/**
+ * Mount config accepted by the Cloudflare bridge: any S3-compatible bucket
+ * (R2, S3, MinIO, ...) as produced by `S3Filesystem.getMountConfig()`.
+ * Declared structurally so this package does not depend on `@mastra/s3`.
+ */
+interface S3CompatibleMountConfig extends FilesystemMountConfig {
+  type: 's3';
+  bucket: string;
+  region?: string;
+  endpoint?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  sessionToken?: string;
+  prefix?: string;
+  readOnly?: boolean;
+}
+
+/** Allowlist pattern for mount paths, matching the other remote sandbox providers. */
+const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
+
+function validateMountPath(mountPath: string): void {
+  if (!SAFE_MOUNT_PATH.test(mountPath)) {
+    throw new Error(
+      `Invalid mount path: ${mountPath}. Must be an absolute path with alphanumeric, dash, dot, underscore, or slash characters only.`,
+    );
+  }
+}
+
+/**
+ * Translates a Workspace mount config into the bridge's mount request, or
+ * explains why the bridge cannot serve it. The bridge mounts S3-compatible
+ * buckets with s3fs; GCS and Azure mount configs have no equivalent route.
+ */
+function toMountRequest(
+  config: FilesystemMountConfig,
+  mountPath: string,
+): { request: CloudflareMountBucketRequest } | { error: string } {
+  if (config.type !== 's3') {
+    return { error: `Cloudflare Sandbox can only mount S3-compatible buckets; got mount type "${config.type}"` };
+  }
+  const s3 = config as S3CompatibleMountConfig;
+  if (s3.sessionToken) {
+    return { error: 'Cloudflare Sandbox bucket mounts do not support temporary credentials (sessionToken)' };
+  }
+  if (Boolean(s3.accessKeyId) !== Boolean(s3.secretAccessKey)) {
+    return { error: 'Cloudflare Sandbox bucket mounts need both accessKeyId and secretAccessKey, or neither' };
+  }
+  // The bridge treats a request with no endpoint as an R2 binding mount, so a
+  // region-only AWS filesystem must resolve to an explicit S3 endpoint.
+  const endpoint = s3.endpoint ?? (s3.region ? `https://s3.${s3.region}.amazonaws.com` : undefined);
+  // The bridge requires the prefix to start with `/`; S3Filesystem emits `dir/`.
+  const prefix = s3.prefix ? (s3.prefix.startsWith('/') ? s3.prefix : `/${s3.prefix}`) : undefined;
+  return {
+    request: {
+      bucket: s3.bucket,
+      mountPath,
+      options: {
+        endpoint,
+        prefix,
+        readOnly: s3.readOnly,
+        credentials:
+          s3.accessKeyId && s3.secretAccessKey
+            ? { accessKeyId: s3.accessKeyId, secretAccessKey: s3.secretAccessKey }
+            : undefined,
+      },
+    },
+  };
+}
 
 export interface CloudflareSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** URL of a deployed Cloudflare Sandbox Bridge Worker. */
@@ -85,6 +172,8 @@ export class CloudflareSandbox extends MastraSandbox {
   readonly name: string;
   readonly provider = 'cloudflare-sandbox';
   status: ProviderStatus = 'pending';
+  /** Created by MastraSandbox because this class implements mount(). */
+  declare readonly mounts: MountManager;
 
   private readonly client: BridgeClient;
   private readonly commandTimeout: number;
@@ -92,6 +181,8 @@ export class CloudflareSandbox extends MastraSandbox {
   private sandboxId?: string;
   private createdAt = new Date();
   private lastUsedAt?: Date;
+  /** Shared across concurrent callers so a wake triggers a single re-mount pass. */
+  private ensureMountsPromise?: Promise<void>;
 
   constructor(options: CloudflareSandboxOptions) {
     const name = options.name ?? 'Cloudflare Sandbox';
@@ -132,6 +223,7 @@ export class CloudflareSandbox extends MastraSandbox {
 
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
 
     const startedAt = Date.now();
     const timeout = options?.timeout ?? this.commandTimeout;
@@ -230,10 +322,37 @@ export class CloudflareSandbox extends MastraSandbox {
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
     assertModesUnsupported(files, 'Cloudflare');
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
     // The bridge writes one file per request.
     for (const file of files) {
       await this.client.writeFile(sandboxId, resolveWorkspacePath(file.path), file.content);
     }
+    this.lastUsedAt = new Date();
+  }
+
+  /** Reads a single file under /workspace, returning its raw bytes. */
+  async readFile(path: string): Promise<Uint8Array> {
+    const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
+    const bytes = await this.client.readFile(sandboxId, resolveWorkspacePath(path));
+    this.lastUsedAt = new Date();
+    return bytes;
+  }
+
+  /** Archives /workspace, returning raw tar bytes that can later restore it via hydrateWorkspace. */
+  async persistWorkspace(options?: CloudflarePersistWorkspaceOptions): Promise<Uint8Array> {
+    const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
+    const archive = await this.client.persistWorkspace(sandboxId, options);
+    this.lastUsedAt = new Date();
+    return archive;
+  }
+
+  /** Restores /workspace from a raw tar payload produced by persistWorkspace. */
+  async hydrateWorkspace(tar: Uint8Array): Promise<void> {
+    const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
+    await this.client.hydrateWorkspace(sandboxId, tar);
     this.lastUsedAt = new Date();
   }
 
@@ -252,12 +371,119 @@ export class CloudflareSandbox extends MastraSandbox {
     };
   }
 
+  /**
+   * Mounts an S3-compatible bucket (R2, S3, MinIO, ...) at `mountPath` through
+   * the bridge's mount route. Called by MountManager for each Workspace `mounts`
+   * entry after start(). The Cloudflare Sandbox SDK forgets mounts when an idle
+   * container is stopped and does not restore them on wake, so
+   * {@link ensureMountsActive} re-mounts stale paths before each operation; that
+   * makes mounted paths the durable part of the filesystem.
+   */
+  async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
+    validateMountPath(mountPath);
+    const sandboxId = this.requireSandboxId();
+
+    const config = filesystem.getMountConfig?.();
+    if (!config) {
+      const error = `Filesystem "${filesystem.id}" does not provide a mount config`;
+      this.mounts.set(mountPath, { filesystem, state: 'error', error });
+      return { success: false, mountPath, error };
+    }
+
+    const translated = toMountRequest(config, mountPath);
+    if ('error' in translated) {
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: translated.error });
+      return { success: false, mountPath, error: translated.error };
+    }
+
+    this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
+    try {
+      await this.client.mountBucket(sandboxId, translated.request);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause.message : String(cause);
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+      return { success: false, mountPath, error };
+    }
+    this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
+    this.lastUsedAt = new Date();
+    return { success: true, mountPath };
+  }
+
+  /** Unmounts a bucket previously mounted with {@link mount}. */
+  async unmount(mountPath: string): Promise<void> {
+    validateMountPath(mountPath);
+    const sandboxId = this.requireSandboxId();
+    await this.client.unmountBucket(sandboxId, mountPath);
+    this.mounts.delete(mountPath);
+    this.lastUsedAt = new Date();
+  }
+
   getInstructions(): string {
+    const mounted = [...this.mounts.entries].filter(([, entry]) => entry.state === 'mounted').map(([path]) => path);
     const defaultInstructions =
-      'Commands execute in a remote Cloudflare Sandbox. Read and write persistent project files under /workspace.';
+      mounted.length > 0
+        ? `Commands execute in a remote Cloudflare Sandbox. The container sleeps when idle and files under /workspace do NOT survive between commands, except under the mounted paths: ${mounted.join(', ')}. Keep anything that must persist under a mounted path.`
+        : 'Commands execute in a remote Cloudflare Sandbox. Use /workspace as scratch space only: the container sleeps when idle and files under /workspace do NOT survive between commands. Do not assume earlier files still exist.';
     return typeof this.instructions === 'function'
       ? this.instructions({ defaultInstructions })
       : (this.instructions ?? defaultInstructions);
+  }
+
+  /**
+   * A slept container boots fresh without its mounts: `@cloudflare/sandbox` keeps
+   * `activeMounts` in memory and clears it on stop, so it never re-mounts on wake,
+   * and `GET /running` still reports `true` until the DO next talks to the
+   * container. Before any operation that reads or writes the filesystem, probe the
+   * mounted paths with `mountpoint` and re-mount the ones that are gone. The pass
+   * is shared across concurrent callers, and there is no probe when nothing is
+   * mounted.
+   */
+  private ensureMountsActive(sandboxId: string): Promise<void> {
+    const mountedPaths = [...this.mounts.entries]
+      .filter(([, entry]) => entry.state === 'mounted')
+      .map(([mountPath]) => mountPath);
+    if (mountedPaths.length === 0) return Promise.resolve();
+    if (!this.ensureMountsPromise) {
+      this.ensureMountsPromise = this.remountStalePaths(sandboxId, mountedPaths).finally(() => {
+        this.ensureMountsPromise = undefined;
+      });
+    }
+    return this.ensureMountsPromise;
+  }
+
+  private async remountStalePaths(sandboxId: string, mountedPaths: string[]): Promise<void> {
+    // Mount paths are validated against SAFE_MOUNT_PATH, so they are safe to embed
+    // directly. `mountpoint -q` exits non-zero for a path that is no longer a mount,
+    // and that path is echoed so a single exec reports every stale mount at once.
+    const script = `for p in ${mountedPaths.join(' ')}; do mountpoint -q "$p" || echo "$p"; done`;
+    const decoder = new TextDecoder();
+    let stdout = '';
+    await this.client.exec(
+      sandboxId,
+      { argv: [SHELL_PATH, '-c', script], timeoutMs: this.commandTimeout },
+      {
+        onEvent: event => {
+          if (event.type === 'stdout') stdout += decoder.decode(event.data, { stream: true });
+        },
+      },
+    );
+    stdout += decoder.decode();
+
+    const stalePaths = stdout
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+    for (const mountPath of stalePaths) {
+      const entry = this.mounts.get(mountPath);
+      if (!entry?.config) continue;
+      const translated = toMountRequest(entry.config, mountPath);
+      if ('error' in translated) continue;
+      try {
+        await this.client.mountBucket(sandboxId, translated.request);
+      } catch (cause) {
+        this.logger?.warn(`Failed to re-mount ${mountPath} after container wake`, { error: cause });
+      }
+    }
   }
 
   private requireSandboxId(): string {

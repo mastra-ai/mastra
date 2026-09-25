@@ -5,13 +5,35 @@ const reactHooks = (await import('eslint-plugin-react-hooks')).default;
 
 const config = await createConfig();
 
-// Typography must come from DS tokens (text-ui-* / text-header-*, or <Txt>).
-// Tailwind default sizes are aliased to tokens in playground-ui/theme.css as a safety net only.
+// Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>).
+// Tailwind's own sizes stay defined as a safety net only; the roles live in playground-ui/theme/typography.css.
 const TYPOGRAPHY_CLASS_PATTERN = '(^|\\s|:)text-(xs|sm|base|lg|xl|\\dxl)(\\s|$)|text-\\[\\d[^\\]]*(px|rem)\\]';
-const TYPOGRAPHY_MESSAGE = 'Use DS typography tokens (text-ui-* / text-header-*) — see Txt.';
+const TYPOGRAPHY_MESSAGE = 'Use a DS text role (text-title / text-body / text-label / text-caption…) — see Txt.';
 const restrictedTypographySelectors = [
   { selector: `Literal[value=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
   { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
+];
+
+// Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any
+// colour Tailwind can spell, and omitting tone inherits rather than restating ink.
+const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
+// Anchored at class boundaries: a variant or an alpha (`hover:text-foreground`, `text-foreground/70`)
+// is something `tone` cannot express, so it stays a class.
+const TXT_TONE_PATTERN = '(^|\\s)text-(foreground|muted-foreground|placeholder)(?=\\s|$)';
+// `>` to the attribute: a descendant match would also flag a coloured child rendered inside a `<Txt>`.
+const txtToneSelector = (node, prop) =>
+  `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] ${node}[${prop}=/${TXT_TONE_PATTERN}/]`;
+const restrictedTxtToneSelectors = [
+  { selector: txtToneSelector('Literal', 'value'), message: TXT_TONE_MESSAGE },
+  { selector: txtToneSelector('TemplateElement', 'value.raw'), message: TXT_TONE_MESSAGE },
+];
+
+const MONO_MESSAGE =
+  'Mono comes from the design system: <Txt font="mono"> for identifiers, timestamps, and durations, <InlineCode> or <CodeBlock> for code, tabular-nums for numbers.';
+const MONO_PATTERN = '(^|\\s|:|!)font-mono(?=!|\\s|$)';
+const restrictedMonoSelectors = [
+  { selector: `Literal[value=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
+  { selector: `TemplateElement[value.raw=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
 ];
 
 const PLAYGROUND_UI_BROAD_IMPORT_MESSAGE =
@@ -210,6 +232,7 @@ export default [
       'e2e/playwright.config.ts',
       'e2e/playwright.studio-base.config.ts',
       'e2e/tests/__utils__/**',
+      'vercel-preview/**',
     ],
   },
   ...config,
@@ -233,6 +256,8 @@ export default [
         'error',
         ...restrictedPlaygroundUiBroadImportSelectors,
         ...restrictedTypographySelectors,
+        ...restrictedTxtToneSelectors,
+        ...restrictedMonoSelectors,
       ],
     },
   },

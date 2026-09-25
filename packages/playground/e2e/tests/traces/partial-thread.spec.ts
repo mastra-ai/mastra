@@ -1,5 +1,7 @@
+import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
+import { mockTraceQueryCapabilities } from '../__utils__/mock-trace-query-capabilities';
 import { resetStorage } from '../__utils__/reset-storage';
 
 const TRACE_ID = 'partial-thread-trace';
@@ -51,13 +53,11 @@ const toolSpan = {
 async function mockPartialThread(page: Page) {
   let comments: Array<Record<string, unknown>> = [];
 
-  await page.route('**/api/observability/traces/light?**', route =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ spans: [], pagination: { page: 0, perPage: 25, total: 0, hasMore: false } }),
-    }),
-  );
+  await page.route('**/api/observability/traces/query', route => {
+    expect(route.request().method()).toBe('POST');
+    const response: Awaited<ReturnType<MastraClient['queryTraces']>> = { traces: [], page: { next: null } };
+    return route.fulfill({ json: response });
+  });
   await page.route(`**/api/observability/traces/${TRACE_ID}`, route =>
     route.fulfill({
       status: 200,
@@ -99,6 +99,7 @@ async function mockPartialThread(page: Page) {
 }
 
 async function openPartialThread(page: Page) {
+  await mockTraceQueryCapabilities(page);
   await mockPartialThread(page);
   await page.goto(`/traces?traceId=${TRACE_ID}`);
   await expect(page.getByTestId('messages-panel')).toBeVisible();
@@ -107,8 +108,9 @@ async function openPartialThread(page: Page) {
 /**
  * FEATURE: Messages trace column
  * USER STORY: A trace reviewer can inspect an agent turn as chat beside its trace and leave a trace comment.
- * BEHAVIOR UNDER TEST: Stored spans become a read-only chat column to the left of the timeline (no tab click
- * required), the side panel widens to fit it, while feedback stays in its dedicated tab.
+ * BEHAVIOR UNDER TEST: Stored spans become a read-only chat column beside the span tree, shown by default in the
+ * side column's Messages tab (no tab click required), the side panel widens to fit it, while feedback stays in
+ * its dedicated tab.
  */
 test.describe('Messages trace column', () => {
   test.afterEach(async () => {
@@ -119,7 +121,7 @@ test.describe('Messages trace column', () => {
     test('renders the user input, assistant response, and tool execution beside the trace', async ({ page }) => {
       await openPartialThread(page);
 
-      await expect(page.getByRole('tab', { name: 'Messages' })).toHaveCount(0);
+      await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByRole('dialog', { name: 'Trace details' })).toHaveClass(/w-4\/5/);
       await expect(page.getByText(USER_INPUT)).toBeVisible();
       await expect(page.getByText(ASSISTANT_OUTPUT)).toBeVisible();

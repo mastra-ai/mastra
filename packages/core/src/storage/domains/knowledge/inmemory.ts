@@ -392,7 +392,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
-  #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+  #createNode(input: CreateKnowledgeNodeInput, options?: { coalesceByName?: boolean }): KnowledgeNode {
     this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
     this.#assertImportRunExists(input.importRunId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
@@ -402,7 +402,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (existingId) {
       const existing = this.#db.knowledgeNodes.get(existingId);
       if (!existing) throw new KnowledgeNotFoundError('node', existingId);
-      if (existing.deletedAt) throw new KnowledgeConflictError(existing.id);
+      if (existing.deletedAt || options?.coalesceByName === false) throw new KnowledgeConflictError(existing.id);
       return cloneNode(existing);
     }
     const collision = this.#findSiblingNameCollision(input.name, scopeIds);
@@ -512,7 +512,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', existing.nodeId);
         return cloneNode(node);
       }
-      const node = this.#createNode(input.node);
+      // Address-bound nodes are identified by their address, not their name: never
+      // coalesce onto an existing same-named node (two distinct pages sharing a title
+      // must become two nodes). Callers handle the conflict by disambiguating the name.
+      const node = this.#createNode(input.node, { coalesceByName: false });
       this.#db.knowledgeNodeAddresses.set(key, { source: input.source, address: input.address, nodeId: node.id });
       return node;
     });

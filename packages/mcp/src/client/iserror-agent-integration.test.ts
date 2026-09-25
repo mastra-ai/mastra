@@ -8,8 +8,8 @@ import { Agent } from '@mastra/core/agent';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Observability } from '@mastra/observability';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import { McpServer } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -61,13 +61,8 @@ describe('MCP isError - agent integration (four surfaces)', () => {
       },
     );
 
-    // Stateless mode: SDK requires a fresh transport per request.
-    httpServer.on('request', async (req, res) => {
-      await mcpServer.close().catch(() => {});
-      const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      await mcpServer.connect(transport);
-      await transport.handleRequest(req, res);
-    });
+    const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
+    httpServer.on('request', (req, res) => handler(req, res));
 
     baseUrl = await new Promise<URL>(resolve => {
       httpServer.listen(0, '127.0.0.1', () => {

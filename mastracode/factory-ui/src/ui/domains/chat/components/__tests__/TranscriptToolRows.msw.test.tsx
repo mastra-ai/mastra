@@ -433,8 +433,17 @@ describe('TranscriptEntries tool rows', () => {
   });
 
   describe('local timestamps', () => {
+    // Mirror the unified Studio presets the ToolCallTime component renders with
+    // (`time-seconds` for the visible clock, `date-time-seconds` for the title).
     const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-    const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'medium' });
+    const calendar = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+    });
     const PART_AT = new Date('2026-07-15T10:03:42.000Z');
 
     it('leads a tool row with the moment core stamped on the call, in local time', () => {

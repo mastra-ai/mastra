@@ -2,58 +2,35 @@ import type { ComponentPropsWithRef, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
-export interface AppShellFrameProps {
-  children: ReactNode;
-  className: string;
-}
-
 export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'children'> {
   children: ReactNode;
-  mainLabel: string;
   mobileHeader?: ReactNode;
-  renderFrame?: (props: AppShellFrameProps) => ReactNode;
-  routeHeader?: ReactNode;
+  sidebar?: ReactNode;
 }
 
-export function AppShell({
-  children,
-  className,
-  mainLabel,
-  mobileHeader,
-  ref,
-  renderFrame,
-  routeHeader,
-  ...props
-}: AppShellProps) {
-  const frame = (
-    <div
-      data-slot="app-shell-frame"
-      className={cn(
-        'relative m-1.5 ml-0 grid min-h-0 flex-1 overflow-hidden rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:m-2 lg:ml-0',
-        routeHeader ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
-      )}
-    >
-      {routeHeader}
-      <div
-        data-slot="app-shell-main"
-        aria-label={mainLabel}
-        role="group"
-        tabIndex={0}
-        className="min-h-0 overflow-y-auto"
-      >
-        {children}
-      </div>
-    </div>
-  );
-  const frameProps: AppShellFrameProps = {
-    children: frame,
-    className: 'flex min-h-0 flex-1 flex-col',
-  };
-
+export function AppShell({ children, className, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
   return (
-    <div ref={ref} data-slot="app-shell" className={cn('flex h-full min-h-0 flex-col', className)} {...props}>
-      {mobileHeader}
-      {renderFrame ? renderFrame(frameProps) : <div className={frameProps.className}>{frame}</div>}
+    <div
+      ref={ref}
+      data-slot="app-shell"
+      className={cn('h-full min-h-0', sidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]', className)}
+      {...props}
+    >
+      {sidebar}
+      <div data-slot="app-shell-content" className="flex h-full min-h-0 flex-col">
+        {mobileHeader}
+        <div
+          data-slot="app-shell-body"
+          className={cn(
+            'flex min-h-0 flex-1 flex-col',
+            // Inset on every side; at lg with a sidebar column the sidebar's own padding provides the left gap.
+            'p-1.5 lg:p-2',
+            sidebar && 'lg:pl-0',
+          )}
+        >
+          {children}
+        </div>
+      </div>
     </div>
   );
 }

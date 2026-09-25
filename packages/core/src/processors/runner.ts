@@ -29,7 +29,6 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
@@ -41,7 +40,7 @@ import {
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
 import { REPROCESS_PART_KEY } from './stream-reprocess';
-import { TrailingAssistantGuard } from './trailing-assistant-guard';
+import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
   CachedLLMStepResponse,
@@ -155,7 +154,7 @@ export class ProcessorState<OUTPUT = undefined> {
       entityId: processor?.id,
       entityName: options.processorName,
       attributes: {
-        ...(processor ? resolveProcessorSpanAttributes(processor, 'output') : {}),
+        ...resolveProcessorSpanAttributes(processor, 'outputStream'),
         processorExecutor: 'legacy',
         processorIndex: options.processorIndex ?? 0,
       },
@@ -596,7 +595,7 @@ export class ProcessorRunner {
    */
   private async executeWorkflowAsProcessor(
     workflow: ProcessorWorkflow,
-    input: ProcessorStepOutput,
+    input: ProcessorStepOutput & { llmRequestProcessorIds?: ReadonlySet<string> },
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     writer?: ProcessorStreamWriter,
@@ -773,7 +772,7 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
-          ...resolveProcessorSpanAttributes(processor, 'output'),
+          ...resolveProcessorSpanAttributes(processor, 'outputResult'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -1516,9 +1515,8 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
-    // Append the trailing assistant guard when the resolved model does not support assistant prefill
     const processors =
-      stepInput.model && isMaybeAnthropicWithoutAssistantPrefill(stepInput.model)
+      stepInput.model && needsTrailingAssistantGuard(stepInput.model, this.inputProcessors)
         ? [...this.inputProcessors, new TrailingAssistantGuard()]
         : this.inputProcessors;
 
@@ -1548,6 +1546,7 @@ export class ProcessorRunner {
                   return nextMessageId;
                 }
               : undefined,
+            llmRequestProcessorIds: args.llmRequestProcessorIds,
             ...stepInput,
           },
           observabilityContext,
@@ -1586,6 +1585,13 @@ export class ProcessorRunner {
       const computeStateSignal = processor.computeStateSignal?.bind(processor);
       if (!processMethod && !computeStateSignal) {
         // Skip processors that don't implement per-step input hooks
+        continue;
+      }
+
+      // The guard is attached speculatively whenever a processor could have swapped the
+      // model. Now that every user processor has run, `stepInput.model` is final: skip the
+      // guard before creating a span so a no-op never shows up in exported traces.
+      if (processorOrWorkflow instanceof TrailingAssistantGuard && !processorOrWorkflow.appliesTo(stepInput.model)) {
         continue;
       }
 
@@ -1667,6 +1673,7 @@ export class ProcessorRunner {
           messageList,
           ...inputData,
           state: processorState.customState,
+          llmRequestStage: args.llmRequestProcessorIds?.has(processor.id) || undefined,
           abort,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           ...createObservabilityContext({ currentSpan: processorSpan }),
@@ -1792,6 +1799,18 @@ export class ProcessorRunner {
     }
 
     return stepInput;
+  }
+
+  /**
+   * IDs of the processors that `runProcessLLMRequest` will call for these input processors.
+   * Pass the result to `runProcessInputStep` as `llmRequestProcessorIds`.
+   */
+  static getLLMRequestProcessorIds(processors: readonly ProcessorOrWorkflow[]): Set<string> {
+    const ids = new Set<string>();
+    for (const processor of processors) {
+      if (!isProcessorWorkflow(processor) && processor.processLLMRequest) ids.add(processor.id);
+    }
+    return ids;
   }
 
   /**

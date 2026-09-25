@@ -4,6 +4,7 @@ import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
 import type { FieldBlockLabelProps } from '../block/field-block-label';
 import type { FieldBlockLayoutProps } from '../block/field-block-layout';
+import { fieldErrorId } from '../block/field-error-id';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 
@@ -46,37 +47,43 @@ export function SelectFieldBlock({
     <FieldBlock.Layout layout={layout} labelColumnWidth={labelColumnWidth} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled}>
             {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
         {layout === 'vertical' && label && !labelIsHidden ? (
-          <FieldBlock.Label name={name} required={required}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled}>
             {label}
           </FieldBlock.Label>
         ) : null}
-        <Select
-          aria-label={labelIsHidden ? label : undefined}
-          name={name}
-          value={value}
-          onValueChange={onValueChange}
-          disabled={disabled}
-        >
-          <SelectTrigger size={size}>
-            <SelectValue placeholder={placeholder} />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
+        <FieldBlock.Column className="gap-1">
+          <Select
+            aria-label={labelIsHidden ? label : undefined}
+            name={name}
+            value={value}
+            onValueChange={onValueChange}
+            disabled={disabled}
+          >
+            <SelectTrigger
+              id={`input-${name}`}
+              size={size}
+              aria-invalid={errorMsg ? true : undefined}
+              aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+            >
+              <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
+        </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

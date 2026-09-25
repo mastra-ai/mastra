@@ -1105,6 +1105,35 @@ export function createKnowledgeStorageTests(
       );
     });
 
+    it('refuses to coalesce an address-bound node onto an existing same-named sibling', async () => {
+      const organic = await store.createNode({ name: 'Duplicate title', scopeIds: [PROJECT_SCOPE_ID] });
+
+      await expect(
+        store.createNodeWithAddress({
+          source: 'github',
+          address: 'issue:duplicate-title',
+          node: { name: 'Duplicate title', scopeIds: [PROJECT_SCOPE_ID] },
+        }),
+      ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
+
+      const bound = await store.createNodeWithAddress({
+        source: 'github',
+        address: 'issue:duplicate-title',
+        node: { name: 'Duplicate title (a1b2c3)', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      expect(bound.id).not.toBe(organic.id);
+      expect(bound.name).toBe('Duplicate title (a1b2c3)');
+
+      // Idempotency by address is preserved: an existing binding returns its node
+      // regardless of the requested name.
+      const again = await store.createNodeWithAddress({
+        source: 'github',
+        address: 'issue:duplicate-title',
+        node: { name: 'Duplicate title', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      expect(again.id).toBe(bound.id);
+    });
+
     it('preserves source-owned records that were broadened outside the importer binding', async () => {
       const node = await store.createNodeWithAddress({
         source: 'github',

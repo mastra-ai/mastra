@@ -1,6 +1,6 @@
 {
   "name": "@mastra/connect",
-  "version": "0.0.0",
+  "version": "0.4.0",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,7 +33,7 @@
     "list-providers": "tsx scripts/list-providers.ts",
     "remove-provider": "tsx scripts/remove-provider.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
-    "test": "vitest run"
+    "test": "vitest run && tsc --noEmit"
   },
   "keywords": [
     "mastra",
@@ -56,13 +56,30 @@
     "node": ">=22.13.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.68.0-0 <2.0.0-0",
+    "@mastra/discord": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/slack": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/telegram": ">=0.1.0-0 <1.0.0-0",
     "zod": ">=3.0.0 || >=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@mastra/discord": {
+      "optional": true
+    },
+    "@mastra/slack": {
+      "optional": true
+    },
+    "@mastra/telegram": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/discord": "workspace:*",
+    "@mastra/slack": "workspace:*",
+    "@mastra/telegram": "workspace:*",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",
@@ -70,5 +87,8 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "@mastra/mcp": "workspace:^"
   }
 }

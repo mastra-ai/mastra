@@ -1,4 +1,5 @@
 import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+import { linearClaimKey } from './claim.js';
 
 export type LinearRuleOverrides = Partial<
   Record<FactoryLinearEventName, FactoryRuleHandler<FactoryLinearRuleContext> | null | undefined>
@@ -13,13 +14,14 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise Work auto-triages the new issue.
+    // otherwise the issue waits in Work Intake.
     board: context.intake?.board ?? 'work',
     source: 'linear-issue',
     sourceKey: `linear:${context.issue.identifier}`,
+    claimKey: linearClaimKey(context.issue.id),
     title: `${context.issue.identifier}: ${context.issue.title}`,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'triage',
+    stage: context.intake?.initialPhase ?? 'intake',
     metadata: {
       linearIssueId: context.issue.id,
       identifier: context.issue.identifier,

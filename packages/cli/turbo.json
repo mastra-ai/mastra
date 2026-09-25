@@ -8,8 +8,8 @@
         "@mastra/server#generate:api-cli-route-metadata",
         "@mastra/factory#generate:api-cli-route-metadata"
       ],
-      "outputs": ["dist/**", "!dist/docs/**"],
-      "inputs": ["$TURBO_DEFAULT$", "./tsdown.config.ts"]
+      "inputs": ["$TURBO_DEFAULT$", "./tsdown.config.ts"],
+      "outputs": ["dist/**", "!dist/docs/**"]
     },
     "build": {
       "dependsOn": ["^build", "build:lib", "@internal/playground#build"],

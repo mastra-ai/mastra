@@ -4,6 +4,8 @@ import { SearchFieldBlock } from '../fields/search-field-block';
 import { SelectFieldBlock } from '../fields/select-field-block';
 import { TextFieldBlock } from '../fields/text-field-block';
 import { FieldBlocksLayout } from './field-blocks-layout';
+import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 const roleOptions = [
   { value: 'admin', label: 'Admin' },
@@ -101,50 +103,69 @@ function MixedExample() {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
   const [department, setDepartment] = useState('');
+  const [submitted, setSubmitted] = useState<{ role: string; department: string } | null>(null);
 
   return (
-    <FieldBlocksLayout columns={1}>
-      <SearchFieldBlock
-        name="search"
-        label="Search"
-        labelIsHidden
-        placeholder="Search users..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        onReset={() => setSearch('')}
-      />
-      <FieldBlocksLayout columns={2}>
-        <FieldBlocksLayout.Column>
-          <TextFieldBlock name="firstName" label="First Name" required placeholder="John" />
-          <TextFieldBlock
-            name="email"
-            label="Email"
-            placeholder="john@example.com"
-            helpText="We will use this for notifications."
-          />
-        </FieldBlocksLayout.Column>
-        <FieldBlocksLayout.Column>
-          <TextFieldBlock name="lastName" label="Last Name" required placeholder="Doe" />
-          <SelectFieldBlock
-            name="role"
-            label="Role"
-            required
-            options={roleOptions}
-            value={role}
-            onValueChange={setRole}
-            placeholder="Select a role"
-          />
-        </FieldBlocksLayout.Column>
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={event => {
+        event.preventDefault();
+        setSubmitted({ role, department });
+      }}
+    >
+      <FieldBlocksLayout columns={1}>
+        <SearchFieldBlock
+          name="search"
+          label="Search"
+          labelIsHidden
+          placeholder="Search users..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          onReset={() => setSearch('')}
+        />
+        <FieldBlocksLayout columns={2}>
+          <FieldBlocksLayout.Column>
+            <TextFieldBlock name="firstName" label="First Name" required placeholder="John" />
+            <TextFieldBlock
+              name="email"
+              label="Email"
+              placeholder="john@example.com"
+              helpText="We will use this for notifications."
+            />
+          </FieldBlocksLayout.Column>
+          <FieldBlocksLayout.Column>
+            <TextFieldBlock name="lastName" label="Last Name" required placeholder="Doe" />
+            <SelectFieldBlock
+              name="role"
+              label="Role"
+              required
+              options={roleOptions}
+              value={role}
+              onValueChange={setRole}
+              placeholder="Select a role"
+            />
+          </FieldBlocksLayout.Column>
+        </FieldBlocksLayout>
+        <SelectFieldBlock
+          name="department"
+          label="Department"
+          options={departmentOptions}
+          value={department}
+          onValueChange={setDepartment}
+          placeholder="Select a department"
+        />
       </FieldBlocksLayout>
-      <SelectFieldBlock
-        name="department"
-        label="Department"
-        options={departmentOptions}
-        value={department}
-        onValueChange={setDepartment}
-        placeholder="Select a department"
-      />
-    </FieldBlocksLayout>
+      <div className="flex items-center justify-end gap-2">
+        {submitted ? (
+          <Txt variant="caption" tone="muted" role="status">
+            Saved as {submitted.role || 'no role'} in {submitted.department || 'no department'}
+          </Txt>
+        ) : null}
+        <Button type="submit" variant="primary">
+          Save profile
+        </Button>
+      </div>
+    </form>
   );
 }
 

@@ -20,6 +20,8 @@ import { RequestTrackingInterceptor } from '../interceptors/request-tracking.int
 import { StreamingInterceptor } from '../interceptors/streaming.interceptor';
 import { TracingInterceptor } from '../interceptors/tracing.interceptor';
 import type { MastraModuleOptions } from '../mastra.module';
+import { AuthService } from '../services/auth.service';
+import { CustomRouteService } from '../services/custom-route.service';
 import { RequestContextService } from '../services/request-context.service';
 import { RouteHandlerService } from '../services/route-handler.service';
 import { parseMultipartFormData } from '../utils/parse-multipart';
@@ -42,17 +44,36 @@ export class MastraController {
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
     @Inject(RouteHandlerService) private readonly routeHandler: RouteHandlerService,
     @Inject(RequestContextService) private readonly requestContext: RequestContextService,
+    @Inject(CustomRouteService) private readonly customRoutes: CustomRouteService,
+    @Inject(AuthService) private readonly authService: AuthService,
   ) {}
 
   /**
    * Catch-all handler that matches incoming requests to Mastra routes.
    */
   @All('*')
-  async handleRequest(@Req() req: Request, @Res({ passthrough: true }) _res: Response): Promise<unknown> {
+  async handleRequest(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<unknown> {
     const path = req.path;
     const method = req.method.toUpperCase();
 
     const routePath = getMastraRoutePath(path, this.options.prefix);
+
+    if (!routePath || !this.routeHandler.matchRoute(method, routePath)) {
+      const requestContext = this.requestContext.requestContext;
+      const authenticate = async (requiresAuth: boolean) => {
+        if (!this.authService.isEnabled()) return;
+        const user = await this.authService.authenticate(req, {
+          requestContext,
+          response: res,
+          requiresAuth,
+          customRoute: true,
+        });
+        if (user !== undefined) this.requestContext.setUser(user);
+      };
+      if (await this.customRoutes.handle(req, res, requestContext, authenticate)) {
+        return undefined;
+      }
+    }
 
     if (!routePath) {
       throw new NotFoundException(`Route not found: ${method} ${path}`);
@@ -118,8 +139,8 @@ export class MastraController {
    * Parse request body, handling multipart/form-data and JSON.
    */
   private async parseBody(req: Request, route: ServerRoute): Promise<unknown> {
-    // Only parse body for methods that typically have bodies
-    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    // Only parse body for methods that support route body schemas
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
       return undefined;
     }
 
@@ -137,6 +158,6 @@ export class MastraController {
     }
 
     // JSON body is already parsed by JsonBodyMiddleware
-    return req.body;
+    return req.body === undefined ? {} : req.body;
   }
 }

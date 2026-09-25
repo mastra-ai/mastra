@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
@@ -12,13 +12,38 @@ import type {
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
-const DUCKDB_OBSERVABILITY_FEATURES = ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
+const DUCKDB_OBSERVABILITY_FEATURES = [
+  'metrics',
+  'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
+  'trace-query',
+  'trace-query-root-duration',
+  'trace-query-discovery',
+  'thread-query',
+  'trace-query-tenant-scope',
+  'feedback',
+] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'delta-polling',
   'trace-query',
+  'trace-query-root-duration',
+  'trace-query-discovery',
   'thread-query',
+  'trace-query-tenant-scope',
+  'feedback',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
@@ -148,6 +173,11 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.migrateSpans(...args);
   }
 
+  async prune(...args: Parameters<ObservabilityStoreImpl['prune']>): ReturnType<ObservabilityStoreImpl['prune']> {
+    const delegate = await this.requireDelegate();
+    return delegate.prune(...args);
+  }
+
   async dangerouslyClearAll(
     ...args: Parameters<ObservabilityStoreImpl['dangerouslyClearAll']>
   ): ReturnType<ObservabilityStoreImpl['dangerouslyClearAll']> {
@@ -214,6 +244,20 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.queryTraces(...args);
+  }
+
+  async getTraceQueryObservedFields(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceQueryObservedFields']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceQueryObservedFields']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceQueryObservedFields(...args);
+  }
+
+  async getTraceQueryValues(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceQueryValues']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceQueryValues']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceQueryValues(...args);
   }
 
   async queryThreads(
@@ -518,6 +562,11 @@ export interface DuckDBStoreConfig {
    * shared application server.
    */
   threads?: number;
+  /**
+   * Opt-in age-based retention policies. Only configured tables are pruned.
+   * Call `store.prune()` from your scheduler to apply them.
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -550,7 +599,7 @@ export class DuckDBStore extends MastraCompositeStore {
 
   constructor(config: DuckDBStoreConfig = {}) {
     const id = config.id ?? 'duckdb';
-    super({ id, name: 'DuckDBStore' });
+    super({ id, name: 'DuckDBStore', retention: config.retention });
 
     this.db = new DuckDBConnection({ path: config.path, memoryLimit: config.memoryLimit, threads: config.threads });
     this.observabilityStore = new ObservabilityStorageDuckDB({ db: this.db });

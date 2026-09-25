@@ -521,6 +521,17 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'required',
     routePlacement: 'origin',
   });
+  addAction(factoryWorkItem, 'automation-run', FACTORY_API_ROUTE_CATALOG.workItemAutomationRun, {
+    description: 'Enqueue an idempotent deferred skill dispatch for a trusted external orchestrator',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Dispatch a skill run with optimistic concurrency and an idempotent request id',
+        command: `mastra api factory work-item automation-run <project-id> <work-item-id> '{"requestId":"00000000-0000-4000-8000-000000000000","expectedRevision":1,"role":"work","skillName":"factory-plan"}'`,
+      },
+    ],
+  });
 
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
     description: 'List the boards installed on a Factory project with their phases and transitions',

@@ -168,6 +168,9 @@ export interface KnowledgeGraphPayload {
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
+  truncated: boolean;
+  outOfWindow: Array<{ id: string; reference: string; name: string }>;
+  pinCensus: { resource: number; thread: number | null };
   page: {
     nextCursor?: string;
     truncated: boolean;
@@ -179,7 +182,38 @@ export interface KnowledgeGraphPayload {
     maxBoundaryNodes: number;
     boundaryHops: 1;
   };
-  version?: string;
+  version: string | null;
+}
+
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: 'org' | 'resource' | 'thread' | null;
+  threadId?: string;
+  description?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
+}
+
+export interface KnowledgeActivityEvent {
+  id: string;
+  action: string;
+  targetType: string;
+  scopeId?: string;
+  sourceType: 'importer' | 'system';
+  sourceId?: string;
+  importRunId?: string;
+  createdAt: string;
+}
+
+export interface KnowledgeActivityPayload {
+  events: KnowledgeActivityEvent[];
+  nextCursor?: string;
 }
 
 export interface KnowledgeNodeRecordPayload {
@@ -357,6 +391,14 @@ function isKnowledgeHandle(value: string | undefined): boolean {
 
 interface ResolvedView {
   projectId: string;
+  /** Factory project display name — shown in place of the project scope's raw UUID-derived name. */
+  projectName: string;
+  /**
+   * The scope node resolved from `resource:${projectId}` — the project scope
+   * itself. Distinct from `resourceScopeId`, which hosts may alias to the
+   * profile's root scope (e.g. an org-rooted project view).
+   */
+  projectScopeId: string;
   knowledge: Knowledge;
   store: KnowledgeStorage;
   view: 'project' | 'thread';
@@ -401,10 +443,16 @@ function importBinding(binding: string): { source?: string; scopeAddress?: strin
 }
 
 function importScopeBelongsToView(scope: string | undefined, projectId: string, threadId?: string): boolean {
-  return (
-    scope === `resource:${projectId}` ||
-    (threadId !== undefined && scope === `resource:${projectId}:thread:${threadId}`)
-  );
+  if (scope === `resource:${projectId}`) return true;
+  // Thread scopes stay thread-private: only the requested thread's own
+  // bindings are visible, never a sibling thread's.
+  if (scope?.startsWith(`resource:${projectId}:thread:`)) {
+    return threadId !== undefined && scope === `resource:${projectId}:thread:${threadId}`;
+  }
+  // Any other sub-scope under the project (`resource:<pid>:<provider>:<resource>`,
+  // e.g. `:notion:<connectionId>` or `:github:<repo>`) belongs to the project
+  // view — that's where importers land per-source content.
+  return scope?.startsWith(`resource:${projectId}:`) === true;
 }
 
 function importRunBelongsToView(run: KnowledgeImportRun, projectId: string, threadId?: string): boolean {
@@ -594,6 +642,56 @@ class WikilinkResolver {
   get cappedCount(): number {
     return this.#capped ? 1 : 0;
   }
+}
+
+/**
+ * Record-metadata link contract, parsed defensively. Importers (e.g.
+ * `@mastra/connect`) attach `metadata.links: [{ address?, name?, rel? }]` to
+ * records; the graph route derives render-time edges from them exactly like
+ * wikilinks. This is an intentionally decoupled local parse — not an import
+ * from `@mastra/connect` — so malformed or foreign metadata never throws.
+ * `rel` is render-neutral in v1 and ignored here.
+ */
+interface RecordLinkEntry {
+  address?: string;
+  name?: string;
+}
+
+function parseRecordLinks(metadata: unknown): RecordLinkEntry[] {
+  if (!metadata || typeof metadata !== 'object') return [];
+  const links = (metadata as { links?: unknown }).links;
+  if (!Array.isArray(links)) return [];
+  const parsed: RecordLinkEntry[] = [];
+  for (const entry of links) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { address, name } = entry as { address?: unknown; name?: unknown };
+    if (typeof address === 'string' && address) parsed.push({ address });
+    else if (typeof name === 'string' && name) parsed.push({ name });
+  }
+  return parsed;
+}
+
+/**
+ * Address → node map over the loaded window. Importers stamp each node's own
+ * stable address into `metadata.address` (plus optional
+ * `metadata.addressAliases`) at upsert time; address-links resolve against
+ * this map ONLY — a miss is a silent skip, since a dangling target and an
+ * out-of-window target are indistinguishable here by design. Duplicate
+ * addresses across window nodes keep the first and continue.
+ */
+function buildNodesByAddress(nodes: KnowledgeNode[]): Map<string, KnowledgeNode> {
+  const byAddress = new Map<string, KnowledgeNode>();
+  for (const node of nodes) {
+    const metadata = node.metadata as { address?: unknown; addressAliases?: unknown } | undefined;
+    if (!metadata || typeof metadata !== 'object') continue;
+    const keys: unknown[] = [metadata.address];
+    if (Array.isArray(metadata.addressAliases)) keys.push(...metadata.addressAliases);
+    for (const key of keys) {
+      if (typeof key !== 'string' || !key) continue;
+      if (!byAddress.has(key)) byAddress.set(key, node);
+    }
+  }
+  return byAddress;
 }
 
 type KnowledgeSurfaceHandleKind =
@@ -863,7 +961,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const projectId = c.req.param('id');
     if (!projectId || !UUID_RE.test(projectId)) return { response: c.json({ error: 'Project not found' }, 404) };
     await this.deps.projects.ensureReady();
-    if (!(await this.deps.projects.get({ orgId: tenant.orgId, id: projectId }))) {
+    const project = await this.deps.projects.get({ orgId: tenant.orgId, id: projectId });
+    if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
     let knowledge: Knowledge | undefined;
@@ -920,6 +1019,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     if (!threadId) {
       return {
         projectId,
+        projectName: project.name,
         knowledge,
         store,
         view: 'project',
@@ -930,6 +1030,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         curationScopeIds: profile.curationScopeIds,
         orgScopeId,
         resourceScopeId: profile.rootScopeId,
+        projectScopeId: resourceScopeId,
         pinScopes: [{ level: 'resource', scopeId: profile.rootScopeId }],
       };
     }
@@ -940,6 +1041,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     if (probe.records.length === 0) return { response: c.json({ error: 'thread_not_found' }, 404) };
     return {
       projectId,
+      projectName: project.name,
       knowledge,
       store,
       view: 'thread',
@@ -951,6 +1053,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       curationScopeIds: profile.curationScopeIds,
       orgScopeId,
       resourceScopeId,
+      projectScopeId: resourceScopeId,
       threadScopeId,
       pinScopes: [
         { level: 'resource', scopeId: resourceScopeId },
@@ -1026,9 +1129,19 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return undefined;
   }
 
+  /**
+   * Built-in identity scopes store their address tail as their name — the raw
+   * project UUID and org id. Substitute readable labels at read time so
+   * project renames stay live without rewriting stored scope nodes.
+   */
+  #scopeDisplayName(view: ResolvedView, node: KnowledgeNode): string {
+    if (node.id === view.projectScopeId) return view.projectName;
+    if (node.id === view.orgScopeId) return 'Organization';
+    return node.name;
+  }
+
   #scopeTreeNode(
-    projectId: string,
-    perspectiveKey: string,
+    view: ResolvedView,
     node: KnowledgeNode,
     counts: Pick<
       KnowledgeScopeTreeNode,
@@ -1038,9 +1151,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   ): KnowledgeScopeTreeNode {
     const description = metadataString(node.metadata, 'description');
     return {
-      id: this.#mintHandle(projectId, perspectiveKey, 'scope', node.id),
-      reference: this.#mintReference(projectId, 'scope', node.id),
-      name: node.name,
+      id: this.#mintHandle(view.projectId, view.perspectiveKey, 'scope', node.id),
+      reference: this.#mintReference(view.projectId, 'scope', node.id),
+      name: this.#scopeDisplayName(view, node),
       kind: node.kind ?? 'scope',
       ...(description ? { description } : {}),
       ...counts,
@@ -1105,6 +1218,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ...(importer.triggers.cron?.bindings ?? []),
                 ...(importer.triggers.webhook?.bindings ?? []),
               ];
+              // Dynamic destinations (platform importers resolve one binding
+              // per Factory project at each cron fire) don't appear in the
+              // static declaration — resolve them here so a connected
+              // importer is listed before its first run. Resolution failure
+              // degrades to the static set: the list stays useful and the
+              // importer reappears once the resolver recovers.
+              const resolveBindings = importer.triggers.cron?.resolveBindings;
+              if (resolveBindings) {
+                try {
+                  declaredBindings.push(...(await resolveBindings()));
+                } catch {
+                  /* static bindings only */
+                }
+              }
               const bindings = Array.from(
                 new Map(declaredBindings.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
               )
@@ -1141,6 +1268,59 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }),
           );
           return c.json({ importers: importers.filter(importer => importer !== null) });
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/run', {
+        method: 'POST',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const resolved = await this.#resolveView(c);
+          if ('response' in resolved) return resolved.response;
+          const importerId = c.req.param('importerId');
+          if (!importerId) return c.json({ error: 'importer_not_found' }, 404);
+          let importer = resolved.knowledge.getImporter(importerId);
+          if (!importer) {
+            // A connection completed moments ago may not have reconciled into
+            // the importer set yet (the runner reconciles on its scheduling
+            // tick). Reconcile once before giving up so connect-time triggers
+            // work immediately.
+            await resolved.knowledge.reconcileImportersInternal();
+            importer = resolved.knowledge.getImporter(importerId);
+          }
+          if (!importer) return c.json({ error: 'importer_not_found' }, 404);
+          const cron = importer.triggers.cron;
+          if (!cron) return c.json({ error: 'importer_not_triggerable' }, 409);
+          const declared = [...(cron.bindings ?? [])];
+          if (cron.resolveBindings) {
+            try {
+              declared.push(...(await cron.resolveBindings()));
+            } catch {
+              /* static bindings only */
+            }
+          }
+          const bindings = Array.from(
+            new Map(declared.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
+          ).filter(binding => importScopeBelongsToView(binding.scope, resolved.projectId, resolved.threadId));
+          if (bindings.length === 0) return c.json({ error: 'importer_not_found' }, 404);
+          const runs: KnowledgeImportRun[] = [];
+          for (const binding of bindings) {
+            try {
+              runs.push(
+                await resolved.knowledge.runImporter(importerId, binding, undefined, {
+                  triggerKind: 'cron',
+                  awaitCompletion: false,
+                }),
+              );
+            } catch {
+              // Binding validation raced a resolver change — skip this binding.
+            }
+          }
+          if (runs.length === 0) return c.json({ error: 'import_trigger_failed' }, 503);
+          return c.json(
+            { runs: runs.map(run => this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, run)) },
+            202,
+          );
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/runs', {
@@ -1757,7 +1937,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           ]);
           const visibleById = new Map<string, KnowledgeNode>();
           for (const node of [...prefixNodes, ...scannedNodes]) {
-            if (node.name.toLocaleLowerCase().includes(query)) visibleById.set(node.id, node);
+            const searchableName = node.isScope ? this.#scopeDisplayName(view, node) : node.name;
+            if (searchableName.toLocaleLowerCase().includes(query)) visibleById.set(node.id, node);
           }
           const results = await Promise.all(
             [...visibleById.values()].map(async node => {
@@ -1765,7 +1946,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               if (node.isScope) {
                 return {
                   id: this.#mintHandle(view.projectId, view.perspectiveKey, 'scope', node.id),
-                  name: node.name,
+                  name: this.#scopeDisplayName(view, node),
                   kind: node.kind ?? 'scope',
                   type: 'scope' as const,
                   rung: null,
@@ -1848,8 +2029,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const emptyCounts = directScopeMemberCounts([], this.#limits.maxNodes);
           const children = page.map(node =>
             this.#scopeTreeNode(
-              projectId,
-              view.perspectiveKey,
+              view,
               node,
               countsById.get(node.id) ?? emptyCounts,
               view.curationScopeIds.includes(node.id),
@@ -1864,8 +2044,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               : undefined;
           return loose(c).json({
             scope: this.#scopeTreeNode(
-              projectId,
-              view.perspectiveKey,
+              view,
               selected,
               countsById.get(selected.id) ?? emptyCounts,
               selectedNeedsCuration,
@@ -1874,8 +2053,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             ...(curationDestination
               ? {
                   curationDestination: this.#scopeTreeNode(
-                    projectId,
-                    view.perspectiveKey,
+                    view,
                     curationDestination,
                     countsById.get(curationDestination.id) ?? emptyCounts,
                   ),
@@ -1906,7 +2084,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
-          const selected = await this.#resolveSelectedScope(view, scopeId, true);
+          const selected = await this.#resolveSelectedScope(view, scopeId);
           if (!selected) return c.json({ error: 'scope_not_found' }, 404);
           const structuralLens = Boolean(scopeHandle);
           const { store } = view;
@@ -1958,7 +2136,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             fetched.push(...batch);
             const batchLast = batch.at(-1);
             if (batch.length < batchLimit || !batchLast) break;
-            nodeCursor = createKnowledgeNodeCursor(batchLast, { isScope: false });
+            // The continuation cursor must embed the same filters as the
+            // listNodes call above — a structural lens queries without the
+            // isScope filter, and a mismatched cursor throws on the next batch.
+            nodeCursor = createKnowledgeNodeCursor(batchLast, structuralLens ? {} : { isScope: false });
           }
           const eligible = fetched.filter(node => node.id !== selected.id && !pinnedNodeIdSet.has(node.id));
           const members = eligible.slice(0, Math.max(0, limit - (structuralLens ? 1 : 0)));
@@ -2009,6 +2190,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           recordWindow.sort((a, b) => b.id.localeCompare(a.id));
 
           const resolver = WikilinkResolver.create(view.knowledge, nodes, selected.id, this.#limits.maxFallbackLookups);
+          const nodesByAddress = buildNodesByAddress(nodes);
           const pinnedRecords = await this.#pinnedRecords(selectedView, pinnedNodeIds);
           const accented = new Set<string>();
           const edges: KnowledgeGraphEdge[] = [];
@@ -2036,7 +2218,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           for (const { record } of pinnedRecords) {
             const targets: string[] = [];
             let targetsTruncated = false;
-            for (const name of parseKnowledgeWikilinks(record.text)) {
+            const linkEntries = parseRecordLinks(record.metadata);
+            // Name-links get exactly the wikilink treatment (in-window-only
+            // with truncation signaling); address-links resolve via the
+            // window address map only, so hits are in-window by construction.
+            const names = [
+              ...parseKnowledgeWikilinks(record.text),
+              ...linkEntries.flatMap(entry => (entry.name ? [entry.name] : [])),
+            ];
+            for (const name of names) {
               const target = await resolver.resolve(name, view.scopeIds);
               if (!target) continue;
               if (!resolver.inWindowId(target.id)) {
@@ -2044,6 +2234,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 targetsTruncated = true;
                 continue;
               }
+              if (!targets.includes(target.id)) targets.push(target.id);
+            }
+            for (const entry of linkEntries) {
+              if (!entry.address) continue;
+              const target = nodesByAddress.get(entry.address);
+              if (!target) continue;
               if (!targets.includes(target.id)) targets.push(target.id);
             }
             for (const target of targets) addRecordNode(record.id, target);
@@ -2076,7 +2272,33 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               continue;
             }
             addRecordNode(record.id, record.nodeId);
-            for (const name of parseKnowledgeWikilinks(record.text)) {
+            const linkEntries = parseRecordLinks(record.metadata);
+            // Name-links follow the wikilink path below (boundary promotion
+            // included); address-links resolve via the window address map
+            // only, so hits are in-window by construction (boundary: false).
+            const names = [
+              ...parseKnowledgeWikilinks(record.text),
+              ...linkEntries.flatMap(entry => (entry.name ? [entry.name] : [])),
+            ];
+            const emitEdge = (target: KnowledgeNode, boundary: boolean) => {
+              addRecordNode(record.id, target.id);
+              const key = `${record.nodeId}\u0000${target.id}`;
+              if (edgeSeen.has(key)) return;
+              if (edges.length >= this.#limits.maxEdges) {
+                edgesTruncated = true;
+                return;
+              }
+              edgeSeen.add(key);
+              edges.push({
+                id: `wikilink:${record.nodeId}:${target.id}`,
+                source: record.nodeId,
+                target: target.id,
+                type: 'wikilink',
+                recordId: record.id,
+                ...(boundary ? { boundary: true } : {}),
+              });
+            };
+            for (const name of names) {
               const target = await resolver.resolve(name, view.scopeIds);
               if (!target || target.id === record.nodeId) continue;
               const outsideWindow = !resolver.inWindowId(target.id);
@@ -2100,22 +2322,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   boundaryNodes.set(target.id, { node: target, scope: targetScope });
                 }
               }
-              addRecordNode(record.id, target.id);
-              const key = `${record.nodeId}\u0000${target.id}`;
-              if (edgeSeen.has(key)) continue;
-              if (edges.length >= this.#limits.maxEdges) {
-                edgesTruncated = true;
-                continue;
-              }
-              edgeSeen.add(key);
-              edges.push({
-                id: `wikilink:${record.nodeId}:${target.id}`,
-                source: record.nodeId,
-                target: target.id,
-                type: 'wikilink',
-                recordId: record.id,
-                ...(boundary ? { boundary: true } : {}),
-              });
+              emitEdge(target, boundary);
+            }
+            for (const entry of linkEntries) {
+              if (!entry.address) continue;
+              const target = nodesByAddress.get(entry.address);
+              if (!target || target.id === record.nodeId) continue;
+              emitEdge(target, false);
             }
           }
 
@@ -2162,7 +2375,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               return {
                 id: this.#mintHandle(projectId, view.perspectiveKey, isScope ? 'scope' : 'node', node.id),
                 reference: this.#mintReference(projectId, isScope ? 'scope' : 'node', node.id),
-                name: node.name,
+                name: isScope ? this.#scopeDisplayName(view, node) : node.name,
                 kind: node.kind ?? (isScope ? 'scope' : 'concept'),
                 ...(description ? { description } : {}),
                 rung: isScope ? null : rungForScopeIds(nodeScopeIds, view),
@@ -2173,8 +2386,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   ? {
                       boundary: {
                         scope: this.#scopeTreeNode(
-                          projectId,
-                          view.perspectiveKey,
+                          view,
                           boundaryScope,
                           emptyScopeCounts,
                           view.curationScopeIds.includes(boundaryScope.id),
@@ -2210,8 +2422,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const payload: KnowledgeGraphPayload = {
             view: view.view,
             scope: this.#scopeTreeNode(
-              projectId,
-              view.perspectiveKey,
+              view,
               selected,
               scopeCounts.get(selected.id) ?? emptyScopeCounts,
               view.curationScopeIds.includes(selected.id),

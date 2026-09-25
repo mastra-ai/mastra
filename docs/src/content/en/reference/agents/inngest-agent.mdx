@@ -127,6 +127,13 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     isOptional: true,
     description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
   },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      "Accepted for API symmetry with `createDurableAgent`, but ignored: Inngest's step memoization and replay own durability, so InngestAgent always persists `suspended` snapshots only (for human-in-the-loop resume). A warning is logged if set.",
+  },
 ]}
 />
 
@@ -429,6 +436,14 @@ Returns: `boolean`
     type: 'boolean',
     isOptional: true,
     description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
+  },
+  {
+    name: 'closeOnSuspend',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'When `true`, close the stream when the run suspends (for example for tool approval) so `fullStream`, `text`, and `getFullOutput()` resolve at the suspension boundary instead of staying open, matching non-durable `Agent.stream()`. Useful for callers such as AG-UI or A2A that need the stream to end. Defaults to `false`, which keeps the stream open across suspension so a later resume can continue streaming on the same reader. `resume()`/`resumeStream()` always return a fresh stream.',
   },
   {
     name: 'toolCallConcurrency',

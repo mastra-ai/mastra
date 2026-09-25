@@ -4,13 +4,42 @@ import type { ZodSchema, ZodError, ZodIssue } from 'zod/v4';
 import { z } from 'zod/v4';
 import { SchemaValidationError } from './errors';
 import type { FieldError, BatchValidationResult } from './errors';
+import { SafeRegExp } from './safe-regex';
 
 /**
  * Convert JSON Schema string to runtime Zod schema.
  * Uses Function() to evaluate the generated Zod code - same pattern as workflow validation.
+ * `RegExp` is shadowed with an RE2-backed implementation so user-supplied `pattern` and
+ * `patternProperties` run in linear time; unsupported syntax throws while the schema compiles.
  */
 function resolveZodSchema(zodString: string): ZodSchema {
-  return Function('z', `"use strict";return (${zodString});`)(z);
+  return Function('z', 'RegExp', `"use strict";return (${zodString});`)(z, SafeRegExp);
+}
+
+const NON_SCHEMA_KEYWORDS = new Set(['const', 'enum', 'default', 'examples']);
+/** Keywords whose object values map arbitrary names (not keywords) to subschemas */
+const SCHEMA_MAP_KEYWORDS = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas']);
+
+/** Compile every `pattern` / `patternProperties` key up front so unsupported syntax fails at schema compile time */
+export function assertSupportedPatterns(node: unknown, isSchemaMap = false): void {
+  if (Array.isArray(node)) {
+    node.forEach(item => assertSupportedPatterns(item));
+    return;
+  }
+  if (!node || typeof node !== 'object') return;
+  for (const [key, value] of Object.entries(node)) {
+    if (isSchemaMap) {
+      assertSupportedPatterns(value);
+      continue;
+    }
+    if (NON_SCHEMA_KEYWORDS.has(key)) continue;
+    if (key === 'pattern' && typeof value === 'string') {
+      new SafeRegExp(value);
+    } else if (key === 'patternProperties' && value && typeof value === 'object') {
+      Object.keys(value).forEach(p => new SafeRegExp(p));
+    }
+    assertSupportedPatterns(value, SCHEMA_MAP_KEYWORDS.has(key));
+  }
 }
 
 /** Schema validator with compilation caching */
@@ -21,6 +50,7 @@ export class SchemaValidator {
   private getValidator(schema: JSONSchema7, cacheKey: string): ZodSchema {
     let zodSchema = this.cache.get(cacheKey);
     if (!zodSchema) {
+      assertSupportedPatterns(schema);
       const zodString = jsonSchemaToZod(schema);
       zodSchema = resolveZodSchema(zodString);
       this.cache.set(cacheKey, zodSchema);

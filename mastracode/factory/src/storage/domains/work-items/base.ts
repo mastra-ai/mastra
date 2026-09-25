@@ -12,7 +12,8 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-import type { FactoryTriageType } from '../../../rules/types.js';
+import { externalSourceForWorkItem } from '../../../rules/types.js';
+import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
@@ -35,6 +36,17 @@ function stableJson(value: unknown): string {
 
 export function factoryDecisionHash(decision: Record<string, unknown>): string {
   return createHash('sha256').update(stableJson(decision)).digest('hex');
+}
+
+function isWorkItemSource(value: unknown): value is WorkItemSource {
+  return (
+    value === 'github-issue' ||
+    value === 'github-pr' ||
+    value === 'linear-issue' ||
+    value === 'jira-issue' ||
+    value === 'incidentio-follow-up' ||
+    value === 'manual'
+  );
 }
 
 export interface ExternalWorkItemSource {
@@ -157,6 +169,8 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
+  'run_terminal_event_missing',
+  'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
   'repository_egress_blocked',
@@ -483,6 +497,12 @@ export interface WorkItemRow {
   factoryProjectId: string;
   board: string | null;
   externalSource: ExternalWorkItemSource | null;
+  /**
+   * Org-wide ownership key for the external record this card tracks, or null
+   * for cards that never claimed one (older rows, integrations without claims,
+   * finished cards). Unique per org while set.
+   */
+  claimKey: string | null;
   parentWorkItemId: string | null;
   title: string;
   stages: WorkItemStage[];
@@ -522,6 +542,8 @@ export interface WorkItemRow {
 export interface CreateWorkItemInput {
   board?: string;
   externalSource?: ExternalWorkItemSource | null;
+  /** See {@link WorkItemRow.claimKey}. Refused with {@link WorkItemClaimConflictError} when another project holds it. */
+  claimKey?: string | null;
   parentWorkItemId?: string | null;
   title: string;
   stages?: WorkItemStage[];
@@ -560,6 +582,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     board: { type: 'text', nullable: true },
     external_source: { type: 'json', nullable: true },
     source_key: { type: 'text', nullable: true },
+    claim_key: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     title: { type: 'text' },
     stages: { type: 'json' },
@@ -581,6 +604,12 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     {
       name: 'work_items_project_source_key_unique',
       columns: ['factory_project_id', 'source_key'],
+    },
+    {
+      // One live card per claimed external record per org. NULL keys never
+      // collide, so unclaimed cards are unaffected.
+      name: 'work_items_org_claim_key_unique',
+      columns: ['org_id', 'claim_key'],
     },
   ],
   indexes: [
@@ -608,6 +637,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   board: string | null;
   external_source: ExternalWorkItemSource | null;
   source_key: string | null;
+  claim_key: string | null;
   parent_work_item_id: string | null;
   title: string;
   stages: WorkItemStage[];
@@ -644,6 +674,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     factoryProjectId: String(row.factory_project_id),
     board: row.board ?? null,
     externalSource: row.external_source,
+    claimKey: row.claim_key ?? null,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
     stages: row.stages,
@@ -670,6 +701,7 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.board !== undefined ? { board: changes.board } : {}),
     ...(changes.parentWorkItemId !== undefined ? { parent_work_item_id: changes.parentWorkItemId } : {}),
     ...(changes.title !== undefined ? { title: changes.title } : {}),
+    ...(changes.claimKey !== undefined ? { claim_key: changes.claimKey } : {}),
     ...(changes.stages !== undefined ? { stages: changes.stages } : {}),
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
@@ -692,6 +724,15 @@ function priorState(row: WorkItemDbRow): WorkItemPriorState {
 
 export class WorkItemRelationError extends Error {
   readonly code = 'invalid_work_item_relation';
+}
+
+/** Another card in the org already holds the claim the write asked for. */
+export class WorkItemClaimConflictError extends Error {
+  readonly code = 'work_item_claim_conflict';
+
+  constructor(readonly claimant: WorkItemRow) {
+    super(`Work item claim is held by ${claimant.id} in project ${claimant.factoryProjectId}`);
+  }
 }
 
 export class WorkItemUpdateConflictError extends Error {
@@ -1206,6 +1247,29 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     this.#isTerminal = isTerminal;
   }
 
+  /**
+   * The claim a new row may carry: the requested key, unless the row is born
+   * finished, in which case there is nothing to own and holding the key would
+   * only block the next project from filing the record.
+   */
+  #claimForNewRow(input: CreateWorkItemInput, stages: WorkItemStage[]): string | null {
+    if (!input.claimKey) return null;
+    const shape = { board: input.board ?? null, externalSource: input.externalSource ?? null, stages } as WorkItemRow;
+    return this.#isTerminal(shape) ? null : input.claimKey;
+  }
+
+  /** The claim an existing unclaimed row adopts from `input`, if it is not finished after `patch`. */
+  #claimToAdopt(current: WorkItemDbRow, patch: Partial<WorkItemDbRow>, input: CreateWorkItemInput): string | null {
+    if (!input.claimKey || current.claim_key !== null) return null;
+    return this.#isTerminal(toWorkItem({ ...current, ...patch })) ? null : input.claimKey;
+  }
+
+  /** Drop the org-wide claim from a patch that moves the card into a terminal phase. */
+  #releaseClaimIfFinished(current: WorkItemDbRow, patch: Partial<WorkItemDbRow>): Partial<WorkItemDbRow> {
+    if (patch.stages === undefined || current.claim_key === null) return patch;
+    return this.#isTerminal(toWorkItem({ ...current, ...patch })) ? { ...patch, claim_key: null } : patch;
+  }
+
   async init(): Promise<void> {
     // The comment schemas are co-registered so the delete cascade below can
     // purge feed rows regardless of domain init order.
@@ -1557,6 +1621,61 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
+  /**
+   * Every card in the org that was linked from one external source, across
+   * Factory projects. Source keys are unique per project, not per org, so an
+   * issue whose routing moved between projects can own one card in each; intake
+   * consults this before creating another.
+   */
+  async listBySource({ orgId, source }: { orgId: string; source: ExternalWorkItemSource }): Promise<WorkItemRow[]> {
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', {
+      org_id: orgId,
+      source_key: externalSourceKey(source),
+    });
+    return rows.map(toWorkItem);
+  }
+
+  /** The one card in the org holding `claimKey`, if any. */
+  async getByClaimKey({ orgId, claimKey }: { orgId: string; claimKey: string }): Promise<WorkItemRow | null> {
+    const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, claim_key: claimKey });
+    return row ? toWorkItem(row) : null;
+  }
+
+  /**
+   * Give an unclaimed card the org-wide claim for its record. Returns the card
+   * once claimed, or null when the card already carries a different claim or
+   * another card in the org holds this one.
+   */
+  async claimWorkItem({
+    orgId,
+    id,
+    claimKey,
+  }: {
+    orgId: string;
+    id: string;
+    claimKey: string;
+  }): Promise<WorkItemRow | null> {
+    const heldBy = async () => {
+      const holder = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, claim_key: claimKey });
+      return holder && holder.id !== id ? holder : null;
+    };
+    if (await heldBy()) return null;
+    try {
+      const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+        if (current.claim_key === claimKey) return {};
+        if (current.claim_key !== null) throw new WorkItemClaimConflictError(toWorkItem(current));
+        return { claim_key: claimKey };
+      });
+      return row ? toWorkItem(row) : null;
+    } catch (error) {
+      if (error instanceof WorkItemClaimConflictError) return null;
+      // Backends map unique violations on inserts only, so a lost race on the
+      // update surfaces as a driver error: the claim's new holder settles it.
+      if (await heldBy()) return null;
+      throw error;
+    }
+  }
+
   async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', {
       id,
@@ -1641,6 +1760,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
+              // A finished card gives up its org-wide claim so the record can be
+              // filed afresh wherever it is routed next.
+              ...(this.#isTerminal({ ...existing, stages: [input.destinationStage] }) ? { claimKey: null } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,
@@ -1753,16 +1875,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               !decision ||
               typeof decision !== 'object' ||
               (decision as Record<string, unknown>).type !== 'upsertLinkedWorkItem' ||
+              !isWorkItemSource((decision as Record<string, unknown>).source) ||
               typeof (decision as Record<string, unknown>).sourceKey !== 'string' ||
               typeof (decision as Record<string, unknown>).idempotencyKey !== 'string'
             ) {
               continue;
             }
-            const materialization = decision as Record<string, unknown> & { sourceKey: string; idempotencyKey: string };
+            const materialization = decision as Record<string, unknown> & {
+              source: WorkItemSource;
+              sourceKey: string;
+              idempotencyKey: string;
+            };
             const item = await ops.findOne<WorkItemDbRow>('work_items', {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
-              source_key: materialization.sourceKey,
+              source_key: externalSourceKey(
+                externalSourceForWorkItem(materialization.source, materialization.sourceKey),
+              ),
             });
             if (item) continue;
             await ops.updateAtomic<GovernanceDbRow>(
@@ -2778,13 +2907,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             }));
-          if (!bindingRow || !itemRow) throw new Error('Factory start replay references missing state.');
-          return {
-            item: toRow(itemRow),
-            binding: toBinding(bindingRow),
-            pendingStart: toPendingStart(prior),
-            replayed: true,
-          };
+          // Replay only a still-live binding. A prior pending row whose binding
+          // was revoked (abort → stage re-entry) or whose state is gone is a
+          // dead-run artifact: discard it and mint a fresh binding below. The
+          // unique kickoff_key index requires removing the stale row before
+          // re-inserting.
+          if (bindingRow && itemRow && bindingRow.status === 'active') {
+            return {
+              item: toRow(itemRow),
+              binding: toBinding(bindingRow),
+              pendingStart: toPendingStart(prior),
+              replayed: true,
+            };
+          }
+          await ops.deleteMany('factory_pending_starts', {
+            id: prior.id,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
         }
         const now = new Date();
         const create = input.workItem.input;
@@ -2806,7 +2946,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
-            return applyUpdate({ current, userId: input.userId, input: { sessions: { [input.role]: input.session } } });
+            const next = applyUpdate({
+              current,
+              userId: input.userId,
+              input: { sessions: { [input.role]: input.session } },
+            });
+            const adopt = this.#claimToAdopt(current, next, create);
+            return adopt ? { ...next, claim_key: adopt } : next;
           });
           item = toRow(row!);
         } else {
@@ -2828,6 +2974,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             board: create.board ?? null,
             external_source: create.externalSource ?? null,
             source_key: externalSourceKey(create.externalSource),
+            claim_key: this.#claimForNewRow(create, create.stages ?? []),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
             stages: create.stages ?? [],
@@ -2905,6 +3052,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         return await prepare();
       } catch (error) {
         if (!(error instanceof UniqueViolationError)) throw error;
+        // A claim another project holds is a refusal, not a race to retry.
+        const claimKey = input.workItem.input.claimKey;
+        const claimant = claimKey
+          ? await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: input.orgId, claim_key: claimKey })
+          : null;
+        if (claimant && claimant.factory_project_id !== input.factoryProjectId) {
+          throw new WorkItemClaimConflictError(toWorkItem(claimant));
+        }
         lastError = error;
       }
     }
@@ -2948,6 +3103,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return await execute();
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
+      // A claim taken by another project is a refusal, not a race to replay.
+      // A claim already held by this project (the record was renamed under a
+      // new source key) resolves to the card that holds it.
+      const claimKey = params.input.claimKey;
+      const claimant = claimKey
+        ? await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: params.orgId, claim_key: claimKey })
+        : null;
+      if (claimant && claimant.factory_project_id !== params.factoryProjectId) {
+        throw new WorkItemClaimConflictError(toWorkItem(claimant));
+      }
+      if (claimant) return { item: toWorkItem(claimant), created: false, previous: priorState(claimant) };
       return execute();
     }
   }
@@ -2978,7 +3144,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       if (!existing) return null;
       if (reuseMode === 'preserve') {
-        const item = toWorkItem(existing);
+        const adopt = this.#claimToAdopt(existing, {}, input);
+        const row = adopt
+          ? await ops.updateAtomic<WorkItemDbRow>(
+              'work_items',
+              { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
+              current => (current.claim_key === null ? { claim_key: adopt } : null),
+            )
+          : null;
+        const item = toWorkItem(row ?? existing);
         return { created: false, item, previous: priorState(existing) };
       }
 
@@ -3004,11 +3178,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               patch.parentWorkItemId,
             );
           }
-          return {
+          const next: Partial<WorkItemDbRow> = {
             board: reuseMode === 'non-stage' ? current.board : (input.board ?? current.board ?? null),
             external_source: input.externalSource ?? null,
             ...applyUpdate({ current, userId, input: patch }),
           };
+          const adopt = this.#claimToAdopt(current, next, input);
+          return adopt ? { ...next, claim_key: adopt } : next;
         },
       );
       return updated ? { item: toWorkItem(updated), created: false, previous } : null;
@@ -3030,6 +3206,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       board: input.board ?? null,
       external_source: input.externalSource ?? null,
       source_key: key,
+      claim_key: this.#claimForNewRow(input, stages),
       parent_work_item_id: input.parentWorkItemId ?? null,
       title: input.title,
       stages,
@@ -3104,7 +3281,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             patch.parentWorkItemId,
           );
         }
-        return applyUpdate({ current, userId, input: patch });
+        return this.#releaseClaimIfFinished(current, applyUpdate({ current, userId, input: patch }));
       });
       return row ? { item: toWorkItem(row), previous } : null;
     };
@@ -3121,12 +3298,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   async #purgeRuleState(
     ops: FactoryStorageOps,
-    { orgId, factoryProjectId, sourceKey }: { orgId: string; factoryProjectId: string; sourceKey: string },
+    { orgId, factoryProjectId, sourceKeys }: { orgId: string; factoryProjectId: string; sourceKeys: string[] },
   ): Promise<void> {
+    const keys = [...new Set(sourceKeys)];
     const decisions = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: sourceKey,
+      source_key: { in: keys },
     });
     if (decisions.length === 0) return;
 
@@ -3150,7 +3328,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await ops.deleteMany('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: sourceKey,
+      source_key: { in: keys },
     });
     for (const evaluationId of evaluationIds) {
       await ops.deleteMany('factory_rule_evaluations', { id: evaluationId });
@@ -3199,7 +3377,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await ops.deleteMany('work_item_activity', where);
   }
 
-  async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
+  async delete({
+    orgId,
+    id,
+    purgeRuleState = true,
+  }: {
+    orgId: string;
+    id: string;
+    purgeRuleState?: boolean;
+  }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
 
@@ -3209,11 +3395,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
-      if (existing.source_key) {
+      if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,
           factoryProjectId: existing.factory_project_id,
-          sourceKey: existing.source_key,
+          sourceKeys: [existing.external_source.externalId],
         });
       }
       await ops.updateMany(

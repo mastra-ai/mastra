@@ -2,6 +2,7 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -13,7 +14,6 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { useAuthCapabilities } from '@/domains/auth/hooks';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
-import { useLinkComponent } from '@/lib/framework';
 
 const agentsLink: NavLink = {
   name: 'My agents',
@@ -104,7 +104,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                   className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
                 >
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                  <span className="font-display text-ui-md truncate whitespace-nowrap">Mastra Studio</span>
+                  <span className="truncate font-display text-body whitespace-nowrap">Mastra Studio</span>
                 </Link>
                 {!isMobile && <MainSidebar.Trigger />}
               </span>
@@ -118,7 +118,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                 className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
               >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <span className="font-display text-ui-md truncate whitespace-nowrap">Mastra Studio</span>
+                <span className="truncate font-display text-body whitespace-nowrap">Mastra Studio</span>
               </Link>
               {!isMobile && <MainSidebar.Trigger />}
             </span>

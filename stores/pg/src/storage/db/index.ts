@@ -19,15 +19,19 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
+import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
+import { toPgJson } from './sanitize-json';
 import { getSchemaSnapshot } from './schema-snapshot';
 import type { SchemaSnapshot } from './schema-snapshot';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
+
+const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
 
 /**
  * Configuration for standalone domain usage.
@@ -170,7 +174,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
 }
 
 export function getSchemaName(schema?: string) {
-  return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
+  return schema ? `"${parseSchemaName(schema)}"` : '"public"';
 }
 
 export function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
@@ -240,7 +244,7 @@ export function generateTableSQL({
 
   const finalColumns = [...columns, ...timeZColumns, ...tableConstraints].join(',\n');
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
-  const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+  const parsedSchemaName = schemaName ? schemaNamePrefix(schemaName) : '';
   // Use the original (long) base name so existing databases that already have
   // the constraint under this name are detected by the IF NOT EXISTS check.
   // buildConstraintName will truncate only when a schema prefix pushes the
@@ -254,7 +258,7 @@ export function generateTableSQL({
     schemaName: parsedSchemaName || undefined,
   });
   const quotedSchemaName = getSchemaName(schemaName);
-  const schemaFilter = parsedSchemaName || 'public';
+  const schemaFilter = schemaName ? parseSchemaName(schemaName) : 'public';
 
   const sql = `
             CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })} (
@@ -358,7 +362,7 @@ export function generateTimestampTriggerSQL(tableName: string, schemaName?: stri
   // validated by parseSqlIdentifier, so they cannot carry a quote.
   const triggerNameLiteral = `'${parsedTriggerName}'`;
   const tableNameLiteral = `'${parseSqlIdentifier(tableName, 'table name')}'`;
-  const schemaNameLiteral = schemaName ? `'${parseSqlIdentifier(schemaName, 'schema name')}'` : `'public'`;
+  const schemaNameLiteral = schemaName ? `'${parseSchemaName(schemaName)}'` : `'public'`;
 
   return `CREATE OR REPLACE FUNCTION ${functionName}()
 RETURNS TRIGGER AS $$
@@ -493,7 +497,7 @@ export class PgDB extends MastraBase {
     if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
       const constraintName = buildConstraintName({
         baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
-        schemaName: this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : undefined,
+        schemaName: this.schemaName ? schemaNamePrefix(this.schemaName) : undefined,
       }).toLowerCase();
       return snapshot.indexes.has(constraintName) && snapshot.replicaIdentityIndexes.has(constraintName);
     }
@@ -689,7 +693,7 @@ export class PgDB extends MastraBase {
       const columnSchema = schema?.[key];
 
       if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
-        return JSON.stringify(value);
+        return toPgJson(value);
       }
       return value;
     });
@@ -726,11 +730,11 @@ export class PgDB extends MastraBase {
     const columnSchema = schema?.[columnName];
 
     if (columnSchema?.type === 'jsonb') {
-      return JSON.stringify(value);
+      return toPgJson(value);
     }
 
     if (typeof value === 'object') {
-      return JSON.stringify(value);
+      return toPgJson(value);
     }
 
     return value;
@@ -866,6 +870,145 @@ export class PgDB extends MastraBase {
     } else {
       await client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
     }
+  }
+
+  private getChunkRowLimit(columnCount: number): number {
+    if (columnCount === 0) {
+      return 0;
+    }
+    return Math.max(1, Math.floor(POSTGRES_MAX_BIND_PARAMETERS / columnCount));
+  }
+
+  private getSpanConflictIdentifier(record: Record<string, any>): string | undefined {
+    const traceId = record.traceId as unknown;
+    const spanId = record.spanId as unknown;
+
+    if (traceId === undefined || spanId === undefined) {
+      return undefined;
+    }
+
+    return `${String(traceId)}|${String(spanId)}`;
+  }
+
+  private async normalizeForInsert(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<{
+    columns: string[];
+    values: QueryValues;
+    conflictKey: string | undefined;
+  }> {
+    this.addTimestampZColumns(record);
+    const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+    const columns = Object.keys(filteredRecord).map(column => parseSqlIdentifier(column, 'column name'));
+    const values = this.prepareValuesForInsert(filteredRecord, tableName);
+
+    return {
+      columns,
+      values,
+      conflictKey: tableName === TABLE_SPANS ? this.getSpanConflictIdentifier(filteredRecord) : undefined,
+    };
+  }
+
+  private buildMultiRowInsertStatement({
+    tableName,
+    columns,
+    rows,
+  }: {
+    tableName: TABLE_NAMES;
+    columns: string[];
+    rows: QueryValues[];
+  }): { query: string; values: QueryValues } {
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const columnList = columns.map(column => `"${column}"`).join(', ');
+
+    const bindParams: string[] = [];
+    const values: QueryValues = [];
+    let bindIndex = 1;
+
+    for (const rowValues of rows) {
+      const placeholders = rowValues.map(() => `$${bindIndex++}`);
+      bindParams.push(`(${placeholders.join(', ')})`);
+      values.push(...rowValues);
+    }
+
+    let query = `INSERT INTO ${fullTableName} (${columnList}) VALUES ${bindParams.join(', ')}`;
+
+    if (tableName === TABLE_SPANS) {
+      const updateColumns = columns.filter(column => column !== 'traceId' && column !== 'spanId');
+      if (updateColumns.length > 0) {
+        const updateClause = updateColumns.map(column => `"${column}" = EXCLUDED."${column}"`).join(', ');
+        query += ` ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`;
+      } else {
+        query += ` ON CONFLICT ("traceId", "spanId") DO NOTHING`;
+      }
+    }
+
+    return { query, values };
+  }
+
+  private async executeBatchInsert(
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
+    { tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] },
+  ): Promise<void> {
+    const preparedRecords: Awaited<ReturnType<PgDB['normalizeForInsert']>>[] = [];
+    for (const record of records) {
+      preparedRecords.push(await this.normalizeForInsert(tableName, record));
+    }
+
+    let pendingColumns: string[] | undefined;
+    let pendingConflictKeys = new Set<string>();
+    let pendingRows: QueryValues[] = [];
+    let pendingLimit = 0;
+
+    const flush = async () => {
+      if (!pendingColumns || pendingRows.length === 0) {
+        return;
+      }
+
+      const statement = this.buildMultiRowInsertStatement({
+        tableName,
+        columns: pendingColumns,
+        rows: pendingRows,
+      });
+      await client.none(statement.query, statement.values);
+
+      pendingColumns = undefined;
+      pendingRows = [];
+      pendingConflictKeys = new Set();
+      pendingLimit = 0;
+    };
+
+    for (const { columns, values, conflictKey } of preparedRecords) {
+      if (columns.length === 0) {
+        continue;
+      }
+
+      const columnsSignature = columns.join('\u0000');
+      const currentPendingColumns = pendingColumns;
+      const isSpans = tableName === TABLE_SPANS;
+      const conflictDuplicate = isSpans && conflictKey !== undefined && pendingConflictKeys.has(conflictKey);
+      const exceedsLimit = pendingRows.length >= pendingLimit;
+      const incompatibleColumns =
+        currentPendingColumns === undefined || columnsSignature !== currentPendingColumns.join('\u0000');
+
+      if (incompatibleColumns || conflictDuplicate || exceedsLimit) {
+        await flush();
+
+        pendingColumns = columns;
+        pendingLimit = this.getChunkRowLimit(columns.length);
+        pendingRows = [values];
+        pendingConflictKeys = new Set();
+      } else {
+        pendingRows.push(values);
+      }
+
+      if (isSpans && conflictKey !== undefined) {
+        pendingConflictKeys.add(conflictKey);
+      }
+    }
+
+    await flush();
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
@@ -1246,7 +1389,7 @@ export class PgDB extends MastraBase {
    * Used to skip deduplication when the constraint already exists (migration already complete).
    */
   private async spansPrimaryKeyExists(): Promise<boolean> {
-    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const parsedSchemaName = this.schemaName ? schemaNamePrefix(this.schemaName) : '';
     const constraintName = buildConstraintName({
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
@@ -1277,7 +1420,7 @@ export class PgDB extends MastraBase {
    */
   private async addSpansPrimaryKey(): Promise<void> {
     const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
-    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const parsedSchemaName = this.schemaName ? schemaNamePrefix(this.schemaName) : '';
     const constraintName = buildConstraintName({
       baseName: 'mastra_ai_spans_traceid_spanid_pk',
       schemaName: parsedSchemaName || undefined,
@@ -1544,9 +1687,7 @@ export class PgDB extends MastraBase {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
       await this.client.tx(async tx => {
-        for (const record of records) {
-          await this.executeInsert(tx, { tableName, record });
-        }
+        await this.executeBatchInsert(tx, { tableName, records });
       });
     } catch (error) {
       throw new MastraError(

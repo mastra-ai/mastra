@@ -95,7 +95,11 @@ export class MockMemory extends MastraMemory {
               ...(workingMemoryTemplate !== undefined ? { template: workingMemoryTemplate } : {}),
             } as WorkingMemory)
           : options?.workingMemory,
-        lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
+        lastMessages: !enableMessageHistory
+          ? false
+          : options?.messageHistory === undefined
+            ? (options?.lastMessages ?? 10)
+            : options?.lastMessages,
       },
     });
     this._hasOwnStorage = true;

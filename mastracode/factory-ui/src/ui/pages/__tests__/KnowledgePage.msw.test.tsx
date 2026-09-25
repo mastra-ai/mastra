@@ -530,9 +530,9 @@ describe('KnowledgePage', () => {
     // Scope selections get a filled active pill matching aria-current.
     const root = within(scopes).getByRole('button', { name: 'Acme Factory' });
     await waitFor(() => expect(root).toHaveAttribute('aria-current', 'page'));
-    expect(root).toHaveClass('bg-surface4');
+    expect(root).toHaveClass('bg-fill');
     expect(root).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: 'Payments' })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: 'Payments' })).not.toHaveClass('bg-fill');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('create')).toBeInTheDocument();
@@ -713,6 +713,187 @@ describe('KnowledgePage', () => {
     } finally {
       server.events.removeListener('request:match', observeRequest);
     }
+  });
+
+  it('offers a Connect-a-source path when no importers are registered', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({ importers: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    // A dead-end "No knowledge importers are registered." is exactly what we
+    // don't want — the empty state names the fix and links to it.
+    expect(await screen.findByText('No knowledge sources yet')).toBeInTheDocument();
+    const cta = screen.getByRole('link', { name: 'Connect a source' });
+    expect(cta).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/knowledge`);
+  });
+
+  it('labels platform-connect importers by provider name, never the machine id', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    // The picker shows the provider's display name; the machine id shape
+    // `connect:<provider>:<connectionId>` never reaches the DOM.
+    expect(await screen.findByText('Notion')).toBeInTheDocument();
+    expect(screen.queryByText('connect:notion:conn-abc123')).toBeNull();
+  });
+
+  it('triggers a manual import run and stays in its loading state while the run is live', async () => {
+    stubKnowledgeRoute();
+    const triggered: string[] = [];
+    // Stateful handler: before the trigger the importer is idle; afterwards its
+    // latest run reports as running, which is what must keep the button loading.
+    let liveRun = false;
+    const runningRun = {
+      id: 'kh_run_manual',
+      reference: 'run-manual',
+      importerId: 'connect:notion:conn-abc123',
+      binding: 'kh_binding',
+      source: 'notion:workspace',
+      importKind: 'static',
+      triggerKind: 'cron',
+      status: 'running',
+      queuedAt: '2026-09-21T09:52:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+              ...(liveRun ? { lastRun: runningRun } : {}),
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: liveRun ? [runningRun] : [] }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/run`,
+        ({ request }) => {
+          triggered.push(new URL(request.url).pathname);
+          liveRun = true;
+          return HttpResponse.json({ runs: [{ ...runningRun, status: 'queued' }] }, { status: 202 });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    const syncButton = await screen.findByRole('button', { name: 'Sync now' });
+    await user.click(syncButton);
+
+    await waitFor(() => expect(triggered).toHaveLength(1));
+    // The mutation settling is NOT the end of the sync: the refetched importer
+    // reports a live run, so the button stays disabled and loading until the
+    // run itself completes — no double-triggering a sync already in flight.
+    const loadingButton = await screen.findByRole('button', { name: 'Syncing…' });
+    expect(loadingButton).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
+  });
+
+  it('shows the Sync now button already loading when a run is in flight on arrival', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+              lastRun: {
+                id: 'kh_run_cron',
+                reference: 'run-cron',
+                importerId: 'connect:notion:conn-abc123',
+                binding: 'kh_binding',
+                source: 'notion:workspace',
+                importKind: 'static',
+                triggerKind: 'cron',
+                status: 'queued',
+                queuedAt: '2026-09-21T09:52:00.000Z',
+              },
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    // A cron- or connect-triggered run that's already live reads the same as a
+    // manual one: the button arrives loading instead of inviting a duplicate sync.
+    expect(await screen.findByRole('button', { name: 'Syncing…' })).toBeDisabled();
+  });
+
+  it('surfaces the server error when a manual sync cannot start', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/run`,
+        () => HttpResponse.json({ error: 'import_trigger_failed' }, { status: 503 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    await user.click(await screen.findByRole('button', { name: 'Sync now' }));
+
+    expect(await screen.findByText('import_trigger_failed')).toBeInTheDocument();
   });
 
   it('explains when relationship data reached a terminal server bound', async () => {

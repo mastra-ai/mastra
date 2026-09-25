@@ -13,6 +13,8 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import { handleModelError } from './model-error-strategy';
+import type { ModelErrorStrategy } from './model-error-strategy';
 
 /**
  * Individual detection category score
@@ -52,6 +54,9 @@ export interface PromptInjectionDetectionEvent {
 export interface PromptInjectionOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection agent */
   model: MastraModelConfig;
+
+  /** How internal model errors are handled. Defaults to 'warn'. */
+  errorStrategy?: ModelErrorStrategy;
 
   /**
    * Detection types to check for.
@@ -138,6 +143,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
   private onDetection?: (event: PromptInjectionDetectionEvent) => void | Promise<void>;
+  private errorStrategy: ModelErrorStrategy;
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -158,6 +164,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
     this.onDetection = options.onDetection;
+    this.errorStrategy = options.errorStrategy ?? 'warn';
 
     this.detectionAgent = new Agent({
       id: 'prompt-injection-detector',
@@ -203,7 +210,12 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           continue;
         }
 
-        const detectionResult = await this.detectPromptInjection(textContent, observabilityContext, requestContext);
+        const detectionResult = await this.detectPromptInjection(
+          textContent,
+          abort,
+          observabilityContext,
+          requestContext,
+        );
         results.push(detectionResult);
         const flagged = this.isInjectionFlagged(detectionResult);
         await this.emitDetection(textContent, detectionResult, flagged);
@@ -257,6 +269,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
    */
   private async detectPromptInjection(
     content: string,
+    abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
   ): Promise<PromptInjectionResult> {
@@ -329,7 +342,13 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
 
       return result;
     } catch (error) {
-      console.warn('[PromptInjectionDetector] Detection agent failed, allowing content:', error);
+      handleModelError({
+        error,
+        errorStrategy: this.errorStrategy,
+        abort,
+        warningMessage: '[PromptInjectionDetector] Detection agent failed, allowing content:',
+        abortMessage: 'Prompt injection detection failed because the internal model call failed',
+      });
       // Fail open - return empty result if detection agent fails (no injection detected)
       return {
         categories: null,

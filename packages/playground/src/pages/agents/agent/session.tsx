@@ -1,14 +1,15 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -53,19 +54,11 @@ function AgentSession() {
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
-      </div>
-    );
+    return <PermissionDenied variant="fill" resource="agents" />;
   }
 
   if (isAgentLoading) {
@@ -74,15 +67,15 @@ function AgentSession() {
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
   if (error && is404NotFoundError(error)) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   if (error) {
-    return <ErrorState title="Failed to load agent" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load agent" descriptionSlot={error.message} />;
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
@@ -110,7 +103,8 @@ function AgentSession() {
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
                     <ActivatedSkillsProvider>
-                      <MainContentLayout>
+                      <PageLayout variant="fit">
+                        <h1 className="sr-only">{agentId}</h1>
                         <SessionHeader />
                         <div className="relative grid h-full min-h-0">
                           <AgentChat
@@ -128,7 +122,7 @@ function AgentSession() {
                             hideModelSwitcher
                           />
                         </div>
-                      </MainContentLayout>
+                      </PageLayout>
                     </ActivatedSkillsProvider>
                   </ObservationalMemoryProvider>
                 </ThreadInputProvider>
@@ -144,10 +138,11 @@ function AgentSession() {
 export default AgentSession;
 
 const AgentSessionLoadingSkeleton = () => (
-  <MainContentLayout>
+  <PageLayout variant="fit">
+    <h1 className="sr-only">Agent session</h1>
     <SessionHeader />
     <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">
       <AgentChatLoadingSkeleton />
     </div>
-  </MainContentLayout>
+  </PageLayout>
 );

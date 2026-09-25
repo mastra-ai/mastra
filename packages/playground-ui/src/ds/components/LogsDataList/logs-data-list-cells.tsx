@@ -1,16 +1,19 @@
+import { Badge } from '../Badge';
+import type { BadgeVariant } from '../Badge';
 import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
-type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
-const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
-  debug: { label: 'DEBUG', color: '#71717a' },
-  info: { label: 'INFO', color: '#60a5fa' },
-  warn: { label: 'WARN', color: '#facc15' },
-  error: { label: 'ERROR', color: '#f87171' },
-  fatal: { label: 'FATAL', color: '#dc2626' },
+type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+const LEVEL_VARIANT: Record<LogLevel, BadgeVariant> = {
+  debug: 'neutral',
+  info: 'blue',
+  warn: 'yellow',
+  error: 'red',
+  fatal: 'red',
 };
 
 // ---------------------------------------------------------------------------
@@ -22,13 +25,9 @@ export interface LogsDataListLevelCellProps {
 }
 
 export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
-  const config = LEVEL_CONFIG[level];
-
   return (
     <DataListCell>
-      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
-        {config.label}
-      </span>
+      <Badge variant={LEVEL_VARIANT[level]}>{level}</Badge>
     </DataListCell>
   );
 }
@@ -38,7 +37,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 // ---------------------------------------------------------------------------
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
+  const iconClass = cn('size-3.5 shrink-0 text-placeholder', className);
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
@@ -65,7 +64,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="min-w-0 truncate text-body-sm">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -79,7 +78,9 @@ export interface LogsDataListMessageCellProps {
 }
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
-  return <DataListCell className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">{message}</DataListCell>;
+  return (
+    <DataListCell className="min-w-0 truncate font-mono text-body-sm text-muted-foreground">{message}</DataListCell>
+  );
 }
 
 // ---------------------------------------------------------------------------

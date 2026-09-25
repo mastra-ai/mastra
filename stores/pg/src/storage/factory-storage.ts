@@ -15,6 +15,7 @@ import type {
 import pg from 'pg';
 import type { Pool, PoolClient } from 'pg';
 
+import { toPgJson } from './db/sanitize-json';
 import { PostgresStore } from './index';
 
 export type PgFactoryStorageConfig =
@@ -131,7 +132,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
         return Boolean(value);
       case 'json':
         // Explicit stringify: node-pg would otherwise turn JS arrays into pg arrays.
-        return JSON.stringify(value);
+        return toPgJson(value);
       case 'bigint':
       case 'integer':
         return Number(value);
@@ -385,8 +386,13 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     const assignments = columns.map((column, i) => `"${column}" = $${i + 1}`).join(', ');
     const filter = this.#buildWhere(schema, where, columns.length + 1);
     const args = [...columns.map(column => this.#serialize(this.#column(schema, column), set[column])), ...filter.args];
-    const result = await queryable.query(`UPDATE "${schema.name}" SET ${assignments} WHERE ${filter.sql}`, args);
-    return result.rowCount ?? 0;
+    try {
+      const result = await queryable.query(`UPDATE "${schema.name}" SET ${assignments} WHERE ${filter.sql}`, args);
+      return result.rowCount ?? 0;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new UniqueViolationError(collection, { cause: error });
+      throw error;
+    }
   }
 
   async deleteMany(collection: string, where: CollectionWhere): Promise<number> {

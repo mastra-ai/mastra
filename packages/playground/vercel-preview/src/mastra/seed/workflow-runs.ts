@@ -1,6 +1,8 @@
 import { previewWorkflows } from '../workflows';
 import { countdownInputSchema } from '../workflows/countdown';
 import { documentBatchInputSchema } from '../workflows/document-batch';
+import { seedEdgeCaseWorkflowRuns } from './edge-case-workflow-runs';
+import { seedOrderWorkflowRuns } from './order-workflow-runs';
 
 let seedPromise: Promise<void> | undefined;
 
@@ -10,6 +12,10 @@ export function seedPreviewWorkflowRuns(): Promise<void> {
 }
 
 async function seedWorkflowRuns(): Promise<void> {
+  await Promise.all([seedBasicWorkflowRuns(), seedOrderWorkflowRuns(), seedEdgeCaseWorkflowRuns()]);
+}
+
+async function seedBasicWorkflowRuns(): Promise<void> {
   const { requestReview, documentBatch, countdown } = previewWorkflows;
   const automaticallyApprovedRun = await requestReview.createRun({ runId: 'preview-request-automatic' });
   await automaticallyApprovedRun.start({ inputData: { title: 'Office supplies', amount: 180 } });

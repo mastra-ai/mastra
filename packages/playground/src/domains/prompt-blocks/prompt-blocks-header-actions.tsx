@@ -1,18 +1,15 @@
-import { CreateButton } from '@mastra/playground-ui/components/Button';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
 
-/** Portals the "New prompt" CTA into the route header from the prompts listing page. */
+/** Renders the "New prompt" CTA for the page header of the prompts listing page. */
 export function PromptBlocksHeaderCreateAction() {
   const { isCmsAvailable } = useIsCmsAvailable();
-  const { Link, paths } = useLinkComponent();
+  const { paths } = useLinkComponent();
   if (!isCmsAvailable) return null;
   return (
-    <RouteHeaderActions owner="prompt-block-list">
-      <CreateButton as={Link} to={paths.cmsPromptBlockCreateLink()} tooltip="Create a prompt" variant="ghost" size="sm">
-        New prompt
-      </CreateButton>
-    </RouteHeaderActions>
+    <HeaderCreateAction href={paths.cmsPromptBlockCreateLink()} tooltip="Create a prompt">
+      New prompt
+    </HeaderCreateAction>
   );
 }

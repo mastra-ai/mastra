@@ -1,4 +1,4 @@
-import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -7,6 +7,7 @@ import {
   fetchKnowledgeImportRun,
   fetchKnowledgeImporters,
   fetchKnowledgeImportRuns,
+  triggerKnowledgeImportRun,
 } from '../ui/domains/factory/services/knowledge-imports';
 
 export function useKnowledgeImporters(factoryProjectId: string | undefined, threadId?: string) {
@@ -17,6 +18,21 @@ export function useKnowledgeImporters(factoryProjectId: string | undefined, thre
       ? ({ signal }) => fetchKnowledgeImporters(baseUrl, factoryProjectId, threadId, signal)
       : skipToken,
     refetchInterval: 5_000,
+  });
+}
+
+export function useTriggerKnowledgeImport(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (importerId: string) => {
+      if (!factoryProjectId) throw new Error('A Factory project is required.');
+      return triggerKnowledgeImportRun(baseUrl, factoryProjectId, importerId);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.knowledgeImporters(factoryProjectId, threadId) });
+      void queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-import-runs'] });
+    },
   });
 }
 

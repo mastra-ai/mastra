@@ -76,6 +76,17 @@ export function fetchKnowledgeImporters(
   return requestJson<KnowledgeImportersPayload>(`${importsBase(baseUrl, factoryProjectId)}${suffix}`, { signal });
 }
 
+export function triggerKnowledgeImportRun(
+  baseUrl: string,
+  factoryProjectId: string,
+  importerId: string,
+): Promise<KnowledgeImportRunsPayload> {
+  return requestJson<KnowledgeImportRunsPayload>(
+    `${importsBase(baseUrl, factoryProjectId)}/${encodeURIComponent(importerId)}/run`,
+    { method: 'POST' },
+  );
+}
+
 export function fetchKnowledgeImportRuns(
   baseUrl: string,
   factoryProjectId: string,

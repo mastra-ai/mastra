@@ -11,6 +11,7 @@ import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/sect
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
@@ -20,11 +21,12 @@ import {
   WorkflowRunProvider,
   WorkflowSelectedStepProvider,
   WorkflowStepDetailProvider,
+  useWorkflowStepDetail,
 } from '@/domains/workflows';
+import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
@@ -69,7 +71,7 @@ export const WorkflowBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+      <ToolCallMono copyText={suspendPayload} className="text-muted-foreground">
         {suspendPayload}
       </ToolCallMono>
     ) : (
@@ -134,24 +136,35 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   return (
     <>
       <div className="flex items-center gap-2 pb-2">
-        <Button icon={<WorkflowIcon />} as={Link} href={`/workflows/${workflowId}/graph`}>
+        <Button icon={<WorkflowIcon />} render={<Link href={`/workflows/${workflowId}/graph`} />}>
           Go to workflow
         </Button>
         {runId && (
-          <Button icon={<Eye />} as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+          <Button icon={<Eye />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
             See run
           </Button>
         )}
       </div>
 
-      <div className="h-[60vh] w-full overflow-hidden rounded-md">
-        <WorkflowSelectedStepProvider>
-          <WorkflowStepDetailProvider>
+      <WorkflowSelectedStepProvider>
+        <WorkflowStepDetailProvider>
+          <div className="h-[60vh] w-full overflow-hidden rounded-md">
             <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
-          </WorkflowStepDetailProvider>
-        </WorkflowSelectedStepProvider>
-      </div>
+          </div>
+          <WorkflowBadgeStepDetail />
+        </WorkflowStepDetailProvider>
+      </WorkflowSelectedStepProvider>
     </>
+  );
+};
+
+const WorkflowBadgeStepDetail = () => {
+  const { stepDetail } = useWorkflowStepDetail();
+  if (!stepDetail) return null;
+  return (
+    <div className="mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border border-border bg-background">
+      <WorkflowStepDetailContent />
+    </div>
   );
 };
 

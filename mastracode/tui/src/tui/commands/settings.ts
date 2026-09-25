@@ -8,10 +8,10 @@ import type { TUI } from '@earendil-works/pi-tui';
 import type { StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
-import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
+import { applyQuietModeToRenderedComponents } from '../quiet-mode.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -176,16 +176,7 @@ async function ensureGitcrawlReady(ctx: SlashCommandContext): Promise<boolean> {
 }
 
 function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
-  const tools = ctx.state.allToolComponents.filter(
-    (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
-  );
-
-  tools.forEach(tool => {
-    tool.setCompactToolModeColor?.(getCurrentModeColor(ctx));
-    tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
-    tool.setQuietPreviewLineLimit?.(previewLineLimit);
-  });
-
+  applyQuietModeToRenderedComponents(ctx.state, enabled, previewLineLimit, getCurrentModeColor(ctx));
   ctx.state.ui.requestRender();
 }
 
@@ -205,6 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
+    backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
     // matching the runtime resolver's fallback. The saved preference is kept so
     // the choice comes back when the key does.
@@ -285,6 +277,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental cross-agent communication: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
+      },
+      onBackgroundToolsChange: enabled => {
+        const current = loadSettings();
+        current.backgroundTools = { ...current.backgroundTools, enabled };
+        saveSettings(current);
+        ctx.showInfo(`Experimental background tools: ${enabled ? 'on' : 'off'} (restart required)`);
       },
       onWebSearchProviderChange: provider => {
         const current = loadSettings();

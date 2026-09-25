@@ -36,7 +36,6 @@ describe('WorkflowInputData', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: 'Add Input item' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Expand object' }));
       fireEvent.change(await screen.findByRole('textbox', { name: /email/i }), {
         target: { value: 'ada@example.com' },
       });
@@ -48,84 +47,112 @@ describe('WorkflowInputData', () => {
     });
   });
 
-  describe('when the form view renders a string field', () => {
-    it('uses a multiline text input', async () => {
-      render(
-        <WorkflowInputData
-          schema={z.object({ prompt: z.string() })}
-          defaultValues={{ prompt: 'First line\nSecond line' }}
-          isSubmitLoading={false}
-          submitButtonLabel="Run"
-          onSubmit={() => {}}
-        />,
-      );
-
-      const promptInput = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: /prompt/i });
-
-      expect(promptInput.tagName).toBe('TEXTAREA');
-    });
-
-    it('starts at one line', async () => {
+  describe('when a string input contains multiple lines', () => {
+    it('preserves the line breaks in the submitted workflow input', async () => {
+      const onSubmit = vi.fn();
       render(
         <WorkflowInputData
           schema={z.object({ prompt: z.string() })}
           isSubmitLoading={false}
           submitButtonLabel="Run"
-          onSubmit={() => {}}
+          onSubmit={onSubmit}
         />,
       );
 
-      const promptInput = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: /prompt/i });
+      fireEvent.change(await screen.findByRole('textbox', { name: /prompt/i }), {
+        target: { value: 'First line\nSecond line' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
-      expect(promptInput.rows).toBe(1);
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ prompt: 'First line\nSecond line' }));
     });
   });
 
-  it('renders processor default values in the simple read-only input', async () => {
-    render(
-      <WorkflowInputData
-        schema={processorSchema}
-        defaultValues={{
-          messages: [
-            {
-              id: 'message-1',
-              role: 'assistant',
-              createdAt: '2026-06-08T00:00:00.000Z',
-              content: {
-                format: 2,
-                parts: [{ type: 'text', text: 'Stored processor run input' }],
-              },
+  describe('when a stored processor input is edited', () => {
+    it('submits the new message while preserving its identity and phase', () => {
+      const onSubmit = vi.fn();
+      const input = {
+        messages: [
+          {
+            id: 'message-1',
+            role: 'assistant',
+            createdAt: '2026-06-08T00:00:00.000Z',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Stored processor run input' }],
             },
-          ],
-          phase: 'outputResult',
-        }}
-        isSubmitLoading={false}
-        submitButtonLabel="Run"
-        onSubmit={() => {}}
-        withoutSubmit
-        isReadOnly
-        isProcessorWorkflow
-      />,
-    );
+          },
+        ],
+        phase: 'outputResult',
+      };
+      render(
+        <WorkflowInputData
+          schema={processorSchema}
+          defaultValues={input}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+          isProcessorWorkflow
+        />,
+      );
 
-    const messageInput = await screen.findByDisplayValue('Stored processor run input');
-    expect(messageInput).toHaveProperty('disabled', true);
-    await waitFor(() => expect(screen.getByText('outputResult')).not.toBeNull());
+      fireEvent.change(screen.getByRole('textbox', { name: 'Test Message' }), {
+        target: { value: 'Edited processor input' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      expect(onSubmit).toHaveBeenCalledWith({
+        ...input,
+        messages: [
+          {
+            ...input.messages[0],
+            content: { format: 2, parts: [{ type: 'text', text: 'Edited processor input' }] },
+          },
+        ],
+      });
+    });
   });
 
-  it('keeps processor fallback values for new simple inputs', async () => {
-    render(
-      <WorkflowInputData
-        schema={processorSchema}
-        isSubmitLoading={false}
-        submitButtonLabel="Run"
-        onSubmit={() => {}}
-        isProcessorWorkflow
-      />,
-    );
+  describe('when a stored processor input is edited', () => {
+    it('submits the new message while preserving its identity and phase', () => {
+      const onSubmit = vi.fn();
+      const input = {
+        messages: [
+          {
+            id: 'message-1',
+            role: 'assistant',
+            createdAt: '2026-06-08T00:00:00.000Z',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Stored processor run input' }],
+            },
+          },
+        ],
+        phase: 'outputResult',
+      };
+      render(
+        <WorkflowInputData
+          schema={processorSchema}
+          defaultValues={input}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+          isProcessorWorkflow
+        />,
+      );
 
-    const messageInput = await screen.findByDisplayValue('Hello, this is a test message.');
-    expect(messageInput).toHaveProperty('disabled', false);
-    await waitFor(() => expect(screen.getByText('input')).not.toBeNull());
+      fireEvent.change(screen.getByRole('textbox', { name: 'Test Message' }), {
+        target: { value: 'Edited processor input' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      expect(onSubmit).toHaveBeenCalledWith({
+        ...input,
+        messages: [
+          {
+            ...input.messages[0],
+            content: { format: 2, parts: [{ type: 'text', text: 'Edited processor input' }] },
+          },
+        ],
+      });
+    });
   });
 });

@@ -483,7 +483,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Using Vertex AI authentication with OAuth token');
       } else {
         // Live API endpoint - this is specifically for the Live API
-        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
         headers = {
           headers: {
             'x-goog-api-key': this.options.apiKey || '',
@@ -948,6 +948,25 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Updating speaker to:', config.speaker);
       }
 
+      // Update thinking configuration if provided. Mirrors `sendInitialConfig`: public config is
+      // camelCase, the wire format is snake_case. Merge into any existing generation_config so a
+      // speaker + thinkingConfig update in the same call don't clobber each other. Only emit when a
+      // sub-field is set, so an empty `thinkingConfig: {}` is a no-op rather than a bare object.
+      const tc = config.thinkingConfig;
+      if (tc && (tc.includeThoughts !== undefined || tc.thinkingBudget !== undefined)) {
+        hasUpdates = true;
+        updateMessage.session.generation_config = {
+          ...updateMessage.session.generation_config,
+          thinking_config: {
+            ...(tc.includeThoughts !== undefined && { include_thoughts: tc.includeThoughts }),
+            ...(tc.thinkingBudget !== undefined && { thinking_budget: tc.thinkingBudget }),
+          },
+        };
+
+        this.options.thinkingConfig = tc;
+        this.log('Updating thinkingConfig');
+      }
+
       // Update instructions if provided
       if (config.instructions !== undefined) {
         hasUpdates = true;
@@ -1240,9 +1259,22 @@ export class GeminiLiveVoice extends MastraVoice<
     });
 
     this.ws.on('close', (code: number, reason: Buffer) => {
-      this.log('WebSocket connection closed', { code, reason: reason.toString() });
+      const reasonText = reason.toString();
+      this.log('WebSocket connection closed', { code, reason: reasonText });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
+      this.emit('session', { state: 'disconnected', code, reason: reasonText });
+
+      // A clean server-initiated close (e.g. 1007 invalid-argument for a bad model id or a
+      // malformed setup frame) arrives as `close`, not as a socket `error`. Surface it as an
+      // `error` so a pending connect() (waitForSessionCreated) rejects immediately with the
+      // real close code and reason instead of waiting out the 30s setup timeout.
+      if (code !== 1000) {
+        this.emit('error', {
+          message: `WebSocket closed during/after setup (code ${code})${reasonText ? `: ${reasonText}` : ''}`,
+          code: 'websocket_closed',
+          details: { code, reason: reasonText },
+        });
+      }
     });
 
     this.ws.on('error', (error: Error) => {
@@ -1896,6 +1928,10 @@ export class GeminiLiveVoice extends MastraVoice<
             };
           };
         };
+        thinking_config?: {
+          include_thoughts?: boolean;
+          thinking_budget?: number;
+        };
       };
       system_instruction?: {
         parts: Array<{
@@ -1965,6 +2001,19 @@ export class GeminiLiveVoice extends MastraVoice<
             voice_name: this.options.speaker,
           },
         },
+      };
+    }
+
+    // Forward caller-supplied thinking configuration. Public config is camelCase; the wire
+    // format is snake_case (`thinking_config.include_thoughts` / `thinking_budget`), matching
+    // the translation done for `speech_config` above. Only emit `thinking_config` when at least
+    // one sub-field is set, so an empty `thinkingConfig: {}` is a no-op and the setup frame stays
+    // byte-for-byte unchanged — a bare `thinking_config: {}` may be rejected by non-thinking models.
+    const setupThinking = this.options.thinkingConfig;
+    if (setupThinking && (setupThinking.includeThoughts !== undefined || setupThinking.thinkingBudget !== undefined)) {
+      generationConfig.thinking_config = {
+        ...(setupThinking.includeThoughts !== undefined && { include_thoughts: setupThinking.includeThoughts }),
+        ...(setupThinking.thinkingBudget !== undefined && { thinking_budget: setupThinking.thinkingBudget }),
       };
     }
 

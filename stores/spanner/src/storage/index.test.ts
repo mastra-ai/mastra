@@ -5,6 +5,7 @@ import {
   createSampleTask,
   createSampleThread,
   createSampleWorkflowSnapshot,
+  createSpan,
   createTestSuite,
   createConfigValidationTests,
   createDomainDirectTests,
@@ -123,6 +124,71 @@ if (ENABLE_TESTS) {
   };
 
   createTestSuite(new SpannerStore(sharedConfig));
+
+  describe('retention', () => {
+    it('prunes expired observability spans and metrics', async () => {
+      const retentionStore = new SpannerStore({
+        ...sharedConfig,
+        id: 'spanner-retention-test',
+        retention: {
+          observability: {
+            spans: { maxAge: '30d', batchSize: 1 },
+            metrics: { maxAge: '30d', batchSize: 1 },
+          },
+        },
+      });
+
+      try {
+        await retentionStore.init();
+        const observability = (await retentionStore.getStore('observability')) as ObservabilitySpanner | undefined;
+        expect(observability).toBeDefined();
+        await observability!.dangerouslyClearAll();
+        await observability!.createSpan({
+          span: createSpan({
+            traceId: 'expired',
+            spanId: 'expired',
+            startedAt: new Date(Date.now() - 31 * 86_400_000),
+          }),
+        });
+        await observability!.createSpan({
+          span: createSpan({
+            traceId: 'retained',
+            spanId: 'retained',
+            startedAt: new Date(Date.now() - 29 * 86_400_000),
+          }),
+        });
+        await observability!.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'expired',
+              name: 'expired',
+              value: 1,
+              timestamp: new Date(Date.now() - 31 * 86_400_000),
+              labels: {},
+            },
+            {
+              metricId: 'retained',
+              name: 'retained',
+              value: 1,
+              timestamp: new Date(Date.now() - 29 * 86_400_000),
+              labels: {},
+            },
+          ],
+        });
+
+        await expect(retentionStore.prune()).resolves.toEqual([
+          { domain: 'observability', table: 'mastra_ai_spans', deleted: 1, done: true },
+          { domain: 'observability', table: 'mastra_ai_metrics', deleted: 1, done: true },
+        ]);
+        await expect(observability!.getTrace({ traceId: 'expired' })).resolves.toBeNull();
+        await expect(observability!.getTrace({ traceId: 'retained' })).resolves.not.toBeNull();
+        const metrics = await observability!.listMetrics({ filters: {} });
+        expect(metrics.metrics.map(metric => metric.name)).toEqual(['retained']);
+      } finally {
+        await retentionStore.close();
+      }
+    });
+  });
 
   // Domain-level direct usage with a pre-configured Database handle.
   createDomainDirectTests({

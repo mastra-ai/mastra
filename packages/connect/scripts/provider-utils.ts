@@ -20,6 +20,8 @@ export interface ProviderManifest {
   providerId: string;
   localId: string;
   templateSha: string;
+  /** Absent on older manifests, whose source is NangoHQ/integration-templates. */
+  templateRepo?: string;
   generatedAt: string;
   toolCount: number;
   skippedActions: { action: string; reason: string }[];

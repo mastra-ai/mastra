@@ -3,7 +3,7 @@ import type {
   MessageStatusRenderers,
   TripwireRendererProps,
   WarningRendererProps,
-} from '@mastra/react';
+} from '@mastra/react/ui';
 
 import { TripwireNotice } from '../tripwire-notice';
 import { Notice } from '@/ds/components/Notice';

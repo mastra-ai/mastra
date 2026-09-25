@@ -75,7 +75,9 @@ async function resolveSourceSession(
 
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
   const threadId = session.thread.requireId();
-  await session.thread.rename({ title: request.threadTitle });
+  // Derived from the work item, not a user rename, so leave the title
+  // unpinned and let auto-naming keep refining it.
+  await session.thread.rename({ title: request.threadTitle, pin: false });
   await session.thread.setSetting({ key: 'factorySessionId', value: request.sessionId });
   return threadId;
 }
@@ -84,14 +86,22 @@ export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
-  readonly #sourceControl?: SourceControlStorageHandle;
+  readonly #sourceControl?:
+    | SourceControlStorageHandle
+    | ((
+        request: FactoryStartRequest,
+      ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   readonly #memorySettings?: MemorySettingsStorage;
 
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
-    sourceControl?: SourceControlStorageHandle,
+    sourceControl?:
+      | SourceControlStorageHandle
+      | ((
+          request: FactoryStartRequest,
+        ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     memorySettings?: MemorySettingsStorage,
   ) {
     this.#controller = controller;
@@ -103,8 +113,10 @@ export class FactoryStartCoordinator {
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
     const storage = this.#storage;
-    if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
-    const sourceSession = await resolveSourceSession(this.#sourceControl, request);
+    const sourceControl =
+      typeof this.#sourceControl === 'function' ? await this.#sourceControl(request) : this.#sourceControl;
+    if (!sourceControl) throw new Error('Factory source control storage is unavailable');
+    const sourceSession = await resolveSourceSession(sourceControl, request);
     const requestContext = request.requestContext ?? new RequestContext();
     // Factory runs resolve model credentials org > user: the org's shared keys
     // win, with the acting user's personal credentials as a fallback — a board

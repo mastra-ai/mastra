@@ -562,6 +562,47 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(body)).not.toContain(content.id);
   });
 
+  // The resource scope's stored name is the address tail (the raw project
+  // UUID) — the routes must substitute the Factory project's display name.
+  it('shows the Factory project name for the resource scope instead of its UUID', async () => {
+    const h = await createHarness();
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(scopeBody.scope.name).toBe('Graph project');
+    expect(JSON.stringify(scopeBody)).not.toContain(h.projectId);
+
+    const graphResponse = await rawGraph(h);
+    expect(graphResponse.status).toBe(200);
+    expect(graphResponse.body.scope.name).toBe('Graph project');
+    expect(graphResponse.body.nodes.some(item => item.name === h.projectId)).toBe(false);
+
+    const searchResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/search?q=graph pro`);
+    const searchBody = (await searchResponse.json()) as KnowledgeSearchPayload;
+    expect(searchBody.results.some(result => result.type === 'scope' && result.name === 'Graph project')).toBe(true);
+  });
+
+  // Regression: hosts may alias the profile root to the org scope (the
+  // Shipyard project view is org-rooted). The first substitution keyed off
+  // resourceScopeId — which is the ROOT alias — so it renamed the org scope
+  // to the project name while the actual project scope kept its UUID.
+  it('labels org and project scopes in an org-rooted profile', async () => {
+    const h = await createHarness({
+      accessProfile: async ({ builtInScopes }) => ({
+        id: 'org-rooted',
+        rootScopeAddress: builtInScopes.org.address,
+        baselineScopes: [builtInScopes.org, builtInScopes.resource],
+        vouchedScopeAddresses: [builtInScopes.org.address, builtInScopes.resource.address],
+      }),
+    });
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(scopeBody.scope.name).toBe('Organization');
+    expect(scopeBody.children.map(child => child.name)).toContain('Graph project');
+    expect(JSON.stringify(scopeBody)).not.toContain(h.projectId);
+  });
+
   it('renders a selected structural scope as the root of its bounded member lens', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
@@ -586,6 +627,26 @@ describe('KnowledgeRoutes', () => {
         expect.objectContaining({ type: 'contains', source: root?.id, target: member?.id }),
       ]),
     );
+  });
+
+  // Regression: the internal pagination loop minted its continuation cursor
+  // with an isScope filter the structural-lens query doesn't use, so any
+  // structural scope with >100 members threw a cursor mismatch (500 banner).
+  it('paginates a structural lens with more than 100 members without a cursor mismatch', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    for (let index = 0; index < 105; index += 1) {
+      await h.knowledge.createNode({
+        name: `Imported page ${String(index).padStart(3, '0')}`,
+        scopeIds: [projectScopeId],
+      });
+    }
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    const response = await rawGraph(h, `?scopeId=${scopeBody.scope.id}`);
+    expect(response.status).toBe(200);
+    expect(response.body.nodes.length).toBeGreaterThan(100);
   });
 
   // 1
@@ -646,7 +707,8 @@ describe('KnowledgeRoutes', () => {
     expect(status).toBe(200);
     expect(body.view).toBe('thread');
     expect(body.nodes.map(node => node.id)).toEqual([threadEntity.id, orgEntity.id]);
-    expect(body.nodes.find(node => node.id === orgEntity.id)?.boundary?.scope.name).toBe('org-1');
+    // The org identity scope renders its readable label, not the raw org id.
+    expect(body.nodes.find(node => node.id === orgEntity.id)?.boundary?.scope.name).toBe('Organization');
     expect(body.edges).toEqual([
       expect.objectContaining({ source: threadEntity.id, target: orgEntity.id, type: 'wikilink', boundary: true }),
     ]);
@@ -715,6 +777,168 @@ describe('KnowledgeRoutes', () => {
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]?.source).toBe(solo.id);
+  });
+
+  // Importer record links (`metadata.links`) — address- and name-resolved
+  // render-time edges alongside wikilinks.
+  it('derives an edge from a record metadata.links address to a window node carrying that metadata.address', async () => {
+    const h = await createHarness();
+    const page = await h.knowledge.createNode({
+      name: 'Imported Page',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:aaa' },
+    });
+    const parent = await h.knowledge.createNode({
+      name: 'Parent Page',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:bbb' },
+    });
+    await record(h.knowledge, page, 'Imported body text.', h.projectScope, 'thread-a', {
+      links: [{ address: 'notion:page:bbb', rel: 'child-of' }],
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: page.id, target: parent.id, type: 'wikilink' });
+  });
+
+  it('resolves a metadata.links address against a node addressAlias', async () => {
+    const h = await createHarness();
+    const doc = await h.knowledge.createNode({
+      name: 'Linked Doc',
+      kind: 'connect:linear:document',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'linear:document:uuid-1', addressAliases: ['linear:document:slug:abc12345'] },
+    });
+    const source = await h.knowledge.createNode({
+      name: 'Source Doc',
+      kind: 'connect:linear:document',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'linear:document:uuid-2' },
+    });
+    await record(h.knowledge, source, 'References another doc.', h.projectScope, 'thread-a', {
+      links: [{ address: 'linear:document:slug:abc12345', rel: 'references' }],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: source.id, target: doc.id });
+  });
+
+  it('resolves a name-only metadata.links entry via the name resolver', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Linking Page', h.projectScope);
+    const target = await node(h.knowledge, 'Titled Target', h.projectScope);
+    await record(h.knowledge, source, 'Confluence-style body.', h.projectScope, 'thread-a', {
+      links: [{ name: 'titled target', rel: 'references' }],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: source.id, target: target.id });
+  });
+
+  it('silently skips a metadata.links address that resolves to no window node', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Dangling Source', h.projectScope);
+    await record(h.knowledge, source, 'Body.', h.projectScope, 'thread-a', {
+      links: [{ address: 'notion:page:nonexistent', rel: 'references' }],
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.edges).toEqual([]);
+    expect(body.page.truncated).toBe(false);
+  });
+
+  it('ignores malformed metadata.links values without error', async () => {
+    const h = await createHarness();
+    const a = await node(h.knowledge, 'Malformed A', h.projectScope);
+    const b = await node(h.knowledge, 'Malformed B', h.projectScope);
+    const c = await node(h.knowledge, 'Malformed C', h.projectScope);
+    await record(h.knowledge, a, 'Links is a string.', h.projectScope, 'thread-a', { links: 'not-an-array' });
+    await record(h.knowledge, b, 'Links is an object.', h.projectScope, 'thread-a', { links: { address: 'x' } });
+    await record(h.knowledge, c, 'Entries are junk.', h.projectScope, 'thread-a', {
+      links: [null, 42, 'str', {}, { rel: 'references' }, { address: 7 }, { name: [] }],
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.edges).toEqual([]);
+  });
+
+  it('skips a metadata.links self-link', async () => {
+    const h = await createHarness();
+    const selfish = await h.knowledge.createNode({
+      name: 'Self Linker',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:self' },
+    });
+    await record(h.knowledge, selfish, 'Points at itself.', h.projectScope, 'thread-a', {
+      links: [{ address: 'notion:page:self', rel: 'references' }],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toEqual([]);
+  });
+
+  it('renders metadata.links and wikilinks from the same record, deduped', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Combo Source', h.projectScope);
+    const wikiTarget = await node(h.knowledge, 'Wiki Target', h.projectScope);
+    const linkTarget = await h.knowledge.createNode({
+      name: 'Link Target',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:link-target' },
+    });
+    await record(h.knowledge, source, 'Mentions [[Wiki Target]] and links elsewhere.', h.projectScope, 'thread-a', {
+      links: [
+        { address: 'notion:page:link-target', rel: 'references' },
+        // Duplicate of the wikilink target by name — must dedupe to one edge.
+        { name: 'Wiki Target', rel: 'references' },
+      ],
+    });
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(2);
+    expect(body.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: source.id, target: wikiTarget.id }),
+        expect.objectContaining({ source: source.id, target: linkTarget.id }),
+      ]),
+    );
+  });
+
+  it('derives pin-path edges from a pinned record with metadata.links', async () => {
+    const h = await createHarness();
+    const relA = await h.knowledge.createNode({
+      name: 'Pinned Rel A',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:rel-a' },
+    });
+    const relB = await h.knowledge.createNode({
+      name: 'Pinned Rel B',
+      kind: 'connect:notion:page',
+      scopeIds: [h.projectScope.at(-1)!],
+      metadata: { address: 'notion:page:rel-b' },
+    });
+    const pinnedNode = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+    await record(h.knowledge, pinnedNode, 'Pinned relationship record.', h.projectScope, 't-any', {
+      links: [
+        { address: 'notion:page:rel-a', rel: 'references' },
+        { address: 'notion:page:rel-b', rel: 'references' },
+      ],
+    });
+
+    const { body } = await graph(h);
+    const pinnedEdge = body.edges.find(edge => edge.pinned);
+    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, type: 'wikilink', pinned: true });
   });
 
   // 5
@@ -1439,6 +1663,56 @@ describe('KnowledgeRoutes', () => {
     await expect(threadDetail.json()).resolves.toMatchObject({ run: { source: 'calendar:thread' } });
   });
 
+  it('lists an importer with only dynamic bindings before its first run', async () => {
+    let resolveCount = 0;
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              // Platform importers declare no static bindings — destinations
+              // resolve per Factory project at fire time.
+              resolveBindings: async () => {
+                resolveCount += 1;
+                if (resolveCount > 1) throw new Error('platform unavailable');
+                return [
+                  // Platform importers land in per-source sub-scopes under the
+                  // project — the view filter must accept those.
+                  { source: 'notion:conn-1', scope: `resource:${h.projectId}:notion:conn-1` },
+                  { source: 'notion:conn-1', scope: 'resource:00000000-0000-4000-8000-000000000099:notion:conn-1' },
+                ];
+              },
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    // No runs yet: the importer is listed via its resolved binding, filtered
+    // to this project's scope only.
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.importers).toHaveLength(1);
+    expect(body.importers[0]).toMatchObject({
+      id: 'connect:notion:conn-1',
+      triggers: ['programmatic', 'cron'],
+      bindings: [{ source: 'notion:conn-1' }],
+    });
+    expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
+
+    // Resolution failure degrades to the static (empty) set instead of 500ing.
+    const degraded = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(degraded.status).toBe(200);
+    await expect(degraded.json()).resolves.toEqual({ importers: [] });
+  });
+
   it('applies trigger filters before run pagination', async () => {
     const runtime = new Knowledge({
       id: 'mastra',
@@ -1482,6 +1756,112 @@ describe('KnowledgeRoutes', () => {
     const body = await response.json();
     expect(body).toMatchObject({ runs: [{ id: expect.stringMatching(/^kh_/) }] });
     expect(JSON.stringify(body)).not.toContain(expected.id);
+  });
+
+  it('manually triggers an import run for the bindings visible to the project view', async () => {
+    const handled: string[] = [];
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'notion:conn-1', scope: `resource:${h.projectId}:notion:conn-1` },
+                { source: 'notion:conn-1', scope: 'resource:00000000-0000-4000-8000-000000000099:notion:conn-1' },
+              ],
+            },
+          },
+          handler: async () => {
+            handled.push('ran');
+          },
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:notion:conn-1/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body.runs).toHaveLength(1);
+    expect(body.runs[0]).toMatchObject({ id: expect.stringMatching(/^kh_/), source: 'notion:conn-1' });
+    // Only the binding belonging to this project view is enqueued.
+    expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
+
+    await vi.waitFor(() => expect(handled).toHaveLength(1));
+  });
+
+  it('reconciles resolver importers before answering a manual trigger for a fresh connection', async () => {
+    // Simulates the connect flow: the resolver knows about the new connection
+    // but the runner has not reconciled it into the registry yet.
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: async () => [
+        {
+          id: 'connect:linear:conn-9',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'linear:conn-9', scope: `resource:${h.projectId}:linear:conn-9` },
+              ],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:linear:conn-9/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      runs: [{ id: expect.stringMatching(/^kh_/), source: 'linear:conn-9' }],
+    });
+  });
+
+  it('rejects manual triggers for unknown, foreign-only, and cron-less importers', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        { id: 'calendar', handler: async () => {} },
+        {
+          id: 'connect:zendesk:conn-2',
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'zendesk:conn-2', scope: 'resource:00000000-0000-4000-8000-000000000099:zendesk:conn-2' },
+              ],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+
+    const unknown = await h.app.request(`${base}/nope/run`, { method: 'POST' });
+    expect(unknown.status).toBe(404);
+
+    const foreignOnly = await h.app.request(`${base}/connect:zendesk:conn-2/run`, { method: 'POST' });
+    expect(foreignOnly.status).toBe(404);
+
+    const cronless = await h.app.request(`${base}/calendar/run`, { method: 'POST' });
+    expect(cronless.status).toBe(409);
+    await expect(cronless.json()).resolves.toMatchObject({ error: 'importer_not_triggerable' });
   });
 
   it('filters proposals by the project perspective and applies admin review actions', async () => {

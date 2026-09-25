@@ -52,8 +52,10 @@ export class KnowledgeImporterRunner {
   readonly #knowledge: Knowledge;
   readonly #workerId = randomUUID();
   readonly #drains = new Map<string, Promise<void>>();
-  readonly #cronJobs: Cron[] = [];
+  readonly #cronJobs = new Map<string, Cron[]>();
   readonly #activeControllers = new Map<string, AbortController>();
+  /** Last successfully resolved dynamic binding set per importer — the fallback when `resolveBindings` throws. */
+  readonly #lastResolvedBindings = new Map<string, readonly KnowledgeImporterBindingInput[]>();
   #recoveryTimer?: ReturnType<typeof setInterval>;
   #recoveryPromise?: Promise<void>;
   #accepting = true;
@@ -65,15 +67,94 @@ export class KnowledgeImporterRunner {
 
   schedule<TPayload>(importer: KnowledgeImporterHandle<TPayload>): void {
     if (!this.#started || !this.#accepting || !importer.triggers.cron) return;
+    if (this.#cronJobs.has(importer.importerId)) return;
+    const jobs: Cron[] = [];
     for (const expression of cronExpressions(importer.triggers.cron)) {
-      this.#cronJobs.push(
+      jobs.push(
         new Cron(expression, () => {
-          for (const binding of importer.triggers.cron!.bindings) {
-            void this.enqueue(importer, binding, undefined, 'cron').catch(() => undefined);
-          }
+          void this.#fireCron(importer).catch(() => undefined);
         }),
       );
     }
+    this.#cronJobs.set(importer.importerId, jobs);
+  }
+
+  async #fireCron<TPayload>(importer: KnowledgeImporterHandle<TPayload>): Promise<void> {
+    const bindings = await this.#resolveCronBindings(importer);
+    for (const binding of bindings) {
+      void this.enqueue(importer, binding, undefined, 'cron', { preresolvedBindings: bindings }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Current cron binding set: the static `bindings` unioned with the trigger's
+   * `resolveBindings` result (deduplicated by binding key). A resolver failure warns
+   * and falls back to the last successfully resolved set (static-only before any
+   * success) — the next fire retries. Invalid resolved entries are skipped
+   * individually so one bad entry never blocks healthy bindings.
+   */
+  async #resolveCronBindings<TPayload>(
+    importer: KnowledgeImporterHandle<TPayload>,
+  ): Promise<readonly KnowledgeImporterBindingInput[]> {
+    const cron = importer.triggers.cron;
+    if (!cron) return [];
+    const staticBindings = cron.bindings ?? [];
+    if (!cron.resolveBindings) return staticBindings;
+
+    let resolved: readonly KnowledgeImporterBindingInput[];
+    try {
+      const result = await cron.resolveBindings();
+      if (!Array.isArray(result)) {
+        throw new Error('Knowledge importer cron resolveBindings must return an array of bindings');
+      }
+      // Validate before caching so a fallback fire never re-logs an invalid
+      // entry the resolver produced on an earlier fire.
+      const valid: KnowledgeImporterBindingInput[] = [];
+      for (const binding of result) {
+        try {
+          knowledgeImporterBindingKey(binding);
+          valid.push(binding);
+        } catch (error) {
+          this.#knowledge.warnInternal(
+            `Knowledge importer ${importer.importerId} cron resolveBindings produced an invalid binding; skipping it`,
+            { error },
+          );
+        }
+      }
+      resolved = valid;
+      this.#lastResolvedBindings.set(importer.importerId, valid);
+    } catch (error) {
+      const lastGood = this.#lastResolvedBindings.get(importer.importerId);
+      this.#knowledge.warnInternal(
+        `Knowledge importer ${importer.importerId} cron resolveBindings failed; using ${
+          lastGood ? 'the last successfully resolved bindings' : 'static bindings only'
+        } for this fire`,
+        { error },
+      );
+      resolved = lastGood ?? [];
+      if (resolved.length === 0) return staticBindings;
+    }
+
+    const byKey = new Map<string, KnowledgeImporterBindingInput>();
+    for (const binding of staticBindings) byKey.set(knowledgeImporterBindingKey(binding), binding);
+    for (const binding of resolved) byKey.set(knowledgeImporterBindingKey(binding), binding);
+    return [...byKey.values()];
+  }
+
+  unschedule(importerId: string): void {
+    const jobs = this.#cronJobs.get(importerId);
+    this.#lastResolvedBindings.delete(importerId);
+    if (!jobs) return;
+    jobs.forEach(job => job.stop());
+    this.#cronJobs.delete(importerId);
+  }
+
+  hasActiveRuns(importerId: string): boolean {
+    for (const key of this.#drains.keys()) {
+      const [drainImporterId] = JSON.parse(key) as [string, string];
+      if (drainImporterId === importerId) return true;
+    }
+    return false;
   }
 
   async start(): Promise<void> {
@@ -92,11 +173,11 @@ export class KnowledgeImporterRunner {
     bindingInput: KnowledgeImporterBindingInput,
     payload: unknown,
     triggerKind: KnowledgeImportTriggerKind,
-    options: { awaitCompletion?: boolean } = {},
+    options: { awaitCompletion?: boolean; preresolvedBindings?: readonly KnowledgeImporterBindingInput[] } = {},
   ): Promise<KnowledgeImportRun> {
     if (!this.#accepting) throw new Error('Knowledge importer runner is shutting down');
     const binding = knowledgeImporterBindingKey(bindingInput);
-    this.#assertDeclaredTriggerBinding(importer, binding, triggerKind);
+    await this.#assertDeclaredTriggerBinding(importer, binding, triggerKind, options.preresolvedBindings);
     const runId = randomUUID();
     const storage = await this.#knowledge.getStorageInternal();
     const run = await storage.enqueueImportRun({
@@ -118,7 +199,9 @@ export class KnowledgeImporterRunner {
   async shutdown(): Promise<void> {
     if (!this.#accepting) return;
     this.#accepting = false;
-    this.#cronJobs.splice(0).forEach(job => job.stop());
+    this.#cronJobs.forEach(jobs => jobs.forEach(job => job.stop()));
+    this.#cronJobs.clear();
+    this.#lastResolvedBindings.clear();
     if (this.#recoveryTimer) clearInterval(this.#recoveryTimer);
     this.#activeControllers.forEach(controller => controller.abort(new Error('Knowledge importer is shutting down')));
     const drains = Promise.allSettled([
@@ -134,16 +217,28 @@ export class KnowledgeImporterRunner {
     }
   }
 
-  #assertDeclaredTriggerBinding<TPayload>(
+  async #assertDeclaredTriggerBinding<TPayload>(
     importer: KnowledgeImporterHandle<TPayload>,
     binding: string,
     triggerKind: KnowledgeImportTriggerKind,
-  ): void {
+    preresolvedBindings?: readonly KnowledgeImporterBindingInput[],
+  ): Promise<void> {
     if (triggerKind === 'programmatic') return;
-    const declared = triggerKind === 'cron' ? importer.triggers.cron?.bindings : importer.triggers.webhook?.bindings;
-    if (!declared?.some(candidate => knowledgeImporterBindingKey(candidate) === binding)) {
-      throw new Error(`Knowledge importer ${importer.importerId} does not allow this ${triggerKind} binding`);
+    const matches = (candidates: readonly KnowledgeImporterBindingInput[] | undefined) =>
+      candidates?.some(candidate => knowledgeImporterBindingKey(candidate) === binding) ?? false;
+    if (triggerKind === 'webhook') {
+      if (!matches(importer.triggers.webhook?.bindings)) {
+        throw new Error(`Knowledge importer ${importer.importerId} does not allow this webhook binding`);
+      }
+      return;
     }
+    // Cron: a fire passes its resolved set down to avoid re-resolving per binding;
+    // external cron-kind enqueues (e.g. runImporter) resolve fresh when needed.
+    if (matches(preresolvedBindings ?? importer.triggers.cron?.bindings)) return;
+    if (!preresolvedBindings && importer.triggers.cron?.resolveBindings) {
+      if (matches(await this.#resolveCronBindings(importer))) return;
+    }
+    throw new Error(`Knowledge importer ${importer.importerId} does not allow this cron binding`);
   }
 
   #startDrain<TPayload>(importer: KnowledgeImporterHandle<TPayload>, binding: string): void {
@@ -319,6 +414,7 @@ export class KnowledgeImporterRunner {
   }
 
   async #recoverAndDrain(): Promise<void> {
+    await this.#knowledge.reconcileImportersInternal();
     const storage = await this.#knowledge.getStorageInternal();
     const staleBefore = new Date(Date.now() - LEASE_TIMEOUT_MS);
     for (const importer of this.#knowledge.listImporters()) {

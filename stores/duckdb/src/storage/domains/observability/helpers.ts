@@ -9,6 +9,24 @@ export function jsonV(val: unknown): string {
   return DuckDBConnection.sqlValue(JSON.stringify(val));
 }
 
+/**
+ * Trim, drop blank, and dedupe tags before they are written, matching the
+ * PostgreSQL and ClickHouse stores so tag predicates and discovery agree.
+ */
+export function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const t of tags) {
+    if (typeof t !== 'string') continue;
+    const trimmed = t.trim();
+    if (trimmed === '' || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
 /** Coerce a value to a Date. Throws if value is nullish. */
 export function toDate(val: unknown): Date {
   if (val === null || val === undefined) {

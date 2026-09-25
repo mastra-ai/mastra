@@ -1,14 +1,15 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "55.0.0-alpha.5",
+  "version": "60.0.0-alpha.0",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
   ],
   "files": [
     "dist",
-    "theme.css"
+    "theme.css",
+    "theme"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
@@ -83,6 +84,26 @@
         "default": "./dist/resize/*.cjs.js"
       }
     },
+    "./sort/*": {
+      "import": {
+        "types": "./dist/sort/*.d.ts",
+        "default": "./dist/sort/*.es.js"
+      },
+      "require": {
+        "types": "./dist/sort/*.d.ts",
+        "default": "./dist/sort/*.cjs.js"
+      }
+    },
+    "./lib/*": {
+      "import": {
+        "types": "./dist/lib/*.d.ts",
+        "default": "./dist/lib/*.es.js"
+      },
+      "require": {
+        "types": "./dist/lib/*.d.ts",
+        "default": "./dist/lib/*.cjs.js"
+      }
+    },
     "./store/*": {
       "import": {
         "types": "./dist/store/*.d.ts",
@@ -118,6 +139,12 @@
         "default": "./dist/new/settings.es.js"
       }
     },
+    "./new/sidebar": {
+      "import": {
+        "types": "./dist/new/sidebar.d.ts",
+        "default": "./dist/new/sidebar.es.js"
+      }
+    },
     "./new/layout/app-shell": {
       "import": {
         "types": "./dist/new/layout/app-shell.d.ts",
@@ -142,7 +169,7 @@
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "pnpm -w build:core && storybook build"
   },
   "keywords": [
     "mastra",
@@ -205,10 +232,10 @@
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
-    "@storybook/addon-a11y": "^10.4.1",
-    "@storybook/addon-docs": "^10.4.1",
-    "@storybook/addon-mcp": "^0.6.0",
-    "@storybook/react-vite": "^10.4.1",
+    "@storybook/addon-a11y": "^10.6.0",
+    "@storybook/addon-docs": "^10.6.0",
+    "@storybook/addon-mcp": "^10.6.0",
+    "@storybook/react-vite": "^10.6.0",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",
     "@tailwindcss/postcss": "^4.3.3",
@@ -227,7 +254,7 @@
     "clsx": "^2.1.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
-    "eslint-plugin-storybook": "^10.5.0",
+    "eslint-plugin-storybook": "^10.6.0",
     "eslint-plugin-tailwindcss": "^4.1.0",
     "jsdom": "^26.1.0",
     "lucide-react": "catalog:",
@@ -235,7 +262,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "rollup-plugin-node-externals": "^8.1.2",
-    "storybook": "^10.4.1",
+    "storybook": "^10.6.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "4.3.3",
     "tw-animate-css": "^1.4.0",

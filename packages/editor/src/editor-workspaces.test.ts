@@ -659,6 +659,44 @@ describe('editor.agent — workspace integration', () => {
     expect(workspace!.name).toBe('Inline WS');
   });
 
+  it('should reuse a single stored inline workspace for configs that differ only in key order', async () => {
+    const { editor, storage } = await createSetup();
+
+    await editor.agent.create({
+      id: 'agent-order-a',
+      name: 'Agent A',
+      instructions: 'You are a test agent',
+      model: { provider: 'openai', name: 'gpt-4' },
+      workspace: {
+        type: 'inline',
+        config: {
+          name: 'Inline WS',
+          filesystem: { provider: 'local', config: { basePath: '/tmp/inline-ws' } },
+        },
+      },
+    });
+
+    await editor.agent.create({
+      id: 'agent-order-b',
+      name: 'Agent B',
+      instructions: 'You are a test agent',
+      model: { provider: 'openai', name: 'gpt-4' },
+      workspace: {
+        type: 'inline',
+        // Same config as agent-order-a, but keys inserted in a different order.
+        config: {
+          filesystem: { config: { basePath: '/tmp/inline-ws' }, provider: 'local' },
+          name: 'Inline WS',
+        },
+      },
+    });
+
+    const workspaceStore = await storage.getStore('workspaces');
+    const all = await workspaceStore!.list();
+    const inlineWorkspaces = all.workspaces.filter((ws: { id: string }) => ws.id.startsWith('inline-'));
+    expect(inlineWorkspaces).toHaveLength(1);
+  });
+
   it('should create an agent with an ID-referenced workspace', async () => {
     const { editor, storage } = await createSetup();
 

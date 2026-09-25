@@ -9,7 +9,13 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ModelGenerationAttributes,
+  ScoreEvent,
+} from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -284,6 +290,11 @@ function mapMastraToLangfuseAttributes(
   environment?: string,
   release?: string,
 ): void {
+  if (attributes['gen_ai.usage.reasoning_tokens'] !== undefined) {
+    attributes['gen_ai.usage.reasoning.output_tokens'] = attributes['gen_ai.usage.reasoning_tokens'];
+    delete attributes['gen_ai.usage.reasoning_tokens'];
+  }
+
   // Environment and release: set directly since onStart() is not called
   if (environment) {
     attributes['langfuse.environment'] = environment;
@@ -341,6 +352,24 @@ function mapMastraToLangfuseAttributes(
   if (attributes['mastra.completion_start_time']) {
     attributes['langfuse.observation.completion_start_time'] = attributes['mastra.completion_start_time'];
     delete attributes['mastra.completion_start_time'];
+  }
+
+  // Exact provider-reported cost takes precedence over Langfuse's model-price inference.
+  // Estimated costs remain unexported so Langfuse can apply its own pricing model.
+  const costContext =
+    span.type === SpanType.MODEL_GENERATION
+      ? (span.attributes as ModelGenerationAttributes | undefined)?.costContext
+      : undefined;
+  if (
+    costContext?.costMetadata?.source === 'provider_reported' &&
+    costContext.costUnit === 'USD' &&
+    typeof costContext.estimatedCost === 'number' &&
+    Number.isFinite(costContext.estimatedCost) &&
+    costContext.estimatedCost >= 0
+  ) {
+    attributes['langfuse.observation.cost_details'] = JSON.stringify({
+      total: costContext.estimatedCost,
+    });
   }
 
   // User ID: mastra.metadata.userId → user.id
@@ -473,6 +502,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.input')) {
         attributes['langfuse.observation.input'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }
@@ -481,6 +511,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.output')) {
         attributes['langfuse.observation.output'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }

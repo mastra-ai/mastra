@@ -157,7 +157,13 @@ describe('AgentController: ask_user with suspended-snapshot persistence failure'
       events.push(event);
     });
 
-    session.suspensions.register({ toolCallId: 'call-1', runId: 'run-1', toolName: 'ask_user' });
+    session.suspensions.register({
+      toolCallId: 'call-1',
+      runId: 'run-1',
+      toolName: 'ask_user',
+      threadId: session.thread.requireId(),
+      resourceId: session.identity.getResourceId(),
+    });
 
     const subscription = {
       stream: (async function* () {

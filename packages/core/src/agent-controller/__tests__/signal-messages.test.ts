@@ -195,7 +195,7 @@ describe('AgentController signal messages', () => {
       expect.objectContaining({ ifActive: { behavior: 'persist' } }),
     );
     const signalMessages = events
-      .filter(event => event.type === 'message_end')
+      .filter(event => event.type === 'message_start')
       .map(event => event.message)
       .filter(message => message.role === 'signal');
     expect(signalMessages).toEqual([

@@ -66,6 +66,32 @@ describe('width-aware custom component rendering', () => {
     expect(component.render(140).join('\n')).toContain('unique-restored-tail');
   });
 
+  it('keeps background completion notifications compact until expanded', () => {
+    const component = new NotificationComponent({
+      message: 'view failed in background',
+      source: 'background-work',
+      priority: 'high',
+      kind: 'background-task-failed',
+      status: 'failed',
+      backgroundCompletion: {
+        taskId: 'task-1',
+        toolName: 'view',
+        argsSummary: '{"path":"missing.ts"}',
+        errorSummary: 'File not found: missing.ts',
+      },
+    });
+
+    const compact = component.render(140).join('\n');
+    expect(compact).toContain('failed in background');
+    expect(compact).toContain('task-1');
+    expect(compact).not.toContain('File not found');
+
+    component.setExpanded(true);
+    const expanded = component.render(140).join('\n');
+    expect(expanded).toContain('invocation · {"path":"missing.ts"}');
+    expect(expanded).toContain('failure · File not found: missing.ts');
+  });
+
   it('reflows expanded observational-memory output without collapsing it', () => {
     const component = new OMOutputComponent({ type: 'observation', observations: source });
     component.setExpanded(true);
@@ -148,6 +174,11 @@ describe('width-aware custom component rendering', () => {
     expectReflow(component);
     expect(component.getChatSpacingKind()).toBe('quiet-shell-tool');
     expect(component.isComplete()).toBe(false);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    // Quiet mode hides output; the (syntax-highlighted) command footer still survives reflow.
+    const visible = component
+      .render(140)
+      .join('\n')
+      .replace(/\u001b\[[0-9;]*m/g, '');
+    expect(visible).toContain('unique-restored-tail');
   });
 });

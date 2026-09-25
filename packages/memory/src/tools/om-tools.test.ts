@@ -188,7 +188,7 @@ describe('om-tools', () => {
       expect(result.messages).not.toContain('Cursor does not belong to the active thread');
     });
 
-    it('should return a helpful message for cross-thread cursors in strict thread scope', async () => {
+    it('should name the other thread for cross-thread cursors in resource scope', async () => {
       await memory.saveThread({
         thread: {
           id: 'other-thread',
@@ -218,12 +218,13 @@ describe('om-tools', () => {
         resourceId,
         cursor: 'other-1',
         threadScope: threadId,
+        retrievalScope: 'resource',
       });
 
       expect(result.count).toBe(0);
       expect(result.messages).toContain('Cursor does not belong to the active thread');
       expect(result.messages).toContain('Pass threadId="other-thread"');
-      expect(result.messages).toContain('omit threadId and use this cursor directly in resource scope');
+      expect(result.messages).not.toContain('omit threadId');
     });
 
     it('should return a hint when cursor is a colon-delimited range', async () => {
@@ -963,19 +964,35 @@ describe('om-tools', () => {
       ).rejects.toThrow('Could not resolve cursor message');
     });
 
-    it('should return a helpful message for cross-thread cursors in strict thread scope', async () => {
+    it('should not disclose the other thread for cross-thread cursors in strict thread scope', async () => {
+      // Thread scope fails closed with the same generic error as an unresolvable cursor,
+      // so probing message IDs reveals nothing about other threads.
+      await expect(
+        recallMessages({
+          memory: memory as any,
+          threadId: 'different-thread',
+          resourceId,
+          cursor: 'owner-msg-1',
+          threadScope: 'different-thread',
+        }),
+      ).rejects.toThrow('Could not resolve cursor message: owner-msg-1');
+    });
+
+    it('should name the other thread for cross-thread cursors when resource scope is explicit', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId: 'different-thread',
         resourceId,
         cursor: 'owner-msg-1',
         threadScope: 'different-thread',
+        retrievalScope: 'resource',
       });
 
       expect(result.count).toBe(0);
       expect(result.messages).toContain('Cursor does not belong to the active thread');
-      expect(result.messages).toContain('different-thread');
       expect(result.messages).toContain(threadId);
+      expect(result.messages).toContain(`Pass threadId="${threadId}"`);
+      expect(result.messages).not.toContain('omit threadId');
     });
 
     it('should allow cursor from same resource in resource scope', async () => {
@@ -1001,7 +1018,8 @@ describe('om-tools', () => {
       ).rejects.toThrow('Could not resolve cursor message');
     });
 
-    it('should allow recallPart to resolve a cursor from another thread in the same resource', async () => {
+    // Seeds a sibling thread that belongs to the *same* resource as `threadId`.
+    const seedSameResourceSiblingThread = async () => {
       await memory.saveThread({
         thread: {
           id: 'same-resource-other-thread',
@@ -1024,12 +1042,31 @@ describe('om-tools', () => {
           },
         ],
       });
+    };
+
+    it('should reject recallPart cursor from another thread when a thread scope is set', async () => {
+      await seedSameResourceSiblingThread();
+
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          threadScope: threadId,
+          cursor: 'same-resource-other-msg-1',
+          partIndex: 0,
+        }),
+      ).rejects.toThrow('Could not resolve cursor message');
+    });
+
+    it('should allow recallPart to resolve a cursor from another thread in the same resource when no thread scope is set', async () => {
+      await seedSameResourceSiblingThread();
 
       const result = await recallPart({
         memory: memory as any,
-        threadId,
+        threadId: 'same-resource-other-thread',
         resourceId,
-        threadScope: threadId,
+        // no threadScope = resource scope, where cross-thread browsing is allowed
         cursor: 'same-resource-other-msg-1',
         partIndex: 0,
       });
@@ -1057,6 +1094,143 @@ describe('om-tools', () => {
       });
       expect(result.count).toBe(1);
       expect(result.messages).toContain('Owner message');
+    });
+
+    // Regression coverage for https://github.com/mastra-ai/mastra/issues/21863.
+    // The helper-level tests above always pass `resourceId` explicitly, so they never
+    // exercised the tool wiring that dropped it in thread scope. These drive the tool.
+    describe('recall tool scope enforcement (#21863)', () => {
+      it('should not return a cross-resource message body through partIndex in thread scope', async () => {
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'owner-msg-1', partIndex: 0 }, {
+            memory,
+            agent: { threadId: otherThreadId, resourceId: otherResourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message');
+      });
+
+      it('should not return a same-resource sibling thread body through partIndex in thread scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 0 }, {
+            memory,
+            agent: { threadId, resourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message');
+      });
+
+      it('should still resolve a cross-thread cursor through partIndex in resource scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 0 },
+          { memory, agent: { resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-1');
+        expect(result.text).toContain('Same resource other thread message');
+      });
+
+      it('should still resolve a cross-thread cursor through partIndex in resource scope with an active thread', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        // context.agent.threadId is populated on every agent run, so this is the normal
+        // path for partIndex continuation notes, which deliberately omit threadId.
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 0 },
+          { memory, agent: { threadId, resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-1');
+        expect(result.text).toContain('Same resource other thread message');
+      });
+
+      it('should fall back to the next message in the cursor message thread, not the active thread', async () => {
+        await seedSameResourceSiblingThread();
+
+        await memory.saveMessages({
+          messages: [
+            {
+              id: 'same-resource-other-msg-2',
+              threadId: 'same-resource-other-thread',
+              resourceId,
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Sibling thread follow-up' }] },
+              createdAt: new Date('2024-01-01T12:30:00Z'),
+            },
+            {
+              id: 'active-thread-later-msg',
+              threadId,
+              resourceId,
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Active thread later message' }] },
+              createdAt: new Date('2024-01-01T13:00:00Z'),
+            },
+          ],
+        });
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 99 },
+          { memory, agent: { threadId, resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-2');
+        expect(result.text).toContain('Sibling thread follow-up');
+        expect(result.text).not.toContain('Active thread later message');
+      });
+
+      it('should reject a cross-resource cursor outright in thread scope without disclosing anything', async () => {
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'owner-msg-1' }, {
+            memory,
+            agent: { threadId: otherThreadId, resourceId: otherResourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message');
+      });
+
+      it('should not disclose the other thread when refusing a cross-thread cursor in thread scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        // Thread scope fails closed with the same generic error as an unresolvable cursor,
+        // so probing message IDs reveals nothing about threads the caller may not browse.
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'same-resource-other-msg-1' }, {
+            memory,
+            agent: { threadId, resourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message: same-resource-other-msg-1');
+      });
+
+      it('should name the other thread when refusing a cross-thread cursor in resource scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.({ mode: 'messages', cursor: 'same-resource-other-msg-1' }, {
+          memory,
+          agent: { threadId, resourceId },
+        } as any);
+
+        expect(result.count).toBe(0);
+        expect(result.messages).toContain('Cursor does not belong to the active thread');
+        expect(result.messages).toContain('Pass threadId="same-resource-other-thread"');
+        expect(result.messages).not.toContain('omit threadId');
+      });
     });
   });
 

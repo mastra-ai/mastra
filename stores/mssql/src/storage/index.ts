@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
 
 import sql from 'mssql';
 import { AgentsMSSQL } from './domains/agents';
@@ -82,6 +82,7 @@ export type MSSQLConfigType = {
    * ```
    */
   indexes?: CreateIndexOptions[];
+  retention?: RetentionConfig;
 } & (
   | {
       /**
@@ -164,7 +165,7 @@ export class MSSQLStore extends MastraCompositeStore {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('MSSQLStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: 'MSSQLStore', disableInit: config.disableInit });
+    super({ id: config.id, name: 'MSSQLStore', disableInit: config.disableInit, retention: config.retention });
     try {
       this.schema = config.schemaName || 'dbo';
 

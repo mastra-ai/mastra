@@ -1,12 +1,12 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useEffect } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, Navigate, useLocation, useParams } from 'react-router';
 import { Brain } from 'lucide-react';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
@@ -24,11 +24,11 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
-import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
+import { KnowledgeSection } from './KnowledgeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
@@ -56,7 +56,6 @@ export function SettingsPanel() {
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
@@ -83,45 +82,43 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="flex flex-1 flex-col lg:px-5 lg:pb-5">
-      <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)] py-3">
-        {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
-        {section === 'account' && <AccountSettingsSection />}
-        {section === 'preferences' && <GeneralSettings />}
-        {section === 'factory' && <FactoryManagementSection />}
-        {section === 'connections' && (
-          <SettingsSubsection
-            scope="personal"
-            title="Connected accounts"
-            description="Connect your account to use Factory from Slack."
-          >
-            <ConnectedAccountsSection />
-          </SettingsSubsection>
-        )}
-        {section === 'repositories' && <RepositoriesSection />}
-        {section === 'intake' && <IntakeSection />}
-        {section === 'models' && (
-          <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
-        )}
-        {section === 'memory' && (
-          <MemorySettingsSection
-            factoryId={factoryId}
-            models={models}
-            sessionResourceId={sessionResourceId}
-            sessionScope={sessionScope}
-          />
-        )}
-        {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
-        {section === 'behavior' && (
-          <BehaviorSettings
-            settings={settings}
-            onBehaviorChange={onBehaviorChange}
-            permissions={permissions ?? null}
-            pendingPermissionCategory={pendingPermissionCategory}
-            setPermissionForCategory={setPermissionForCategory}
-          />
-        )}
-      </div>
+    <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+      {section === 'account' && <AccountSettingsSection />}
+      {section === 'preferences' && <GeneralSettings />}
+      {section === 'factory' && <FactoryManagementSection />}
+      {section === 'connections' && (
+        <SettingsSubsection
+          scope="personal"
+          title="Connected accounts"
+          description="Connect your account to use Factory from Slack."
+        >
+          <ConnectedAccountsSection />
+        </SettingsSubsection>
+      )}
+      {section === 'repositories' && <RepositoriesSection />}
+      {section === 'intake' && <IntakeSection />}
+      {section === 'knowledge' && <KnowledgeSettingsRoute factoryId={factoryId} />}
+      {section === 'models' && (
+        <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
+      )}
+      {section === 'memory' && (
+        <MemorySettingsSection
+          factoryId={factoryId}
+          models={models}
+          sessionResourceId={sessionResourceId}
+          sessionScope={sessionScope}
+        />
+      )}
+      {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'behavior' && (
+        <BehaviorSettings
+          settings={settings}
+          onBehaviorChange={onBehaviorChange}
+          permissions={permissions ?? null}
+          pendingPermissionCategory={pendingPermissionCategory}
+          setPermissionForCategory={setPermissionForCategory}
+        />
+      )}
     </section>
   );
 }
@@ -130,6 +127,22 @@ interface ModelsSettingsSectionProps {
   models: AvailableModelOption[];
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
+}
+
+/**
+ * Renders the Knowledge settings page, or bounces to Preferences (the
+ * always-available Sources landing) when the server doesn't advertise the
+ * knowledge feature. The nav item is hidden in that case too, so this
+ * redirect only fires for deep-linked URLs or bookmarked routes after a
+ * deploy flipped the flag off.
+ */
+function KnowledgeSettingsRoute({ factoryId }: { factoryId: string | undefined }) {
+  const features = useServerFeatures();
+  if (features.isPending || !factoryId) return null;
+  if (!features.data?.knowledge) {
+    return <Navigate to={settingsSectionPath(factoryId, 'preferences')} replace />;
+  }
+  return <KnowledgeSection />;
 }
 
 interface MemorySettingsSectionProps {
@@ -151,7 +164,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
     return (
       <EmptyState
         as="h2"
-        iconSlot={<Brain size={40} className="text-icon3" />}
+        iconSlot={<Brain />}
         titleSlot="No models configured"
         descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
         actionSlot={

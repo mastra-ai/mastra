@@ -88,9 +88,23 @@ export class BuildBundler extends Bundler {
     const storage = mastra.getStorage();
     if (storage) {
       if (!storage.disableInit) {
-        storage.init();
+        await storage.init();
       }
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+    }
+
+    try {
+      await mastra.restartAllActiveWorkflowRuns();
+    } catch (error) {
+      mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
+    }
+
+    if (mastra.recoveryConfig?.durableAgents === 'auto') {
+      try {
+        await mastra.recoverAllDurableAgents();
+      } catch (error) {
+        mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
+      }
     }
     `;
   }

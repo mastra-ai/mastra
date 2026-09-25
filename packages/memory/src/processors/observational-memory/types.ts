@@ -1,4 +1,5 @@
 import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -65,6 +66,12 @@ export type ResolvedActivationTTL = number | 'auto';
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
 
 /**
+ * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
+ * fields into this before combining them (`??`, ternaries) — see `WidenModelId` in core.
+ */
+export type WidenedObservationalMemoryModel = WidenModelId<ObservationalMemoryModel>;
+
+/**
  * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
  *
  * Pass `false` to disable both, or an object to disable them individually. Agents that
@@ -106,10 +113,10 @@ export interface ObservationConfig {
 
   /**
    * Model settings for the Observer agent.
-   * @default { temperature: 0.3 }
+   * @default { temperature: 0.3 } for models known to support temperature
    *
-   * Note: `maxOutputTokens: 100_000` is only applied by default when using
-   * the built-in default model selection.
+   * Note: The default `maxOutputTokens: 100_000` is only applied when using the built-in
+   * default model selection or `ModelByInputTokens`.
    */
   modelSettings?: ModelSettings;
 
@@ -308,10 +315,10 @@ export interface ReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0 }
+   * @default { temperature: 0 } for models known to support temperature
    *
-   * Note: `maxOutputTokens: 100_000` is only applied by default when using
-   * the built-in default model selection.
+   * Note: The default `maxOutputTokens: 100_000` is only applied when using the built-in
+   * default model selection or `ModelByInputTokens`.
    */
   modelSettings?: ModelSettings;
 
@@ -1002,6 +1009,12 @@ export interface ObservationalMemoryConfig {
    * Memory scope for observations.
    * - 'resource': Observations span all threads for a resource (cross-thread memory)
    * - 'thread': Observations are per-thread (default)
+   *
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 

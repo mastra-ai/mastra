@@ -1,7 +1,7 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useContext, useEffect, useState } from 'react';
 import { TabsContext } from './tabs-context';
-import '@/ds/primitives/focus.css';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type TabContentProps = {
@@ -25,7 +25,13 @@ export const TabContent = ({ children, value, flush = false, keepMounted = false
       keepMounted={keepMounted}
       data-slot="tabs-content"
       data-flush={flush || undefined}
-      className={cn('ds-focus ds-focus-line grid overflow-y-auto py-2', className)}
+      className={cn(
+        'grid overflow-y-auto ring-offset-background',
+        // Flush panels give the row to their content (scroll region, code block) instead of padding it.
+        flush ? 'h-full min-h-0' : 'py-2',
+        focusRing.visible,
+        className,
+      )}
     >
       <div data-slot="tabs-content-body" className="contents">
         {!keepMounted || selected || visited ? children : null}

@@ -1,12 +1,14 @@
 import { ReadableStream } from 'node:stream/web';
+import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
-import type { Event } from '../../events/types';
+import type { Event, EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import { ChunkFrom } from '../../stream/types';
 import type {
   ChunkType,
@@ -99,7 +101,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
   onStreamFinished?: () => void | Promise<void>;
   /** Callback on error */
-  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /**
+   * Callback on error. `runDead` is only set for idle-timeout terminations:
+   * `true` when `isAlive` confirmed the run is dead, `false` when the stream
+   * went quiet but the run may still be alive (bare timeout).
+   */
+  onError?: ({ error, runDead }: { error: Error | string; runDead?: boolean }) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -110,9 +117,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   logger?: IMastraLogger;
   /**
    * If true, close the underlying ReadableStream when a SUSPENDED event is
-   * received. Used by `generate()` / `resumeGenerate()` so that
-   * `getFullOutput()` resolves on suspend instead of hanging. Streaming
-   * callers leave this `false` so the stream stays open for a later resume.
+   * received so `getFullOutput()`/`fullStream` resolve on suspend instead of
+   * hanging. The durable agent derives this from the public `closeOnSuspend`
+   * stream option (default `false`, keeping the stream open for a later
+   * same-reader resume).
    */
   closeOnSuspend?: boolean;
   /**
@@ -147,6 +155,11 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   output: MastraModelOutput<OUTPUT>;
   /** Cleanup function to unsubscribe from pubsub */
   cleanup: () => void;
+  /**
+   * Stop consuming: close the stream (pending reads resolve as done) and
+   * unsubscribe. Idempotent. Does not affect the run itself.
+   */
+  detach: () => void;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -284,6 +297,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const onIdleTimeout = async (generation: number) => {
     idleTimer = undefined;
     if (cancelled || !controller || generation !== idleGeneration) return;
+    let runDead = false;
     if (isAlive) {
       let alive = true;
       try {
@@ -298,12 +312,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         armIdleTimer(); // still driving ⇒ keep waiting
         return;
       }
+      runDead = true;
     }
     // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
     // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Fire onError — for
-    // observe() that schedules registry + pubsub-topic cleanup, so an
-    // idle-terminated run doesn't retain state — then unsubscribe in finally.
+    // controller.error which MastraModelOutput swallows). Fire onError with
+    // `runDead` — observe() schedules registry + pubsub-topic cleanup only when
+    // isAlive confirmed the run is dead; a bare timeout just means this observer
+    // stopped hearing from the run — then unsubscribe in finally.
     const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
     safeEnqueue(controller, {
       type: 'error',
@@ -312,7 +328,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     safeClose(controller);
     markTerminated(); // block any re-arm while we await onError below
     try {
-      await onError?.({ error });
+      await onError?.({ error, runDead });
     } catch (callbackError) {
       logError(`[DurableAgentStream] onError callback error:`, callbackError);
     } finally {
@@ -347,6 +363,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
+          if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
           // Track error chunks for onError callback
           if ((chunk as any).type === 'error') {
             const errPayload = (chunk as any).payload;
@@ -380,6 +397,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Enqueue finish chunk and close stream even if callback throws
           const finishChunk = {
             type: 'finish' as const,
+            runId,
+            from: ChunkFrom.AGENT,
             payload: {
               output: data.output,
               stepResult: data.stepResult,
@@ -553,6 +572,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
 
+  // Every delivery has to be acked, including the events this consumer filters
+  // out, or a durable backend (Redis consumer groups) keeps them pending for the
+  // life of the subscription. The EventCallback is a stable reference because
+  // `unsubscribe` has to be handed the same callback that was subscribed.
+  const subscribedCallback: EventCallback = withAck(handleEvent);
+
   // Create the readable stream
   const stream = new ReadableStream<ChunkType<OUTPUT>>({
     start(ctrl) {
@@ -564,16 +589,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       const topic = AGENT_STREAM_TOPIC(runId);
       const subscribePromise =
         offset === undefined
-          ? pubsub.subscribeWithReplay(topic, handleEvent)
+          ? pubsub.subscribeWithReplay(topic, subscribedCallback)
           : pubsub.supportsOffsets
-            ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-            : pubsub.subscribe(topic, handleEvent, { startFrom: 'latest' });
+            ? pubsub.subscribeFromOffset(topic, offset, subscribedCallback)
+            : pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' });
 
       subscribePromise
         .then(() => {
           if (cancelled) {
             // cleanup() was called before subscribe resolved — unsubscribe now
-            void pubsub.unsubscribe(topic, handleEvent).catch(error => {
+            void pubsub.unsubscribe(topic, subscribedCallback).catch(error => {
               logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
             });
             resolveReady();
@@ -586,12 +611,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         })
         .catch(error => {
           logError(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
+          markTerminated();
           rejectReady(error);
           ctrl.error(error);
         });
     },
     cancel() {
-      cleanup();
+      detach();
     },
   });
 
@@ -604,11 +630,19 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     if (isSubscribed) {
       isSubscribed = false;
       const topic = AGENT_STREAM_TOPIC(runId);
-      void pubsub.unsubscribe(topic, handleEvent).catch(error => {
+      void pubsub.unsubscribe(topic, subscribedCallback).catch(error => {
         logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
       });
     }
     controller = null;
+  };
+
+  // Observer-only teardown: end this consumer's stream and unsubscribe. Closing
+  // the controller (rather than just nulling it in cleanup) makes a pending
+  // read resolve as done instead of hanging. Never touches run state.
+  const detach = () => {
+    if (controller) safeClose(controller);
+    cleanup();
   };
 
   // Create the MastraModelOutput.
@@ -651,6 +685,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   return {
     output,
     cleanup,
+    detach,
     ready,
   };
 }
@@ -668,6 +703,8 @@ export async function emitChunkEvent<OUTPUT = undefined>(
     type: AgentStreamEventTypes.CHUNK,
     runId,
     data: chunk,
+    // The chunk crosses the pubsub as JSON; keep when it was produced.
+    producedAt: getChunkProducedAt(chunk) ?? Date.now(),
   });
 }
 

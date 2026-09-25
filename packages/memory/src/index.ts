@@ -9,7 +9,13 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
-import { MastraMemory } from '@mastra/core/memory';
+import {
+  MastraMemory,
+  loadMessageHistory,
+  normalizeMessageHistoryConfig,
+  getMemoryTokenBoundary,
+  isAfterMemoryTokenBoundary,
+} from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -22,6 +28,7 @@ import type {
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
+import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -64,7 +71,9 @@ import type {
   SummarizeConversationResult,
 } from './processors/observational-memory/summarize';
 import { TokenCounter } from './processors/observational-memory/token-counter';
+import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
@@ -153,11 +162,11 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * with packages/core/src/memory/working-memory-utils.ts,
  * packages/core/src/memory/system-reminders.ts, and
  * packages/core/src/agent/signals.ts. Those source files also carry
- * compatibility notes that point back here.
+ * compatibility notes that point back here. isSystemReminderMessage lives in
+ * ./system-reminders so observational memory can share it.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
-const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -217,30 +226,58 @@ export function extractWorkingMemoryContent(text: string): string | null {
   return text.substring(contentStart, end);
 }
 
-function isSystemReminderMessage(message: MastraDBMessage): boolean {
-  if (!isRecord(message.content)) {
-    return false;
-  }
+type MastraMessagePart = MastraDBMessage['content']['parts'][number];
+const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
 
-  const metadata = message.content.metadata;
-  if (message.role === 'signal') {
-    return (
-      isRecord(metadata) &&
-      isRecord(metadata.signal) &&
-      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+/**
+ * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
+ * at a time. A step starts at a `step-start` part, or where a tool part is followed by
+ * a non-tool part (the same boundary prompt conversion uses when markers are missing).
+ * A step whose tool calls were all working-memory calls loses its tool-call/tool-result
+ * boundary once they are removed. If only reasoning is left, the whole step is dropped:
+ * replaying that signed reasoning merges it into the next step's assistant message,
+ * which providers such as Anthropic reject (see #22798).
+ */
+function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  const isWorkingMemoryCall = (part: MastraMessagePart) =>
+    part?.type === 'tool-invocation' && part.toolInvocation?.toolName === UPDATE_WORKING_MEMORY_TOOL_NAME;
+
+  if (!parts.some(isWorkingMemoryCall)) return parts;
+
+  const steps: MastraMessagePart[][] = [];
+  parts.forEach((part, i) => {
+    const previous = parts[i - 1];
+    const startsStep =
+      part?.type === 'step-start' || (previous?.type === 'tool-invocation' && part?.type !== 'tool-invocation');
+    if (startsStep || steps.length === 0) steps.push([]);
+    steps[steps.length - 1]!.push(part);
+  });
+
+  return steps.flatMap(step => {
+    if (!step.some(isWorkingMemoryCall)) return step;
+    const remaining = step.filter(part => !isWorkingMemoryCall(part));
+    const onlyReasoningLeft = remaining.every(
+      part =>
+        part?.type === 'step-start' ||
+        part?.type === 'reasoning' ||
+        (part?.type === 'text' && !removeWorkingMemoryTags(part.text ?? '').trim()),
     );
-  }
+    return onlyReasoningLeft ? [] : remaining;
+  });
+}
 
-  if (message.role !== 'user') {
-    return false;
+/**
+ * Removes `updateWorkingMemory` entries from the legacy `toolInvocations` array so
+ * prompt conversion cannot re-add a stripped working-memory call.
+ */
+function removeWorkingMemoryToolInvocations(
+  toolInvocations: MastraDBMessage['content']['toolInvocations'],
+): MastraDBMessage['content']['toolInvocations'] {
+  if (!toolInvocations?.some(invocation => invocation.toolName === UPDATE_WORKING_MEMORY_TOOL_NAME)) {
+    return toolInvocations;
   }
-
-  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
-    return true;
-  }
-
-  const firstTextPart = message.content.parts.find(part => part.type === 'text');
-  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
+  const remaining = toolInvocations.filter(invocation => invocation.toolName !== UPDATE_WORKING_MEMORY_TOOL_NAME);
+  return remaining.length > 0 ? remaining : undefined;
 }
 
 // Keep this union and the recall helpers in sync with core without requiring newer peer exports.
@@ -323,6 +360,19 @@ function normalizeObservationalMemoryConfig(
   return config as NormalizedObservationalMemoryConfig;
 }
 
+/**
+ * Observer model selection (`observation.model`, else top-level `model`), read into the widened
+ * model type first: combining values of the public type makes TS subtype-reduce the model-id
+ * literal union, which fails with TS2590 once the provider registry is large enough.
+ */
+function selectObserverModel(
+  omConfig: NormalizedObservationalMemoryConfig,
+): WidenedObservationalMemoryModel | undefined {
+  const observationModel: WidenedObservationalMemoryModel | undefined = omConfig.observation?.model;
+  const topLevelModel: WidenedObservationalMemoryModel | undefined = omConfig.model;
+  return observationModel ?? topLevelModel;
+}
+
 function hasWorkingMemoryExtractor(
   extractors: NonNullable<NonNullable<ObservationalMemoryConfig['observation']>['extract']> | undefined,
 ): boolean {
@@ -338,6 +388,13 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
+
+// Upper bound on how long `deleteThread` waits for in-flight observational-memory
+// cycles on that thread. Well under the engine's 30s default, which is sized for
+// server endpoints rather than a user-facing delete. Exceeding it degrades to
+// deleting anyway; the liveness checks in the observation strategies' `persist`
+// still keep a late cycle from writing to a thread that no longer exists.
+const OM_DELETE_DRAIN_TIMEOUT_MS = 10_000;
 
 // Max number of distinct contents whose embeddings are kept in the in-process
 // cache. Bounds memory so a long-running Memory instance can't accumulate every
@@ -377,6 +434,10 @@ const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
  * if packaged docs are unavailable.
  */
 export class Memory extends MastraMemory {
+  protected override createMemoryTokenCounter() {
+    return new TokenCounter();
+  }
+
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
@@ -529,7 +590,7 @@ export class Memory extends MastraMemory {
     let curatorMemory: Memory | undefined;
     const subconsciousExtractors = omConfig.experimental_subconscious
       .createObservationExtractors(
-        observation.model ?? omConfig.model,
+        selectObserverModel(omConfig),
         () => (curatorMemory ??= this.createSubconsciousMemory()),
       )
       .filter(extractor => !existingSlugs.has(extractor.slug));
@@ -709,6 +770,8 @@ export class Memory extends MastraMemory {
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
       );
     }
+
+    return thread;
   }
 
   private createMemorySpan(
@@ -763,6 +826,9 @@ export class Memory extends MastraMemory {
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
+    const history = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
+    const historyDisabledByConfig = !history.enabled && perPageArg === undefined;
+    const shouldUseTokenLoader = perPageArg === undefined && history.enabled && history.maxTokens !== undefined;
 
     const span = this.createMemorySpan(
       'recall',
@@ -775,16 +841,27 @@ export class Memory extends MastraMemory {
     );
 
     try {
-      if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
+      // A disabled history configuration must not touch storage or validate thread ownership.
+      if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+        const result = {
+          messages: [],
+          usage: undefined,
+          total: 0,
+          page: page ?? 0,
+          perPage: 0,
+          hasMore: false,
+        };
+        span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
+        return result;
+      }
 
-      // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-      const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+      const validatedThread = resourceId
+        ? await this.validateThreadIsOwnedByResource(threadId, resourceId, config)
+        : undefined;
 
-      // lastMessages: false means "disable conversation history entirely".
-      // When the resolved perPage is false from config (not an explicit caller override),
-      // return empty messages. This prevents recall() from treating false as "no limit"
-      // and returning ALL messages when the user intended to disable history.
-      const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
+      // Use perPage from args if provided, otherwise use the normalized count limit.
+      // Token-only history is loaded through finite pages below and never maps to `false`.
+      const perPage = perPageArg !== undefined ? perPageArg : (history.maxMessages ?? 0);
 
       // When limiting messages (perPage !== false) without explicit orderBy, we need to:
       // 1. Query DESC to get the NEWEST messages (not oldest)
@@ -842,20 +919,6 @@ export class Memory extends MastraMemory {
 
       let usage: { tokens: number } | undefined;
 
-      // If history is disabled and there's no semantic recall to perform, return empty immediately
-      if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
-        const result = {
-          messages: [],
-          usage: undefined,
-          total: 0,
-          page: page ?? 0,
-          perPage: 0,
-          hasMore: false,
-        };
-        span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
-        return result;
-      }
-
       if (config?.semanticRecall && vectorSearchString && this.vector) {
         const result = await this.embedMessageContent(vectorSearchString!);
         usage = result.usage;
@@ -893,45 +956,88 @@ export class Memory extends MastraMemory {
 
       // Get raw messages from storage
       const memoryStore = await this.getMemoryStore();
+      const include = filteredVectorResults.map(r => ({
+        id: r.metadata?.message_id,
+        threadId: r.metadata?.thread_id,
+        withNextMessages:
+          typeof vectorConfig.messageRange === 'number' ? vectorConfig.messageRange : vectorConfig.messageRange.after,
+        withPreviousMessages:
+          typeof vectorConfig.messageRange === 'number' ? vectorConfig.messageRange : vectorConfig.messageRange.before,
+      }));
 
-      // When history is disabled by config, use perPage: 0 so only semantic recall
-      // include results are returned (not the full message history)
-      const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+      let rawMessages: MastraDBMessage[];
+      let resultPage: number;
+      let resultPerPage: number | false;
+      let total: number;
+      let hasMore: boolean;
 
-      const paginatedResult = await memoryStore.listMessages({
-        threadId,
-        resourceId,
-        perPage: effectivePerPage,
-        page,
-        orderBy: effectiveOrderBy,
-        filter,
-        ...(includeTotal !== undefined ? { includeTotal } : {}),
-        ...(filteredVectorResults?.length
-          ? {
-              include: filteredVectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      });
-      // Reverse to restore chronological order if we queried DESC to get newest messages
-      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+      if (shouldUseTokenLoader) {
+        const thread = validatedThread ?? (await memoryStore.getThreadById({ threadId, resourceId }));
+        const storedBoundary = getMemoryTokenBoundary(thread);
+        const boundary =
+          storedBoundary !== undefined &&
+          storedBoundary.maxTokens === history.maxTokens &&
+          storedBoundary.atMaxRemoveTokens === history.atMaxRemoveTokens
+            ? storedBoundary
+            : undefined;
+        const loaded = await loadMessageHistory({
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          boundary,
+          filter,
+          maxMessages: history.maxMessages,
+          maxTokens: history.maxTokens,
+          atMaxRemoveTokens: history.atMaxRemoveTokens,
+          tokenCounter: new TokenCounter(),
+          initialTokens: 24,
+        });
+        rawMessages = loaded.messages;
+
+        if (include.length) {
+          const semanticMessages = await memoryStore.listMessages({
+            threadId,
+            resourceId,
+            perPage: 0,
+            include,
+            includeTotal: false,
+          });
+          rawMessages = new MessageList({ threadId, resourceId })
+            .add(rawMessages, 'memory')
+            .add(
+              semanticMessages.messages.filter(message => !boundary || isAfterMemoryTokenBoundary(message, boundary)),
+              'memory',
+            )
+            .get.all.db();
+        }
+
+        resultPage = 0;
+        resultPerPage = history.maxMessages ?? false;
+        total = rawMessages.length;
+        hasMore = false;
+      } else {
+        // When history is disabled by config, use perPage: 0 so only semantic recall
+        // include results are returned (not the full message history)
+        const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+        const paginatedResult = await memoryStore.listMessages({
+          threadId,
+          resourceId,
+          perPage: effectivePerPage,
+          page,
+          orderBy: effectiveOrderBy,
+          filter,
+          ...(includeTotal !== undefined ? { includeTotal } : {}),
+          ...(include.length ? { include } : {}),
+        });
+        // Reverse to restore chronological order if we queried DESC to get newest messages
+        rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+        ({ total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult);
+      }
 
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
       const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
-
-      const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
 
       span?.end({
@@ -1014,6 +1120,13 @@ export class Memory extends MastraMemory {
     return savedThread;
   }
 
+  /**
+   * Update a thread's title or metadata.
+   *
+   * Unlike `session.thread.rename()`, this does not pin the title, so
+   * Observational Memory may still replace it with an extracted title. To
+   * protect a manual rename, set `metadata.titlePinned` to `true`.
+   */
   async updateThread({
     id,
     title,
@@ -1057,6 +1170,16 @@ export class Memory extends MastraMemory {
   }
 
   private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
+    // Join in-flight observational-memory cycles for this thread first so their
+    // vector writes land before `deleteThreadVectors` runs instead of after it —
+    // a write that arrives after the cleanup is never removed and stays reachable
+    // through resource-scoped recall. Only join an engine that already exists,
+    // never instantiate one just to drain it (same rule as `settled()`).
+    const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
+    if (engine && resourceId) {
+      await engine.waitForBuffering(threadId, resourceId, OM_DELETE_DRAIN_TIMEOUT_MS);
+    }
+
     await memoryStore.deleteThread({ threadId });
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
@@ -1664,23 +1787,19 @@ ${workingMemory}`;
     }
 
     if (Array.isArray(newMessage.content?.parts)) {
-      newMessage.content.parts = newMessage.content.parts
-        .filter(part => {
-          if (part?.type === 'tool-invocation') {
-            return part.toolInvocation?.toolName !== 'updateWorkingMemory';
-          }
-          return true;
-        })
-        .map(part => {
-          if (part?.type === 'text') {
-            const text = typeof part.text === 'string' ? part.text : '';
-            return {
-              ...part,
-              text: removeWorkingMemoryTags(text).trim(),
-            };
-          }
-          return part;
-        });
+      if (Array.isArray(newMessage.content.toolInvocations)) {
+        newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
+      }
+      newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
+        if (part?.type === 'text') {
+          const text = typeof part.text === 'string' ? part.text : '';
+          return {
+            ...part,
+            text: removeWorkingMemoryTags(text).trim(),
+          };
+        }
+        return part;
+      });
 
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
@@ -2010,19 +2129,57 @@ ${workingMemory}`;
       }
     } else {
       // No OM: load recent messages
-      const lastMessages = config.lastMessages;
-      if (lastMessages === false) {
+      const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
+      if (!lastMessages.enabled) {
         messages = [];
+      } else if (lastMessages.maxTokens !== undefined) {
+        const storedBoundary = getMemoryTokenBoundary(await memoryStore.getThreadById({ threadId, resourceId }));
+        const boundary =
+          storedBoundary?.maxTokens === lastMessages.maxTokens &&
+          storedBoundary.atMaxRemoveTokens === lastMessages.atMaxRemoveTokens
+            ? storedBoundary
+            : undefined;
+        const tokenCounter = this.createMemoryTokenCounter()!;
+        const loaded = await loadMessageHistory({
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          boundary,
+          maxMessages: lastMessages.maxMessages,
+          maxTokens: lastMessages.maxTokens,
+          tokenCounter,
+          initialTokens: 24,
+        });
+        const messageList = new MessageList();
+        messageList.add(loaded.messages, 'memory');
+        if (systemParts.length) messageList.addSystem(systemParts.join('\n\n'));
+        const limiter = new TokenLimiterProcessor({
+          limit: lastMessages.maxTokens,
+          atMaxRemoveTokens: lastMessages.atMaxRemoveTokens,
+          trimMode: 'memory-only',
+          tokenCounter,
+        });
+        await limiter.processInput({
+          messageList,
+          messages: messageList.get.all.db(),
+          systemMessages: messageList.getAllSystemMessages(),
+          state: {},
+          retryCount: 0,
+          abort: reason => {
+            throw new Error(reason);
+          },
+        });
+        messages = messageList.get.all.db();
       } else {
         const result = await memoryStore.listMessages({
           threadId,
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
-          perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+          perPage: lastMessages.maxMessages!,
           // Only `messages` is consumed here; skip the COUNT(*) work.
           includeTotal: false,
         });
-        messages = result.messages.reverse(); // DESC → chronological order
+        messages = result.messages.reverse();
       }
     }
 
@@ -2203,7 +2360,7 @@ ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:
@@ -2239,7 +2396,7 @@ ${template.content}
 </working_memory_template>
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:
@@ -2766,7 +2923,7 @@ Notes:
         tools.ask_memory = createAskMemoryTool({
           memory: this,
           config: remind,
-          omModel: omConfig.observation?.model ?? omConfig.model,
+          omModel: selectObserverModel(omConfig),
           getParentAgent: agentId => this._mastraInstance?.getAgentById(agentId),
         });
       }

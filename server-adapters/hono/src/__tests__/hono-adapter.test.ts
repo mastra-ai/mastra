@@ -1,11 +1,17 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { registerApiRoute } from '@mastra/core/server';
+import {
+  TraceQueryExecutionError,
+  encodeTraceQueryCursor,
+  parseTraceQueryRequest,
+  planTraceQuery,
+} from '@mastra/core/storage';
+import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
+import { HTTPException as MastraHTTPException, MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -15,18 +21,13 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
   createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import {
-  TraceQueryExecutionError,
-  encodeTraceQueryCursor,
-  parseTraceQueryRequest,
-  planTraceQuery,
-} from '@mastra/core/storage';
-import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
-import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -50,6 +51,7 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       const app = new Hono();
@@ -1627,5 +1629,78 @@ describe('Hono Server Adapter', () => {
       const response = await app.request(request);
       return { status: response.status };
     },
+  });
+});
+
+describe('Handler error logging', () => {
+  let context: AdapterTestContext;
+
+  beforeEach(async () => {
+    context = await createDefaultTestContext();
+  });
+
+  const requestFailingRoute = async (error: Error) => {
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+    vi.spyOn(context.mastra, 'getLogger').mockReturnValue(logger as any);
+
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra: context.mastra });
+    const failingRoute: ServerRoute<any, any, any> = {
+      method: 'GET',
+      path: '/test/failing',
+      responseType: 'json',
+      handler: async () => {
+        throw error;
+      },
+    };
+
+    app.use('*', adapter.createContextMiddleware());
+    await adapter.registerRoute(app, failingRoute, { prefix: '' });
+
+    const response = await app.request(new Request('http://localhost/test/failing'));
+    return { response, logger };
+  };
+
+  it('logs 501 Not Implemented at warn level', async () => {
+    const { response, logger } = await requestFailingRoute(
+      new MastraHTTPException(501, { message: 'Not supported by the configured observability store' }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+  });
+
+  it('logs errors carrying a 501 in details at warn level', async () => {
+    const { response, logger } = await requestFailingRoute(
+      new MastraError({
+        id: 'TEST_NOT_IMPLEMENTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Not supported by the configured storage',
+        details: { status: 501 },
+      }),
+    );
+
+    expect(response.status).toBe(501);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.error).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
+  });
+
+  it('still logs server errors at error level', async () => {
+    const { response, logger } = await requestFailingRoute(new Error('boom'));
+
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Error calling handler',
+      expect.objectContaining({ path: '/test/failing' }),
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith('Error calling handler', expect.anything());
   });
 });

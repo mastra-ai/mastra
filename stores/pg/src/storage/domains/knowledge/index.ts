@@ -111,9 +111,11 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getSchemaSnapshot } from '../../db/schema-snapshot';
 
 interface QueryResult {
@@ -195,7 +197,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     return transformed;
   });
   if (schemaName) {
-    const quotedSchema = `"${parseSqlIdentifier(schemaName, 'schema name')}"`;
+    const quotedSchema = `"${parseSchemaName(schemaName)}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
       for (const table of KNOWLEDGE_TABLE_NAMES) {
@@ -382,7 +384,7 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: string }> {
   const table = (name: string) => {
     const quotedName = `"${parseSqlIdentifier(name, 'table name')}"`;
-    return schemaName ? `"${parseSqlIdentifier(schemaName, 'schema name')}".${quotedName}` : quotedName;
+    return schemaName ? `"${parseSchemaName(schemaName)}".${quotedName}` : quotedName;
   };
   return [
     {
@@ -1328,11 +1330,12 @@ export class KnowledgePG extends KnowledgeStorage {
     const parent = await this.#getNodeForUpdate(tx, nodeId);
     if (!parent || parent.deletedAt) throw new KnowledgeNotFoundError('node', nodeId);
     const now = new Date();
+    const metadataJson = input.metadata ? toPgJson(input.metadata) : null;
     const record: KnowledgeRecord = {
       id: input.id ?? createKnowledgeUlid(),
       nodeId: parent.id,
       text: input.text,
-      metadata: input.metadata,
+      metadata: metadataJson ? (JSON.parse(metadataJson) as KnowledgeRecord['metadata']) : input.metadata,
       source: input.source,
       version: 1,
       createdAt: now,
@@ -1344,7 +1347,7 @@ export class KnowledgePG extends KnowledgeStorage {
         record.id,
         record.nodeId,
         record.text,
-        record.metadata ? JSON.stringify(record.metadata) : null,
+        metadataJson,
         record.source ?? null,
         now.toISOString(),
         now.toISOString(),
@@ -1693,7 +1696,9 @@ export class KnowledgePG extends KnowledgeStorage {
         if (!existing) throw new KnowledgeNotFoundError('node', String(binding.rows[0].nodeId));
         return existing;
       }
-      const node = await this.#createNode(tx, input.node);
+      // Address-bound nodes are identified by address, not name — never coalesce onto
+      // an existing same-named node. Callers disambiguate the name on conflict.
+      const node = await this.#createNode(tx, input.node, { coalesceByName: false });
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (source,address,nodeId) VALUES (?,?,?)`,
         args: [input.source, input.address, node.id],
@@ -2961,12 +2966,19 @@ export class KnowledgePG extends KnowledgeStorage {
   async #transaction<T>(operation: (tx: Executor) => Promise<T>): Promise<T> {
     return this.#client.tx(tx => operation(createExecutor(tx, this.#schemaName)));
   }
-  async #createNode(executor: Executor, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+  async #createNode(
+    executor: Executor,
+    input: CreateKnowledgeNodeInput,
+    options?: { coalesceByName?: boolean },
+  ): Promise<KnowledgeNode> {
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     await this.#lockSiblingName(executor, input.name, scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds, true);
     if (existing?.deletedAt) throw new KnowledgeConflictError(existing.id);
-    if (existing) return existing;
+    if (existing) {
+      if (options?.coalesceByName === false) throw new KnowledgeConflictError(existing.id);
+      return existing;
+    }
     await this.#assertNoSiblingNameCollision(executor, input.name, scopeIds);
     const now = new Date();
     const node: KnowledgeNode = {

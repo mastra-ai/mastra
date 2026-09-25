@@ -57,8 +57,10 @@ describe('OpenAI Codex OAuth fetch', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0].toString()).toBe('https://chatgpt.com/backend-api/codex/responses');
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const [input, init] = fetchMock.mock.calls[0]!;
+    const request = input instanceof Request ? input : new Request(input, init);
+    expect(request.url).toBe('https://chatgpt.com/backend-api/codex/responses');
+    const headers = request.headers;
     expect(headers.get('Authorization')).toBe('Bearer oauth-token');
     expect(headers.get('ChatGPT-Account-ID')).toBe('acct-123');
     expect(headers.get('originator')).toBe('mastracode');
@@ -102,5 +104,39 @@ describe('OpenAI Codex OAuth fetch', () => {
       store: false,
       reasoningEffort: 'high',
     });
+  });
+});
+
+describe('createReasoningEffortMiddleware', () => {
+  it('returns undefined when reasoning effort is unset', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    expect(createReasoningEffortMiddleware('my-provider', undefined)).toBeUndefined();
+  });
+
+  it('injects reasoningEffort under the given provider key', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    const middleware = createReasoningEffortMiddleware('my-provider', 'high');
+    expect(middleware).toBeDefined();
+
+    const params = { providerOptions: { 'my-provider': { existing: 'preserved' } } };
+    const transformed = await middleware!.transformParams!({ params } as any);
+
+    expect(transformed.providerOptions?.['my-provider']).toEqual({
+      existing: 'preserved',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('does not inject Codex-only options and preserves unrelated providers', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    const middleware = createReasoningEffortMiddleware('openai', 'low');
+    const params = { providerOptions: { anthropic: { effort: 'low' } } };
+
+    const transformed = await middleware!.transformParams!({ params } as any);
+
+    expect(transformed.providerOptions?.openai).toEqual({ reasoningEffort: 'low' });
+    expect(transformed.providerOptions?.openai).not.toHaveProperty('instructions');
+    expect(transformed.providerOptions?.openai).not.toHaveProperty('store');
+    expect(transformed.providerOptions?.anthropic).toEqual({ effort: 'low' });
   });
 });

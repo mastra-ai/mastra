@@ -1,23 +1,47 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Loader2, Unplug } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useParams } from 'react-router';
 
 import {
   useKnowledgeImporters,
   useKnowledgeImportRun,
   useKnowledgeImportRuns,
+  useTriggerKnowledgeImport,
 } from '../../../../../hooks/useKnowledgeImports';
+import { settingsSectionPath } from '../../../settings/settingsSections';
 import type {
   KnowledgeImporterSummary,
   KnowledgeImportRun,
   KnowledgeImportStatus,
   KnowledgeImportTrigger,
 } from '../../services/knowledge-imports';
+import { PLATFORM_CONNECT_PROVIDERS } from '../../services/platformConnect';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
+
+/**
+ * Human-readable label for an importer id. Platform-connect importers use the
+ * machine id shape `connect:<provider>:<connectionId>` — surface the provider
+ * display name instead. When one provider has several connections, a short
+ * connection-id tail disambiguates them. Non-connect importer ids (e.g. the
+ * GitHub demo importer) pass through unchanged.
+ */
+function importerLabel(id: string, all: KnowledgeImporterSummary[]): string {
+  const match = /^connect:([^:]+):(.+)$/.exec(id);
+  if (!match) return id;
+  const [, slug, connectionId] = match;
+  const displayName =
+    (PLATFORM_CONNECT_PROVIDERS as Record<string, { displayName: string } | undefined>)[slug!]?.displayName ?? slug!;
+  const siblings = all.filter(entry => entry.id.startsWith(`connect:${slug}:`));
+  if (siblings.length <= 1) return displayName;
+  return `${displayName} · …${connectionId!.slice(-4)}`;
+}
 
 function elapsed(run: KnowledgeImportRun): string {
   if (!run.startedAt) return 'Not started';
@@ -74,17 +98,17 @@ function ImportRunDetail({
   return (
     <section
       aria-label="Import run detail"
-      className="border-surface5 bg-surface2 flex min-h-0 flex-col gap-4 rounded-lg border p-4"
+      className="border-border bg-background flex min-h-0 flex-col gap-4 rounded-lg border p-4"
     >
       <header className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <Txt as="h3" variant="ui-lg" className="text-icon6 font-semibold">
+            <Txt as="h3" variant="heading" className="text-foreground font-semibold">
               {run.importerId}
             </Txt>
-            <Badge size="xs">{run.status}</Badge>
+            <Badge size="sm">{run.status}</Badge>
           </div>
-          <Txt as="p" variant="ui-sm" className="text-icon3 mt-1">
+          <Txt as="p" variant="caption" className="text-muted-foreground mt-1">
             {run.source ?? 'Private source'} · {run.triggerKind} · {elapsed(run)}
           </Txt>
         </div>
@@ -96,21 +120,21 @@ function ImportRunDetail({
       {run.error ? <Notice variant="destructive">{run.error}</Notice> : null}
 
       <div>
-        <Txt as="h4" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+        <Txt as="h4" variant="caption" className="text-foreground mb-2 font-semibold">
           Knowledge activity
         </Txt>
         {activity.length === 0 ? (
-          <Txt as="p" variant="ui-sm" className="text-icon3">
+          <Txt as="p" variant="caption" className="text-muted-foreground">
             This run did not produce visible knowledge changes.
           </Txt>
         ) : (
           <ol className="divide-surface5 divide-y">
             {activity.map(event => (
               <li key={event.id} className="flex justify-between gap-4 py-2 text-sm">
-                <span className="text-icon5">
+                <span className="text-foreground">
                   {event.action} {event.targetType}
                 </span>
-                <time className="text-icon3 text-xs" dateTime={event.createdAt}>
+                <time className="text-muted-foreground text-xs" dateTime={event.createdAt}>
                   {new Date(event.createdAt).toLocaleString()}
                 </time>
               </li>
@@ -133,7 +157,7 @@ function ImportRunDetail({
 
       {transcript ? (
         <div>
-          <Txt as="h4" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+          <Txt as="h4" variant="caption" className="text-foreground mb-2 font-semibold">
             Agent transcript
           </Txt>
           {!transcript.available ? (
@@ -141,16 +165,16 @@ function ImportRunDetail({
           ) : (
             <ol className="flex flex-col gap-2" aria-label="Agent import transcript">
               {transcript.messages.map(message => (
-                <li key={message.id} className="border-surface5 bg-surface3 rounded-md border p-3">
+                <li key={message.id} className="border-border bg-fill rounded-md border p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <Badge size="xs">{message.role}</Badge>
-                    <time className="text-icon3 text-xs" dateTime={message.createdAt}>
+                    <Badge size="sm">{message.role}</Badge>
+                    <time className="text-muted-foreground text-xs" dateTime={message.createdAt}>
                       {new Date(message.createdAt).toLocaleString()}
                     </time>
                   </div>
-                  <pre className="text-icon4 overflow-x-auto text-xs whitespace-pre-wrap">{message.preview}</pre>
+                  <pre className="text-muted-foreground overflow-x-auto text-xs whitespace-pre-wrap">{message.preview}</pre>
                   {message.truncated ? (
-                    <Txt variant="ui-xs" className="text-icon3 mt-2">
+                    <Txt variant="meta" className="text-muted-foreground mt-2">
                       {formatOmittedBytes(message.omittedBytes)} omitted from this preview.
                     </Txt>
                   ) : null}
@@ -256,7 +280,7 @@ function ImportRuns({
       {runs.isPending ? <SkeletonRows label="Loading import runs" rows={6} /> : null}
       {runs.isError ? <Notice variant="destructive">{runs.error.message}</Notice> : null}
       {runs.data && items.length === 0 ? (
-        <Txt as="p" variant="ui-md" className="text-icon3">
+        <Txt as="p" variant="body" className="text-muted-foreground">
           No import runs match these filters.
         </Txt>
       ) : null}
@@ -266,20 +290,20 @@ function ImportRuns({
             <li key={run.id}>
               <button
                 type="button"
-                className="hover:bg-surface3 flex w-full items-start justify-between gap-4 px-2 py-3 text-left"
+                className="hover:bg-fill-hover flex w-full items-start justify-between gap-4 px-2 py-3 text-left"
                 onClick={() => setSelectedRunId(run.reference)}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-icon5 font-medium">{run.source ?? run.binding}</span>
-                    <Badge size="xs">{run.status}</Badge>
+                    <span className="text-foreground font-medium">{run.source ?? run.binding}</span>
+                    <Badge size="sm">{run.status}</Badge>
                   </div>
-                  <span className="text-icon3 mt-1 block truncate text-xs">
+                  <span className="text-muted-foreground mt-1 block truncate text-xs">
                     {run.triggerKind} · {elapsed(run)}
                   </span>
-                  {run.error ? <span className="text-icon3 mt-1 block truncate text-xs">{run.error}</span> : null}
+                  {run.error ? <span className="text-muted-foreground mt-1 block truncate text-xs">{run.error}</span> : null}
                 </div>
-                <time className="text-icon3 shrink-0 text-xs" dateTime={run.queuedAt}>
+                <time className="text-muted-foreground shrink-0 text-xs" dateTime={run.queuedAt}>
                   {new Date(run.queuedAt).toLocaleString()}
                 </time>
               </button>
@@ -296,6 +320,37 @@ function ImportRuns({
   );
 }
 
+/**
+ * Manual sync trigger. Stays in its loading state for the whole life of the
+ * sync, not just the trigger request: the importers query (polled every 5s)
+ * reports the importer's latest run, so the button reads "Syncing…" while that
+ * run is queued or running and returns to "Sync now" once it settles.
+ */
+function SyncNowButton({
+  importer,
+  pending,
+  onSync,
+}: {
+  importer: KnowledgeImporterSummary;
+  pending: boolean;
+  onSync: () => void;
+}) {
+  const runStatus = importer.lastRun?.status;
+  const syncing = pending || runStatus === 'queued' || runStatus === 'running';
+  return (
+    <Button variant="default" size="sm" disabled={syncing} onClick={onSync}>
+      {syncing ? (
+        <>
+          <Loader2 size={14} aria-hidden className="motion-safe:animate-spin motion-reduce:animate-none" />
+          Syncing…
+        </>
+      ) : (
+        'Sync now'
+      )}
+    </Button>
+  );
+}
+
 export function KnowledgeImports({
   factoryProjectId,
   threadId,
@@ -309,14 +364,25 @@ export function KnowledgeImports({
 }) {
   const importers = useKnowledgeImporters(factoryProjectId, threadId);
   const [requestedImporterId, setRequestedImporterId] = useState<string | undefined>(initialImporterId);
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const trigger = useTriggerKnowledgeImport(factoryProjectId, threadId);
   if (!factoryProjectId) return null;
   if (importers.isPending) return <SkeletonRows label="Loading knowledge importers" rows={5} />;
   if (importers.isError) return <Notice variant="destructive">{importers.error.message}</Notice>;
   if (importers.data.importers.length === 0) {
     return (
-      <Txt as="p" variant="ui-md" className="text-icon3">
-        No knowledge importers are registered.
-      </Txt>
+      <EmptyState
+        iconSlot={<Unplug aria-hidden />}
+        titleSlot="No knowledge sources yet"
+        descriptionSlot="Connect a source like Notion, Linear, or Confluence and its imports will show up here."
+        actionSlot={
+          factoryId ? (
+            <Button size="sm" render={<Link to={settingsSectionPath(factoryId, 'knowledge')} />}>
+              Connect a source
+            </Button>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -328,18 +394,22 @@ export function KnowledgeImports({
       <div className="flex items-center gap-3">
         <Select value={importer.id} onValueChange={setRequestedImporterId}>
           <SelectTrigger size="sm" aria-label="Knowledge importer" className="w-64">
-            {importer.id}
+            {importerLabel(importer.id, importers.data.importers)}
           </SelectTrigger>
           <SelectContent>
             {importers.data.importers.map(entry => (
               <SelectItem key={entry.id} value={entry.id}>
-                {entry.id}
+                {importerLabel(entry.id, importers.data.importers)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Badge size="xs">{importer.importKind}</Badge>
+        <Badge size="sm">{importer.importKind}</Badge>
+        {importer.triggers.includes('cron') ? (
+          <SyncNowButton importer={importer} pending={trigger.isPending} onSync={() => trigger.mutate(importer.id)} />
+        ) : null}
       </div>
+      {trigger.isError ? <Notice variant="destructive">{trigger.error.message}</Notice> : null}
       <ImportRuns
         key={importer.id}
         factoryProjectId={factoryProjectId}

@@ -58,10 +58,14 @@ function credentialAt(provider: ProviderInfo, scope: CredentialScope): Credentia
 interface RowScope {
   scope: CredentialScope;
   authEnabled: boolean;
+  showOrgCoverage: boolean;
 }
 
-function orgCoverage(provider: ProviderInfo, { scope, authEnabled }: RowScope): Credential | undefined {
-  return authEnabled && scope === 'user' ? credentialAt(provider, 'org') : undefined;
+function orgCoverage(
+  provider: ProviderInfo,
+  { scope, authEnabled, showOrgCoverage }: RowScope,
+): Credential | undefined {
+  return authEnabled && scope === 'user' && showOrgCoverage ? credentialAt(provider, 'org') : undefined;
 }
 
 function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope: RowScope }) {
@@ -94,7 +98,13 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   );
 }
 
-export function ProviderAccessSection({ description }: { description?: string }) {
+export function ProviderAccessSection({
+  description,
+  fixedScope,
+}: {
+  description?: string;
+  fixedScope?: CredentialScope;
+}) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
   const startOAuthMutation = useStartProviderOAuth();
@@ -110,10 +120,16 @@ export function ProviderAccessSection({ description }: { description?: string })
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
-  const scopeOptions: SettingsScope[] = authEnabled ? ['personal', 'org'] : ['personal'];
+  const fixedSettingsScope: SettingsScope | undefined =
+    fixedScope === 'org' ? 'org' : fixedScope ? 'personal' : undefined;
+  const scopeOptions: SettingsScope[] = fixedSettingsScope
+    ? [fixedSettingsScope]
+    : authEnabled
+      ? ['personal', 'org']
+      : ['personal'];
   const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
-  const scope: CredentialScope = scopeControl.shown === 'org' ? 'org' : 'user';
-  const rowScope: RowScope = { scope, authEnabled };
+  const scope: CredentialScope = fixedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
+  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage: fixedScope === undefined };
   const scopeArg = authEnabled ? { scope } : {};
 
   const oauthProviders = providers
@@ -193,7 +209,7 @@ export function ProviderAccessSection({ description }: { description?: string })
       >
         <div className="flex flex-col gap-3">
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
               {error}
             </Txt>
           )}
@@ -206,7 +222,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
-                  <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
                     No providers support sign in.
                   </Txt>
                 ) : (
@@ -221,7 +237,6 @@ export function ProviderAccessSection({ description }: { description?: string })
                           <StatusBadge provider={provider} rowScope={rowScope} />
                           {signedIn ? (
                             <Button
-                              variant="outline"
                               size="sm"
                               aria-label={
                                 scope === 'org'
@@ -235,7 +250,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                             </Button>
                           ) : (
                             <Button
-                              variant={covered ? 'outline' : 'primary'}
+                              variant={covered ? 'default' : 'primary'}
                               size="sm"
                               aria-label={`Sign in to ${displayName}`}
                               disabled={startOAuthMutation.isPending}
@@ -255,7 +270,10 @@ export function ProviderAccessSection({ description }: { description?: string })
 
           <TabContent value="api-key" className="flex flex-col gap-3">
             <div className="relative">
-              <Search size={14} className="text-icon3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
+              <Search
+                size={14}
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+              />
               <Input
                 type="text"
                 placeholder="Search providers to add an API key…"
@@ -273,7 +291,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
-                  <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
                     {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
                   </Txt>
                 ) : (
@@ -294,7 +312,6 @@ export function ProviderAccessSection({ description }: { description?: string })
                           </Button>
                           {storedKey && (
                             <Button
-                              variant="outline"
                               size="sm"
                               aria-label={`Remove key for ${displayName}`}
                               disabled={isRemoving(provider)}

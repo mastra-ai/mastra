@@ -1,0 +1,172 @@
+---
+title: 'Connect importers'
+description: 'Sync Notion, Confluence, Zendesk, Linear, and Fireflies into Knowledge through the Mastra Platform connection proxy.'
+packages:
+  - '@mastra/core'
+  - '@mastra/connect'
+---
+
+# Connect importers
+
+`@mastra/connect` ships a hardcoded set of Knowledge importers for five third-party sources: Notion, Confluence, Zendesk, Linear, and Fireflies. Each importer runs as a deterministic cursor-based sync through the Mastra Platform HTTP proxy — source credentials never enter your process, and importers do not reuse Connect toolset definitions. Jira is deliberately not a knowledge importer — it is a work-intake source (see the Factory intake integrations).
+
+Pass the resolver returned by `importers()` straight to `KnowledgeConfig.importers`. It is a live async resolver: attaching a connection on the platform makes the corresponding importer appear on the next scheduling tick, and detaching one stops it — no process restart.
+
+## Register the resolver
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+import { importers } from '@mastra/connect'
+
+export const knowledge = new Knowledge({
+  id: 'mastra',
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  importers: importers({
+    projectId: process.env.MASTRA_PROJECT_ID,
+    integrations: {
+      notion: { scope: 'org:acme' },
+      linear: { scope: 'org:acme:engineering' },
+      fireflies: { scope: 'org:acme' },
+    },
+  }),
+})
+```
+
+Only the providers you list under `integrations` are considered. A provider with no `scope` or `access` throws at `importers()` call time. Per-connection resolution problems — needs-reauth, ambiguous multiple connections without a `connectionId` pin, no active connection — warn and skip so one bad integration never fails the whole set.
+
+## Providers
+
+| `integrationId` | Default schedule | External address | Relationships | Notes |
+| - | - | - | - | - |
+| `notion` | `0 * * * *` | `notion:page:<id>`, `notion:database:<id>` | Parent page/database (`child-of`); page links from `link_to_page` blocks, page mentions, and notion.so URLs (`references`). | `POST /v1/search` sorted by `last_edited_time`; page bodies fetched via a bounded `blocks/{id}/children` walk; archived pages remove records under an `owner` binding. |
+| `confluence` | `0 * * * *` | `confluence:page:<id>` | Direct ancestor (`child-of`); `<ri:page>` storage-format links — by content id when present, by title otherwise (`references`). | CQL `lastmodified >= "<watermark>"`; storage-format body stripped to plain text. |
+| `linear` | `*/30 * * * *` | `linear:document:<id>` | Project container (`in`, `linear:project:<id>`); doc-to-doc links from `linear.app` document URLs, resolved via slug aliases (`references`). | GraphQL `documents(filter: { updatedAt: { gte: $watermark } })` — Documents (project docs, PRDs), not issues; archived documents remove records. |
+| `zendesk` | `*/30 * * * *` | `zendesk:article:<id>` | Section container (`in`, `zendesk:section:<id>`); article-to-article links from Help Center hrefs (`references`). | Help Center incremental export (`/api/v2/help_center/incremental/articles.json`) — Guide articles, not tickets; HTML bodies stripped to plain text; drafts remove records. |
+| `fireflies` | `0 */2 * * *` | `fireflies:transcript:<id>` | Attendee containers (`attended-by`/`organized-by`, `fireflies:person:<email>`); recurring-meeting series keyed on title (`in`, `fireflies:series:<slug>`). | GraphQL `transcripts(fromDate: $watermark)`; one record per summary facet (overview, action items, keywords) with a `metadata.citation` deep link. |
+
+## Per-integration options
+
+| Field | Purpose |
+| - | - |
+| `scope` | Convenience shorthand for a single-scope `owner` grant. |
+| `access` | Explicit `{ scopeAddress: 'owner' \| 'edit' }` map when you need multiple scopes or non-owner roles. |
+| `scopes` | Function returning destination scope addresses, resolved at each cron fire. Requires an explicit `access` map. |
+| `connectionId` | Pin a specific connection id when a project has more than one connection for the same provider. |
+| `disabled` | Skip this provider even if a connection exists. |
+| `schedule` | Cron override; defaults to the provider's `defaultSchedule`. |
+
+If a project has multiple active connections for the same provider and no `connectionId` is pinned, `importers()` reads the corresponding environment variable (for example `MASTRA_NOTION_CONNECTION_ID`) and falls back to warn-and-skip when ambiguous.
+
+### Dynamic destination scopes
+
+When the set of destinations changes at runtime — for example one scope per active project — pass a `scopes` function instead of hardcoding scope addresses. It is resolved at every cron fire, so scopes added or removed after startup take effect on the next run without re-registering the importer:
+
+```typescript
+importers({
+  projectId: 'proj_x',
+  integrations: {
+    notion: {
+      access: { 'resource:$projectId': 'owner' },
+      scopes: async () => (await listActiveProjects()).map(p => `resource:${p.id}`),
+    },
+  },
+})
+```
+
+Parameterized `access` keys (containing `$`, like `resource:$projectId`) grant authority over every scope the pattern matches but are not destinations themselves — only resolved `scopes` and concrete `access` keys are synced. A concrete key alongside a `scopes` function keeps syncing as a static destination on every run. If the `scopes` function throws, the run proceeds with the last successfully resolved set (or the static destinations only) and retries at the next fire.
+
+The `scopes` function receives `{ connection }` — the platform connection the importer is bound to — so different connections of the same provider can resolve different destination sets (per-connection routing):
+
+```typescript
+const scopes = async ({ connection }) => {
+  const selection = await loadRoutingFor(connection.id)
+  return selection.map(projectId => `resource:${projectId}`)
+}
+```
+
+## Credential model
+
+All provider HTTP goes through `proxyRequest` against the platform's connection proxy. Importer code never sees access tokens or API keys, and the proxy enforces per-connection authorization. This is the same guarantee that applies to `connect()` tools — importers just use the client layer directly instead of exposing tools to a model.
+
+## Delta semantics
+
+Every importer is written for at-least-once execution:
+
+- Cursor or watermark state lives in `context.state` — the importer's durable KV store. It is written exactly once per run, after every mutation for that window has committed. A mid-run failure leaves the watermark low, so the next run replays that window; deterministic record ids keep the replay idempotent.
+- Date-based watermarks (Notion, Confluence, Linear, Fireflies) re-process the boundary timestamp inclusively.
+- Zendesk's watermark is the incremental export's `end_time` (epoch seconds) — stored verbatim and passed back as the next `start_time`.
+- Every run is bounded: at most 50 HTTP pages and 500 records per invocation, and every handler honors `context.signal` for cancellation.
+- Descending walkers (Notion, Linear, Fireflies) persist a resume cursor alongside the watermark. When a run hits the per-run bound before draining back to the previous watermark, the next scheduled run resumes deeper into the tail instead of restarting from the newest page — so an initial backfill larger than one bounded run still converges. During the multi-run backfill the walker also persists the newest timestamp it observed on the first-fetched page, so the final drain run (which by construction only sees older items via its resume cursor) still writes the correct high-water watermark rather than regressing it to the older tail. Once the walk exhausts pagination, the watermark advances, and both the resume cursor and the high-water candidate are cleared.
+
+## Relationship links
+
+Importers record the relationships their source natively knows — cross-references between content and containment structure — as `metadata.links` on each record:
+
+```typescript
+interface RecordLink {
+  address?: string // Stable node address, preferred (e.g. 'notion:page:<id>')
+  name?: string // Display-name fallback for title-only sources (Confluence)
+  rel?: string // 'references' | 'child-of' | 'in' | 'attended-by' | ...
+}
+// Stored as record metadata: { links: RecordLink[] }
+```
+
+No edges are stored. The Factory graph route derives edges at render time: `address` entries resolve against the loaded window's nodes via the self-address each importer stamps into node metadata (`metadata.address`, plus `metadata.addressAliases` — Linear docs register a slug alias because doc URLs carry the short slug, not the uuid); `name` entries resolve through the same name resolver wikilinks use. Unresolvable targets are skipped silently. Structure links are emitted one-directionally — the child records `child-of`/`in` toward its container.
+
+Container nodes (Linear projects, Zendesk sections, Fireflies people and series) are upserted with a name, a kind (`connect:linear:project`, `connect:zendesk:section`, `connect:fireflies:person`, `connect:fireflies:series`), and one minimal record so they render in the graph.
+
+The sorted link array is part of each record's content hash, so a structural move or link change produces a new record id and flows through the normal replace-and-clean-up machinery. Imported body text has `[[`/`]]` neutralized to fullwidth brackets so source content can never mint accidental wikilink edges.
+
+## Cache and revalidation
+
+`importers()` snapshots the resolved definitions and revalidates on TTL expiry (`ttlMs`, default `30_000`). Two additional entry points let you drive revalidation yourself:
+
+```typescript
+const resolver = importers({ projectId: 'proj_x', integrations: { notion: { scope: 'org:acme' } } })
+
+resolver.invalidate() // Drop the cached snapshot; next call refetches.
+await resolver.refresh() // Force a refetch now and update the cache.
+```
+
+A platform fetch failure serves the previous good snapshot rather than losing importers mid-run; the failure is logged and enters a short cooldown.
+
+## Factory auto-construction
+
+The Factory (`@mastra/factory`) accepts a first-class `importers` config option and auto-constructs the `Knowledge` instance on your behalf when the platform environment is present. In a platform-enabled deployment you do not need to instantiate `Knowledge` yourself:
+
+```typescript title="src/mastra/index.ts"
+import { MastraFactory } from '@mastra/factory'
+
+export const factory = new MastraFactory({
+  storage,
+  // Factory calls importers() from @mastra/connect on your behalf.
+  // Auto-constructs `new Knowledge({ id: 'factory', storage, importers: importers() })`
+  // whenever both MASTRA_PLATFORM_ACCESS_TOKEN (or _SECRET_KEY) and MASTRA_PROJECT_ID
+  // are set. Skipped silently otherwise — local dev boots fine.
+})
+```
+
+The following forms are all supported:
+
+| `FactoryConfig` shape | Behavior |
+| - | - |
+| `knowledge: myOwnKnowledge` | Fully-owned mode — Factory registers your `Knowledge` verbatim; `importers` is ignored. |
+| `importers: importers({ ... })` | Auto-construct with the resolver you configure explicitly (bypasses env auto-detection). |
+| `importers: [customImporter]` | Auto-construct with a static importer array — useful for tests and non-platform hosts. |
+| `importers: false` | Explicit opt-out — no Knowledge is auto-constructed even if the platform env is present. |
+| _(neither field set)_ | Auto-construct when the platform env is present; otherwise skip silently. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` enables an empty-importer Knowledge as a dev override. |
+
+When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project, per-source destinations: scopes are resolved from the Factory project inventory at each cron fire, one `resource:<projectId>:<provider>:<connectionId>` sub-scope per project per connected account, so newly created projects start syncing without a restart and each source shows up as its own scope in the knowledge graph. The rung grammar is `provider:resource` — the same topology as repository knowledge under `resource:<projectId>:github:<owner/repo>` — where the resource is the connected account or workspace, addressed by its stable connection id. The scope's display name carries the human label (`Notion — Acme Workspace` when the platform reports an account label, the provider name otherwise). Missing sub-scopes are materialized on demand during resolution — including the parent `org` and `resource` rungs for projects nobody has visited yet. Document sources (Notion, Confluence, Linear Documents, Zendesk Help Center) default to the `owner` role; transcript sources (Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage, { knowledge })` from `@mastra/factory`.
+
+The default resolver enumerates projects across every org in the storage backend — the platform connection feeding the importers is deployment-level, so in a multi-org deployment its content lands in all orgs' projects. Pass your own `importersOptions.integrations` with an org-filtered `scopes` resolver when you need a tenant boundary.
+
+Each connection can also be routed to a subset of projects. The Knowledge settings section shows a per-connection "Sync to" control (all projects by default, or a selected list), persisted through `PUT /web/integrations/platform/:provider/connections/:connectionId/routing`. The default resolver honors the stored selection on its next cron fire: a selected-mode connection resolves only its chosen projects (intersected with the live inventory, so deleted projects drop out silently), while unrouted connections keep syncing everywhere. An empty selection is valid — the connection stays established on the platform ("Sync to: No projects") and its imports land in no Factory project until one is linked.
+
+The `importers()` resolver enumerates **project** connections (`GET /v2/projects/:projectId/connections`), so a connection must be attached to the deployment's platform project to produce an importer. Factory handles this automatically when `MASTRA_PROJECT_ID` is set: connect sessions are minted project-scoped, and connections created before this behavior are attached idempotently the next time the settings page lists them.
+
+The presence of a `Knowledge` instance on the Factory — auto-constructed or user-supplied — is what flips the `/web/config/features` `knowledge` flag on. That flag drives both the Knowledge page in Factory's SPA and the Knowledge Importers settings section, where users can connect Notion, Confluence, Linear, Zendesk, or Fireflies through the same Nango-backed OAuth flow the Factory already uses for Jira and incident.io. A newly-connected provider starts syncing on the next importer tick without a Factory restart.
+
+Auto-construction gives you a `Knowledge` instance with live importers but no access model. Importer-driven ingestion works because each definition carries its own `access` map, but the Knowledge Canvas and Search read routes need a `knowledgeAccessProfile` to serve results — pass `knowledgeAccessProfile` alongside `importers` (or `knowledge`) when you plan to expose the read surfaces.
+
+Jira remains in Factory's platform-connect provider set for work intake only — it has no knowledge importer, so the Knowledge Importers settings section lists Notion, Confluence, Linear, Zendesk, and Fireflies while Jira stays exposed via the intake connections above.

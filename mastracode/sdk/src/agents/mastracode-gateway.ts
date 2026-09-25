@@ -28,29 +28,35 @@ import {
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
+import {
+  normalizeAnthropicModelId,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
+  createReasoningEffortMiddleware,
   getEffectiveThinkingLevel,
   openaiCodexProvider,
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { xaiProvider } from '../providers/xai.js';
+import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
-export const OPENAI_PREFIX = 'openai/';
-export const MASTRA_GATEWAY_PREFIX = 'mastra/';
-export const MASTRACODE_GATEWAY_ID = 'mastracode';
+export {
+  MASTRA_GATEWAY_PREFIX,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
 
-const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
-  'gpt-5.3': 'gpt-5.3-codex',
-  'gpt-5.2': 'gpt-5.2-codex',
-  'gpt-5.1': 'gpt-5.1-codex',
-  'gpt-5.1-mini': 'gpt-5.1-codex-mini',
-  'gpt-5': 'gpt-5-codex',
-};
+export const MASTRACODE_GATEWAY_ID = 'mastracode';
 
 type ModelRequestHeaders = Record<string, string>;
 
@@ -71,47 +77,39 @@ export type MastraCodeGatewayOptions = {
   credentialStore?: CredentialStore;
 };
 
-const authStorage = new AuthStorage();
+/**
+ * Global file-backed credential store for local (TUI) model resolution.
+ *
+ * Constructed lazily, NOT at module scope: `AuthStorage`'s default path is
+ * resolved from `MASTRA_APP_DATA_DIR` at construction, and this module is
+ * routinely imported before test harnesses / embedders point that variable at
+ * an isolated directory — an import-time construction would permanently pin
+ * the developer's real app-data dir for every credential read.
+ */
+let authStorageSingleton: AuthStorage | undefined;
+let authStorageSingletonDir: string | undefined;
+
+export function getGlobalAuthStorage(): AuthStorage {
+  // Keyed by the resolved app-data dir: in-process harnesses re-point
+  // MASTRA_APP_DATA_DIR per run inside one long-lived worker, so a store
+  // pinned to a previous dir must be discarded, not reused.
+  const dir = getAppDataDir();
+  if (!authStorageSingleton || authStorageSingletonDir !== dir) {
+    authStorageSingleton = new AuthStorage();
+    authStorageSingletonDir = dir;
+  }
+  return authStorageSingleton;
+}
 
 export function reloadAuthStorage() {
-  authStorage.reload();
-}
-
-export function stripMastraGatewayPrefix(modelId: string): string {
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
-}
-
-function normalizeAnthropicModelId(modelId: string): string {
-  return modelId.replace(/\.(?=\d)/g, '-');
-}
-
-export function remapOpenAIModelForCodexOAuth(modelId: string): string {
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
-
-  if (!normalizedModelId.startsWith(OPENAI_PREFIX)) {
-    return modelId;
-  }
-
-  const openaiModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
-
-  if (openaiModelId.includes('-codex')) {
-    return modelId;
-  }
-
-  const codexModelId = CODEX_OPENAI_MODEL_REMAPS[openaiModelId];
-  if (!codexModelId) {
-    return modelId;
-  }
-
-  const remappedModelId = `${OPENAI_PREFIX}${codexModelId}`;
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? `${MASTRA_GATEWAY_PREFIX}${remappedModelId}` : remappedModelId;
+  getGlobalAuthStorage().reload();
 }
 
 /**
  * Resolve the Anthropic API key.
  * Main slot → dedicated apikey: slot → env var.
  */
-export function getAnthropicApiKey(credentials: CredentialStore = authStorage): string | undefined {
+export function getAnthropicApiKey(credentials: CredentialStore = getGlobalAuthStorage()): string | undefined {
   const storedCred = credentials.get('anthropic');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
@@ -127,7 +125,7 @@ export function getAnthropicApiKey(credentials: CredentialStore = authStorage): 
  * Resolve the OpenAI API key.
  * Main slot → dedicated apikey: slot → env var.
  */
-export function getOpenAIApiKey(credentials: CredentialStore = authStorage): string | undefined {
+export function getOpenAIApiKey(credentials: CredentialStore = getGlobalAuthStorage()): string | undefined {
   const storedCred = credentials.get('openai-codex');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
@@ -151,11 +149,23 @@ function anthropicApiKeyProvider(
   });
 }
 
-function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
+function openaiApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  headers?: ModelRequestHeaders,
+  thinkingLevel?: ThinkingLevel,
+) {
   const openai = createOpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL, headers });
+  const middleware =
+    thinkingLevel && thinkingLevel !== 'off'
+      ? createReasoningEffortMiddleware(
+          'openai',
+          THINKING_LEVEL_TO_REASONING_EFFORT[getEffectiveThinkingLevel(modelId, thinkingLevel)],
+        )
+      : undefined;
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: [],
+    middleware: middleware ? [middleware] : [],
   });
 }
 
@@ -163,7 +173,10 @@ function getAuthProviderId(providerId: string): string {
   return providerId === 'openai' ? 'openai-codex' : providerId;
 }
 
-function getProviderAuthKey(providerId: string, credentials: CredentialStore = authStorage): string | undefined {
+function getProviderAuthKey(
+  providerId: string,
+  credentials: CredentialStore = getGlobalAuthStorage(),
+): string | undefined {
   const authProviderId = getAuthProviderId(providerId);
   const storedCred = credentials.get(authProviderId);
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
@@ -287,11 +300,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     this.#thinkingLevel = thinkingLevel;
     this.#customProviders = customProviders;
     this.#settingsPath = settingsPath;
-    this.#credentials = credentialStore ?? authStorage;
+    this.#credentials = credentialStore ?? getGlobalAuthStorage();
   }
 
   static getMastraGatewayApiKey(): string | undefined {
-    return authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    return getGlobalAuthStorage().getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   }
 
   /** @deprecated Renamed to {@link MastraCodeGateway.getMastraGatewayApiKey}. */
@@ -330,7 +343,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   static resolveProviderAuth(
     request: GatewayAuthRequest,
     mastraGatewayApiKey?: string,
-    credentials: CredentialStore = authStorage,
+    credentials: CredentialStore = getGlobalAuthStorage(),
   ): GatewayAuthResult | undefined {
     if (request.gatewayId === 'mastra' && mastraGatewayApiKey) {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
@@ -412,7 +425,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     };
 
     try {
-      const copilotModels = await getCopilotModelCatalog({ authStorage });
+      const copilotModels = await getCopilotModelCatalog({ authStorage: this.#credentials });
       providers['github-copilot'] = {
         name: 'GitHub Copilot',
         apiKeyEnvVar: '',
@@ -470,7 +483,15 @@ export class MastraCodeGateway extends MastraModelGateway {
         apiKey: args.apiKey,
         headers: args.headers,
       });
-      return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+      const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
+      const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
+      if (!middleware) {
+        return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+      }
+      return wrapLanguageModel({
+        model: provider.chatModel(args.modelId),
+        middleware: [middleware],
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (args.providerId === 'github-copilot') {
@@ -511,6 +532,10 @@ export class MastraCodeGateway extends MastraModelGateway {
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;
+    }
+
+    if (args.providerId === 'google') {
+      return this.#resolveGoogleModel(args);
     }
 
     if (this.#routeThroughMastraGateway) {
@@ -660,9 +685,39 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     const apiKey = getOpenAIApiKey(this.#credentials);
     if (apiKey) {
-      return openaiApiKeyProvider(args.modelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
+      return openaiApiKeyProvider(
+        args.modelId,
+        apiKey,
+        args.headers,
+        this.#thinkingLevel,
+      ) as unknown as GatewayLanguageModel;
     }
 
     return undefined;
+  }
+
+  #resolveGoogleModel(args: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+    headers?: Record<string, string>;
+    transport?: any;
+    responsesWebSocket?: any;
+  }): GatewayLanguageModel {
+    const baseModel = this.#routeThroughMastraGateway
+      ? (this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel)
+      : (new ModelRouterLanguageModel({
+          id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+          apiKey: args.apiKey,
+          headers: args.headers,
+        }) as unknown as GatewayLanguageModel);
+
+    const thinkingMiddleware = createGoogleThinkingMiddleware(args.modelId, this.#thinkingLevel);
+    if (!thinkingMiddleware) return baseModel;
+
+    return wrapLanguageModel({
+      model: baseModel as any,
+      middleware: [thinkingMiddleware],
+    }) as unknown as GatewayLanguageModel;
   }
 }

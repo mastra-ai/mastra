@@ -55,13 +55,20 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type {
+  AgentChunkType,
+  ThreadHistoryChunk,
+  CustomChunkWriter,
+  MastraOnFinishCallbackArgs,
+  ModelManagerModelConfig,
+} from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
@@ -185,9 +192,22 @@ export type AgentClaimThreadPeerOptions = {
   metadata?: Record<string, unknown>;
 };
 
+export type AgentUpdateThreadPeerOptions = {
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
   sourceId: string;
   discoveredAt: Date;
+  /**
+   * True when the agent that ran this discovery published the advertisement
+   * itself, so it names one of that agent's own threads rather than a peer's.
+   * Discovery answers with the caller's own advertisements alongside peer
+   * responses; callers listing peers for a human use this to exclude their own.
+   */
+  selfAdvertised?: boolean;
 };
 
 export type DiscoverAgentThreadPeersOptions = {
@@ -322,7 +342,9 @@ export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type CancelQueuedAgentMessagesOptions =
-  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel selected pending input across all Agents sharing this runtime and thread. */
+  | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel only the calling Agent's queued messages in this owner group. */
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 /**
@@ -429,20 +451,50 @@ export interface AgentThreadIdentityOptions {
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
+  clearPendingSignals?: boolean;
+  /** Abort only if this run is still the thread's active run. */
+  expectedRunId?: string;
+  /**
+   * Abort only what this process owns. When the active run belongs to a remote
+   * thread owner, an ordinary abort asks that owner to stop the run; a local-only
+   * abort leaves it running and reports `false` instead. Thread lifecycle
+   * transitions (detaching, switching threads) use this so unbinding a thread
+   * never kills another instance's run.
+   */
+  localOnly?: boolean;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
+  /**
+   * Start the stream with one `thread-history` chunk holding the thread's stored
+   * messages (newest `perPage`, default 40, oldest first), then emit only parts
+   * newer than that history, then live parts. Pending approval and suspension
+   * chunks are always emitted.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
+  /** Request context used to resolve the agent's memory when loading initial history. */
+  requestContext?: RequestContext;
 }
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentThreadSubscription<OUTPUT = unknown> {
-  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+  /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
+  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  abort: () => boolean;
+  /**
+   * Abort the active run. Pass `localOnly` to leave a remote owner's run alone,
+   * or `clearPendingSignals` to also drop input queued behind it.
+   */
+  abort: (options?: Pick<AgentAbortThreadOptions, 'clearPendingSignals' | 'localOnly'>) => boolean;
   unsubscribe: () => void;
 }
 
@@ -456,8 +508,17 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
   /**
-   * Custom instructions for the structuring agent.
-   * If not provided, will generate instructions based on the schema.
+   * Custom instructions describing the expected output. The meaning depends on the mode:
+   *
+   * - With `model` set (separate structuring pass): instructions for the structuring agent.
+   * - Without `model`, when `jsonPromptInjection` is active: these instructions are injected
+   *   into the prompt **in place of** the generated schema dump, which can cut thousands of
+   *   tokens per model call on large schemas. Adherence then rests on your wording, so keep
+   *   the field list explicit.
+   * - Without `model` and without prompt injection (native response format): no effect.
+   *
+   * If not provided, instructions are generated from the schema. Output is always validated
+   * against `schema` regardless of what this field contains.
    */
   instructions?: string;
 
@@ -593,7 +654,7 @@ export interface GoalConfig {
  *
  * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
  * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, id, name).
+ *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
  *
  * See `packages/core/src/agent/durable/create-durable-agent.ts`.
  */
@@ -610,6 +671,13 @@ export type AgentDurableOption =
       cleanupTimeoutMs?: number;
       /** See createDurableAgent options: per-topic opt-out of the replay cache. */
       shouldCache?: (topic: string) => boolean;
+      /**
+       * See createDurableAgent options: overrides the snapshot-persistence
+       * policy. By default `pending | paused | suspended` are always
+       * persisted and `running` checkpoints only when the Mastra instance
+       * sets `recovery: { durableAgents: 'auto' }`.
+       */
+      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
       /** Optional id override (defaults to agent.id). */
       id?: string;
       /** Optional name override (defaults to agent.name). */
@@ -1256,6 +1324,10 @@ export type AgentExecuteOnFinishOptions = {
     | MastraScorers
     | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /** Writer for emitting a transient `data-thread-title` chunk on stream runs before `finish`. */
+  writer?: CustomChunkWriter;
+  /** Abort signal of the current run; an abort during the title wait releases `finish` immediately. */
+  abortSignal?: AbortSignal;
   /**
    * Optional platform `waitUntil` so detached title generation survives
    * serverless freeze-after-response without blocking `generate()`/`stream()`.

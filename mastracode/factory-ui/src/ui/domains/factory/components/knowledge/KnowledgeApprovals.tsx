@@ -65,14 +65,14 @@ export function KnowledgeApprovals({
             <SelectItem value="rejected">Rejected</SelectItem>
           </SelectContent>
         </Select>
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-muted-foreground">
           Only proposals visible from this project perspective are shown.
         </Txt>
       </div>
 
       {review.isError ? <Notice variant="destructive">{review.error.message}</Notice> : null}
       {visibleProposals.length === 0 ? (
-        <Txt as="p" variant="ui-md" className="text-icon3 py-8">
+        <Txt as="p" variant="body" className="text-muted-foreground py-8">
           No {status} proposals.
         </Txt>
       ) : (
@@ -82,27 +82,27 @@ export function KnowledgeApprovals({
               target => target.currentVersion !== undefined && target.currentVersion !== target.expectedVersion,
             );
             return (
-              <li key={proposal.id} className="border-surface5 bg-surface2 rounded-lg border p-4">
+              <li key={proposal.id} className="border-border bg-background rounded-lg border p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Txt as="h3" variant="ui-md" className="text-icon6 font-semibold">
+                      <Txt as="h3" variant="body" className="text-foreground font-semibold">
                         {proposal.operation}
                       </Txt>
                       <Badge size="xs">{proposal.status}</Badge>
                       {stale ? <Badge size="xs">stale</Badge> : null}
                     </div>
                     {proposal.reason ? (
-                      <Txt as="p" variant="ui-sm" className="text-icon4 mt-1">
+                      <Txt as="p" variant="caption" className="text-muted-foreground mt-1">
                         {proposal.reason}
                       </Txt>
                     ) : null}
-                    <Txt as="p" variant="ui-sm" className="text-icon3 mt-1">
+                    <Txt as="p" variant="caption" className="text-muted-foreground mt-1">
                       Proposer: {proposal.proposer}
                     </Txt>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <time className="text-icon3 text-xs" dateTime={proposal.createdAt}>
+                    <time className="text-muted-foreground text-xs" dateTime={proposal.createdAt}>
                       {new Date(proposal.createdAt).toLocaleString()}
                     </time>
                     <Button
@@ -120,7 +120,7 @@ export function KnowledgeApprovals({
                   {proposal.targets.map(target => (
                     <li
                       key={`${target.type}:${target.id}`}
-                      className="text-icon4 flex items-center justify-between gap-3 text-sm"
+                      className="text-muted-foreground flex items-center justify-between gap-3 text-sm"
                     >
                       {target.type === 'node' && target.name ? (
                         <button
@@ -133,7 +133,7 @@ export function KnowledgeApprovals({
                       ) : (
                         <span>{target.type}</span>
                       )}
-                      <span className="text-icon3 text-xs">
+                      <span className="text-muted-foreground text-xs">
                         expected v{target.expectedVersion}
                         {target.currentVersion !== undefined ? ` · current v${target.currentVersion}` : ''}
                       </span>
@@ -142,7 +142,7 @@ export function KnowledgeApprovals({
                 </ul>
 
                 {proposal.reviewReason ? (
-                  <Txt as="p" variant="ui-sm" className="text-icon3 mt-3">
+                  <Txt as="p" variant="caption" className="text-muted-foreground mt-3">
                     Review: {proposal.reviewReason}
                   </Txt>
                 ) : null}

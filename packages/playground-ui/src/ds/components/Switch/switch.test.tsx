@@ -4,7 +4,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Switch } from './switch';
 
-// Base UI synthesizes PointerEvents, which this jsdom version does not implement.
+// Base UI's Switch synthesizes a PointerEvent on click, which jsdom does not
+// implement. Polyfill it with the available MouseEvent constructor.
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
     window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
@@ -67,6 +68,7 @@ describe('Switch', () => {
     expect(switchEl.getAttribute('aria-checked')).toBe('true');
 
     fireEvent.click(switchEl);
+    // Controlled: state only changes if the consumer updates `checked`.
     expect(switchEl.getAttribute('aria-checked')).toBe('true');
     expect(onCheckedChange).toHaveBeenCalledWith(false, expect.anything());
   });
@@ -86,7 +88,6 @@ describe('Switch', () => {
 
     expect(iconEl).toBeDefined();
     expect(iconEl?.getAttribute('aria-hidden')).toBe('true');
-    expect(iconEl?.className).toContain('group-data-[checked]/switch:text-neutral6');
     expect(screen.getByTestId('switch-icon')).toBeDefined();
   });
 
@@ -113,12 +114,11 @@ describe('Switch', () => {
     expect(uncheckedIconEl?.className).toContain('group-data-[checked]/switch:opacity-0');
   });
 
-  it('uses neutral switch states without the old accent glow', () => {
+  it('moves the thumb by width and translation rather than scaling', () => {
     render(<Switch aria-label="Toggle" defaultChecked />);
 
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
-    expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
     expect(switchEl.className).toContain('border-0');
     expect(switchEl.className).not.toContain('overflow-hidden');
     expect(switchEl.className).not.toContain('active:scale');
@@ -131,8 +131,6 @@ describe('Switch', () => {
     expect(thumbEl?.className).toContain('group-active/switch:w-6');
     expect(thumbEl?.className).not.toContain('group-active/switch:scale');
     expect(thumbEl?.className).toContain('group-active/switch:data-[checked]:translate-x-2');
-    expect(switchEl.className).not.toContain('accent1');
-    expect(switchEl.className).not.toContain('shadow-glow');
   });
 
   it('keeps switch motion CSS-only without transient React data attributes', () => {

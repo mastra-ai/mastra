@@ -104,7 +104,9 @@ export function AddItemsToDatasetDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No other datasets available</div>
+                    <div className="px-2 py-4 text-center text-body text-muted-foreground">
+                      No other datasets available
+                    </div>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>
@@ -116,19 +118,19 @@ export function AddItemsToDatasetDialog({
               </Select>
             </div>
 
-            <p className="text-muted-foreground text-ui-md">
+            <p className="text-body text-muted-foreground">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
             </p>
 
             {isAdding && (
               <div className="space-y-2">
-                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-ui-md">
+                <p className="text-body text-muted-foreground">
                   Adding items: {progress} / {items.length}
                 </p>
               </div>

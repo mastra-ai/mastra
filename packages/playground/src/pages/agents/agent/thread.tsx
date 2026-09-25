@@ -1,10 +1,11 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useMastraClient } from '@mastra/react';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -12,8 +13,10 @@ import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import {
   AgentChatLoadingSkeleton,
+  AgentLandingLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -25,24 +28,34 @@ import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-prefe
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
+import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
-import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
+  const client = useMastraClient();
+  const { data: auth, error: authError } = useAuthCapabilities();
+  const signedIn = auth && isAuthenticated(auth);
+  const userId = signedIn ? auth.user.id : undefined;
+  const canPersistDraft = auth?.enabled === false || Boolean(signedIn);
+  const draftScope = [client.options.baseUrl, client.options.apiPrefix, userId, agentId];
+  const draftKey = JSON.stringify([...draftScope, threadId ?? 'new']);
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const threadsPanel = useRef<CollapsiblePanelHandle>(null);
+  const draftHandle = useRef<ThreadDraftHandle>(null);
   const isNewThread = threadId === 'new';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
   const newThreadId = useMemo(() => uuid(), [threadId]);
-  const newThreadKey = `${agentId}:${newThreadId}`;
+  const newThreadKey = JSON.stringify([...draftScope, newThreadId]);
   const activeNewThread = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     activeNewThread.current = isNewThread ? newThreadKey : undefined;
@@ -74,52 +87,76 @@ function AgentThread() {
   );
 
   const messageId = searchParams.get('messageId') ?? undefined;
-  // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
-  const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
+  // With memory the panel also hosts the memory card, so it stays mounted (reachable via `{`
+  // or the expand button) but starts collapsed, and reopens once the first thread exists.
+  // Collapse is one-shot per agent so query refetches can't re-collapse a panel the user opened.
+  const collapseThreadsPanel =
+    isNewThread && hasMemory && !isAgentLoading && !isThreadsLoading && sidebarThreads.length === 0;
+  const hasThread = !isNewThread || sidebarThreads.length > 0;
+  const collapsedForAgent = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (collapseThreadsPanel && collapsedForAgent.current !== agentId) {
+      collapsedForAgent.current = agentId;
+      threadsPanel.current?.collapse();
+    } else if (hasThread && collapsedForAgent.current === agentId) {
+      collapsedForAgent.current = undefined;
+      threadsPanel.current?.expand();
+    }
+  }, [collapseThreadsPanel, hasThread, agentId]);
+
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
+    return <PermissionDenied variant="fill" resource="agents" />;
+  }
+
+  if (!auth && authError) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
-      </div>
+      <EmptyState
+        tone="error"
+        titleSlot="Failed to check authentication"
+        descriptionSlot="Reload the page to try again. Your saved drafts have not been changed."
+      />
     );
   }
 
-  if (isAgentLoading) {
-    return <AgentThreadLoadingSkeleton />;
+  if (isAgentLoading || !auth) {
+    return isNewThread ? <AgentLandingLoadingSkeleton /> : <AgentThreadLoadingSkeleton />;
   }
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
   if (error && is404NotFoundError(error)) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   if (error) {
-    return <ErrorState title="Failed to load agent" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load agent" descriptionSlot={error.message} />;
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
+  // A first visit has nothing to list: give the landing the full width until a thread exists.
+  // Without memory there is nothing else in the panel, so it is dropped entirely.
+  const hideThreadsPanel = isNewThread && !hasMemory && (isThreadsLoading || sidebarThreads.length === 0);
 
   const handleRefreshThreadList = async () => {
     if (isNewThread && activeNewThread.current === newThreadKey) {
-      void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
+      const currentDraft = draftHandle.current;
+      if (canPersistDraft) await currentDraft?.move(newThreadKey);
+      if (activeNewThread.current === newThreadKey && currentDraft === draftHandle.current) {
+        void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
+      }
     }
 
     await refreshThreads();
@@ -141,7 +178,11 @@ function AgentThread() {
             threadId={actualThreadId}
             enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
           >
-            <ThreadInputProvider>
+            <ThreadInputProvider
+              ref={draftHandle}
+              key={`${canPersistDraft}:${JSON.stringify([...draftScope, actualThreadId])}`}
+              persistence={canPersistDraft ? { key: draftKey, threadId: actualThreadId } : undefined}
+            >
               <ObservationalMemoryProvider>
                 <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
@@ -150,7 +191,7 @@ function AgentThread() {
                       agentId={agentId!}
                       leftPanel={threadsPanel}
                       leftSlot={
-                        isThreadsLoading ? (
+                        hideThreadsPanel ? undefined : isThreadsLoading ? (
                           <AgentSidebarLoadingSkeleton />
                         ) : (
                           <AgentSidebar
@@ -166,23 +207,19 @@ function AgentThread() {
                     >
                       <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
                         <div className="relative grid min-h-0 flex-1">
-                          {isAdvancedVariant ? (
-                            <ThreadViewByTrace threadId={actualThreadId} />
-                          ) : (
-                            <AgentChat
-                              agentId={agentId!}
-                              agentName={agent?.name}
-                              modelVersion={agent?.modelVersion}
-                              supportsMemory={agent?.supportsMemory}
-                              threadId={actualThreadId}
-                              memory={hasMemory}
-                              refreshThreadList={handleRefreshThreadList}
-                              modelList={agent?.modelList}
-                              messageId={messageId}
-                              suggestedPrompts={suggestedPrompts}
-                              isNewThread={isNewThread}
-                            />
-                          )}
+                          <AgentChat
+                            agentId={agentId!}
+                            agentName={agent?.name}
+                            modelVersion={agent?.modelVersion}
+                            supportsMemory={agent?.supportsMemory}
+                            threadId={actualThreadId}
+                            memory={hasMemory}
+                            refreshThreadList={handleRefreshThreadList}
+                            modelList={agent?.modelList}
+                            messageId={messageId}
+                            suggestedPrompts={suggestedPrompts}
+                            isNewThread={isNewThread}
+                          />
                         </div>
                       </div>
                     </AgentLayout>

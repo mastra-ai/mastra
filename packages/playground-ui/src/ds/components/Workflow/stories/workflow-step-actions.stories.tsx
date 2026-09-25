@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
-import { WorkflowStepCardView } from '../cards/workflow-step-card-view';
+import { WorkflowStepCardView } from '../cards/step/workflow-step-card-view';
 import { WorkflowStepAction } from '../controls/workflow-step-action';
 import { WorkflowStepActions } from '../controls/workflow-step-actions';
 
