@@ -79,6 +79,32 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.additionalProperties).toBe(false);
     });
 
+    it('keeps numeric format and range keywords only in the typed branch', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          pageSize: { type: 'integer', format: 'int32', description: 'Max files.' },
+          ratio: { type: 'number', minimum: 0, maximum: 1, multipleOf: 0.5 },
+          count: { type: ['integer', 'null'], format: 'int64', exclusiveMinimum: 0 },
+        },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { pageSize, ratio, count } = result.properties;
+
+      expect(pageSize).toEqual({
+        description: 'Max files.',
+        anyOf: [{ type: 'integer', format: 'int32', description: 'Max files.' }, { type: 'null' }],
+      });
+      for (const keyword of ['minimum', 'maximum', 'multipleOf', 'format']) {
+        expect(ratio).not.toHaveProperty(keyword);
+      }
+      expect(ratio.anyOf.map((b: any) => b.type)).toEqual(['number', 'null']);
+      expect(count).toEqual({
+        description: 'constraints: greater than 0',
+        anyOf: [{ type: 'integer', format: 'int64' }, { type: 'null' }],
+      });
+    });
+
     it('still accepts an object, a string, and null through the compat validation path', async () => {
       const compatSchema = compat.processToCompatSchema(structuredClone(searchToolSchema) as any);
 
