@@ -263,6 +263,12 @@ describe('trace-aggregate conformance cases', () => {
         { expected },
       ),
     ).toMatch(/^rows\[0\]\.bucket/);
+    // Date.parse would accept these as midnight UTC, but the schema requires a date-time with offset.
+    for (const bucket of ['2026-08-01', '2026-08-01T00:00:00']) {
+      expect(
+        traceAggregateResponseMismatch({ rows: [{ bucket, measures: { count: 1 } }], truncated: false }, { expected }),
+      ).toMatch(/^rows\[0\]\.bucket: expected an ISO-8601/);
+    }
   });
 
   it('traceAggregateResponseMismatch ignores record key order but not row order', () => {

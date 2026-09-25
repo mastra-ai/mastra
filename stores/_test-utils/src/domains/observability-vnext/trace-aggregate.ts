@@ -3,6 +3,7 @@ import {
   parseTraceAggregateRequest,
   planTraceAggregate,
   TRACE_AGGREGATE_INTERVAL_MS,
+  traceAggregateRowSchema,
   type TraceAggregateCountDistinctField,
   type TraceAggregateRequest,
   type TraceAggregateResponse,
@@ -614,7 +615,10 @@ export function traceAggregateResponseMismatch(
         return `${at}.dimensions.${key}: expected ${JSON.stringify(expectedRow.dimensions![key])}, got ${JSON.stringify(actualRow.dimensions![key])}`;
       }
     }
-    // The schema accepts any ISO-8601 offset form, so buckets compare as instants, not strings.
+    // The schema accepts any ISO-8601 offset form, so a schema-valid bucket compares as an instant.
+    if (actualRow.bucket !== undefined && !bucketSchema.safeParse(actualRow.bucket).success) {
+      return `${at}.bucket: expected an ISO-8601 date-time with offset, got ${actualRow.bucket}`;
+    }
     if (bucketInstant(actualRow.bucket) !== bucketInstant(expectedRow.bucket)) {
       return `${at}.bucket: expected ${expectedRow.bucket}, got ${actualRow.bucket}`;
     }
@@ -635,6 +639,8 @@ export function traceAggregateResponseMismatch(
   }
   return null;
 }
+
+const bucketSchema = traceAggregateRowSchema.shape.bucket.unwrap();
 
 function bucketInstant(bucket: string | undefined): number | undefined {
   return bucket === undefined ? undefined : Date.parse(bucket);
