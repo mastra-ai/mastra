@@ -593,7 +593,7 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 
 ## HTTP routes
 
-These routes belong to a Mastra runtime. `POST` routes publish through `addFeedback()`, so every configured exporter receives the record. The other routes use the configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.
+These routes belong to a Mastra runtime. `POST` routes publish through `addFeedback()`, so every exporter on the default observability instance receives the record. The other routes use the configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.
 
 | Method | Path | Purpose | Permission |
 | - | - | - | - |
