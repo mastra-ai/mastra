@@ -1176,9 +1176,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // persists the suspended snapshot. Resuming inside that window used to find no
         // suspended step and dispatch a fresh run whose input was the resume payload,
         // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
+        // After a resume re-suspends, the stored snapshot is still the previous suspended
+        // one until the new suspension is persisted, so a named tool call must also wait
+        // for its label to appear rather than failing against the stale labels (#25158).
+        const toolCallId = resumeOptions?.toolCallId;
+        const isReady = (s: any) => s?.status === 'suspended' && (!toolCallId || !!s.resumeLabels?.[toolCallId]);
         let snapshot: any = await loadSnapshot();
         const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (workflowsStore && snapshot?.status !== 'suspended' && Date.now() < deadline) {
+        while (workflowsStore && !isReady(snapshot) && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           snapshot = await loadSnapshot();
         }
@@ -1197,7 +1202,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // packages/core/src/workflows/workflow.ts, which builds the same path).
         const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
         const resumeLabels: Record<string, { stepId?: string } | undefined> = snapshot?.resumeLabels ?? {};
-        const toolCallId = resumeOptions?.toolCallId;
 
         const expandToLeafPath = (stepId: string): string[] => {
           const stepResult = (snapshot?.context ?? {})[stepId];
