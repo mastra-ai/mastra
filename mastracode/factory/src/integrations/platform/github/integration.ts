@@ -1290,7 +1290,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
             { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
           );
-          const octokit = new Octokit({ auth: token });
+          const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
           const { data } = await octokit.issues.addAssignees({
             owner,
             repo,
