@@ -1,6 +1,8 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
@@ -273,4 +275,65 @@ describe("toolCallConcurrency default 'available' strategy with function approva
     expect(tracker.peak).toBe(2);
     expect(policy).toHaveBeenCalledTimes(2);
   });
+});
+
+describe("toolCallConcurrency strategy 'called' on resume (#24581)", () => {
+  // Delegation tools have no suspend schema, so a batch that calls only them runs in
+  // parallel under 'called' even though a suspend tool is registered. At runtime each one
+  // suspends (a child agent asking the user a question), and asks again after its first answer.
+  function delegationTool(id: string, resumedWith: string[]) {
+    return createTool({
+      id,
+      description: id,
+      inputSchema: z.object({ data: z.string() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) {
+          return await context?.agent?.suspend({ question: `${id}: first question` });
+        }
+        resumedWith.push(id);
+        return await context?.agent?.suspend({ question: `${id}: follow-up question` });
+      },
+    });
+  }
+
+  it('continues every suspended sibling when they are resumed together without a toolCallId', async () => {
+    const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+    const resumedWith: string[] = [];
+    const delegates = ['delegate-a', 'delegate-b', 'delegate-c'];
+    const supervisor = new Agent({
+      id: 'called-resume-siblings',
+      name: 'called-resume-siblings',
+      instructions: 'x',
+      model: twoParallelToolCalls(delegates),
+      defaultOptions: { maxSteps: 1, toolCallConcurrency: { limit: 10, strategy: 'called' } },
+      tools: {
+        ask_user: trackedTool('ask_user', tracker, { suspendable: true }),
+        ...Object.fromEntries(delegates.map(id => [id, delegationTool(id, resumedWith)])),
+      },
+    });
+    const mastra = new Mastra({
+      agents: { supervisor },
+      logger: false,
+      storage: new InMemoryStore(),
+    });
+    const agent = mastra.getAgent('supervisor');
+
+    const stream = await agent.stream('go');
+    const suspended = new Set<string>();
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-suspended') {
+        suspended.add((chunk.payload as { toolName: string }).toolName);
+      }
+    }
+    expect([...suspended].sort()).toEqual(delegates);
+
+    // No toolCallId: the answer is applied to every suspended foreach iteration.
+    const resumed = await agent.resumeStream({ answer: 'yes' }, { runId: stream.runId });
+    await drain(resumed);
+
+    // Each child suspends again after its first answer. With the stale resume-time
+    // concurrency of 1, the first re-suspension stopped the queue and only one child ran.
+    expect(resumedWith.sort()).toEqual(delegates);
+    expect(tracker.peak).toBe(0);
+  }, 30000);
 });
