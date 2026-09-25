@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Fixed stored agent REST handlers to persist durable execution configuration and create versions when durability changes.
+Stored agents now retain durable execution settings, and changing durability creates a new agent version.
