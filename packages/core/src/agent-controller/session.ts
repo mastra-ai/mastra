@@ -265,6 +265,8 @@ export interface ThreadDataStore {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    /** The caller's context, so a dynamic memory resolves for the caller's user. */
+    requestContext?: RequestContext;
   }): Promise<AgentControllerThread>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
@@ -469,10 +471,12 @@ export class SessionThread {
     threadId,
     expectedResourceId,
     expectedProjectPath,
+    requestContext,
   }: {
     threadId: string;
     expectedResourceId: string;
     expectedProjectPath: string;
+    requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     if (!this.#store?.hasStorage()) {
       throw new Error('Memory is not configured on this AgentController');
@@ -491,6 +495,7 @@ export class SessionThread {
       resourceId: this.#getResourceId(),
       title: thread.title,
       metadata: thread.metadata,
+      requestContext,
     });
   }
 
@@ -755,10 +760,12 @@ export class SessionThread {
     sourceThreadId,
     title,
     resourceId,
+    requestContext,
   }: {
     sourceThreadId?: string;
     title?: string;
     resourceId?: string;
+    requestContext?: RequestContext;
   } = {}): Promise<AgentControllerThread> {
     const sourceId = sourceThreadId ?? this.#threadId;
     if (!sourceId) {
@@ -772,6 +779,7 @@ export class SessionThread {
       sourceThreadId: sourceId,
       resourceId: resourceId ?? this.#owner.identity.getResourceId(),
       title,
+      requestContext,
     });
   }
 
@@ -780,11 +788,13 @@ export class SessionThread {
     resourceId,
     title,
     metadata,
+    requestContext,
   }: {
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
@@ -792,7 +802,7 @@ export class SessionThread {
       throw new Error('Memory is not configured on this AgentController');
     }
 
-    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata, requestContext });
 
     // Acquire lock on new thread before releasing old one
     const oldThreadId = this.#threadId;

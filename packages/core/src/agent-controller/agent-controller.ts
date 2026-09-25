@@ -1027,8 +1027,8 @@ export class AgentController<TState = {}> {
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
-      cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
-        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -1065,16 +1065,18 @@ export class AgentController<TState = {}> {
     resourceId,
     title,
     metadata,
+    requestContext,
   }: {
     session: Session<TState>;
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
     const memory = this.config.memory
-      ? await this.resolveMemory(session)
+      ? await this.resolveMemory(session, requestContext)
       : storage
         ? await storage.getStore('memory')
         : undefined;
@@ -2244,8 +2246,8 @@ export class AgentController<TState = {}> {
         // that thread pickers / startup flows can hide transient fork threads —
         // see `listThreads` (filtered by default).
         cloneThreadForFork: hasMemory
-          ? async ({ sourceThreadId, resourceId, title }) => {
-              const memory = await this.resolveMemory(session);
+          ? async ({ sourceThreadId, resourceId, title, requestContext }) => {
+              const memory = await this.resolveMemory(session, requestContext);
               // The fork only needs the new thread id, so copy without loading
               // the message payloads into the Node heap.
               const result = await memory.copyThread({
@@ -2361,8 +2363,9 @@ export class AgentController<TState = {}> {
 
   /**
    * Resolve memory from config — handles both static instances and dynamic factory functions.
+   * Pass the caller's context so a dynamic factory sees the caller's user.
    */
-  private async resolveMemory(session: Session<TState>): Promise<MastraMemory> {
+  private async resolveMemory(session: Session<TState>, callerContext?: RequestContext): Promise<MastraMemory> {
     const mem = this.config.memory;
     if (!mem) {
       throw new Error('Memory is not configured on this AgentController');
@@ -2370,7 +2373,7 @@ export class AgentController<TState = {}> {
     if (typeof mem !== 'function') {
       return mem;
     }
-    const requestContext = await this.buildRequestContext(session);
+    const requestContext = await this.buildRequestContext(session, callerContext);
     const resolved = await Promise.resolve(mem({ requestContext }));
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');

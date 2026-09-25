@@ -374,9 +374,9 @@ Rename the active stored thread.
 await session.thread.rename({ title: 'Fix login failure' })
 ```
 
-### `session.thread.clone({ sourceThreadId?, title?, resourceId? })`
+### `session.thread.clone({ sourceThreadId?, title?, resourceId?, requestContext? })`
 
-Clone an owned thread and its messages, then bind the session to the clone.
+Clone an owned thread and its messages, then bind the session to the clone. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 const clone = await session.thread.clone({
