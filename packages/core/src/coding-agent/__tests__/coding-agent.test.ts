@@ -234,9 +234,12 @@ describe('createCodingAgent', () => {
       },
     });
 
-    const result = await createCodingAgent(baseConfig({ model: [{ model: mockModel, maxRetries: 0 }] })).stream('Do it', {
-      maxSteps: 5,
-    });
+    const result = await createCodingAgent(baseConfig({ model: [{ model: mockModel, maxRetries: 0 }] })).stream(
+      'Do it',
+      {
+        maxSteps: 5,
+      },
+    );
     for await (const _chunk of result.fullStream) {
       // Drain so the run completes.
     }
