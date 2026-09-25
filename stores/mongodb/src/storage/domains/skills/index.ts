@@ -374,7 +374,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, status, metadata, entityIds } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -392,6 +392,11 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
+      // An explicitly empty ID set cannot match any skills.
+      if (entityIds?.length === 0) {
+        return { skills: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       const collection = await this.getCollection(TABLE_SKILLS);
 
       // Build filter
@@ -401,6 +406,12 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       }
       if (visibility) {
         filter.visibility = visibility;
+      }
+      if (status !== undefined) {
+        filter.status = status;
+      }
+      if (entityIds) {
+        filter.id = { $in: entityIds };
       }
       if (metadata) {
         for (const [key, value] of Object.entries(metadata)) {
