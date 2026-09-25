@@ -361,7 +361,7 @@ describe('Mock OM Agent Integration', () => {
     });
   });
 
-  it("gives prepareStep every previous step's tool results after OM relocates earlier responses", async () => {
+  it("gives prepareStep and processInputStep every previous step's tool results after OM relocates earlier responses", async () => {
     let callCount = 0;
     const multiToolModel = new MockLanguageModelV2({
       doGenerate: async () => {
@@ -401,6 +401,9 @@ describe('Mock OM Agent Integration', () => {
       inputSchema: z.object({}),
       execute: async () => ({ status: 'stopped' }),
     });
+    const ids = (parts: any[]) => parts.map(p => p.toolCallId ?? p.payload?.toolCallId);
+    let atStepThree: string[][] | undefined;
+    let processInputAtStepThree: string[][] | undefined;
     const multiToolAgent = new Agent({
       id: 'test-om-prepare-step-agent',
       name: 'Prepare-step OM Agent',
@@ -408,10 +411,17 @@ describe('Mock OM Agent Integration', () => {
       model: multiToolModel as any,
       tools: { sendMessage, endTurn },
       memory,
+      inputProcessors: [
+        {
+          id: 'capture-previous-steps',
+          processInputStep: async ({ stepNumber, steps }) => {
+            if (stepNumber === 2) processInputAtStepThree = steps.map(step => ids(step.toolResults));
+            return undefined;
+          },
+        },
+      ],
     });
 
-    const ids = (parts: any[]) => parts.map(p => p.toolCallId ?? p.payload?.toolCallId);
-    let atStepThree: string[][] | undefined;
     await multiToolAgent.generate('Run three tool steps.', {
       memory: { thread: 'test-thread-prepare-step-results', resource: 'test-resource' },
       prepareStep: ({ stepNumber, steps }) => {
@@ -422,6 +432,10 @@ describe('Mock OM Agent Integration', () => {
     });
 
     expect(atStepThree).toEqual([
+      ['send-1', 'end-1'],
+      ['send-2', 'end-2'],
+    ]);
+    expect(processInputAtStepThree).toEqual([
       ['send-1', 'end-1'],
       ['send-2', 'end-2'],
     ]);
