@@ -43,7 +43,7 @@ export const Clickable: Story = {
 
 export const WithCustomContent: Story = {
   render: () => (
-    <Entity className="w-[350px]">
+    <Entity className="w-88">
       <EntityIcon>
         <Database />
       </EntityIcon>

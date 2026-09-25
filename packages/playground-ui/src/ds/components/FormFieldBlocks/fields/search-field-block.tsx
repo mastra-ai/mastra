@@ -120,9 +120,9 @@ export function SearchFieldBlock({
               aria-hidden="true"
               className={cn(
                 'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
-                size === 'sm' && 'size-3.5',
-                (!size || size === 'md') && 'size-4',
-                size === 'lg' && 'size-[1.125rem]',
+                size === 'sm' && 'size-icon-sm',
+                (!size || size === 'md') && 'size-icon-md',
+                size === 'lg' && 'size-icon-lg',
               )}
             />
             {onReset && (value || isMinimized === false) && (

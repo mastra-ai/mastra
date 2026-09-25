@@ -222,7 +222,7 @@ export const ToolCallContent = ({ className, children, ...props }: ComponentProp
   <CollapsibleContent className="max-w-full min-w-0" {...props}>
     <div
       className={cn(
-        "relative ml-[14px] flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
+        "relative ml-3.5 flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
         className,
       )}
     >

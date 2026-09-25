@@ -81,7 +81,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
   return (
     <div
       className={cn(
-        'relative isolate w-[274px]',
+        'relative isolate w-69',
         isBodyExpanded && 'w-172',
         isStacked &&
           'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border before:bg-card after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border after:bg-card',

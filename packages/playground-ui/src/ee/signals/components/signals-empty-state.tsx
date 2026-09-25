@@ -189,7 +189,7 @@ export const SignalsEmptyState = ({
   }));
 
   return (
-    <section className="min-h-full w-full bg-sidebar p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
+    <section className="min-h-full w-full bg-sidebar p-6 md:px-10 lg:px-12 xl:px-18">
       <div className="mx-auto w-full max-w-260">
         <header>
           <p className="flex items-center gap-2 font-mono text-caption tracking-wider text-muted-foreground uppercase">
@@ -212,7 +212,7 @@ export const SignalsEmptyState = ({
           <div role="listitem" className="min-h-50 p-5">
             <h2 className="text-heading text-foreground">Traces</h2>
             <p className="mt-0.5 text-caption text-muted-foreground">Every agent interaction</p>
-            <p className="mt-5 font-mono text-caption tracking-[0.18em] text-muted-foreground uppercase">Input</p>
+            <p className="mt-5 font-mono text-caption tracking-widest text-muted-foreground uppercase">Input</p>
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
                 <div
@@ -255,7 +255,7 @@ export const SignalsEmptyState = ({
           <div role="listitem" className="min-h-50 p-5">
             <h2 className="text-heading text-foreground">Theme analysis</h2>
             <p className="mt-0.5 text-caption text-muted-foreground">How recurring patterns connect</p>
-            <p className="mt-5 font-mono text-caption tracking-[0.18em] text-muted-foreground uppercase">Output</p>
+            <p className="mt-5 font-mono text-caption tracking-widest text-muted-foreground uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span

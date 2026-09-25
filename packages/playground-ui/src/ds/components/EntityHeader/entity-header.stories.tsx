@@ -65,7 +65,7 @@ export const LongTitle: Story = {
 
 export const WithRichContent: Story = {
   render: () => (
-    <div className="w-[450px] rounded-lg bg-card">
+    <div className="w-112 rounded-lg bg-card">
       <EntityHeader icon={<Bot />} title="AI Assistant">
         <div className="space-y-2">
           <p className="text-body text-muted-foreground">An intelligent assistant for customer support tasks</p>

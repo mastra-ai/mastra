@@ -261,7 +261,7 @@ export const SettingsList: Story = {
 
 export const WithDescription: Story = {
   render: () => (
-    <div className="flex w-[350px] items-start justify-between gap-4">
+    <div className="flex w-88 items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
         <span className="text-caption text-muted-foreground">Switch to a darker color scheme</span>

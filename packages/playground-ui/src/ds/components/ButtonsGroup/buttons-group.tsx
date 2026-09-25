@@ -42,8 +42,8 @@ ButtonsGroup.displayName = 'ButtonsGroup';
 // box grows and the type does not.
 const buttonsGroupTextClassName = cn(
   'inline-flex items-center justify-center border border-border bg-card text-foreground select-none',
-  'shrink-0 gap-[.75em] rounded-full px-[1em] text-label whitespace-nowrap',
-  '[&>svg]:size-[1.1em] [&>svg]:opacity-50',
+  'shrink-0 gap-2.5 rounded-full px-3.5 text-label whitespace-nowrap',
+  '[&>svg]:size-icon-sm [&>svg]:opacity-50',
 );
 
 export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'>;

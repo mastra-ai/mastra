@@ -258,9 +258,9 @@ describe('SearchFieldBlock — minimizing', () => {
 
 describe('SearchFieldBlock — sizing', () => {
   it.each([
-    ['sm', 'px-8', 'size-3.5'],
-    ['md', 'px-9', 'size-4'],
-    ['lg', 'px-10', 'size-[1.125rem]'],
+    ['sm', 'px-8', 'size-icon-sm'],
+    ['md', 'px-9', 'size-icon-md'],
+    ['lg', 'px-10', 'size-icon-lg'],
   ] as const)('leaves room for the icon at size %s', (size, padding, iconSize) => {
     const { container } = render(<SearchFieldBlock name="search" size={size} />);
 
@@ -272,7 +272,7 @@ describe('SearchFieldBlock — sizing', () => {
     const { container } = render(<SearchFieldBlock name="search" />);
 
     expect(screen.getByRole('textbox').classList.contains('px-9')).toBe(true);
-    expect(container.querySelector('svg')?.classList.contains('size-4')).toBe(true);
+    expect(container.querySelector('svg')?.classList.contains('size-icon-md')).toBe(true);
   });
 
   // The buttons carry the field's own height, so the row keeps one line.

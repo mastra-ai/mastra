@@ -111,10 +111,10 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
             <TooltipPrimitive.Arrow
               className={cn(
                 'flex',
-                'data-[side=top]:-bottom-[7px] data-[side=top]:rotate-180',
-                'data-[side=bottom]:-top-[7px]',
-                'data-[side=left]:right-[-9px] data-[side=left]:rotate-90',
-                'data-[side=right]:left-[-9px] data-[side=right]:-rotate-90',
+                'data-[side=top]:-bottom-2 data-[side=top]:rotate-180',
+                'data-[side=bottom]:-top-2',
+                'data-[side=left]:-right-2.5 data-[side=left]:rotate-90',
+                'data-[side=right]:-left-2.5 data-[side=right]:-rotate-90',
               )}
             >
               <TooltipArrowSvg />

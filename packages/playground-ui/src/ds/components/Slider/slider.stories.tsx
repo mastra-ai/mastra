@@ -25,7 +25,7 @@ export const Default: Story = {
     defaultValue: [50],
     max: 100,
     step: 1,
-    className: 'w-[240px]',
+    className: 'w-60',
   },
 };
 
@@ -48,7 +48,7 @@ export const WithRange: Story = {
     defaultValue: [25, 75],
     max: 100,
     step: 1,
-    className: 'w-[240px]',
+    className: 'w-60',
   },
 };
 
@@ -57,7 +57,7 @@ export const ThreeThumbs: Story = {
     defaultValue: [10, 50, 90],
     max: 100,
     step: 1,
-    className: 'w-[240px]',
+    className: 'w-60',
   },
 };
 
@@ -66,7 +66,7 @@ export const Disabled: Story = {
     defaultValue: [50],
     max: 100,
     disabled: true,
-    className: 'w-[240px]',
+    className: 'w-60',
   },
 };
 
@@ -76,7 +76,7 @@ export const CustomRange: Story = {
     min: -10,
     max: 10,
     step: 1,
-    className: 'w-[240px]',
+    className: 'w-60',
   },
 };
 
@@ -86,7 +86,7 @@ export const FineGrained: Story = {
     min: 0,
     max: 1,
     step: 0.01,
-    className: 'w-[240px]',
+    className: 'w-60',
   },
 };
 
@@ -94,7 +94,7 @@ export const WithLabel: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([50]);
     return (
-      <div className="flex w-[280px] flex-col gap-2">
+      <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
           <span id="volume-label" className="text-body text-foreground">
             Volume
@@ -121,7 +121,7 @@ export const PriceRange: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([200, 800]);
     return (
-      <div className="flex w-[280px] flex-col gap-2">
+      <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
           <span className="text-body text-foreground">Price range</span>
           <span className="text-body text-muted-foreground tabular-nums">
@@ -147,13 +147,13 @@ export const Vertical: Story = {
     max: 100,
     step: 1,
     orientation: 'vertical',
-    className: 'h-[160px]',
+    className: 'h-40',
   },
 };
 
 export const States: Story = {
   render: () => (
-    <div className="flex w-[280px] flex-col gap-6">
+    <div className="flex w-70 flex-col gap-6">
       <div className="flex flex-col gap-2">
         <span className="text-body text-foreground">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />
