@@ -167,30 +167,12 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
 
     const expected: Record<string, any> = {};
     if (options?.expectedStatus) expected.status = options.expectedStatus;
-
-    if (options?.expectedOwnerId !== undefined || options?.expectedLeaseExpiresAt !== undefined) {
-      // Convex's patch compares expected fields with strict equality against the raw stored
-      // record, so rows written before ownership existed (missing keys) would never match a
-      // `null` expectation. Normalize missing-vs-null locally, then hand the raw stored values
-      // to the server so its compare-and-swap still guards against concurrent writers.
-      const stored = await this.#db.load<Record<string, any>>({
-        tableName: TABLE_BACKGROUND_TASKS,
-        keys: { id: taskId },
-      });
-      if (!stored) return false;
-
-      if (options.expectedOwnerId !== undefined && (stored.ownerId ?? null) !== options.expectedOwnerId) {
-        return false;
-      }
-      if (
-        options.expectedLeaseExpiresAt !== undefined &&
-        (stored.leaseExpiresAt ?? null) !== (options.expectedLeaseExpiresAt?.toISOString() ?? null)
-      ) {
-        return false;
-      }
-
-      if (options.expectedOwnerId !== undefined) expected.ownerId = stored.ownerId ?? null;
-      if (options.expectedLeaseExpiresAt !== undefined) expected.leaseExpiresAt = stored.leaseExpiresAt ?? null;
+    // The server compares expected fields with `(record[key] ?? null) === value`,
+    // so a key missing on a row written before ownership existed still matches a
+    // `null` expectation without a separate read here.
+    if (options?.expectedOwnerId !== undefined) expected.ownerId = options.expectedOwnerId;
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      expected.leaseExpiresAt = options.expectedLeaseExpiresAt?.toISOString() ?? null;
     }
 
     return this.#db.patch({

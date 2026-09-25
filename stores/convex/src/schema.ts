@@ -263,6 +263,8 @@ export const mastraBackgroundTasksTable = defineTable({
   startedAt: v.union(v.string(), v.null()),
   suspendedAt: v.union(v.string(), v.null()),
   completedAt: v.union(v.string(), v.null()),
+  ownerId: v.union(v.string(), v.null()),
+  leaseExpiresAt: v.union(v.string(), v.null()),
 })
   .index('by_record_id', ['id'])
   .index('by_status_created', ['status', 'createdAt'])

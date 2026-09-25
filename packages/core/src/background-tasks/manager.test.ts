@@ -1662,14 +1662,29 @@ describe('BackgroundTaskManager', () => {
       const gate = new Promise<void>(resolve => {
         release = resolve;
       });
+      const onChunk = vi.fn();
+      const onResult = vi.fn();
+      const onComplete = vi.fn();
+      const published: string[] = [];
+      const onPublished = (event: { type: string }) => {
+        published.push(event.type);
+      };
+      await local.isolatedPubsub.subscribe('background-tasks-result', onPublished);
 
       try {
         const { task } = await local.mgr.enqueue(
           { toolName: 't', toolCallId: 'superseded', args: {}, agentId: 'a1', runId: 'r-superseded' },
-          ctx(async () => {
-            await gate;
-            return 'late result';
-          }),
+          {
+            executor: {
+              execute: async () => {
+                await gate;
+                return 'late result';
+              },
+            },
+            onChunk,
+            onResult,
+            onComplete,
+          },
         );
         await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
 
@@ -1689,8 +1704,19 @@ describe('BackgroundTaskManager', () => {
         const afterTakeover = await local.mgr.getTask(task.id);
         expect(afterTakeover).toMatchObject({ status: 'running', ownerId: 'other-worker' });
         expect(afterTakeover!.result).toBeUndefined();
+
+        // Losing ownership must not leak the stale result to local observers:
+        // no completion hook fires and no `task.completed` event is published.
+        // The observer is proven live by the `task.running` event from the
+        // original claim, so the negative assertion is not vacuous.
+        expect(published).toContain('task.running');
+        expect(onChunk).not.toHaveBeenCalled();
+        expect(onResult).not.toHaveBeenCalled();
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(published).not.toContain('task.completed');
       } finally {
         release();
+        await local.isolatedPubsub.unsubscribe('background-tasks-result', onPublished);
         await local.cleanup();
       }
     });

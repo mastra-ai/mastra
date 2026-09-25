@@ -438,19 +438,30 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
 
       it('reclaims an expired lease fenced on the stale owner and expiry', async () => {
         if (!bgStorage) return;
-        const leaseExpiresAt = new Date(Date.now() - 60_000);
         const task = createSampleTask({
           status: 'running',
           startedAt: new Date(Date.now() - 120_000),
           ownerId: 'worker-a',
-          leaseExpiresAt,
+          leaseExpiresAt: new Date(Date.now() - 60_000),
         });
         await bgStorage.createTask(task);
+
+        // Fence on the ownership state read back through the store, not on the
+        // Date that was written. Adapters round-trip timestamps with differing
+        // precision; a fence that only matches the original Date would fail on
+        // a store that truncates or reformats it, silently stalling recovery.
+        const observed = await bgStorage.getTask(task.id);
+        expect(observed!.ownerId).toBe('worker-a');
+        expect(observed!.leaseExpiresAt).toBeDefined();
 
         const reclaimed = await bgStorage.updateTask(
           task.id,
           { status: 'pending', startedAt: undefined, ownerId: undefined, leaseExpiresAt: undefined },
-          { expectedStatus: 'running', expectedOwnerId: 'worker-a', expectedLeaseExpiresAt: leaseExpiresAt },
+          {
+            expectedStatus: 'running',
+            expectedOwnerId: observed!.ownerId,
+            expectedLeaseExpiresAt: observed!.leaseExpiresAt ?? null,
+          },
         );
 
         expect(reclaimed).toBe(true);
@@ -502,21 +513,22 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
 
       it('rejects a reclaim that another worker already applied', async () => {
         if (!bgStorage) return;
-        const leaseExpiresAt = new Date(Date.now() - 60_000);
         const task = createSampleTask({
           status: 'running',
           startedAt: new Date(Date.now() - 120_000),
           ownerId: 'worker-a',
-          leaseExpiresAt,
+          leaseExpiresAt: new Date(Date.now() - 60_000),
         });
         await bgStorage.createTask(task);
 
-        // Both workers observed the same stale owner/lease. The first reclaim
-        // wins; the second must be rejected because that state is gone.
+        // Both workers read the same stale ownership back through the store and
+        // race to reclaim it. The first reclaim wins; the second must be
+        // rejected because that state is gone.
+        const observed = await bgStorage.getTask(task.id);
         const fence = {
           expectedStatus: 'running' as const,
-          expectedOwnerId: 'worker-a',
-          expectedLeaseExpiresAt: leaseExpiresAt,
+          expectedOwnerId: observed!.ownerId ?? null,
+          expectedLeaseExpiresAt: observed!.leaseExpiresAt ?? null,
         };
         const first = await bgStorage.updateTask(
           task.id,
