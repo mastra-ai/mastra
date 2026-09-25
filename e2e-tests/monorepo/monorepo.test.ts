@@ -657,25 +657,41 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(packageJson.dependencies?.nodemailer).toBe('^9.0.1');
     });
 
-    // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
-    it('should keep default and user-configured externals in the output manifest', async () => {
-      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
-      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+    it('should preserve default externals alongside a configured externals array', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const outputFiles = await readdir(outputDir);
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
 
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
           '@mastra/core': expect.any(String),
+          '@mastra/mcp': expect.any(String),
+          zod: expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
         }),
       );
+      expect(outputFiles).not.toContain('@mastra__core.mjs');
+      expect(outputFiles).not.toContain('@mastra__mcp.mjs');
+      expect(outputFiles).not.toContain('zod.mjs');
+      expect(output).toMatch(/from ["']@mastra\/core\//);
+      expect(output).toMatch(/from ["']@mastra\/mcp["']/);
+      expect(output).toMatch(/from ["']zod["']/);
+      expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
+      expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
+      expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
     });
 
-    it('should exclude dependencies imported only from dead NODE_ENV branches', async () => {
-      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
-      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+    it('should exclude imports from dead NODE_ENV branches', async () => {
+      const indexPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const index = await readFile(indexPath, 'utf-8');
 
-      expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
+      expect(index).not.toMatch(/import\(["']date-fns["']\)/);
     });
 
     it('should update the source pnpm lockfile while installing output dependencies', async () => {
@@ -1211,7 +1227,7 @@ export const mastra = new Mastra({
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
-          // Runtime externals skip resolution; this case must exercise bundling the missing subpath.
+          // Test a subpath absent from the workspace package's exports map.
           const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
           const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
           await writeFile(
@@ -1241,7 +1257,7 @@ export const mastra = new Mastra({
           const output = `${buildResult.stdout}\n${buildResult.stderr}`;
 
           expect(buildResult.exitCode, output).toBe(1);
-          expect(output).toContain('Could not resolve workspace package subpath "@inner/subpath-only/missing".');
+          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
