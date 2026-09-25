@@ -581,7 +581,7 @@ export class Schedules {
     // an immediate spurious fire instead of waiting for the next cron tick.
     // A completed schedule can only be reactivated by changing its timing.
     const timingChanged = isOneOff
-      ? patch.runAt !== undefined
+      ? patch.runAt !== undefined && nextRunAt !== existing.runAt
       : patch.cron !== undefined || patch.timezone !== undefined || patch.endAt !== undefined;
     if (existing.status === 'completed' && patch.status !== undefined && !timingChanged) {
       throw scheduleCompleted(existing.id, patch.status === 'paused' ? 'pause' : 'resume');

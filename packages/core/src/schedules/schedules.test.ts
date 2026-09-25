@@ -290,6 +290,9 @@ describe('mastra.schedules canonical service', () => {
     const tzOnly = await mastra.schedules.update(hb.id, { timezone: 'UTC' });
     expect(tzOnly.status).toBe('completed');
 
+    const sameRunAt = await mastra.schedules.update(hb.id, { runAt: new Date(hb.runAt!) });
+    expect(sameRunAt.status).toBe('completed');
+
     const newRunAt = Date.now() + 120_000;
     const updated = await mastra.schedules.update(hb.id, { runAt: newRunAt });
     expect(updated.status).toBe('active');
