@@ -292,6 +292,7 @@ export interface SessionMachinery {
     agent?: Agent;
     resourceId: string;
     threadId: string;
+    requestContext?: RequestContext;
   }): Promise<AgentThreadSubscription<any, true>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
@@ -585,7 +586,11 @@ export class SessionThread {
    * Ensure the session is subscribed to the given agent/thread stream, opening a
    * fresh subscription (and driving its run loop) when the binding changed.
    */
-  async ensureSubscription(threadId: string, agent = this.#owner.machinery.getAgent()): Promise<void> {
+  async ensureSubscription(
+    threadId: string,
+    agent = this.#owner.machinery.getAgent(),
+    requestContext?: RequestContext,
+  ): Promise<void> {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
@@ -595,16 +600,16 @@ export class SessionThread {
     }
 
     this.cleanupSubscription();
-    const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
+    const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId, requestContext });
     session.stream.attach({ subscription, agent, key });
     session.ensureFollowUpBinding(agent, resourceId, threadId);
     void session.processSubscribedThreadStream(subscription);
   }
 
   /** Ensure a subscription for the session's active thread (no-op when unbound). */
-  async ensureCurrentSubscription(): Promise<void> {
+  async ensureCurrentSubscription(requestContext?: RequestContext): Promise<void> {
     if (this.#threadId === null) return;
-    await this.ensureSubscription(this.#threadId);
+    await this.ensureSubscription(this.#threadId, undefined, requestContext);
   }
 
   /**
@@ -819,7 +824,7 @@ export class SessionThread {
     await this.loadMetadata();
     session.resetTokenUsage();
     session.emit({ type: 'thread_created', thread: clonedThread });
-    await this.ensureCurrentSubscription();
+    await this.ensureCurrentSubscription(requestContext);
 
     return clonedThread;
   }
