@@ -47,7 +47,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
-import { withRetry } from './retry';
+import { assertCompleteModelResponse, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
@@ -435,6 +435,7 @@ export class ReflectorRunner {
                 // doesn't get tagged with the previous attempt's chunk count.
                 chunkCount = 0;
                 const streamResult = await agent.stream(prompt, {
+                  maxSteps: 1,
                   modelSettings: {
                     ...this.reflectionConfig.modelSettings,
                   },
@@ -474,7 +475,7 @@ export class ReflectorRunner {
                     : {}),
                 });
 
-                return streamResult.getFullOutput();
+                return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM reflector');
               }, abortSignal),
           }),
         { label: 'reflector', abortSignal },
