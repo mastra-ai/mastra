@@ -1013,6 +1013,8 @@ export class MessageList {
         const unavailableUrls = new Set(
           this.messages.filter(message => message.role === 'user').flatMap(getUnavailableAttachmentUrls),
         );
+        // A message that re-sends a recorded URL gets the placeholder too, so record it there as well.
+        for (const url of unavailableUrls) this.recordUnavailableAttachment(url);
         const downloadedAssets = await downloadAssetsFromMessages({
           messages: modelMessages,
           downloadConcurrency: options?.downloadConcurrency,
@@ -1351,7 +1353,13 @@ export class MessageList {
 
   private recordUnavailableAttachment(url: string) {
     for (const message of this.messages) {
-      if (message.role !== 'user' || !getMessageAttachmentUrls(message).includes(url)) continue;
+      if (
+        message.role !== 'user' ||
+        getUnavailableAttachmentUrls(message).includes(url) ||
+        !getMessageAttachmentUrls(message).includes(url)
+      ) {
+        continue;
+      }
       message.content.metadata = withUnavailableAttachmentUrls(message.content.metadata, [url]);
       const urls = this.unavailableAttachmentUpdates.get(message.id) ?? new Set<string>();
       urls.add(url);

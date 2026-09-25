@@ -187,7 +187,7 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/\-_=\s]*$/;
  * base64 produces a data URL that can never be fetched.
  *
  * Data URLs are not inspected: history replayed as input may already contain a
- * malformed one, and its download failure stays recoverable through error processors.
+ * malformed one, which the prompt build replaces with a placeholder instead of failing.
  */
 export function isValidFilePartDataString(data: string): boolean {
   return data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || BASE64_PATTERN.test(data);

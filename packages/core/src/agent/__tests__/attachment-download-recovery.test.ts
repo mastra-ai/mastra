@@ -289,6 +289,32 @@ describe('attachment download recovery', () => {
       expect(requests).toBe(1);
     });
 
+    it('records an unavailable attachment on a later message that sends it again', async () => {
+      const { run, memory, prompts } = setup({ durable });
+      expect((await run(attachment())).text).toBe('ok');
+      await waitForHistory(memory);
+      failure = '404';
+      expect((await run('Continue')).text).toBe('ok');
+      const fetched = requests;
+
+      const resent = await run(attachment());
+      expect(resent.errors).toEqual([]);
+      expect(resent.text).toBe('ok');
+      expect(requests).toBe(fetched);
+      expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual([
+        '[Attachment unavailable: application/pdf]',
+        '[Attachment unavailable: application/pdf]',
+      ]);
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
+        const carrying = messages.filter(message => JSON.stringify(message.content.parts).includes(url));
+        expect(carrying).toHaveLength(2);
+        for (const message of carrying) {
+          expect(message.content.metadata?.mastra).toMatchObject({ unavailableAttachments: [url] });
+        }
+      });
+    });
+
     it('replaces an undecodable data URL in history with a placeholder right away', async () => {
       const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: true }));
       const { run, memory, prompts } = setup({ durable, errorProcessor: { id: 'unused', processAPIError } });
