@@ -505,7 +505,8 @@ export async function evaluateGoal(deps: {
   // NOT change the persisted status — the record stays `active` so the next
   // agent turn is still judged; only `isContinued` is set to false (below)
   // to stop the auto-loop and give the user a chance to provide input.
-  const runsUsed = record.runsUsed + 1;
+  // A failed judge produced no verdict, so it does not consume the run budget.
+  const runsUsed = judgeFailed ? record.runsUsed : record.runsUsed + 1;
   const maxRunsReached = runsUsed >= effective.maxRuns;
   let status: GoalObjectiveRecord['status'] = record.status;
   let pausedReason: string | undefined;
