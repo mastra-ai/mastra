@@ -92,12 +92,22 @@ describe('AgentController cloneThread', () => {
   it("resolves dynamic memory with the caller's request context when cloning", async () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     const storage = new InMemoryStore();
-    // History subscriptions also resolve memory, so record the user seen by
-    // the instance that actually performs the clone.
+    // The caller's copy of the clone lives only in that caller's store, so the
+    // post-clone history subscription finds it only when it resolves memory
+    // with the same caller.
+    const callerStorage = new InMemoryStore();
     let cloningUser: unknown;
+    const recalled: Promise<{ messages: { id: string }[] }>[] = [];
     const memoryFactory = vi.fn().mockImplementation(({ requestContext }) => {
-      const user = requestContext.get('user');
-      return Object.assign(new MockMemory(), {
+      const user = requestContext.get('user') as { id: string } | undefined;
+      const memory = new MockMemory({ storage: user?.id === 'user-1' ? callerStorage : storage });
+      const recall = memory.recall.bind(memory);
+      return Object.assign(memory, {
+        recall: (args: Parameters<typeof recall>[0]) => {
+          const result = recall(args);
+          if (args.threadId === 'c') recalled.push(result as any);
+          return result;
+        },
         cloneThread: vi.fn().mockImplementation(async () => {
           cloningUser = user;
           return {
@@ -133,18 +143,32 @@ describe('AgentController cloneThread', () => {
     await memoryStore!.saveThread({
       thread: { id: 'src', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
     });
+    const callerStore = await callerStorage.getStore('memory');
+    await callerStore!.saveThread({
+      thread: { id: 'c', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+    });
+    await callerStore!.saveMessages({
+      messages: [
+        {
+          id: 'copied-message',
+          threadId: 'c',
+          resourceId: 'controller-resource',
+          role: 'user',
+          createdAt: now,
+          content: { format: 2, parts: [{ type: 'text', text: 'copied' }] },
+        },
+      ],
+    });
     const session = await controller.createSession({ id: 's', ownerId: 'o' });
-    const agent = controller.getCurrentAgent(session);
-    const subscribe = vi.spyOn(agent, 'subscribeToThread');
 
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'user-1' });
     await session.thread.clone({ sourceThreadId: 'src', requestContext });
 
     expect(cloningUser).toEqual({ id: 'user-1' });
-    // The history subscription opened on the clone resolves memory for the same caller.
-    const cloneSubscription = subscribe.mock.calls.find(([opts]) => opts.threadId === 'c');
-    expect(cloneSubscription?.[0].requestContext?.get('user')).toEqual({ id: 'user-1' });
+    // The subscription opened on the clone loaded the copied history.
+    expect(recalled).toHaveLength(1);
+    expect((await recalled[0]!).messages.map(m => m.id)).toEqual(['copied-message']);
   });
 
   it('uses the raw memory storage clone when configured memory is absent', async () => {
