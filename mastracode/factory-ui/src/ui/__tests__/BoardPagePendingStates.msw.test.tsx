@@ -15,6 +15,7 @@ import type { GithubIssue } from '../domains/factory/services/factory';
 import type { IncidentioIssue } from '../domains/factory/services/incidentio';
 import type { JiraIssue } from '../domains/factory/services/jira';
 import type { LinearIssue } from '../domains/factory/services/linear';
+import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -604,7 +605,9 @@ describe('Board card pending states', () => {
       }),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
         const body = (await request.json()) as { metadata: Record<string, unknown> };
-        return HttpResponse.json({ workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata } });
+        return HttpResponse.json({
+          workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata },
+        });
       }),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
@@ -631,6 +634,107 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
   });
 
+  it('starts a Linear session in its configured repository without prompting', async () => {
+    stubBoardEndpoints();
+    const sessionRepositories: string[] = [];
+    const patches: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, connected: false })),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              installationId: 'inst-1',
+              repositories: [
+                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
+                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            linear: {
+              enabled: true,
+              sourceIds: ['linear-project-1'],
+              repositoryByLinearProject: { 'linear-project-1': 'acme/other' },
+            },
+          },
+        }),
+      ),
+
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({
+          workItem: { ...workItem, metadata: { linearProjectId: 'linear-project-1', repository: 'acme/other' } },
+        });
+      }),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, ({ params }) => {
+        sessionRepositories.push(String(params.projectRepositoryId));
+        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    function StartLinearSession() {
+      const { start, enabled } = useStartFactoryRun();
+      return (
+        <button
+          disabled={!enabled}
+          onClick={() =>
+            start.mutate({
+              branch: 'fix-login',
+              threadTitle: 'Fix login bug',
+              workItem: {
+                id: ITEM_ID,
+                role: 'chat',
+                source: 'linear-issue',
+                sourceKey: 'linear:issue-1',
+                title: 'Fix login bug',
+                metadata: { linearProjectId: 'linear-project-1' },
+              },
+            })
+          }
+        >
+          Start Linear session
+        </button>
+      );
+    }
+    const router = createMemoryRouter([{ path: '/factories/:factoryId', element: <StartLinearSession /> }], {
+      initialEntries: [`/factories/${FACTORY_ID}`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    const startButton = await screen.findByRole('button', { name: 'Start Linear session' });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await user.click(startButton);
+
+    await waitFor(() =>
+      expect(patches).toEqual([{ metadata: { linearProjectId: 'linear-project-1', repository: 'acme/other' } }]),
+    );
+    await waitFor(() => expect(sessionRepositories).toEqual(['repo-2']));
+  });
+
   it('starts one session when the details run control is re-triggered before it resolves', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
@@ -644,7 +748,9 @@ describe('Board card pending states', () => {
       }),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
         const body = (await request.json()) as { metadata: Record<string, unknown> };
-        return HttpResponse.json({ workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata } });
+        return HttpResponse.json({
+          workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata },
+        });
       }),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
