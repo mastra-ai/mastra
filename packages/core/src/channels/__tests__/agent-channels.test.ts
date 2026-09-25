@@ -1797,7 +1797,7 @@ describe('AgentChannels', () => {
       spy.mockRestore();
     });
 
-    it("does not merge another sender's batched messages into the current sender's turn", async () => {
+    it("dispatches another sender's batched messages as their own turn", async () => {
       const chatMod = await getChatModule();
       let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
@@ -1826,9 +1826,15 @@ describe('AgentChannels', () => {
       const chatThread = makeChatThread({ adapter: channels.adapters.discord });
       await registeredDMWrapper!(chatThread, current, {}, { skipped: [fromOther], totalSinceLastHandler: 2 });
 
-      const serialized = JSON.stringify(dispatches[0].signalContents);
-      expect(serialized).toContain('my text');
-      expect(serialized).not.toContain('other user text');
+      expect(dispatches).toHaveLength(2);
+      const firstTurn = JSON.stringify(dispatches[0].signalContents);
+      const secondTurn = JSON.stringify(dispatches[1].signalContents);
+      expect(firstTurn).toContain('other user text');
+      expect(firstTurn).not.toContain('my text');
+      expect(secondTurn).toContain('my text');
+      expect(secondTurn).not.toContain('other user text');
+      expect(dispatches[0].attributes.messageId).toBe('m1');
+      expect(dispatches[1].attributes.messageId).toBe('m2');
 
       spy.mockRestore();
     });

@@ -1095,7 +1095,28 @@ export class AgentChannels {
     skipped: readonly Message[] = [],
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped);
+      // The SDK batches by conversation, not sender. Split the batch into runs of
+      // consecutive messages from one sender so each run is dispatched under its
+      // own author's identity, in the order they were sent.
+      const all = [...skipped, message];
+      const batchIds = new Set(all.map(m => m.id));
+      const runs: Message[][] = [];
+      for (const m of all) {
+        const last = runs[runs.length - 1];
+        if (last && last[0]!.author?.userId === m.author?.userId) last.push(m);
+        else runs.push([m]);
+      }
+      for (const run of runs) {
+        await this.processChatMessage(
+          chatThread,
+          run[run.length - 1]!,
+          mastra,
+          requestContext,
+          signalMetadata,
+          run.slice(0, -1),
+          batchIds,
+        );
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       // A refused request is not a malfunction: the host decided this sender
@@ -1134,21 +1155,11 @@ export class AgentChannels {
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown> = {},
     skipped: readonly Message[] = [],
+    historyExcludeIds: ReadonlySet<string> = new Set([...skipped, message].map(m => m.id)),
   ): Promise<void> {
     const platform = chatThread.adapter.name;
     // Messages batched by a concurrency strategy, oldest first, then the current one.
-    // Only the current sender's messages are merged: the run is attributed to and
-    // authorized as `message.author`, so another user's content must not ride
-    // along under that identity. Custom handlers still see all of them in `skipped`.
-    const otherAuthors = skipped.filter(m => m.author?.userId !== message.author?.userId);
-    if (otherAuthors.length > 0) {
-      this.log('debug', `[${platform}] Not merging batched messages from other senders`, {
-        messageIds: otherAuthors.map(m => m.id),
-      });
-    }
-    const batch = [...skipped.filter(m => !otherAuthors.includes(m)), message].filter(
-      m => !this.isContentlessMessage(m),
-    );
+    const batch = [...skipped, message].filter(m => !this.isContentlessMessage(m));
 
     // Some adapters lift platform side-channel events (read receipts, delivery
     // acks) into inbound messages carrying no text and no attachments. Running
@@ -1202,11 +1213,7 @@ export class AgentChannels {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
         this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
-        const history = await this.fetchThreadHistory(
-          chatThread,
-          new Set([...skipped, message].map(m => m.id)),
-          maxMessages,
-        );
+        const history = await this.fetchThreadHistory(chatThread, historyExcludeIds, maxMessages);
         this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
         if (history.length > 0) {
           const lines = ['[Thread context — messages in this thread before you joined]'];
