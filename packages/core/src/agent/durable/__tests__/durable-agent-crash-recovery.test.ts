@@ -137,10 +137,12 @@ async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<strin
     const recovered = await durableAgent.recover(runId);
     const execution = globalRunRegistry.get(runId)?.workflowExecution;
     const errors: string[] = [];
-    let finished = false;
+    // Read the answer from the finish payload: a checkpoint saved after the final
+    // model turn recovers without streaming any text.
+    let finalText: string | undefined;
     for await (const chunk of recovered.fullStream) {
       if (chunk.type === 'error') errors.push(String((chunk.payload as any)?.error?.message ?? chunk.payload));
-      if (chunk.type === 'finish') finished = true;
+      if (chunk.type === 'finish') finalText = String((chunk.payload.output as { text?: string }).text);
     }
     const executionError = await Promise.resolve(execution).then(
       () => undefined,
@@ -148,7 +150,8 @@ async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<strin
     );
     if (errors.length) return `stream error: ${errors[0]}`;
     if (executionError) return `workflow error: ${executionError}`;
-    return finished ? 'ok' : 'stream closed without finish';
+    if (finalText === undefined) return 'stream closed without finish';
+    return finalText === 'done' ? 'ok' : `finished with text ${JSON.stringify(finalText)}`;
   })();
 
   let timer: ReturnType<typeof setTimeout> | undefined;

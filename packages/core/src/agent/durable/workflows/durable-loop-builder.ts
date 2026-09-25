@@ -47,11 +47,6 @@ import {
 
 const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
 
-/** Steps that read an earlier step's result via `getStepResult` (reader → sources). */
-const STEP_RESULT_READS: StepResultReads = {
-  [COLLECT_TOOL_RESULTS_STEP_ID]: [DurableStepIds.LLM_EXECUTION],
-};
-
 /**
  * Options for creating a durable agentic workflow
  */
@@ -206,14 +201,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
   /**
    * Engine-aware snapshot pruning. The `running`-only history strip (#20747)
-   * keeps what a crash-restart reads back, including the direct reads declared
-   * in `STEP_RESULT_READS`. The evented engine additionally reads persisted
-   * step results back at every step boundary during normal execution, so it
-   * retains running history. See `pruneAgentLoopSnapshot` for the rationale.
+   * keeps what a crash-restart reads back, including `stepResultReads`: steps
+   * that read an earlier step's result via `getStepResult` (reader → sources).
+   * The evented engine additionally reads persisted step results back at every
+   * step boundary during normal execution, so it retains running history. See
+   * `pruneAgentLoopSnapshot` for the rationale.
    */
-  protected pruneSnapshotHook(): typeof pruneAgentLoopSnapshot {
+  protected pruneSnapshotHook(stepResultReads: StepResultReads = {}): typeof pruneAgentLoopSnapshot {
     const retainRunningHistory = this.#options?.engine === 'evented';
-    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory, stepResultReads: STEP_RESULT_READS });
+    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory, stepResultReads });
   }
 
   // ── Runtime hooks ──────────────────────────────────────────────────────
@@ -403,7 +399,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
-          pruneSnapshot: this.pruneSnapshotHook(),
+          pruneSnapshot: this.pruneSnapshotHook({ [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id] }),
           validateInputs: false,
           // Deliberate divergence from the main loop (#21529): the workflow
           // engine's own step events repeatedly serialized cumulative
@@ -491,8 +487,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         .map(
           async ({ inputData, getStepResult, getInitData }) => {
             const toolResults = inputData as DurableToolCallOutput[];
-            // Direct read of an earlier step: declared in STEP_RESULT_READS so
-            // snapshot pruning keeps it for a crash-restart.
+            // Direct read of an earlier step: declared to pruneSnapshotHook above
+            // so snapshot pruning keeps it for a crash-restart.
             const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
             const initData = getInitData() as IterationState;
 
