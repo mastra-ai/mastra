@@ -34,7 +34,7 @@ import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { downloadAssetsFromMessages, getAssetUrl } from './prompt/download-assets';
 import type { AssetDownloadCache } from './prompt/download-assets';
-import { assertValidFilePartDataString, resolveFilePartMediaTypeAndData } from './prompt/image-utils';
+import { isSendableFileData } from './prompt/image-utils';
 import {
   getMessageAttachmentUrls,
   getUnavailableAttachmentUrls,
@@ -57,25 +57,6 @@ import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from '
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
-
-/**
- * Rejects input file/image data that is neither a URL nor base64 (e.g. a relative path
- * like `/api/images/foo.png`). Such data is otherwise wrapped as a base64 data URL that
- * can never be fetched, gets persisted, and fails every later turn of the thread.
- * AI SDK v5+ model messages are checked earlier, before the adapter wraps them.
- */
-function assertValidInputFileData(message: MastraDBMessage) {
-  const candidates = [
-    ...(message.content.parts ?? [])
-      .filter(part => part.type === 'file')
-      .map(part => resolveFilePartMediaTypeAndData(part).data),
-    ...(message.content.experimental_attachments ?? []).map(attachment => attachment.url),
-  ];
-
-  for (const data of candidates) {
-    if (typeof data === 'string') assertValidFilePartDataString(data);
-  }
-}
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -1057,7 +1038,14 @@ export class MessageList {
                 .map(part => {
                   if (part.type === 'image' || part.type === 'file') {
                     const assetUrl = getAssetUrl(part);
-                    if (assetUrl && unavailableUrls.has(assetUrl)) {
+                    const data = part.type === 'image' ? part.image : part.data;
+                    const unsendable = typeof data === 'string' && !isSendableFileData(data);
+                    if (unsendable) {
+                      this.logger?.warn(
+                        `Skipping an attachment that is neither a URL nor base64: ${data.slice(0, 100)}`,
+                      );
+                    }
+                    if (unsendable || (assetUrl && unavailableUrls.has(assetUrl))) {
                       const name = (part.type === 'file' && part.filename) || part.mediaType || part.type;
                       return { type: 'text' as const, text: `[Attachment unavailable: ${name}]` };
                     }
@@ -2200,9 +2188,6 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-    if (messageSource === 'input') {
-      assertValidInputFileData(messageV2);
-    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)

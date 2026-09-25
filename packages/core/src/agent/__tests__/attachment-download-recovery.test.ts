@@ -348,6 +348,44 @@ describe('attachment download recovery', () => {
       expect(promptAttachments(prompts[0]!).placeholders).toEqual(['[Attachment unavailable: image/svg+xml]']);
     });
 
+    it.each([
+      [
+        'model file part',
+        { role: 'user', content: [{ type: 'file', data: '/api/images/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+      [
+        'model image part',
+        { role: 'user', content: [{ type: 'image', image: '/api/images/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+      [
+        'UI message file part',
+        { id: 'ui-1', role: 'user', parts: [{ type: 'file', url: '/api/images/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+      [
+        'protocol-relative URL',
+        { role: 'user', content: [{ type: 'file', data: '//cdn.example.com/foo.svg', mediaType: 'image/svg+xml' }] },
+      ],
+    ])(
+      'answers a new %s with a relative path using a placeholder, on this turn and later ones',
+      async (_label, message) => {
+        const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
+        const { run, prompts } = setup({ durable, errorProcessor: { id: 'decline', processAPIError } });
+
+        for (const input of [[message], 'Continue'] as Parameters<Agent['stream']>[0][]) {
+          const result = await run(input);
+          expect(result.errors).toEqual([]);
+          expect(result.text).toBe('ok');
+        }
+        expect(prompts.length).toBeGreaterThanOrEqual(2);
+        for (const prompt of prompts) {
+          expect(promptAttachments(prompt)).toEqual({
+            files: [],
+            placeholders: ['[Attachment unavailable: image/svg+xml]'],
+          });
+        }
+      },
+    );
+
     it('records the attachment on stored messages that carry a URL recorded elsewhere in history', async () => {
       const { run, memory, prompts } = setup({ durable });
       await memory.saveThread({

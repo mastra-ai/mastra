@@ -181,30 +181,20 @@ export function isValidUrl(str: string): boolean {
 const BASE64_PATTERN = /^[A-Za-z0-9+/\-_=\s]*$/;
 
 /**
- * Checks whether a string can be sent as file/image part data: a data URL, an
- * OpenAI file ID (`file-...`), an absolute URL (any scheme), or raw base64.
- * Relative paths like `/api/images/foo.png` are rejected, since treating them as
- * base64 produces a data URL that can never be fetched.
- *
- * Data URLs are not inspected: history replayed as input may already contain a
- * malformed one, which the prompt build replaces with a placeholder instead of failing.
+ * Checks whether a string plausibly holds raw base64 content. Relative paths such as
+ * `/api/images/foo.png` fail, so they aren't wrapped as a data URL that can never decode.
  */
-export function isValidFilePartDataString(data: string): boolean {
-  return data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || BASE64_PATTERN.test(data);
+export function isBase64Like(data: string): boolean {
+  return BASE64_PATTERN.test(data);
 }
 
 /**
- * Throws a user-facing error when file/image part data fails {@link isValidFilePartDataString}.
+ * Checks whether file/image part data can be sent to a model: a data URL, an OpenAI file
+ * ID (`file-...`), an absolute URL (any scheme), or raw base64. Anything else, such as a
+ * relative or protocol-relative path, can't be downloaded or decoded.
  */
-export function assertValidFilePartDataString(data: string): void {
-  if (isValidFilePartDataString(data)) return;
-  const preview = data.length > 100 ? `${data.slice(0, 100)}...` : data;
-  throw new MastraError({
-    id: 'INVALID_FILE_PART_DATA',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.USER,
-    text: `Invalid file part data "${preview}": expected an absolute URL (e.g. https://...), a data URL, or base64-encoded content. Relative paths are not supported; resolve them to absolute URLs before sending.`,
-  });
+export function isSendableFileData(data: string): boolean {
+  return data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || isBase64Like(data);
 }
 
 /**

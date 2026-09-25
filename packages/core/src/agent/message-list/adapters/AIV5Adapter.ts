@@ -4,11 +4,11 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type { ImageContent } from '../prompt/image-utils';
 import {
-  assertValidFilePartDataString,
   categorizeFileData,
   createDataUri,
   imageContentToString,
   isAbsoluteUrl,
+  isBase64Like,
   parseDataUri,
   resolveFilePartMediaTypeAndData,
 } from '../prompt/image-utils';
@@ -869,12 +869,12 @@ export class AIV5Adapter {
       } else if (typeof data === 'string') {
         // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
         // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
-        // { file_id: "file-..." }. Anything else must be raw base64; wrapping a relative
-        // path instead would persist a data URL that fails every later turn.
-        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data)) {
+        // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
+        // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
+        // attachment that can't be downloaded.
+        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
           return data;
         }
-        assertValidFilePartDataString(data);
         return `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');

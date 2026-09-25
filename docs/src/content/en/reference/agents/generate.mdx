@@ -1426,7 +1426,7 @@ const response = await agent.generate([
 console.log(response.text)
 ```
 
-The `image` value, or `data` for a `type: 'file'` part, must be an absolute URL, a data URL, or base64 content. Relative paths such as `/api/images/foo.png` throw an `INVALID_FILE_PART_DATA` error, so resolve them to absolute URLs before sending. If an attachment in the thread's history can no longer be downloaded, the agent replaces it with a placeholder instead of failing. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures).
+The `image` value, or `data` for a `type: 'file'` part, should be an absolute URL, a data URL, or base64 content. The model can't see an attachment given as a relative path such as `/api/images/foo.png`, so resolve it to an absolute URL before sending. The agent replaces it with a placeholder and logs a warning. It does the same for any attachment it can't download, instead of failing. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures).
 
 ### Using `maxSteps`
 
