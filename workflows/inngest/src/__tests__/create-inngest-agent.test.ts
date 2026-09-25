@@ -10,6 +10,7 @@ import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import {
   AGENT_CONTROL_TOPIC,
   AGENT_STREAM_TOPIC,
+  AgentControlEventTypes,
   AgentStreamEventTypes,
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
@@ -1702,5 +1703,126 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       result.cleanup();
       sendSpy.mockRestore();
     }
+  });
+});
+
+describe('thread and run abort (#25156)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-abort',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeDurable(id: string) {
+    const durableAgent = createInngestAgent({
+      agent: new Agent({ id, name: id, instructions: 'Test', model: createMockModel() as any }),
+      inngest,
+    });
+    // Keep publishes in-process; the Inngest realtime transport is not under test.
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    return durableAgent;
+  }
+
+  function abortRequestsFor(publish: ReturnType<typeof vi.spyOn>, runId: string) {
+    return publish.mock.calls.filter(
+      ([topic, event]: any[]) =>
+        topic === AGENT_CONTROL_TOPIC(runId) &&
+        event?.type === AgentControlEventTypes.ABORT_REQUEST &&
+        event.runId === runId,
+    );
+  }
+
+  async function startThreadRun(durableAgent: ReturnType<typeof makeDurable>, threadId: string, resourceId: string) {
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    const deadline = Date.now() + 1_000;
+    while (!durableAgent.getActiveThreadRunId({ threadId, resourceId }) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return { result, sendSpy };
+  }
+
+  it('abortThreadStream stops the active Inngest run and asks the worker to abort it', async () => {
+    const durableAgent = makeDurable('abort-thread');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-t';
+    const resourceId = 'abort-thread-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      const runId = durableAgent.getActiveThreadRunId({ threadId, resourceId });
+      expect(runId).toBe(result.runId);
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(controller?.signal.aborted).toBe(false);
+
+      expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
+
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('abortThreadStream publishes nothing when expectedRunId does not match the active run', async () => {
+    const durableAgent = makeDurable('abort-thread-stale');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-stale-t';
+    const resourceId = 'abort-thread-stale-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: 'some-other-run' })).toBe(false);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      expect(globalRunRegistry.get(result.runId)?.abortController?.signal.aborted).toBe(false);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('abortThreadStream returns false and publishes nothing for a thread without an active run', async () => {
+    const durableAgent = makeDurable('abort-thread-idle');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+
+    expect(durableAgent.abortThreadStream({ threadId: 'idle-t', resourceId: 'idle-r' })).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(publish.mock.calls.filter(([topic]: any[]) => String(topic).startsWith('agent.control.'))).toHaveLength(0);
+  });
+
+  it('abortRunStream asks the worker to abort a run this process does not know', async () => {
+    const durableAgent = makeDurable('abort-run-remote');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const runId = 'abort-run-remote-run';
+
+    expect(typeof durableAgent.abortRunStream(runId)).toBe('boolean');
+    await vi.waitFor(() => expect(abortRequestsFor(publish, runId)).toHaveLength(1));
+  });
+
+  it('abortRunStream flips the local controller of a run started here and reports it aborted', async () => {
+    const durableAgent = makeDurable('abort-run-local');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const { result, sendSpy } = await startThreadRun(durableAgent, 'abort-run-local-t', 'abort-run-local-r');
+
+    try {
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(durableAgent.abortRunStream(result.runId)).toBe(true);
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('does not throw when publishing the abort request fails', async () => {
+    const durableAgent = makeDurable('abort-run-publish-fails');
+    vi.spyOn(durableAgent.pubsub, 'publish').mockRejectedValue(new Error('transport down'));
+
+    expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
+    await new Promise(resolve => setTimeout(resolve, 10));
   });
 });
