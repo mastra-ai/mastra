@@ -10,9 +10,9 @@ packages:
 
 The `TokenLimiterProcessor` limits the number of tokens in messages. Depending on `trimMode`, it acts as a prompt processor, an input processor, and an output processor:
 
-- **Prompt processor** (`processLLMRequest`): In the default `best-fit` and `contiguous` trim modes, enforces the input budget on the provider prompt right before each model call, at every step of the agentic loop. The prompt is measured after earlier prompt processors (such as `ToolCallFilter`) have transformed it, so only tokens that actually reach the model are counted. Tool call and tool result messages are grouped so they're kept or removed together, and trimming is transient: stored messages are never modified.
+- **Prompt processor** (`processLLMRequest`): In the default `best-fit` and `contiguous` trim modes, enforces the input budget on the provider prompt right before each model call, at every step of the agentic loop. The prompt is measured after earlier prompt processors (such as `ToolCallFilter`) have transformed it, so only tokens that actually reach the model are counted. Tool call and tool result messages are grouped so they're kept or removed together, and trimming is transient: stored messages are never modified. Trimming is uniform — no group is exempt because it belongs to the current run.
 - **Input processor** (`processInput`): In `memory-only` trim mode, filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
-- **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits
+- **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits. When `maxToolResultTokens` is set, the processor must also be registered in `outputProcessors` — that's what runs `processToolResult`, which caps individual tool results before they're added to the message list.
 
 ## Usage example
 
@@ -80,7 +80,7 @@ const processor = new TokenLimiterProcessor({
             name: 'maxToolResultTokens',
             type: 'number',
             description:
-              "Caps each tool result produced in the current run to this many tokens before it reaches the model. The stored result is kept intact; the model receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. Results already mapped by a tool's `toModelOutput` are left alone. Unset by default.",
+              "Caps every tool result to this many tokens via the `processToolResult` output-processor hook, before the result is added to the message list. The stored result is kept intact; the model receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. Results already mapped by a tool's `toModelOutput` are left alone. Requires the processor to be registered in `outputProcessors`. Unset by default.",
             isOptional: true,
           },
         ],
@@ -117,14 +117,21 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      "In 'memory-only' trim mode, applies stored-history trimming at each step, preserving system messages and every message produced by the current run (tool calls, tool results, partial answers). In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
+      "In 'memory-only' trim mode, applies stored-history trimming at each step, preserving system messages and trimming the rest newest-first to fit the budget. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
     isOptional: true,
   },
   {
     name: 'processLLMRequest',
     type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
     description:
-      "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages and every message produced by the current run (the triggering prompt, tool calls, tool results, partial answers) are always preserved, and tool call and tool result messages are grouped so they are kept or removed together. Set `maxToolResultTokens` to cap oversized current-run tool results instead.",
+      "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages are always preserved; other tool call and tool result messages are grouped so they are kept or removed together, and groups are trimmed newest-first to fit the budget. Set `maxToolResultTokens` to cap oversized tool results before they reach this stage.",
+    isOptional: true,
+  },
+  {
+    name: 'processToolResult',
+    type: '(args: ProcessToolResultArgs) => Promise<void>',
+    description:
+      "When `maxToolResultTokens` is set and the processor is registered in `outputProcessors`, caps each tool result to that many tokens right after the tool runs, before the result is added to the message list. The full result stays in storage; the model-facing copy is capped via the tool-invocation part's `providerMetadata`, the same mechanism a tool's `toModelOutput` uses. If a result already carries a `toModelOutput` mapping, that mapping is left alone.",
     isOptional: true,
   },
   {
@@ -167,16 +174,20 @@ for await (const part of stream.fullStream) {
 
 Images and file attachments are estimated instead of tokenized, including `file` message parts and tool results shaped like `{ data, mediaType }`. Images use a flat per-image estimate; other media uses decoded byte size, while remote URLs and provider file ids use a flat fallback because their size isn't known locally. Encoded payloads such as base64 data are never counted as text, avoiding an inflated count that could truncate history unnecessarily.
 
-## Current-run messages
+## Capping large tool results
 
-Messages produced by the current run (the triggering prompt, tool calls, tool results, and partial answers) are never trimmed, whether trimming happens on the provider prompt in `processLLMRequest` (`best-fit`, `contiguous`) or on stored history in `processInputStep` (`memory-only`). Removing them mid-run would hide tool data from the next step, so the model would call the same tool again until `maxSteps` runs out. Only older history is trimmed to make room.
-
-If a single tool result is large, set `maxToolResultTokens` so the model sees a truncated copy instead of the full result:
+Trimming (`processLLMRequest` / `processInputStep`) removes whole messages from the prompt or stored history to fit the token budget, and applies uniformly — it doesn't exempt messages produced by the current run. If a single tool result is large enough that trimming alone isn't a good fit, set `maxToolResultTokens` so the model sees a truncated copy of that result instead of losing the surrounding conversation to make room for it. Capping requires the processor to also be registered in `outputProcessors`, since it runs through `processToolResult`:
 
 ```typescript
 const processor = new TokenLimiterProcessor({
   limit: 8000,
   maxToolResultTokens: 2000,
+})
+
+export const agent = new Agent({
+  // ...
+  inputProcessors: [processor],
+  outputProcessors: [processor], // required for maxToolResultTokens to take effect
 })
 ```
 
@@ -186,7 +197,6 @@ When trimming input, `TokenLimiterProcessor` throws a `TripWire` error in the fo
 
 - **Empty messages**: If there are no non-system messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
 - **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
-- **Current run exceeds limit**: If the current run's messages alone exceed the remaining budget, a TripWire is thrown instead of dropping tool data or the triggering prompt. Set `maxToolResultTokens` or raise `limit`.
 - **No messages fit**: If no message fits within the remaining token budget, a TripWire is thrown because you can't send an LLM request with no messages.
 
 ```typescript

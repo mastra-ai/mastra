@@ -1923,15 +1923,8 @@ describe('TokenLimiterProcessor', () => {
     });
   });
 
-  describe('current-run immutability (#24110)', () => {
-    const mockModel = { modelId: 'test-model', specificationVersion: 'v2', provider: 'test' } as any;
+  describe('capping oversized tool results via processToolResult (#24110)', () => {
     const at = (n: number) => new Date(Date.UTC(2024, 0, 1, 0, 0, n));
-    const text = (id: string, role: 'user' | 'assistant', t: string, n: number): MastraDBMessage => ({
-      id,
-      role,
-      content: { format: 2, content: t, parts: [{ type: 'text', text: t }] },
-      createdAt: at(n),
-    });
     const toolResult = (id: string, result: unknown, n: number): MastraDBMessage => ({
       id,
       role: 'assistant',
@@ -1947,91 +1940,89 @@ describe('TokenLimiterProcessor', () => {
       },
       createdAt: at(n),
     });
-    const run = (processor: TokenLimiterProcessor, messageList: MessageList) =>
-      processor.processInputStep({
+
+    const runProcessToolResult = (processor: TokenLimiterProcessor, messageList: MessageList, id: string, result: unknown) =>
+      processor.processToolResult({
+        result,
+        toolCallId: `call-${id}`,
+        toolName: 'lookup',
+        args: {},
         messageList,
-        stepNumber: 1,
-        model: mockModel,
         steps: [],
         systemMessages: [],
         state: {},
-        retryCount: 0,
-        abort: mockAbort,
-      });
+      } as any);
 
-    it('keeps current-run tool results and trims older history instead', async () => {
-      const processor = new TokenLimiterProcessor({ limit: 120 });
-      const messageList = new MessageList();
-      messageList.add(
-        [text('old-1', 'user', 'old question '.repeat(20), 1), text('old-2', 'assistant', 'old answer '.repeat(20), 2)],
-        'memory',
-      );
-      messageList.add(text('user-now', 'user', 'what is the weather?', 3), 'input');
-      messageList.add(toolResult('tool-now', { forecast: 'sunny', temp: 21 }, 4), 'response');
-
-      await run(processor, messageList);
-
-      const ids = messageList.get.all.db().map(m => m.id);
-      expect(ids).toContain('tool-now');
-      expect(ids).toContain('user-now');
-      expect(ids).not.toContain('old-1');
-    });
-
-    it('throws when the current run alone exceeds the budget', async () => {
-      const processor = new TokenLimiterProcessor({ limit: 60 });
-      const messageList = new MessageList();
-      messageList.add(text('user-now', 'user', 'go', 1), 'input');
-      messageList.add(toolResult('tool-now', 'x '.repeat(500), 2), 'response');
-
-      await expect(run(processor, messageList)).rejects.toThrow(/current run's messages/);
-      expect(messageList.get.all.db().map(m => m.id)).toContain('tool-now');
-    });
-
-    it('caps oversized current-run tool results for the model and keeps the stored result', async () => {
+    it('caps an oversized tool result for the model and keeps the stored result intact', async () => {
       const big = 'word '.repeat(2000);
       const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
       const messageList = new MessageList();
-      messageList.add(text('user-now', 'user', 'go', 1), 'input');
-      messageList.add(toolResult('tool-now', big, 2), 'response');
+      messageList.add(toolResult('tool-now', big, 1), 'response');
 
-      await run(processor, messageList);
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
 
       const stored = messageList.get.all.db().find(m => m.id === 'tool-now')!;
       const part = stored.content.parts[0] as any;
       expect(part.toolInvocation.result).toBe(big);
       const modelOutput = part.providerMetadata?.mastra?.modelOutput;
       expect(modelOutput.type).toBe('text');
-      expect(modelOutput.value).toMatch(/\[truncated: showing 50 of [\d,]+ tokens\]$/);
+      expect(modelOutput.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
       expect(modelOutput.value.length).toBeLessThan(big.length);
     });
 
     it('leaves results under maxToolResultTokens untouched', async () => {
       const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
       const messageList = new MessageList();
-      messageList.add(text('user-now', 'user', 'go', 1), 'input');
-      messageList.add(toolResult('tool-now', { ok: true }, 2), 'response');
+      messageList.add(toolResult('tool-now', { ok: true }, 1), 'response');
 
-      await run(processor, messageList);
+      await runProcessToolResult(processor, messageList, 'tool-now', { ok: true });
 
       const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
       expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
     });
 
-    it('rejects a non-positive maxToolResultTokens', () => {
-      expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
+    it('does nothing when maxToolResultTokens is unset', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 400 });
+      const messageList = new MessageList();
+      const big = 'word '.repeat(2000);
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
     });
 
-    it('throws instead of silently dropping an oversized current-run context message', async () => {
-      // If a caller-supplied 'context' message isn't counted as part of the current run, the budget
-      // pre-check passes using only user-now's size, and best-fit trimming then just skips the oversized
-      // context message (it doesn't "fit") instead of keeping it or failing loudly.
-      const processor = new TokenLimiterProcessor({ limit: 60 });
+    it('respects an existing toModelOutput mapping instead of overwriting it', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 5 });
       const messageList = new MessageList();
-      messageList.add(text('user-now', 'user', 'go', 1), 'input');
-      messageList.add(text('ctx-now', 'user', 'x '.repeat(500), 2), 'context');
+      const big = 'word '.repeat(2000);
+      const mapped: MastraDBMessage = {
+        id: 'tool-now',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: '',
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call-tool-now', toolName: 'lookup', args: {}, result: big },
+              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'already mapped' } } },
+            },
+          ],
+        },
+        createdAt: at(1),
+      };
+      messageList.add(mapped, 'response');
 
-      await expect(run(processor, messageList)).rejects.toThrow(/current run's messages/);
-      expect(messageList.get.all.db().map(m => m.id)).toContain('ctx-now');
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput).toEqual({ type: 'text', value: 'already mapped' });
+    });
+
+    it('rejects a non-positive maxToolResultTokens', () => {
+      expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
   });
 });

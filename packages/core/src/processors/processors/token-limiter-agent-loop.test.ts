@@ -50,7 +50,10 @@ function setup(toolOutput: string, limiter: TokenLimiterProcessor) {
     instructions: 'You are helpful.',
     model: model as any,
     tools: { lookup },
+    // maxToolResultTokens only takes effect via processToolResult, which only
+    // fires for output processors, so the limiter must be registered on both.
     inputProcessors: [limiter],
+    outputProcessors: [limiter],
   });
   return { agent, prompts, executions: () => executions };
 }
@@ -65,26 +68,30 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
     expect(result.text).toBe('answer from tool');
   });
 
-  it('fails loudly instead of silently dropping an oversized current-run tool result', async () => {
-    const { agent, prompts, executions } = setup('result '.repeat(3000), new TokenLimiterProcessor({ limit: 2000 }));
-    const output = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
-
-    expect(executions()).toBe(1);
-    expect(prompts).toHaveLength(1);
-    expect(output.text).toBe('');
-    expect(JSON.stringify(output.tripwire ?? output.error ?? '')).toMatch(/current run's messages/);
-  });
-
-  it('sends the model a capped copy when maxToolResultTokens is set', async () => {
+  it('sends the model a capped copy of an oversized tool result instead of dropping it', async () => {
     const big = 'result '.repeat(3000);
-    const { agent, prompts } = setup(big, new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }));
+    const { agent, prompts, executions } = setup(big, new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }));
     const result = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
 
+    expect(executions()).toBe(1);
     expect(result.text).toBe('answer from tool');
     const sent = JSON.stringify(
       prompts[1]!.flatMap(m => (Array.isArray(m.content) ? m.content : [])).find((c: any) => c.type === 'tool-result'),
     );
-    expect(sent).toContain('[truncated: showing 100 of');
+    expect(sent).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]/);
     expect(sent.length).toBeLessThan(big.length);
+  });
+
+  it('without maxToolResultTokens, an oversized tool result is ordinary trimmable content and can be dropped', async () => {
+    const { agent, prompts } = setup('result '.repeat(3000), new TokenLimiterProcessor({ limit: 2000 }));
+    await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
+
+    // No cap set, so nothing protects the oversized result from best-fit trimming.
+    // Callers who need the current run's tool data preserved must set maxToolResultTokens.
+    const secondPrompt = prompts[1] ?? [];
+    const hasToolResult = secondPrompt.some(
+      (m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool-result'),
+    );
+    expect(hasToolResult).toBe(false);
   });
 });

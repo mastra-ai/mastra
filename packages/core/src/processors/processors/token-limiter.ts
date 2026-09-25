@@ -287,36 +287,13 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Messages from the current run (the triggering prompt, tool calls/results, partial answers) are never
-    // trimmed: removing them mid-run hides the prompt or tool data from the next step and makes the model loop.
-    // Only the trailing input message is the actual triggering prompt — earlier messages tagged 'input'
-    // (e.g. a full history re-sent without memory) are ordinary trimmable history.
-    const sources = messageList.makeMessageSourceChecker();
-    const currentRunIds = this.getCurrentRunIds(messages, sources);
-    let responseTokens = 0;
-    for (const message of messages) {
-      if (!currentRunIds.has(message.id)) continue;
-      if (this.maxToolResultTokens !== undefined) this.capToolResults(message, this.maxToolResultTokens);
-      responseTokens += await this.countInputMessageTokens(message);
-    }
-
-    if (responseTokens > remainingBudget) {
-      throw new TripWire(
-        "TokenLimiterProcessor: The current run's messages exceed the remaining token budget and cannot be trimmed. Set `maxToolResultTokens` to cap oversized tool results or raise `limit`.",
-        {
-          retry: false,
-          metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
-        },
-      );
-    }
-
-    // Process older (non-current-run) messages newest first within what the current run leaves
+    // Process messages newest first within budget
     const messagesToKeep: MastraDBMessage[] = [];
-    let currentTokens = responseTokens;
+    let currentTokens = 0;
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (!message || currentRunIds.has(message.id)) continue;
+      if (!message) continue;
 
       const messageTokens = await this.countInputMessageTokens(message);
 
@@ -328,7 +305,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       }
     }
 
-    if (messagesToKeep.length === 0 && responseTokens === 0) {
+    if (messagesToKeep.length === 0) {
       throw new TripWire(
         'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
         {
@@ -340,92 +317,82 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     // Remove older messages that don't fit within the token budget
     const keepIds = new Set(messagesToKeep.map(m => m.id));
-    const idsToRemove = messages.filter(m => !currentRunIds.has(m.id) && !keepIds.has(m.id)).map(m => m.id);
+    const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
     }
   }
 
   /**
-   * The current run's protected messages: the triggering prompt plus anything produced during
-   * this run (tool calls/results, partial answers, caller-supplied context). Only the trailing
-   * `input`-sourced message is the actual triggering prompt — earlier messages tagged `input`
-   * (e.g. a full conversation re-sent in one call without memory) are ordinary trimmable history.
-   */
-  private getCurrentRunIds(
-    messages: MastraDBMessage[],
-    sources: { input: Set<string>; output: Set<string>; context: Set<string> },
-  ): Set<string> {
-    const ids = new Set([...sources.output, ...sources.context]);
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message && sources.input.has(message.id)) {
-        ids.add(message.id);
-        break;
-      }
-    }
-    return ids;
-  }
-
-  /**
-   * Truncate text to a token budget, reserving room for the truncation marker
-   * so the final value never exceeds `maxTokens`.
+   * Truncate text to a token budget, always appending a truncation marker that
+   * reports the exact number of tokens actually shown. Shrinks the visible
+   * slice as needed to keep the marker itself inside `maxTokens`; if `maxTokens`
+   * is too small to fit any content, the result is the marker alone (reporting
+   * 0 tokens shown) so the caller is never silently handed a truncated payload
+   * with no indication.
    */
   private capText(text: string, maxTokens: number): string | undefined {
     const total = this.countTokens(text);
     if (total <= maxTokens) return undefined;
-    const suffix = `\n[truncated: showing ${maxTokens.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
-    const suffixTokens = this.countTokens(suffix);
-    return suffixTokens >= maxTokens
-      ? sliceByTokensSafe(text, 0, maxTokens)
-      : `${sliceByTokensSafe(text, 0, maxTokens - suffixTokens)}${suffix}`;
-  }
 
-  /**
-   * Give oversized tool results a truncated model-only copy (`providerMetadata.mastra.modelOutput`).
-   * The stored result stays intact; results already mapped by `toModelOutput` are left alone.
-   */
-  private capToolResults(message: MastraDBMessage, maxTokens: number): void {
-    if (typeof message.content !== 'object' || !Array.isArray(message.content.parts)) return;
-    for (const part of message.content.parts) {
-      if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') continue;
-      const mastraMeta = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
-      if (mastraMeta?.modelOutput != null) continue;
-      const result = part.toolInvocation.result;
-      const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);
-      if (result === undefined || isMediaPayload(result) || isMediaArray) continue;
-      const text = typeof result === 'string' ? result : JSON.stringify(result);
-      if (text === undefined) continue;
-      const value = this.capText(text, maxTokens);
-      if (value === undefined) continue;
-      part.providerMetadata = {
-        ...part.providerMetadata,
-        mastra: { ...mastraMeta, modelOutput: { type: 'text', value }, modelOutputCapped: true },
-      };
-    }
-  }
-
-  /**
-   * Cap oversized tool results inside a protected (current-run) prompt group.
-   * Mutations here are transient — same contract as `processLLMRequest` — so
-   * the group's tool-result parts are truncated in place for this call only.
-   */
-  private capPromptToolResults(group: PromptMessage[], maxTokens: number): void {
-    for (const message of group) {
-      if (message.role !== 'tool') continue;
-      for (const part of message.content) {
-        if (part.type !== 'tool-result') continue;
-        if (part.output.type === 'text' || part.output.type === 'error-text') {
-          const value = this.capText(part.output.value, maxTokens);
-          if (value !== undefined) part.output = { ...part.output, value };
-        } else if (part.output.type === 'json' || part.output.type === 'error-json') {
-          const value = this.capText(JSON.stringify(part.output.value), maxTokens);
-          if (value !== undefined) part.output = { type: part.output.type === 'json' ? 'text' : 'error-text', value };
-        }
-        // 'content' arrays (mixed text/media) are left alone: media entries are
-        // already estimated rather than tokenized, so they rarely blow the budget.
+    let shown = Math.max(0, maxTokens);
+    while (shown > 0) {
+      const slice = sliceByTokensSafe(text, 0, shown);
+      const marker = `\n[truncated: showing ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
+      if (this.countTokens(slice) + this.countTokens(marker) <= maxTokens) {
+        return `${slice}${marker}`;
       }
+      shown -= 1;
     }
+    return `[truncated: showing 0 of ${total.toLocaleString('en-US')} tokens]`;
+  }
+
+  /**
+   * Give an oversized tool result a truncated model-only copy
+   * (`providerMetadata.mastra.modelOutput`). The stored result stays intact;
+   * results already mapped by `toModelOutput` and media payloads are left alone.
+   */
+  private capToolResult(result: unknown, maxTokens: number): string | undefined {
+    const isMediaArray = Array.isArray(result) && result.length > 0 && result.every(isMediaPayload);
+    if (result === undefined || isMediaPayload(result) || isMediaArray) return undefined;
+    const text = typeof result === 'string' ? result : JSON.stringify(result);
+    if (text === undefined) return undefined;
+    return this.capText(text, maxTokens);
+  }
+
+  /**
+   * Cap an oversized tool result before it is persisted to the message list or
+   * sent to the model. Runs unconditionally (regardless of `trimMode`) for every
+   * output processor invocation, so register this processor in `outputProcessors`
+   * for capping to take effect (`inputProcessors` alone only trims history).
+   */
+  async processToolResult(args: {
+    result: unknown;
+    toolCallId: string;
+    toolName: string;
+    messageList: ProcessInputStepArgs['messageList'];
+  }): Promise<void> {
+    if (this.maxToolResultTokens === undefined) return;
+    const { result, toolCallId, toolName, messageList } = args;
+    if (!messageList) return;
+
+    const existingPart = messageList
+      .get.all.db()
+      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
+      .find(part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId);
+    const existingMastraMeta = existingPart?.providerMetadata?.mastra as Record<string, unknown> | undefined;
+    if (existingMastraMeta?.modelOutput != null) return;
+
+    const value = this.capToolResult(result, this.maxToolResultTokens);
+    if (value === undefined) return;
+
+    const toolArgs = existingPart?.type === 'tool-invocation' ? existingPart.toolInvocation.args : undefined;
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName, args: toolArgs, result },
+      providerMetadata: { mastra: { modelOutput: { type: 'text', value }, modelOutputCapped: true } },
+    });
   }
 
   /**
@@ -439,11 +406,13 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * Mutations are transient for the same reason the filtering is — stored
    * messages, memory and UI history keep everything.
    *
-   * Groups belonging to the current run (the triggering prompt, tool calls/results,
-   * partial answers) are never trimmed here either: dropping them mid-run hides the
-   * prompt or tool data from the next step and makes the model loop (#24110).
+   * Oversized tool results are capped separately in `processToolResult`
+   * (before the result is even added to the message list), so trimming here
+   * never needs to special-case the current run: every group is an equal
+   * candidate for removal, newest-first for `contiguous`, best-effort for
+   * `best-fit` (#24110).
    */
-  async processLLMRequest({ prompt, messageList }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
+  async processLLMRequest({ prompt }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
     if (this.trimMode === 'memory-only') return undefined;
 
     const groups = this.groupPromptMessages(prompt);
@@ -479,47 +448,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // The current run's messages map to a contiguous suffix of non-system groups
-    // (conversion preserves order, and each stored message maps to one group).
-    // Protect that many trailing groups from trimming, and cap their tool results.
-    const nonSystemGroups = groups.filter(group => group[0]?.role !== 'system');
-    const protectedGroups = new Set<PromptMessage[]>();
-    if (messageList) {
-      const sources = messageList.makeMessageSourceChecker();
-      const dbMessages = messageList.get.all.db();
-      const currentRunIds = this.getCurrentRunIds(dbMessages, sources);
-      const currentRunCount = dbMessages.filter(
-        message => currentRunIds.has(message.id) && message.role !== 'system',
-      ).length;
-      const protectedList = nonSystemGroups.slice(Math.max(0, nonSystemGroups.length - currentRunCount));
-      for (const group of protectedList) {
-        protectedGroups.add(group);
-        if (this.maxToolResultTokens !== undefined) this.capPromptToolResults(group, this.maxToolResultTokens);
-      }
-    }
-
-    let responseTokens = 0;
-    for (const group of protectedGroups) {
-      for (const message of group) responseTokens += this.countPromptMessageTokens(message);
-    }
-
-    if (responseTokens > remainingBudget) {
-      throw new TripWire(
-        "TokenLimiterProcessor: The current run's messages exceed the remaining token budget and cannot be trimmed. Set `maxToolResultTokens` to cap oversized tool results or raise `limit`.",
-        {
-          retry: false,
-          metadata: { systemTokens, limit, remainingBudget, messageCount },
-        },
-      );
-    }
-
-    // Process remaining (non-protected) non-system message groups in reverse order (newest first)
-    const keptGroups = new Set<PromptMessage[]>(protectedGroups);
-    let currentTokens = responseTokens;
+    // Trim non-system message groups in reverse order (newest first). No group
+    // is exempt — the current run's tool results were already capped in
+    // `processToolResult`, so an oversized run can no longer exhaust the
+    // budget on its own the way it could when this stage tried to protect it.
+    const keptGroups = new Set<PromptMessage[]>();
+    let currentTokens = 0;
 
     for (let i = groups.length - 1; i >= 0; i--) {
       const group = groups[i];
-      if (!group || group[0]?.role === 'system' || protectedGroups.has(group)) continue;
+      if (!group || group[0]?.role === 'system') continue;
 
       let groupTokens = 0;
       for (const message of group) groupTokens += this.countPromptMessageTokens(message);
