@@ -28,4 +28,11 @@ describe('SessionSuspensions.resolveToolCallId', () => {
   it('returns undefined when nothing is pending', () => {
     expect(new SessionSuspensions().resolveToolCallId('missing')).toBeUndefined();
   });
+
+  it('does not treat an explicit empty id as omitted', () => {
+    const suspensions = new SessionSuspensions();
+    suspensions.register({ toolCallId: 'q-1', runId: 'run', toolName: 'ask_user', threadId: 't', resourceId: 'r' });
+    expect(suspensions.resolveToolCallId('')).toBeUndefined();
+    expect(suspensions.resolveToolCallId()).toBe('q-1');
+  });
 });

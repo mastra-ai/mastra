@@ -194,7 +194,7 @@ const toolApprovalBodySchema = z.object({
   requestContext: bodyRequestContextSchema,
 });
 const toolSuspensionBodySchema = z.object({
-  toolCallId: z.string(),
+  toolCallId: z.string().min(1),
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
