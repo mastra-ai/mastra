@@ -743,6 +743,36 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).not.toHaveBeenCalled();
       });
 
+      it('keeps a stashed requester when the run id is recovered from stored messages', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' }, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+
+        await click('tool_approve:tool-call-1', 'bob');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
       it('keeps the permissive behavior when no requester was recorded', async () => {
         const { dispatchApproval, click } = await setup({});
         await click('tool_approve:tool-call-1', 'mallory');

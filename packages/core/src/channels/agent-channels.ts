@@ -635,14 +635,14 @@ export class AgentChannels {
                             )
                             .filter((id): id is string => !!id),
                         );
-                        if (authors.size > 1) {
+                        if (!requesterId && authors.size > 1) {
                           this.log(
                             'info',
                             `Ignoring tool approval action: requester for toolCallId=${toolCallId} is ambiguous`,
                           );
                           return;
                         }
-                        requesterId = [...authors][0];
+                        requesterId ??= [...authors][0];
                         break;
                       }
                     }
