@@ -1094,57 +1094,67 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown>,
     skipped: readonly Message[] = [],
   ): Promise<void> {
-    try {
-      // The SDK batches by conversation, not sender. Split the batch into runs of
-      // consecutive messages from one sender so each run is dispatched under its
-      // own author's identity, in the order they were sent.
-      const all = [...skipped, message];
-      const batchIds = new Set(all.map(m => m.id));
-      const runs: Message[][] = [];
-      for (const m of all) {
-        const last = runs[runs.length - 1];
-        if (last && last[0]!.author?.userId === m.author?.userId) last.push(m);
-        else runs.push([m]);
-      }
-      for (const run of runs) {
+    // The SDK batches by conversation, not sender. Split the batch into runs of
+    // consecutive messages from one sender so each run is dispatched under its
+    // own author's identity, in the order they were sent. A message without a
+    // userId is never grouped with another.
+    const all = [...skipped, message];
+    const batchIds = new Set(all.map(m => m.id));
+    const runs: Message[][] = [];
+    for (const m of all) {
+      const last = runs[runs.length - 1];
+      const userId = m.author?.userId;
+      if (last && userId !== undefined && last[0]!.author?.userId === userId) last.push(m);
+      else runs.push([m]);
+    }
+    for (const [i, run] of runs.entries()) {
+      const runMessage = run[run.length - 1]!;
+      // The final run holds the triggering message, so it uses the context the
+      // handler saw. Earlier runs belong to other senders (or earlier turns) and
+      // get a fresh context so per-sender data never leaks between runs.
+      const isLast = i === runs.length - 1;
+      try {
         await this.processChatMessage(
           chatThread,
-          run[run.length - 1]!,
+          runMessage,
           mastra,
-          requestContext,
-          signalMetadata,
+          isLast ? requestContext : new RequestContext(),
+          isLast ? signalMetadata : {},
           run.slice(0, -1),
           batchIds,
         );
+      } catch (err) {
+        // One failed or refused run must not stop later senders' runs.
+        await this.handleRunError(chatThread, runMessage, err);
       }
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      // A refused request is not a malfunction: the host decided this sender
-      // gets nothing. Log it and stop — posting would echo the host's
-      // authorization message into the chat thread and confirm the bot is
-      // present to a sender who was just turned away.
-      if (err instanceof ChannelSessionRejectedError) {
-        this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
-          messageId: message.id,
-          authorId: message.author?.userId,
-          reason: error.message,
-        });
-        return;
-      }
-      this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+    }
+  }
+
+  private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
+    const error = err instanceof Error ? err : new Error(String(err));
+    // A refused request is not a malfunction: the host decided this sender
+    // gets nothing. Log it and stop — posting would echo the host's
+    // authorization message into the chat thread and confirm the bot is
+    // present to a sender who was just turned away.
+    if (err instanceof ChannelSessionRejectedError) {
+      this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
         messageId: message.id,
         authorId: message.author?.userId,
-        error: String(err),
+        reason: error.message,
       });
-      try {
-        const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
-        const errorMessage = adapterConfig?.formatError
-          ? adapterConfig.formatError(error)
-          : `❌ Error: ${error.message}`;
-        await chatThread.post(errorMessage);
-      } catch (postErr) {
-        this.log('debug', 'Failed to post error message to thread', postErr);
-      }
+      return;
+    }
+    this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+      messageId: message.id,
+      authorId: message.author?.userId,
+      error: String(err),
+    });
+    try {
+      const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
+      const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
+      await chatThread.post(errorMessage);
+    } catch (postErr) {
+      this.log('debug', 'Failed to post error message to thread', postErr);
     }
   }
 

@@ -1839,6 +1839,58 @@ describe('AgentChannels', () => {
       spy.mockRestore();
     });
 
+    it("isolates each sender's run and keeps going when one run is refused", async () => {
+      const chatMod = await getChatModule();
+      const { ChannelSessionRejectedError } = await import('../errors');
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('tenant', 'current-sender');
+        return defaultHandler(thread, msg);
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const calls: { id: string; tenant: unknown }[] = [];
+      vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+        calls.push({ id: args[1].id, tenant: args[3].get('tenant') });
+        if (args[1].id === 'a') throw new ChannelSessionRejectedError('no');
+      });
+
+      const author = (userId?: string) => ({ userId, userName: userId ?? 'anon' });
+      const skipped = [
+        { ...message, id: 'a', author: author('user-a') },
+        { ...message, id: 'anon1', author: author(undefined) },
+        { ...message, id: 'anon2', author: author(undefined) },
+      ];
+      const current = { ...message, id: 'c', author: author('user-c') };
+      await registeredDMWrapper!(
+        makeChatThread({ adapter: channels.adapters.discord }),
+        current,
+        {},
+        {
+          skipped,
+          totalSinceLastHandler: 4,
+        },
+      );
+
+      expect(calls).toEqual([
+        { id: 'a', tenant: undefined },
+        { id: 'anon1', tenant: undefined },
+        { id: 'anon2', tenant: undefined },
+        { id: 'c', tenant: 'current-sender' },
+      ]);
+
+      spy.mockRestore();
+    });
+
     it('gives a custom handler the request context for the run', async () => {
       const chatMod = await getChatModule();
       let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
