@@ -160,9 +160,7 @@ export function EmptyFactoryState() {
                   // right after they chose to go back. connectingRepositoryId covers
                   // the whole run — including the factories invalidation await after
                   // both mutations have settled.
-                  disabled={
-                    createFactory.isPending || linkRepository.isPending || connectingRepositoryId !== null
-                  }
+                  disabled={createFactory.isPending || linkRepository.isPending || connectingRepositoryId !== null}
                 >
                   <ArrowLeft aria-hidden="true" />
                   Back
