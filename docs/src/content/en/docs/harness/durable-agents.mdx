@@ -192,7 +192,7 @@ for await (const chunk of output.fullStream) {
 }
 ```
 
-If you pass `idleTimeoutMs`, a stream that receives no chunks for that long ends with an error chunk and detaches the observer. The run itself is only cleaned up when you also pass `isAlive` and it reports the run is no longer running.
+If you pass `idleTimeoutMs` and no chunks arrive for that long, Mastra checks `isAlive` when you provide it. If `isAlive` returns `true` or throws, the timer restarts and the stream stays open. Otherwise the stream ends with an error chunk and detaches the observer. The run itself is only cleaned up when `isAlive` returns `false`.
 
 `createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
