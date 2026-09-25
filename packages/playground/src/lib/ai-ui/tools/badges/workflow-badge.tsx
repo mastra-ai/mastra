@@ -20,7 +20,6 @@ import {
 import { WorkflowStepDetailContent } from '@mastra/playground-ui/domains/workflows/components/workflow-step-detail';
 import type { WorkflowRunStreamResult } from '@mastra/playground-ui/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
-import { useWorkflowRuns } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow-runs';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Eye } from 'lucide-react';
@@ -53,14 +52,6 @@ export const WorkflowBadge = ({
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, usePlaygroundStore().requestContext);
-  const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
-    enabled: Boolean(runId) && !isStreaming,
-  });
-  const run = runs?.find(run => run.runId === runId);
-  const isLoading = isRunsLoading || !run;
-
-  const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
-
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
@@ -99,13 +90,8 @@ export const WorkflowBadge = ({
         ) : null
       }
     >
-      {!isStreaming && !isLoading && (
-        <PlaygroundWorkflowRunProvider
-          snapshot={snapshot}
-          workflowId={workflowId}
-          initialRunId={runId}
-          withoutTimeTravel
-        >
+      {!isStreaming && runId && (
+        <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
         </PlaygroundWorkflowRunProvider>
       )}
