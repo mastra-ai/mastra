@@ -17,6 +17,7 @@ import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import {
   createSourceControlSessionLookup,
+  FactorySourceControlConflictError,
   hydrateFactorySession,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,

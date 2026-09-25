@@ -561,6 +561,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it.each([
     { failure: 'missing connection', expected: /connect source control/i },
     { failure: 'missing repository', expected: /link a repository/i },
+    { failure: 'multiple providers', expected: /repositories from more than one source-control provider/i },
     { failure: 'account-link reread', expected: /try again later/i },
     { failure: 'project reread', expected: /try again later/i },
     { failure: 'source-control selection', expected: /try again later/i },
@@ -604,6 +605,9 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       deps.projects.get
         .mockResolvedValueOnce({ id: 'fp-1', slackWorkItemsEnabled: true })
         .mockRejectedValueOnce(outage);
+    const resolverDeps = failure === 'multiple providers'
+      ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }
+      : deps;
     const workItems = { upsert: vi.fn() };
     const store = { listThreads: vi.fn().mockResolvedValue({ threads: [] }), saveThread: vi.fn() };
     const mastra = { getStorage: () => ({ getStore: async () => store }) };
@@ -616,9 +620,9 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const message = { ...makeMessage('T-1'), id: 'msg-1', attachments: [] };
     const channels = new AgentChannels({
       adapters: { slack: { name: 'slack' } as any },
-      resolveResourceId: createChannelResourceIdResolver(deps as any),
+      resolveResourceId: createChannelResourceIdResolver(resolverDeps as any),
     });
-    const handlers = createHandlers({ ...deps, workItems } as any);
+    const handlers = createHandlers({ ...resolverDeps, workItems } as any);
     const ctx = handlerCtx(mastra);
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -634,7 +638,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(thread.post.mock.calls[0]![0]).toMatch(expected);
     expect(thread.post.mock.calls[0]![0]).not.toContain('db down');
     expect(thread.post.mock.calls[0]![0]).not.toContain('postgres://');
-    if (['missing connection', 'missing repository'].includes(failure)) {
+    if (['missing connection', 'missing repository', 'multiple providers'].includes(failure)) {
       expect(errorLog).not.toHaveBeenCalled();
     } else {
       expect(errorLog).toHaveBeenCalledWith(
