@@ -1,6 +1,7 @@
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -308,6 +309,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
+  validateModelTimeoutSettings(execOptions.modelSettings?.timeout);
+
   if (execOptions.eagerToolExecution) {
     throw new Error('eagerToolExecution is not supported by durable agents');
   }
@@ -609,6 +612,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
 
   const modelList = await typedAgent.getModelList(requestContext);
+  for (const modelConfig of modelList ?? []) {
+    validateModelTimeoutSettings(modelConfig.modelSettings?.timeout);
+  }
 
   // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;
