@@ -633,6 +633,29 @@ describe('DiscordProvider.configure — cache invalidation', () => {
     expect(persisted).toMatchObject({ botToken: 'bot-token-B', publicKey: B.verifyKey, applicationId: B.id });
   });
 
+  it('ignores stale DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID env when the token is supplied via configure()', async () => {
+    // Deployment leftover: env still describes app A while the platform
+    // connection supplies app B's token. Per-field env fallback would complete
+    // the config with A's Ed25519 key and skip the /applications/@me backfill
+    // — the exact forgery path the token-switch replacement closes.
+    process.env.DISCORD_BOT_TOKEN = APP.botToken;
+    process.env.DISCORD_PUBLIC_KEY = APP.publicKey;
+    process.env.DISCORD_APPLICATION_ID = APP.applicationId;
+    const storage = new InMemoryChannelsStorage();
+    const provider = new DiscordProvider({ storage });
+
+    await provider.configure({ botToken: 'bot-token-B' });
+
+    // Identity must come from B's token, not the env leftovers.
+    const B = { id: '555555555555555555', verifyKey: 'cccccccccccccccc' };
+    stubValidateApp({ id: B.id, verifyKey: B.verifyKey });
+    const result = await provider.connect('agent-1');
+    const url = new URL((result as { authorizationUrl: string }).authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(B.id);
+    const persisted = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(persisted).toMatchObject({ botToken: 'bot-token-B', publicKey: B.verifyKey, applicationId: B.id });
+  });
+
   it('drops a stale stored config from a previous process when configured with a different token', async () => {
     // Simulate a restart: storage still holds app A's config, but the platform
     // connection now points at app B.

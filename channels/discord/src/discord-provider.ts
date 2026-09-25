@@ -673,11 +673,24 @@ export class DiscordProvider implements ChannelProvider {
     }
   }
 
-  /** App credentials from provider config or `DISCORD_*` env, with per-field fallback. */
+  /**
+   * App credentials from provider config or `DISCORD_*` env.
+   *
+   * A config-supplied bot token defines the application identity, so
+   * `publicKey` / `applicationId` never fall back to the environment in that
+   * case — stale `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` from a
+   * *different* application would otherwise complete the config and keep that
+   * application's Ed25519 key trusted for webhook verification (bypassing the
+   * `GET /applications/@me` backfill). Env fallback for those fields applies
+   * only when the bot token itself comes from the environment.
+   */
   #suppliedPartialAppConfig(): Partial<DiscordAppConfig> {
     const a = this.#config.app ?? {};
+    if (a.botToken != null) {
+      return { botToken: a.botToken, publicKey: a.publicKey, applicationId: a.applicationId };
+    }
     return {
-      botToken: a.botToken ?? process.env.DISCORD_BOT_TOKEN,
+      botToken: process.env.DISCORD_BOT_TOKEN,
       publicKey: a.publicKey ?? process.env.DISCORD_PUBLIC_KEY,
       applicationId: a.applicationId ?? process.env.DISCORD_APPLICATION_ID,
     };
