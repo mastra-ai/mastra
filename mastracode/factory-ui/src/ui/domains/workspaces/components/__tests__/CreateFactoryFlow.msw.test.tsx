@@ -25,6 +25,7 @@ const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
+const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const WIZARD_PATH = '/factories/fp-host/new-factory';
 
 const connectedGithub: GithubStatus = {
@@ -865,6 +866,41 @@ describe('back navigation', () => {
 
     expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
+  });
+
+  it('drops the back button once a Factory has been created but the final commit failed', async () => {
+    // The final commit on model-provider persists `factoryId` (and possibly
+    // `linkedRepositoryId`) so a retry resumes instead of duplicating. If the
+    // user could still step back, they might pick a new name or repository
+    // while the retry silently finishes the prior IDs, so Back is removed
+    // once these server-side checkpoints exist.
+    seedDraft('model-provider');
+    sessionStorage.setItem(FACTORY_KEY, 'fp-existing');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-existing', name: 'Mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
+    );
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('also drops the back button when only the repository link has been persisted', async () => {
+    seedDraft('model-provider');
+    sessionStorage.setItem(LINKED_KEY, 'lnk-existing');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
+    );
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
   });
 
   it('preserves the repository pick when Back rewinds through name back to vcs', async () => {

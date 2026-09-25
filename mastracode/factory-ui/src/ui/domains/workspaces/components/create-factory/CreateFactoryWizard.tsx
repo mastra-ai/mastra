@@ -99,7 +99,11 @@ export function CreateFactoryWizard() {
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
         onBack={
-          step === 'name' || committing
+          // Once the final commit has written any server state (a Factory row or
+          // a linked repository), stepping back would let the user pick a new
+          // name or repository while the retry still resumes the prior IDs, so
+          // the Back affordance is dropped until the wizard completes.
+          step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
             ? undefined
             : () => {
                 setTyped(undefined);

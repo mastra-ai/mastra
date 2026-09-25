@@ -48,15 +48,6 @@ export function clearOnboardingFlow(): void {
 }
 
 /**
- * Forget the mid-flow factory id when the user rewinds to pick a different
- * repository, so the next choice creates a fresh Factory instead of relinking
- * the old one.
- */
-export function clearOnboardingFactory(): void {
-  sessionStorage.removeItem(ONBOARDING_FACTORY_KEY);
-}
-
-/**
  * Whether an onboarding flow is mid-way with its factory already created —
  * the only case where `/onboarding` may stay open (and `/` must route back
  * into it) even though a factory exists. Picking a repository creates the

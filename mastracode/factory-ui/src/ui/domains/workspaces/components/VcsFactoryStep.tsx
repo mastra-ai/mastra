@@ -62,7 +62,17 @@ export function VcsFactoryStep({
             githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config'
           }
           gitlabConnected={gitlabConfigured}
-          gitlabUnavailable={!gitlabStatus.data?.enabled}
+          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
+          // connect-session request answers 403 with `organization_required`, so gate the
+          // tile here to keep it from starting a doomed Nango session.
+          gitlabUnavailable={!gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required'}
+          gitlabUnavailableReason={
+            !gitlabStatus.data?.enabled
+              ? 'missing_config'
+              : gitlabStatus.data.reason === 'organization_required'
+                ? 'organization_required'
+                : undefined
+          }
           onChooseGithub={() => {
             if (connected) setSelectedProvider('github');
             else onConnect();
@@ -144,6 +154,7 @@ function ProviderChoice({
   githubUnavailable,
   gitlabConnected,
   gitlabUnavailable,
+  gitlabUnavailableReason,
   onChooseGithub,
   onChooseGitlab,
   onGitlabConnected,
@@ -152,10 +163,16 @@ function ProviderChoice({
   githubUnavailable: boolean;
   gitlabConnected: boolean;
   gitlabUnavailable: boolean;
+  gitlabUnavailableReason?: 'missing_config' | 'organization_required';
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
   onGitlabConnected: () => void;
 }) {
+  const gitlabMessage = gitlabUnavailable
+    ? gitlabUnavailableReason === 'organization_required'
+      ? 'Join an organization to connect GitLab repositories.'
+      : 'GitLab is not available for this deployment.'
+    : 'Connect GitLab to choose a repository.';
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
       <ProviderConnection
@@ -179,9 +196,7 @@ function ProviderChoice({
       <div role="separator" aria-orientation="vertical" className="bg-border h-full min-h-36 w-px" />
       <ProviderConnection
         provider="GitLab"
-        message={
-          gitlabUnavailable ? 'GitLab is not available for this deployment.' : 'Connect GitLab to choose a repository.'
-        }
+        message={gitlabMessage}
         icon={<GitLabIcon />}
         actionSlot={
           gitlabUnavailable ? (

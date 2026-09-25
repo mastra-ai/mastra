@@ -115,17 +115,21 @@ export function CreateFactoryRepositoryRows({
         />
       ) : (
         (() => {
-          const gitlabUnavailable = !gitlabStatus.data?.enabled;
+          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
+          // connect-session request answers 403 with `organization_required`, so gate the
+          // button here to keep it from starting a doomed Nango session.
+          const gitlabUnavailable = !gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required';
+          const gitlabSubtitle = !gitlabStatus.data?.enabled
+            ? 'GitLab is not available for this deployment.'
+            : gitlabStatus.data.reason === 'organization_required'
+              ? 'Join an organization to connect GitLab repositories.'
+              : 'Sign in to GitLab to grant access to your projects.';
           return (
             <CommandGroup heading="GitLab">
               <CommandPaletteItem
                 icon={gitlabConnecting ? <Spinner size="sm" aria-label="Connecting to GitLab" /> : <GitLabIcon />}
                 title={gitlabUnavailable ? 'GitLab unavailable' : 'Connect GitLab'}
-                subtitle={
-                  gitlabUnavailable
-                    ? 'GitLab is not available for this deployment.'
-                    : 'Sign in to GitLab to grant access to your projects.'
-                }
+                subtitle={gitlabSubtitle}
                 value="connect-gitlab"
                 disabled={gitlabUnavailable || gitlabConnecting}
                 onSelect={() => void startGitlabConnect()}

@@ -8,7 +8,6 @@ import { connectLinear } from '../../factory/services/linear';
 import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
-  clearOnboardingFactory,
   clearOnboardingFlow,
   ONBOARDING_FACTORY_KEY as FACTORY_KEY,
   persistOnboardingFactory,
@@ -85,17 +84,6 @@ export function EmptyFactoryState() {
     setStep(next);
   };
 
-  const goBack = (previous: Step, from: Step) => {
-    // Rewinding into `vcs` from a later step means the user wants a different
-    // repository. Drop the Factory created for the first pick so the next
-    // choice creates a fresh one instead of linking to the wrong Factory.
-    if (previous === 'vcs' && from !== 'vcs') {
-      setPendingFactory(null);
-      clearOnboardingFactory();
-    }
-    goTo(previous);
-  };
-
   const persistBeforeRedirect = (currentStep: Step) => {
     persistOnboardingStep(currentStep);
     if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
@@ -149,6 +137,11 @@ export function EmptyFactoryState() {
   const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider'];
   const stepIndex = steps.indexOf(step);
   const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
+  // Once a Factory has been created for the user's first repository pick, Back
+  // can no longer safely land on `vcs`: rewinding would either orphan the
+  // server Factory or race against the retry that already links to it. Drop
+  // the affordance in that case rather than shipping a destructive delete.
+  const backDisabled = Boolean(pendingFactory) && previousStep === 'vcs';
 
   return (
     <main className="bg-sidebar text-foreground min-h-dvh">
@@ -156,11 +149,11 @@ export function EmptyFactoryState() {
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
             <div className="mb-9 flex items-center gap-3">
-              {previousStep && (
+              {previousStep && !backDisabled && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => goBack(previousStep, step)}
+                  onClick={() => goTo(previousStep)}
                   aria-label="Go back to previous step"
                   // A pending chooseRepository run ends with goTo('project-management');
                   // letting Back fire mid-flight would move the user forward again
