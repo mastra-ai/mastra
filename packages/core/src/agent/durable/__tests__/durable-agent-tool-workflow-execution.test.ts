@@ -361,6 +361,66 @@ describe('DurableAgent tool approval workflow execution', () => {
     cleanup();
   });
 
+  it('should forward custom resume data sent with a tool approval', async () => {
+    const mockModel = createToolCallThenTextModel('approvalNoteTool', { input: 'test' }, 'All done');
+    const receivedResumeData: unknown[] = [];
+
+    const approvalNoteTool = createTool({
+      id: 'approvalNoteTool',
+      description: 'An approval-gated tool that reads the approval payload',
+      inputSchema: z.object({ input: z.string() }),
+      requireApproval: true,
+      execute: async (_inputData: { input: string }, context?: any) => {
+        receivedResumeData.push(context?.agent?.resumeData ?? context?.resumeData);
+        return { result: 'completed' };
+      },
+    });
+
+    const baseAgent = new Agent({
+      id: 'approval-note-agent',
+      name: 'Approval Note Agent',
+      instructions: 'Use the approval note tool',
+      model: mockModel as LanguageModelV2,
+      tools: { approvalNoteTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'approval-note-agent': durableAgent as any },
+    });
+
+    let approvalData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Use the approval note tool', {
+      onSuspended: data => {
+        approvalData = data;
+      },
+    });
+
+    await delay(500);
+    expect(approvalData?.type).toBe('approval');
+
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(
+      runId,
+      { approved: true, note: 'hello' },
+      {
+        onFinish: data => {
+          finishData = data;
+        },
+      },
+    );
+
+    await delay(500);
+
+    // Same as the standard loop: only a bare `{ approved }` payload is withheld from the tool.
+    expect(receivedResumeData).toEqual([{ approved: true, note: 'hello' }]);
+    expect(finishData).not.toBeNull();
+    resumeResult.cleanup();
+    cleanup();
+  });
+
   it('should return not-approved result when tool approval is denied', async () => {
     const mockModel = createToolCallThenTextModel('searchTool', { query: 'test' }, 'Done');
 
