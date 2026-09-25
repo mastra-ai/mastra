@@ -424,6 +424,17 @@ function requestsConsent(
   return (resolvePhaseSemantics(boards, decision.board, decision.stage)?.kind ?? 'working') === 'working';
 }
 
+// The Factory reviewing code it wrote is part of the same work, not new work to
+// consent to: a push to a Factory-authored PR re-reviews without a person's click.
+function reviewsFactoryAuthoredCode(
+  item: { metadata: Record<string, unknown> | null },
+  decision: FactoryCommitDecision,
+): boolean {
+  if (item.metadata?.factoryAuthored !== true) return false;
+  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  return decision.type === 'invokeSkill' && decision.role === 'review';
+}
+
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -752,6 +763,7 @@ export class FactoryDecisionDispatcher {
     // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
+    if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 

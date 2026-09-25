@@ -2835,6 +2835,53 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
   });
 
+  it('re-reviews a push to a Factory-authored PR without asking, even with automatic runs off', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:8' },
+        title: 'Factory change',
+        stages: ['done'],
+        sessions: {},
+        metadata: { authorTrusted: true, factoryAuthored: true },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'push-f', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-f' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(rows.find(row => row.idempotencyKey === 're-review-f')?.status).toBe('succeeded');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    const run = rows.find(row => row.decision.type === 'invokeSkill');
+    expect(run?.decision).toMatchObject({ skillName: 'factory-rereview' });
+    expect(run?.status).not.toBe('proposed');
+  });
+
   it('lets an external push move a card a person already handed over', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
