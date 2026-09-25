@@ -1460,10 +1460,17 @@ describe('thinking defaults routes', () => {
     });
   });
 
-  it('reports the defaults as read-only when authentication is enabled', async () => {
-    const res = await buildApp(userA).request('/web/config/thinking');
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ editable: false });
+  it('reports the defaults as editable only for organization admins when authentication is enabled', async () => {
+    const admin = await buildApp(userA, { isOrganizationAdmin: async () => true }).request('/web/config/thinking');
+    expect(await admin.json()).toMatchObject({ editable: true });
+
+    const nonAdmin = await buildApp(userA, { isOrganizationAdmin: async () => false }).request('/web/config/thinking');
+    expect(nonAdmin.status).toBe(200);
+    expect(await nonAdmin.json()).toMatchObject({ editable: false });
+
+    const signedOut = await buildApp(null).request('/web/config/thinking');
+    expect(signedOut.status).toBe(200);
+    expect(await signedOut.json()).toMatchObject({ editable: false });
   });
 
   it('round-trips global and per-mode defaults through the settings file', async () => {
@@ -1495,14 +1502,36 @@ describe('thinking defaults routes', () => {
     expect((await putThinking(app, { modeDefaults: ['high'] })).status).toBe(400);
   });
 
-  it('rejects deployment-scoped writes in tenant mode', async () => {
-    const nonAdmin = buildApp(userA, { isOrganizationAdmin: async () => false });
-    expect((await putThinking(nonAdmin, { globalDefault: 'high' })).status).toBe(403);
-
-    const signedOut = buildApp(null);
-    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(403);
-
+  it('lets organization admins write deployment defaults when authentication is enabled', async () => {
     const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
-    expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(403);
+    const put = await putThinking(admin, { globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    expect(put.status).toBe(200);
+
+    const read = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
+    expect(await read.json()).toMatchObject({ globalDefault: 'high', modeDefaults: { plan: 'max' } });
+  });
+
+  it('rejects deployment writes from non-admins and signed-out callers when authentication is enabled', async () => {
+    const nonAdmin = await putThinking(buildApp(userA, { isOrganizationAdmin: async () => false }), {
+      globalDefault: 'high',
+    });
+    expect(nonAdmin.status).toBe(403);
+    expect(await nonAdmin.json()).toMatchObject({ error: 'organization_admin_required' });
+
+    const failing = await putThinking(
+      buildApp(userA, {
+        isOrganizationAdmin: async () => {
+          throw new Error('identity provider unavailable');
+        },
+      }),
+      { globalDefault: 'high' },
+    );
+    expect(failing.status).toBe(403);
+
+    const signedOut = await putThinking(buildApp(null), { globalDefault: 'high' });
+    expect(signedOut.status).toBe(401);
+
+    const read = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
+    expect(await read.json()).toMatchObject({ globalDefault: 'off' });
   });
 });

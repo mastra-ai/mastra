@@ -709,6 +709,24 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }
     };
 
+    const deploymentThinkingAccess = async (
+      c: Context,
+    ): Promise<{ ok: true } | { ok: false; status: 401 | 403; error: string; message?: string }> => {
+      if (!auth.enabled()) return { ok: true };
+      await auth.ensureUser(c);
+      const tenant = auth.tenant(c);
+      if (!tenant) return { ok: false, status: 401, error: 'unauthorized' };
+      if (!(await auth.isOrganizationAdmin(c, tenantOrgId(tenant)))) {
+        return {
+          ok: false,
+          status: 403,
+          error: 'organization_admin_required',
+          message: 'Only organization admins can change deployment thinking defaults while authentication is enabled',
+        };
+      }
+      return { ok: true };
+    };
+
     return [
       registerApiRoute('/web/config/features', {
         method: 'GET',
@@ -1171,9 +1189,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       // global `preferences.thinkingLevel` plus per-mode
       // `models.modeThinkingDefaults`. These are what request-time resolution
       // falls back to when a session carries no explicit override — including
-      // automated (rule-driven) Factory runs nobody opens interactively. In
-      // tenant mode, writes are disabled because the settings file is shared
-      // deployment-wide rather than scoped to an organization.
+      // automated (rule-driven) Factory runs nobody opens interactively. When
+      // auth is enabled, only signed-in organization admins may write them,
+      // because the settings file is shared by the whole deployment.
 
       registerApiRoute('/web/config/thinking', {
         method: 'GET',
@@ -1187,7 +1205,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               globalDefault: settings.preferences.thinkingLevel,
               modeDefaults: settings.models.modeThinkingDefaults,
               modes,
-              editable: !auth.enabled(),
+              editable: (await deploymentThinkingAccess(loose(c))).ok,
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1199,13 +1217,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          if (auth.enabled()) {
+          const access = await deploymentThinkingAccess(loose(c));
+          if (!access.ok) {
             return c.json(
-              {
-                error:
-                  'Deployment thinking defaults are shared by the whole deployment, so they cannot be changed while authentication is enabled',
-              },
-              403,
+              { error: access.error, ...(access.message ? { message: access.message } : {}) },
+              access.status,
             );
           }
           let body: { globalDefault?: unknown; modeDefaults?: unknown };
