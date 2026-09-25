@@ -708,7 +708,7 @@ export class AgentChannels {
                 const { requestContext } = handlerContext;
                 requestContext.set('channel', channelContext);
 
-                const renderContext = this._buildRenderContext(chatThread, platform, undefined, requesterId);
+                const renderContext = this._buildRenderContext(chatThread, platform, { requesterId });
                 requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
                 try {
@@ -760,12 +760,10 @@ export class AgentChannels {
               const { requestContext } = handlerContext;
               requestContext.set('channel', channelContext);
 
-              const renderContext = this._buildRenderContext(
-                chatThread,
-                platform,
-                { toolCallId, messageId },
+              const renderContext = this._buildRenderContext(chatThread, platform, {
+                approvalContext: { toolCallId, messageId },
                 requesterId,
-              );
+              });
               requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
               await this.dispatchApproval({
@@ -1391,7 +1389,7 @@ export class AgentChannels {
     // subscription consumer: rendering now happens inline with the run that
     // produces the chunks, so only the Lambda that won the wake race
     // (signals reservation) renders the reply.
-    const renderContext = this._buildRenderContext(chatThread, platform, undefined, message.author?.userId);
+    const renderContext = this._buildRenderContext(chatThread, platform, { requesterId: message.author?.userId });
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
@@ -1476,8 +1474,10 @@ export class AgentChannels {
   _buildRenderContext(
     chatThread: Thread,
     platform: string,
-    approvalContext?: { toolCallId: string; messageId: string },
-    requesterId?: string,
+    {
+      approvalContext,
+      requesterId,
+    }: { approvalContext?: { toolCallId: string; messageId: string }; requesterId?: string } = {},
   ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];

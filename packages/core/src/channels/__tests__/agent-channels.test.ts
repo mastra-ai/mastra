@@ -784,8 +784,7 @@ describe('AgentChannels', () => {
         const ctx = (channels as any)._buildRenderContext(
           { id: 'channel-1:thread-1', channelId: 'channel-1' },
           'discord',
-          undefined,
-          'alice',
+          { requesterId: 'alice' },
         );
         ctx.onApprovalPosted('tool-call-2', { displayName: 'x', argsSummary: '', startedAt: 0 });
         expect((channels as any).pendingApprovalCards.get('tool-call-2').requesterId).toBe('alice');
