@@ -683,7 +683,12 @@ export class WorkflowsPG extends WorkflowsStorage {
     const queryValues = usePagination ? [...values, normalizedPerPage, page! * normalizedPerPage] : values;
     const rows = await this.#db.client.manyOrNone(
       `SELECT workflow_name, run_id, "resourceId", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ",
-        snapshot ->> 'status' AS status, (snapshot ->> 'timestamp')::double precision AS timestamp
+        CASE WHEN snapshot ->> 'status' IN (
+          'running', 'waiting', 'suspended', 'success', 'failed', 'canceled',
+          'pending', 'bailed', 'tripwire', 'paused', 'skipped'
+        ) THEN snapshot ->> 'status' END AS status,
+        CASE WHEN jsonb_typeof(snapshot -> 'timestamp') = 'number'
+          THEN (snapshot ->> 'timestamp')::double precision END AS timestamp
        FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC
        ${usePagination ? `LIMIT $${values.length + 1} OFFSET $${values.length + 2}` : ''}`,
       queryValues,
@@ -692,8 +697,8 @@ export class WorkflowsPG extends WorkflowsStorage {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
       resourceId: row.resourceId as string | undefined,
-      status: row.status as WorkflowRunSummaries['runs'][number]['status'],
-      timestamp: Number(row.timestamp),
+      status: (row.status ?? undefined) as WorkflowRunSummaries['runs'][number]['status'],
+      timestamp: row.timestamp == null ? undefined : Number(row.timestamp),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     }));

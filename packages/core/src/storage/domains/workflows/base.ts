@@ -1,4 +1,4 @@
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../../../workflows';
 import type {
   UpdateWorkflowStateOptions,
   WorkflowRun,
@@ -7,6 +7,20 @@ import type {
   StorageListWorkflowRunsInput,
 } from '../../types';
 import { StorageDomain } from '../base';
+
+const workflowRunStatuses = new Set<WorkflowRunStatus>([
+  'running',
+  'waiting',
+  'suspended',
+  'success',
+  'failed',
+  'canceled',
+  'pending',
+  'bailed',
+  'tripwire',
+  'paused',
+  'skipped',
+]);
 
 export abstract class WorkflowsStorage extends StorageDomain {
   constructor() {
@@ -80,7 +94,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
         return {
           workflowName: run.workflowName,
           runId: run.runId,
-          status: snapshot && typeof snapshot === 'object' ? snapshot.status : undefined,
+          status:
+            snapshot && typeof snapshot === 'object' && workflowRunStatuses.has(snapshot.status)
+              ? snapshot.status
+              : undefined,
           timestamp:
             snapshot && typeof snapshot === 'object' && typeof snapshot.timestamp === 'number'
               ? snapshot.timestamp

@@ -91,6 +91,31 @@ describe('workflow snapshot status index', () => {
     }
   });
 
+  it('omits invalid summary status and missing or non-numeric timestamps from legacy JSONB rows', async () => {
+    const malformedName = `summary-legacy-${randomUUID()}`;
+    const insert = async (snapshot: object) => {
+      const runId = randomUUID();
+      await store.db.none(
+        `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, NOW(), NOW())`,
+        [malformedName, runId, snapshot],
+      );
+      return runId;
+    };
+    const valid = await insert({ status: 'success', timestamp: 123 });
+    const missing = await insert({ status: 'bogus' });
+    const text = await insert({ status: 'waiting', timestamp: '456' });
+
+    const { runs, total } = await workflows.listWorkflowRunSummaries({ workflowName: malformedName });
+    expect(total).toBe(3);
+    const byId = new Map(runs.map((run: any) => [run.runId, run]));
+    expect(byId.get(valid)).toMatchObject({ status: 'success', timestamp: 123 });
+    expect(byId.get(missing).status).toBeUndefined();
+    expect(byId.get(missing).timestamp).toBeUndefined();
+    expect(byId.get(text).status).toBe('waiting');
+    expect(byId.get(text).timestamp).toBeUndefined();
+  });
+
   it('persists a snapshot with a real backslash before an unpaired surrogate without losing literal escapes', async () => {
     const runId = randomUUID();
     const note = { path: 'C:\\path\\\uD800-end', literal: String.raw`literal\uD800`, nullPath: 'C:\\path\\\0-end' };

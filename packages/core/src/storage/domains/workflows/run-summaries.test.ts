@@ -69,15 +69,18 @@ describe('workflow run summary fallback with legacy snapshots', () => {
         run('malformed', '{broken'),
         run('missing', {}),
         run('null', null),
+        run('unsupported', JSON.stringify({ status: 'bogus', timestamp: 456 })),
       ] as WorkflowRuns['runs'],
-      total: 4,
+      total: 5,
     });
 
     const result = await store.listWorkflowRunSummaries();
-    expect(result.total).toBe(4);
-    expect(result.runs).toHaveLength(4);
+    expect(result.total).toBe(5);
+    expect(result.runs).toHaveLength(5);
     expect(result.runs[0]).toMatchObject({ runId: 'good', status: 'success', timestamp: 123 });
-    for (const summary of result.runs.slice(1)) {
+    expect(result.runs[4]).toMatchObject({ runId: 'unsupported', timestamp: 456 });
+    expect(result.runs[4].status).toBeUndefined();
+    for (const summary of result.runs.slice(1, 4)) {
       expect(summary.status).toBeUndefined();
       expect(summary.timestamp).toBeUndefined();
       expect(summary.createdAt).toEqual(createdAt);
