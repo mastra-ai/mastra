@@ -238,6 +238,31 @@ describe('trace-aggregate conformance cases', () => {
     expect(traceAggregateResponseMismatch({ ...response(2900), truncated: true }, { expected })).toMatch(/^truncated/);
   });
 
+  it('traceAggregateResponseMismatch ignores record key order but not row order', () => {
+    const expected = {
+      rows: [
+        { dimensions: { entityName: 'a', environment: 'prod' }, measures: { count: 1, errorCount: 0 } },
+        { dimensions: { entityName: 'b', environment: 'prod' }, measures: { count: 1, errorCount: 0 } },
+      ],
+      truncated: false,
+    };
+    const reversedKeys = {
+      rows: [
+        { dimensions: { environment: 'prod', entityName: 'a' }, measures: { errorCount: 0, count: 1 } },
+        { dimensions: { environment: 'prod', entityName: 'b' }, measures: { errorCount: 0, count: 1 } },
+      ],
+      truncated: false,
+    };
+    expect(traceAggregateResponseMismatch(reversedKeys, { expected })).toBeNull();
+    const reversedRows = { rows: [expected.rows[1]!, expected.rows[0]!], truncated: false };
+    expect(traceAggregateResponseMismatch(reversedRows, { expected })).toMatch(/^rows\[0\]\.dimensions\.entityName/);
+    const missingDimension = {
+      rows: [{ dimensions: { entityName: 'a' }, measures: { count: 1, errorCount: 0 } }, expected.rows[1]!],
+      truncated: false,
+    };
+    expect(traceAggregateResponseMismatch(missingDimension, { expected })).toMatch(/^rows\[0\]\.dimensions keys/);
+  });
+
   it('aggregates exactly the population evaluateTraceQuery selects for every case', () => {
     for (const testCase of TRACE_AGGREGATE_CONFORMANCE_CASES) {
       const { timeRange, where } = testCase.request;

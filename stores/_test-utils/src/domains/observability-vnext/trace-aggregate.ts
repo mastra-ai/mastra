@@ -605,18 +605,22 @@ export function traceAggregateResponseMismatch(
   for (const [index, expectedRow] of expected.rows.entries()) {
     const actualRow = actual.rows[index]!;
     const at = `rows[${index}]`;
-    if (JSON.stringify(actualRow.dimensions ?? null) !== JSON.stringify(expectedRow.dimensions ?? null)) {
-      return `${at}.dimensions: expected ${JSON.stringify(expectedRow.dimensions)}, got ${JSON.stringify(actualRow.dimensions)}`;
+    // `dimensions` and `measures` are records, so key order is not part of the contract.
+    if (sortedKeys(actualRow.dimensions) !== sortedKeys(expectedRow.dimensions)) {
+      return `${at}.dimensions keys: expected ${sortedKeys(expectedRow.dimensions)}, got ${sortedKeys(actualRow.dimensions)}`;
+    }
+    for (const key of Object.keys(expectedRow.dimensions ?? {})) {
+      if (actualRow.dimensions![key] !== expectedRow.dimensions![key]) {
+        return `${at}.dimensions.${key}: expected ${JSON.stringify(expectedRow.dimensions![key])}, got ${JSON.stringify(actualRow.dimensions![key])}`;
+      }
     }
     if (actualRow.bucket !== expectedRow.bucket) {
       return `${at}.bucket: expected ${expectedRow.bucket}, got ${actualRow.bucket}`;
     }
-    const expectedKeys = Object.keys(expectedRow.measures);
-    const actualKeys = Object.keys(actualRow.measures);
-    if (JSON.stringify(actualKeys) !== JSON.stringify(expectedKeys)) {
-      return `${at}.measures keys: expected ${JSON.stringify(expectedKeys)}, got ${JSON.stringify(actualKeys)}`;
+    if (sortedKeys(actualRow.measures) !== sortedKeys(expectedRow.measures)) {
+      return `${at}.measures keys: expected ${sortedKeys(expectedRow.measures)}, got ${sortedKeys(actualRow.measures)}`;
     }
-    for (const key of expectedKeys) {
+    for (const key of Object.keys(expectedRow.measures)) {
       const expectedValue = expectedRow.measures[key]!;
       const actualValue = (actualRow.measures as Record<string, number>)[key]!;
       const allowed = tolerance[key];
@@ -629,6 +633,10 @@ export function traceAggregateResponseMismatch(
     }
   }
   return null;
+}
+
+function sortedKeys(record: object | undefined): string {
+  return record === undefined ? 'absent' : JSON.stringify(Object.keys(record).sort());
 }
 
 const triage = { entityName: 'triage' };
