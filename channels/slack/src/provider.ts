@@ -176,7 +176,6 @@ export class SlackProvider implements ChannelProvider {
       // cycle. The manifest client asks the resolver for a fresh access
       // token before each call and never rotates tokens itself.
       this.#manifestClient = new SlackManifestClient({
-        token: config.token ?? '',
         tokenResolver: config.tokenResolver,
       });
     } else if (config.refreshToken) {

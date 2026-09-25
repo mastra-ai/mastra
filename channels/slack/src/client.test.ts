@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { SlackManifestClient } from './client';
+import type { SlackManifestClientConfig } from './client';
+import type { SlackProviderConfig } from './types';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -174,7 +176,12 @@ describe('SlackManifestClient', () => {
     it('does not invoke onTokenRotation in delegated mode', async () => {
       const tokenResolver = vi.fn().mockResolvedValue('resolved-token');
       const rotationSpy = vi.fn();
-      const delegated = new SlackManifestClient({ tokenResolver, onTokenRotation: rotationSpy });
+      // The combination is rejected at the type level; cast to verify the
+      // runtime guarantee for JS consumers.
+      const delegated = new SlackManifestClient({
+        tokenResolver,
+        onTokenRotation: rotationSpy,
+      } as unknown as SlackManifestClientConfig);
 
       await delegated.rotateToken();
 
@@ -354,6 +361,43 @@ describe('SlackManifestClient', () => {
 
       await expect(client.setAppIcon('A123', new ArrayBuffer(8))).resolves.toBeUndefined();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('too_large'));
+    });
+  });
+
+  describe('config type-level mutual exclusion', () => {
+    it('rejects combining direct credentials with a tokenResolver at compile time', () => {
+      const resolver = async () => 'token';
+
+      // Valid: either direct credentials or a resolver.
+      const selfManaged: SlackManifestClientConfig = { token: 't', refreshToken: 'r' };
+      const delegated: SlackManifestClientConfig = { tokenResolver: resolver };
+
+      // @ts-expect-error — refreshToken cannot be combined with tokenResolver
+      const refreshAndResolver: SlackManifestClientConfig = { refreshToken: 'r', tokenResolver: resolver };
+      // @ts-expect-error — token cannot be combined with tokenResolver
+      const tokenAndResolver: SlackManifestClientConfig = { token: 't', tokenResolver: resolver };
+      // @ts-expect-error — onTokenRotation is meaningless in delegated mode
+      const rotationAndResolver: SlackManifestClientConfig = {
+        tokenResolver: resolver,
+        onTokenRotation: async () => {},
+      };
+
+      expect([selfManaged, delegated, refreshAndResolver, tokenAndResolver, rotationAndResolver]).toBeDefined();
+    });
+
+    it('rejects combining SlackProvider credentials with a tokenResolver at compile time', () => {
+      const resolver = async () => 'token';
+
+      // Valid: either direct credentials or a resolver.
+      const selfManaged: SlackProviderConfig = { token: 't', refreshToken: 'r' };
+      const delegated: SlackProviderConfig = { tokenResolver: resolver };
+
+      // @ts-expect-error — refreshToken cannot be combined with tokenResolver
+      const refreshAndResolver: SlackProviderConfig = { refreshToken: 'r', tokenResolver: resolver };
+      // @ts-expect-error — token cannot be combined with tokenResolver
+      const tokenAndResolver: SlackProviderConfig = { token: 't', tokenResolver: resolver };
+
+      expect([selfManaged, delegated, refreshAndResolver, tokenAndResolver]).toBeDefined();
     });
   });
 });

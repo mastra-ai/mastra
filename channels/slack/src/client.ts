@@ -3,21 +3,34 @@ import type { SlackAppManifest, SlackAppCredentials } from './types';
 const SLACK_API_BASE = 'https://slack.com/api';
 const SLACK_API_TIMEOUT_MS = 30_000;
 
-export interface SlackManifestClientConfig {
+/**
+ * Self-managed credentials: the client rotates its own App Configuration
+ * token pair via `tooling.tokens.rotate`. Mutually exclusive with
+ * {@link SlackManifestClientDelegatedConfig}.
+ */
+export interface SlackManifestClientSelfManagedConfig {
   token?: string;
   refreshToken?: string;
   onTokenRotation?: (tokens: { token: string; refreshToken: string }) => Promise<void>;
-  /**
-   * Resolve a fresh App Configuration access token on demand.
-   *
-   * When set, the client never calls `tooling.tokens.rotate` itself — an
-   * external credential manager (e.g. the Mastra platform) owns the refresh
-   * cycle and this resolver returns a currently-valid access token before
-   * each manifest call. `refreshToken` and `onTokenRotation` are unused in
-   * this mode.
-   */
-  tokenResolver?: () => Promise<string>;
+  tokenResolver?: never;
 }
+
+/**
+ * Delegated credentials: an external credential manager (e.g. the Mastra
+ * platform) owns the refresh cycle. The client never calls
+ * `tooling.tokens.rotate` itself — the resolver returns a currently-valid
+ * access token before each manifest call. Direct credentials (`token`,
+ * `refreshToken`) and `onTokenRotation` cannot be combined with a resolver.
+ */
+export interface SlackManifestClientDelegatedConfig {
+  /** Resolve a fresh App Configuration access token on demand. */
+  tokenResolver: () => Promise<string>;
+  token?: never;
+  refreshToken?: never;
+  onTokenRotation?: never;
+}
+
+export type SlackManifestClientConfig = SlackManifestClientSelfManagedConfig | SlackManifestClientDelegatedConfig;
 
 /**
  * Client for Slack's App Manifest API.
