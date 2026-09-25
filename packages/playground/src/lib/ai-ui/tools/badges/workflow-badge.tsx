@@ -126,6 +126,7 @@ interface WorkflowBadgeExtendedProps {
 const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExtendedProps) => {
   const requestContext = useMergedRequestContext();
   const { Link } = useLinkComponent();
+  const { isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
 
   return (
     <>
@@ -143,7 +144,12 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
       <WorkflowSelectedStepProvider>
         <WorkflowStepDetailProvider>
           <div className="h-[60vh] w-full overflow-hidden rounded-md">
-            <WorkflowGraph workflowId={workflowId} workflow={workflow!} requestContext={requestContext} />
+            <WorkflowGraph
+              workflowId={workflowId}
+              workflow={workflow!}
+              isLoading={isLoadingRunExecutionResult}
+              requestContext={requestContext}
+            />
           </div>
           <WorkflowBadgeStepDetail requestContext={requestContext} />
         </WorkflowStepDetailProvider>
