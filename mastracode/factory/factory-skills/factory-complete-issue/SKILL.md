@@ -7,6 +7,8 @@ description: Mark a GitHub issue as done and update its status labels
 
 Mark the GitHub issue behind a completed Factory work item as done and update its status labels.
 
+The Factory system prompt identifies the **Target repository**. Before changing issue state, verify the checkout with `git rev-parse --show-toplevel` and `git remote get-url origin`. Normalize SSH and HTTPS GitHub remotes to `owner/repository` (ignoring a trailing `.git`) and confirm the target matches the issue URL or repository context. If the target is missing or does not match the checkout, stop without modifying the issue and report the expected target and observed remote/root.
+
 Parse the issue URL or number from `$ARGUMENTS`, then read its current state and labels. Remove any of these labels that are present:
 
 - `status: needs triage`

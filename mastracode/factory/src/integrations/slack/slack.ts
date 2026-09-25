@@ -431,7 +431,12 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
             : 'Could not start a session: connect source control to this Factory project.',
         );
       }
-      const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
+      const repo = await resolveFactorySourceRepository({
+        sourceControl,
+        orgId,
+        factoryProjectId,
+        firstLinkedRepository: true,
+      });
       if (!repo.found) {
         throw new SlackSessionStartError(
           repo.reason === 'connection'

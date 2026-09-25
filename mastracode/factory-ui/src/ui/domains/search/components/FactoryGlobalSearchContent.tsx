@@ -14,6 +14,7 @@ import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
+import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
@@ -87,6 +88,13 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
+      {runs.repositorySelection && (
+        <RepositoryPickerDialog
+          repositories={runs.repositories}
+          onClose={runs.closeRepositorySelection}
+          onSelect={runs.selectRepository}
+        />
+      )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>

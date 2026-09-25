@@ -94,6 +94,7 @@ export function AttentionItemRow({
   updatingReceipt,
   onOpen,
   onRetry,
+  onChooseRepository,
   onApprove,
   onDismiss,
   onRead,
@@ -107,6 +108,7 @@ export function AttentionItemRow({
   updatingReceipt: boolean;
   onOpen?: () => void;
   onRetry?: () => void;
+  onChooseRepository?: () => void;
   onApprove?: () => void;
   onDismiss?: () => void;
   onRead: () => void;
@@ -153,7 +155,16 @@ export function AttentionItemRow({
             >
               <Brain aria-hidden />
             </Button>
-            {onRetry ? (
+            {onChooseRepository ? (
+              <RowAction
+                tooltip="Choose repository"
+                label={`Choose repository for ${item.title}`}
+                disabled={retrying}
+                onClick={onChooseRepository}
+              >
+                <RotateCw aria-hidden />
+              </RowAction>
+            ) : onRetry ? (
               <RowAction
                 tooltip="Retry"
                 label={`${retrying ? 'Retrying' : 'Retry'} ${item.title}`}

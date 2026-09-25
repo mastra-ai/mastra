@@ -26,6 +26,7 @@ import {
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
+import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -226,6 +227,7 @@ export async function prepareFactoryRuleBinding(
   projects: FactoryProjectsStorage,
   boards: BoardRegistry,
   input: FactoryBindingPreparationInput,
+  intake?: Pick<IntakeStorage, 'getConfig'>,
 ): Promise<void> {
   try {
     const sourceControl =
@@ -253,20 +255,47 @@ export async function prepareFactoryRuleBinding(
         `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
       );
     }
-    const repositorySlug =
-      typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
+    const connections = await sourceControl.connections.list({
+      orgId: input.record.orgId,
+      factoryProjectId: input.record.factoryProjectId,
+    });
+    if (!connections.some(connection => connection.integrationId === sourceControl.integrationId)) {
+      throw new FactoryDispatchError('source_control_missing', 'Factory source-control connection not found.');
+    }
+    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
+    const repository = await resolveWorkItemRepository({
+      sourceControl,
+      orgId: input.record.orgId,
+      factoryProjectId: input.record.factoryProjectId,
+      item: input.item,
+      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+    });
+    if (repository.status !== 'resolved') {
+      const detail =
+        repository.status === 'ambiguous'
+          ? `Choose one of the linked repositories: ${repository.candidates.join(', ')}.`
+          : repository.hint;
+      throw new FactoryDispatchError('source_repository_ambiguous', detail);
+    }
     // Re-preparing a binding (server restart, retired controller session) must
     // land in the role's existing session: minting a replacement would repoint
     // the work item, flip the session's owner to the approver, and orphan the
     // previous sandbox.
     const approver = input.record.approvedBy ?? undefined;
+    const boundSession = await reuseBoundSession(sourceControl, input);
+    if (boundSession && boundSession.projectRepositoryId !== repository.projectRepositoryId) {
+      throw new FactoryDispatchError(
+        'source_repository_ambiguous',
+        `The existing session is bound to a different repository than ${repository.slug}. Choose the correct repository and retry.`,
+      );
+    }
     const preparedSession =
-      (await reuseBoundSession(sourceControl, input)) ??
+      boundSession ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
-        repositorySlug,
+        repositorySlug: repository.slug,
         branch,
         // A person who approved the run is its interactive user: attribute it to
         // them, not the repo connector. An agent's pre-approval names no person.
@@ -569,6 +598,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             sessionId: request.sessionId,
           }),
         deps.domains.memorySettings,
+        deps.domains.intake,
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -594,6 +624,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 deps.domains.projects,
                 deps.boardRegistry,
                 input,
+                deps.domains.intake,
               );
             },
           }

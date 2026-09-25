@@ -559,12 +559,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
-    // The system prompt derives its working directory from `state.projectPath`
-    // and falls back to the server's own process.cwd() when unset — which
-    // points the agent at the host checkout (and lets it run `git checkout`
-    // there instead of in its session workdir). Pin it to the session workdir
-    // once known. A remote workdir resolves at the sandbox's first start, so
-    // the pin self-heals on the next resolution after the VM has run.
+    // The SDK system prompt uses `state.projectPath` without falling back to
+    // the server cwd. Pin the session workdir once known so the prompt and
+    // workspace tools describe the same checkout. A remote workdir resolves at
+    // the sandbox's first start, so the pin self-heals on the next resolution.
     if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
     }

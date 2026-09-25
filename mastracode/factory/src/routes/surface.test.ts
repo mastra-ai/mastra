@@ -45,7 +45,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
     sandboxWorkdir: '/sandbox/mastra',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
-  return { seeded, sourceControl, project, projectRepository, github };
+  return { seeded, sourceControl, project, projectRepository, installation, github };
 }
 
 function bindingInput(
@@ -373,6 +373,42 @@ describe('prepareFactoryRuleBinding', () => {
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ userId: 'clicker-1' }),
     );
+  });
+
+  it('blocks autonomous dispatch on an unattributed multi-repository item before creating a session', async () => {
+    const { seeded, sourceControl, project, projectRepository, installation, github } =
+      await seedFactoryWithRepository();
+    const second = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: installation.id,
+        externalId: '789',
+        slug: 'internetburrito/hydra',
+        defaultBranch: 'main',
+      },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: second.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/hydra',
+    });
+    const createSession = vi.spyOn(sourceControl.sessions, 'create');
+    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+    const input = bindingInput(project.id);
+    (input.item as { metadata: Record<string, unknown> | null }).metadata = null;
+
+    const error = await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input).catch(
+      failure => failure,
+    );
+
+    expect(error).toBeInstanceOf(FactoryDispatchError);
+    expect(error).toMatchObject({ code: 'source_repository_ambiguous' });
+    expect(error.message).toContain('internetburrito/hydra');
+    expect(createSession).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
   });
 
   it('classifies a missing source-control connection', async () => {

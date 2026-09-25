@@ -15,6 +15,7 @@ import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/board
 import type { BoardKind } from '../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
+import { RepositoryPickerDialog } from '../domains/factory/components/RepositoryPickerDialog';
 import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
@@ -289,6 +290,13 @@ function BoardContent({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {runs.repositorySelection && (
+        <RepositoryPickerDialog
+          repositories={runs.repositories}
+          onClose={runs.closeRepositorySelection}
+          onSelect={runs.selectRepository}
+        />
+      )}
       {mutationError !== undefined && (
         <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
