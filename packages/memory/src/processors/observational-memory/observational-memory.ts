@@ -3082,6 +3082,165 @@ ${formattedMessages}
   }
 
   /**
+   * Force compaction of pending context, ignoring the observation threshold.
+   *
+   * OM normally observes once its local token estimate crosses the threshold. A provider can
+   * still reject a request for exceeding its context window when its own token count is higher
+   * than that estimate, while `observe()` and `finalize()` see nothing to do. `compact()` is the
+   * recovery path, intended for a processor's `processAPIError` handler.
+   *
+   * It activates any buffered observations, then observes the oldest pending messages in chunks
+   * of at most `maxChunkTokens` until pending tokens drop to `targetTokens`, no progress is made,
+   * or `maxIterations` is reached. Each chunk runs under the same thread/resource lock as
+   * `observe()`, and the threshold bypass applies to this call only — nothing is written to the
+   * record's config. When a `messageList` is given, compacted messages are removed from it so a
+   * retried model call sends the smaller context.
+   *
+   * @example
+   * ```ts
+   * const result = await om.compact({ threadId, resourceId, messageList });
+   * if (result.compacted) {
+   *   return { retry: true };
+   * }
+   * ```
+   */
+  async compact(opts: {
+    threadId: string;
+    resourceId?: string;
+    /** Live MessageList of the failed request. Pending messages are read from it, and compacted messages are removed from it. */
+    messageList?: MessageList;
+    /** Messages to compact when no `messageList` is given. Defaults to unobserved messages in storage. */
+    messages?: MastraDBMessage[];
+    /** Stop once pending tokens are at or below this value. Defaults to half the observation threshold. */
+    targetTokens?: number;
+    /** Maximum tokens of messages sent to the Observer per pass. Defaults to the observation threshold. */
+    maxChunkTokens?: number;
+    /** Maximum number of observation passes. Defaults to 10. */
+    maxIterations?: number;
+    hooks?: ObserveLifecycleHooks;
+    agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
+    requestContext?: RequestContext;
+    writer?: ProcessorStreamWriter;
+    observabilityContext?: ObservabilityContext;
+  }): Promise<{
+    /** Whether any context was compacted (activated or observed). */
+    compacted: boolean;
+    /** Whether buffered observations were activated. */
+    activated: boolean;
+    /** Number of observation passes run. */
+    iterations: number;
+    /** Estimated pending tokens removed by this call. */
+    tokensCompacted: number;
+    /** Estimated pending tokens remaining. */
+    pendingTokens: number;
+    reachedTarget: boolean;
+    record: ObservationalMemoryRecord;
+  }> {
+    const { threadId, resourceId, messageList } = opts;
+    const maxIterations = opts.maxIterations ?? 10;
+    const currentMessages = () => (messageList ? getObservableMessages(messageList) : opts.messages);
+    const compactedIds = new Set<string>();
+
+    await BufferingCoordinator.awaitBuffering(threadId, resourceId ?? null, this.scope);
+
+    const initialStatus = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
+    let activated = false;
+    if (initialStatus.canActivate) {
+      const activation = await this.activate({
+        threadId,
+        resourceId,
+        messages: currentMessages(),
+        messageList,
+        writer: opts.writer,
+      });
+      activated = activation.activated;
+      activation.activatedMessageIds?.forEach(id => compactedIds.add(id));
+    }
+
+    let status = activated
+      ? await this.getStatus({ threadId, resourceId, messages: currentMessages() })
+      : initialStatus;
+    const targetTokens = opts.targetTokens ?? Math.floor(status.threshold / 2);
+    const maxChunkTokens = opts.maxChunkTokens ?? status.threshold;
+    let pendingTokens = status.pendingTokens;
+    let iterations = 0;
+    let observed = false;
+
+    while (pendingTokens > targetTokens && iterations < maxIterations) {
+      const messages = currentMessages();
+      const unobserved = messages
+        ? this.getUnobservedMessages(messages, status.record)
+        : this.getUnobservedMessages(
+            await this.loadMessagesFromStorage(
+              threadId,
+              resourceId,
+              status.record.lastObservedAt ? new Date(status.record.lastObservedAt) : undefined,
+            ),
+            status.record,
+          );
+
+      // Oldest-first prefix of at most maxChunkTokens, but always at least one message so a
+      // single oversized message can still be compacted.
+      const chunk: MastraDBMessage[] = [];
+      let chunkTokens = 0;
+      for (const message of unobserved) {
+        const messageTokens = await this.tokenCounter.countMessageAsync(message);
+        if (chunk.length > 0 && chunkTokens + messageTokens > maxChunkTokens) break;
+        chunk.push(message);
+        chunkTokens += messageTokens;
+      }
+      if (chunk.length === 0) break;
+
+      const result = await this.observe({
+        threadId,
+        resourceId,
+        messages: chunk,
+        messageList,
+        trigger: 'compact',
+        bypassThreshold: true,
+        hooks: opts.hooks,
+        agent: opts.agent,
+        sendSignal: opts.sendSignal,
+        sendStateSignal: opts.sendStateSignal,
+        requestContext: opts.requestContext,
+        writer: opts.writer,
+        observabilityContext: opts.observabilityContext,
+      });
+      iterations++;
+      if (!result.observed) break;
+
+      observed = true;
+      chunk.forEach(message => compactedIds.add(message.id));
+      status = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
+      const madeProgress = status.pendingTokens < pendingTokens;
+      pendingTokens = status.pendingTokens;
+      if (!madeProgress) break;
+    }
+
+    if (messageList && compactedIds.size > 0) {
+      await this.cleanupObservedContext({
+        messageList,
+        threadId,
+        resourceId,
+        observedMessageIds: [...compactedIds],
+      });
+    }
+
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    return {
+      compacted: activated || observed,
+      activated,
+      iterations,
+      tokensCompacted: Math.max(0, initialStatus.pendingTokens - pendingTokens),
+      pendingTokens,
+      reachedTarget: pendingTokens <= targetTokens,
+      record,
+    };
+  }
+
+  /**
    * Return only the messages that haven't been fully observed yet.
    *
    * Use this to prune observed messages from an in-memory message array,
@@ -3750,6 +3909,11 @@ ${formattedMessages}
     hooks?: ObserveLifecycleHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
+    /**
+     * Observe even when unobserved tokens are below the observation threshold.
+     * Applies to this call only; nothing is written to the record's config.
+     */
+    bypassThreshold?: boolean;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
@@ -3792,7 +3956,9 @@ ${formattedMessages}
               freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
             );
 
-        if (
+        if (opts.bypassThreshold) {
+          if (unobservedMessages.length === 0) return;
+        } else if (
           !this.meetsObservationThreshold({
             record: freshRecord,
             unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),

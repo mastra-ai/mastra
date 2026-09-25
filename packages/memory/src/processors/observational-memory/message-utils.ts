@@ -194,6 +194,77 @@ export function getObservableMessages(messageList: MessageList): MastraDBMessage
   });
 }
 
+function canCarryMarker(message: MastraDBMessage | undefined): boolean {
+  return message?.role === 'assistant' && Array.isArray(message.content?.parts);
+}
+
+function hasOnlyLifecycleParts(message: MastraDBMessage | undefined): boolean {
+  const parts = message?.content?.parts;
+  if (!Array.isArray(parts)) return false;
+  return parts.every(part => (part as { type?: string })?.type?.startsWith('data-om-'));
+}
+
+/**
+ * Pick the message an observation lifecycle marker should be attached to.
+ *
+ * A `data-om-observation-end` marker declares every message before its host message, and
+ * every part before it, as observed. It must therefore land on an assistant message that is
+ * inside the observed set — at or before `anchor`, the last observed message — or on a
+ * following assistant message that has no content yet (the empty response message seeded for
+ * step-0 markers). Landing on a newer message with content would hide unobserved context.
+ *
+ * Without an anchor, falls back to the newest assistant message.
+ *
+ * @param messages Candidate messages in ascending (oldest → newest) order.
+ * @param anchor The last message of the observed set.
+ * @returns Index of the message to attach the marker to, or -1 when no safe target exists.
+ */
+export function findObservationMarkerTargetIndex(
+  messages: MastraDBMessage[],
+  anchor?: Pick<MastraDBMessage, 'id' | 'createdAt'>,
+): number {
+  let boundary = messages.length - 1;
+
+  if (anchor) {
+    boundary = messages.findIndex(message => message.id === anchor.id);
+    if (boundary === -1) {
+      // Anchor is not in this view: only messages strictly older than it are covered.
+      if (!anchor.createdAt) return -1;
+      const anchorTime = new Date(anchor.createdAt).getTime();
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const createdAt = messages[i]?.createdAt;
+        if (createdAt && new Date(createdAt).getTime() < anchorTime) {
+          boundary = i;
+          break;
+        }
+      }
+    }
+
+    while (boundary + 1 < messages.length && hasOnlyLifecycleParts(messages[boundary + 1])) {
+      boundary++;
+    }
+  }
+
+  for (let i = boundary; i >= 0; i--) {
+    if (canCarryMarker(messages[i])) return i;
+  }
+  return -1;
+}
+
+/**
+ * Append a lifecycle marker part to a message unless the same marker (by cycle id) is already there.
+ * `writer.custom()` may have already appended the streamed marker before persistence runs.
+ */
+export function appendMarkerPart(message: MastraDBMessage, marker: { type: string; data: unknown }): void {
+  const parts = message.content.parts;
+  const cycleId = (marker.data as { cycleId?: string } | undefined)?.cycleId;
+  const alreadyPresent =
+    cycleId && parts.some(part => part?.type === marker.type && (part as { data?: any }).data?.cycleId === cycleId);
+  if (!alreadyPresent) {
+    parts.push(marker as MessagePart);
+  }
+}
+
 /**
  * Safely extract buffered observation chunks from a record.
  * Handles both array and JSON-string formats, returning empty array if malformed.

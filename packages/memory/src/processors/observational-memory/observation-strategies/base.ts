@@ -6,7 +6,12 @@ import xxhash from 'xxhash-wasm';
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
 import { formatOmError } from '../error';
-import { getObservableMessages, stripThreadTags } from '../message-utils';
+import {
+  appendMarkerPart,
+  findObservationMarkerTargetIndex,
+  getObservableMessages,
+  stripThreadTags,
+} from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
@@ -162,7 +167,13 @@ export abstract class ObservationStrategy {
     return crypto.randomUUID();
   }
 
-  protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
+  /**
+   * Stream a lifecycle marker and persist it on a message.
+   *
+   * @param anchor The last message of the observed set. Observation boundary markers must pass
+   *   it so the marker is never placed on a newer message the observer did not see.
+   */
+  protected async streamMarker(marker: { type: string; data: unknown }, anchor?: MastraDBMessage): Promise<void> {
     if (this.opts.writer) {
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       await this.opts.writer.custom({ ...marker, transient: true }).catch(() => {});
@@ -170,16 +181,17 @@ export abstract class ObservationStrategy {
 
     const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
     // Prefer the live MessageList (markers land on the pending assistant message
-    // before it reaches storage); fall back to the storage scan when no list was
-    // provided or the list contains no assistant message yet.
+    // before it reaches storage); fall back to storage when no list was provided
+    // or the list has no suitable assistant message.
     const persisted = await this.persistMarkerToMessage(
       marker,
       this.opts.messageList,
       markerThreadId,
       this.opts.resourceId,
+      anchor,
     );
     if (!persisted) {
-      await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+      await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId, anchor);
     }
   }
 
@@ -351,83 +363,77 @@ export abstract class ObservationStrategy {
   // ── Marker persistence ──────────────────────────────────────
 
   /**
-   * Persist a marker to the last assistant message in storage.
+   * Persist a marker to an assistant message in storage.
    * Fetches messages directly from the DB so it works even when
    * no MessageList is available (e.g. async buffering ops).
+   *
+   * With an `anchor`, only messages at or before the anchor are considered (see
+   * `findObservationMarkerTargetIndex`); without one, the newest assistant message is used.
    */
   protected async persistMarkerToStorage(
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    anchor?: MastraDBMessage,
   ): Promise<void> {
     try {
+      // Query up to the anchor rather than the newest page: the anchor can be far older than
+      // the latest messages (e.g. `compact()` observing the oldest pending chunk of a long thread).
       const result = await this.storage.listMessages({
         threadId,
         perPage: 20,
         orderBy: { field: 'createdAt', direction: 'DESC' },
+        ...(anchor?.createdAt ? { filter: { dateRange: { end: new Date(anchor.createdAt) } } } : {}),
       });
-      const messages = result?.messages ?? [];
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
-      }
+      const messages = [...(result?.messages ?? [])].reverse();
+      const targetIndex = findObservationMarkerTargetIndex(messages, anchor);
+      const msg = messages[targetIndex];
+      if (!msg) return;
+      appendMarkerPart(msg, marker);
+      await this.messageHistory.persistMessages({
+        messages: [msg],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
   }
 
   /**
-   * Persist a marker part on the last assistant message in a MessageList
+   * Persist a marker part on an assistant message in a MessageList
    * AND save the updated message to the DB.
    *
+   * With an `anchor`, the list is only used when it contains the anchor, and only messages
+   * at or before it are considered (see `findObservationMarkerTargetIndex`).
+   *
    * @returns true when a marker was placed on an assistant message, false when
-   *   no list was provided or the list contains no assistant message (caller
-   *   should fall back to `persistMarkerToStorage`).
+   *   no suitable message was found in the list (caller should fall back to
+   *   `persistMarkerToStorage`).
    */
   protected async persistMarkerToMessage(
     marker: { type: string; data: unknown },
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
+    anchor?: MastraDBMessage,
   ): Promise<boolean> {
     if (!messageList) return false;
     const allMsgs = getObservableMessages(messageList);
-    for (let i = allMsgs.length - 1; i >= 0; i--) {
-      const msg = allMsgs[i];
-      if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-        const markerData = marker.data as { cycleId?: string } | undefined;
-        const alreadyPresent =
-          markerData?.cycleId &&
-          msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-        if (!alreadyPresent) {
-          msg.content.parts.push(marker as any);
-        }
-        try {
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-        } catch (e) {
-          omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
-        }
-        return true;
-      }
+    if (anchor && !allMsgs.some(msg => msg.id === anchor.id)) return false;
+    const msg = allMsgs[findObservationMarkerTargetIndex(allMsgs, anchor)];
+    if (!msg) return false;
+    appendMarkerPart(msg, marker);
+    try {
+      await this.messageHistory.persistMessages({
+        messages: [msg],
+        threadId,
+        resourceId,
+      });
+    } catch (e) {
+      omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
     }
-    return false;
+    return true;
   }
 
   // ── Abstract phase methods ──────────────────────────────────
