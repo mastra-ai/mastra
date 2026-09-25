@@ -253,7 +253,7 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 ## Cleanup
 
-Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub, removes the run from the internal registry, and clears the run's cached events, so no one can replay the run afterward. If you don't call it, an automatic timer (`cleanupTimeoutMs`) runs cleanup after the run finishes, errors, or is aborted. Detaching an observer or hitting a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
+Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub, removes the run from the internal registry, and clears the run's cached events, so no one can replay the run afterward. When you don't call it, an automatic timer (`cleanupTimeoutMs`) runs cleanup once the run finishes, errors, or is aborted, but detaching an observer or hitting a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
 
 Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
 
