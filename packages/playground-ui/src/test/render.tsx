@@ -3,11 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RenderHookOptions, RenderHookResult, RenderOptions, RenderResult } from '@testing-library/react';
 import { render, renderHook, waitFor } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
-import { MemoryRouter } from 'react-router';
 import { expect } from 'vitest';
 
 /**
- * Shared test rendering helpers for the playground package.
+ * Shared test rendering helpers for the playground-ui package.
  *
  * Every helper drives the real `@mastra/client-js` + React Query stack through
  * `MastraReactProvider` + `QueryClientProvider`, matching the MSW testing
@@ -23,11 +22,7 @@ export const TEST_BASE_URL = 'http://localhost:4111';
 export interface ProvidersOptions {
   /** Base URL handed to `MastraReactProvider`; must match MSW handler URLs. */
   baseUrl?: string;
-  /** Wrap children in a `MemoryRouter`. Pass entries to seed the history/state. */
-  router?: boolean | { initialEntries?: MemoryRouterEntry[] };
 }
-
-type MemoryRouterEntry = string | { pathname: string; state?: unknown };
 
 const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -36,23 +31,14 @@ const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { ret
  * wait for in-flight queries/mutations to settle via {@link waitForMutationsIdle}.
  */
 export const makeWrapper = (options: ProvidersOptions = {}) => {
-  const { baseUrl = TEST_BASE_URL, router } = options;
+  const { baseUrl = TEST_BASE_URL } = options;
   const queryClient = makeQueryClient();
 
-  const wrapper = ({ children }: { children: ReactNode }) => {
-    const tree = (
-      <MastraReactProvider baseUrl={baseUrl}>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-      </MastraReactProvider>
-    );
-
-    if (!router) {
-      return tree;
-    }
-
-    const initialEntries = typeof router === 'object' ? router.initialEntries : undefined;
-    return <MemoryRouter initialEntries={initialEntries}>{tree}</MemoryRouter>;
-  };
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <MastraReactProvider baseUrl={baseUrl}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </MastraReactProvider>
+  );
 
   return { wrapper, queryClient };
 };
@@ -62,8 +48,8 @@ export const renderWithProviders = (
   ui: ReactElement,
   options: ProvidersOptions & Omit<RenderOptions, 'wrapper'> = {},
 ): RenderResult & { queryClient: QueryClient } => {
-  const { baseUrl, router, ...renderOptions } = options;
-  const { wrapper, queryClient } = makeWrapper({ baseUrl, router });
+  const { baseUrl, ...renderOptions } = options;
+  const { wrapper, queryClient } = makeWrapper({ baseUrl });
   return { ...render(ui, { ...renderOptions, wrapper }), queryClient };
 };
 
@@ -72,8 +58,8 @@ export const renderHookWithProviders = <Result, Props>(
   callback: (props: Props) => Result,
   options: ProvidersOptions & Omit<RenderHookOptions<Props>, 'wrapper'> = {},
 ): RenderHookResult<Result, Props> & { queryClient: QueryClient } => {
-  const { baseUrl, router, ...hookOptions } = options;
-  const { wrapper, queryClient } = makeWrapper({ baseUrl, router });
+  const { baseUrl, ...hookOptions } = options;
+  const { wrapper, queryClient } = makeWrapper({ baseUrl });
   return { ...renderHook(callback, { ...hookOptions, wrapper }), queryClient };
 };
 
