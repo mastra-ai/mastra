@@ -14,6 +14,7 @@ describe('HTML transformers text extraction', () => {
     ['<h1>Intro</h1><p>Plain paragraph</p>', 'Plain paragraph'],
     ['<h1>Intro</h1><div><div><p>x</p></div></div>', 'x'],
     ['<h1>Intro</h1><p>Hel<b>lo</b></p>', 'Hello'],
+    ['<h1>Intro</h1><fieldset><legend>Name</legend>Bob</fieldset>', 'Name Bob'],
     [
       '<h1>Intro</h1><div><details><summary>First</summary></details><details><summary>Second</summary></details></div>',
       'First Second',
