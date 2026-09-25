@@ -60,6 +60,11 @@ export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 // Thread state (per-thread, per-type durable state; e.g. the task list)
 export const TABLE_THREAD_STATE = 'mastra_thread_state';
 
+// Signal subscriptions (durable SignalProvider subscriptions, delivery ledger, coordination rows)
+export const TABLE_SIGNAL_SUBSCRIPTIONS = 'mastra_signal_subscriptions';
+export const TABLE_SIGNAL_SUBSCRIPTION_DELIVERIES = 'mastra_signal_subscription_deliveries';
+export const TABLE_SIGNAL_SUBSCRIPTION_COORDINATION = 'mastra_signal_subscription_coordination';
+
 // Knowledge store tables
 export const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 export const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
@@ -107,6 +112,9 @@ export type TABLE_NAMES =
   | typeof TABLE_NOTIFICATIONS
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_THREAD_STATE
+  | typeof TABLE_SIGNAL_SUBSCRIPTIONS
+  | typeof TABLE_SIGNAL_SUBSCRIPTION_DELIVERIES
+  | typeof TABLE_SIGNAL_SUBSCRIPTION_COORDINATION
   | typeof TABLE_WORKFLOW_DEFINITIONS
   | typeof TABLE_KNOWLEDGE_NODES
   | typeof TABLE_KNOWLEDGE_RECORDS
@@ -485,6 +493,61 @@ export const THREAD_STATE_SCHEMA: Record<string, StorageColumn> = {
   value: { type: 'jsonb', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Durable signal subscriptions. All time columns are epoch milliseconds so
+ * adapters can compare them against database time.
+ */
+export const SIGNAL_SUBSCRIPTIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  agentId: { type: 'text', nullable: false },
+  providerId: { type: 'text', nullable: false },
+  resourceId: { type: 'text', nullable: false },
+  threadId: { type: 'text', nullable: false },
+  externalResourceId: { type: 'text', nullable: false },
+  metadata: { type: 'jsonb', nullable: false },
+  deliveryOptions: { type: 'jsonb', nullable: false },
+  enabled: { type: 'boolean', nullable: false },
+  operationKind: { type: 'text', nullable: true },
+  operationOwner: { type: 'text', nullable: true },
+  operationExpiresAt: { type: 'bigint', nullable: true },
+  claimOwner: { type: 'text', nullable: true },
+  claimExpiresAt: { type: 'bigint', nullable: true },
+  cursor: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'bigint', nullable: false },
+  updatedAt: { type: 'bigint', nullable: false },
+  lastPolledAt: { type: 'bigint', nullable: true },
+  nextPollAt: { type: 'bigint', nullable: true },
+  lastDeliveredAt: { type: 'bigint', nullable: true },
+};
+
+/** Delivery ledger for signal-subscription webhook dedupe, unique per `(subscriptionId, deliveryId)`. */
+export const SIGNAL_SUBSCRIPTION_DELIVERIES_SCHEMA: Record<string, StorageColumn> = {
+  subscriptionId: { type: 'text', nullable: false },
+  deliveryId: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  owner: { type: 'text', nullable: true },
+  expiresAt: { type: 'bigint', nullable: true },
+  createdAt: { type: 'bigint', nullable: false },
+  deliveredAt: { type: 'bigint', nullable: true },
+};
+
+/**
+ * Coordination rows for signal subscriptions: expiring locks (`kind = 'lock'`)
+ * and permanent document owners (`kind = 'owner'`), unique per `(kind, key)`.
+ */
+export const SIGNAL_SUBSCRIPTION_COORDINATION_SCHEMA: Record<string, StorageColumn> = {
+  kind: { type: 'text', nullable: false },
+  key: { type: 'text', nullable: false },
+  owner: { type: 'text', nullable: true },
+  expiresAt: { type: 'bigint', nullable: true },
+  agentId: { type: 'text', nullable: true },
+  providerId: { type: 'text', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  fencingToken: { type: 'text', nullable: true },
+  createdAt: { type: 'bigint', nullable: false },
 };
 
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
@@ -891,6 +954,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
   [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
+  [TABLE_SIGNAL_SUBSCRIPTIONS]: SIGNAL_SUBSCRIPTIONS_SCHEMA,
+  [TABLE_SIGNAL_SUBSCRIPTION_DELIVERIES]: SIGNAL_SUBSCRIPTION_DELIVERIES_SCHEMA,
+  [TABLE_SIGNAL_SUBSCRIPTION_COORDINATION]: SIGNAL_SUBSCRIPTION_COORDINATION_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
   [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
   [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
@@ -913,6 +979,14 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
   [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
+  [TABLE_SIGNAL_SUBSCRIPTION_DELIVERIES]: {
+    columns: SIGNAL_SUBSCRIPTION_DELIVERIES_SCHEMA,
+    compositePrimaryKey: ['subscriptionId', 'deliveryId'],
+  },
+  [TABLE_SIGNAL_SUBSCRIPTION_COORDINATION]: {
+    columns: SIGNAL_SUBSCRIPTION_COORDINATION_SCHEMA,
+    compositePrimaryKey: ['kind', 'key'],
+  },
   [TABLE_KNOWLEDGE_MENTIONS]: {
     columns: KNOWLEDGE_MENTIONS_SCHEMA,
     compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
