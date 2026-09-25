@@ -1,5 +1,6 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { DataList as EntityList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useRef } from 'react';
 import type { SyntheticEvent } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
@@ -7,7 +8,6 @@ import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';
 import { AgentWorkflowDetails } from './agent-workflow-details';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentRowProps {
   agent: GetAgentResponse;
@@ -41,7 +41,7 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <EntityList.Cell className="text-neutral4 min-w-0 overflow-visible text-left">
+        <EntityList.Cell className="min-w-0 overflow-visible text-left text-muted-foreground">
           <span title={agent.name} className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
             {agent.name}
           </span>

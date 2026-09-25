@@ -102,6 +102,7 @@ const metadataSchema = z
     const {
       factoryRuleMaterializationKey: _materialization,
       factoryPullRequestReconciliation: _reconciliation,
+      externalSourceMissingAt: _externalSourceMissingAt,
       ...metadata
     } = value;
     return metadata;

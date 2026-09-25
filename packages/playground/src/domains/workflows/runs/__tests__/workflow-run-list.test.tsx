@@ -1,4 +1,6 @@
 import type { ListWorkflowRunsResponse } from '@mastra/client-js';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -8,10 +10,8 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRecentRuns } from '../workflow-run-list';
-import { emptyWorkflowRuns, oneSuccessfulRun, runsWithInput } from './fixtures/workflow-runs';
+import { emptyWorkflowRuns, oneSuccessfulRun, runsWithInput, runsWithResource } from './fixtures/workflow-runs';
 import { readOnlyAuthCapabilities } from '@/domains/agents/components/__tests__/fixtures/auth';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -147,6 +147,18 @@ describe('WorkflowRecentRuns', () => {
       const link = await screen.findByRole('link', { name: /run-success-1/ });
       expect(within(link).getByTitle('run-success-1')).not.toBeNull();
       expect(within(link).getByText(/2026/).getAttribute('datetime')).not.toBeNull();
+    });
+  });
+
+  describe('when a run is attributed to a resource', () => {
+    it('shows the resource on that run and nothing on the unattributed one', async () => {
+      stubCapabilities();
+      stubRuns(runsWithResource);
+      renderRunList();
+      const attributed = await screen.findByRole('link', { name: /run-tenant/ });
+      expect(within(attributed).getByTitle('Resource tenant-42')).not.toBeNull();
+      const unattributed = screen.getByRole('link', { name: /run-anonymous/ });
+      expect(within(unattributed).queryByTitle(/^Resource /)).toBeNull();
     });
   });
 

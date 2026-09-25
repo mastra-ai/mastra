@@ -77,8 +77,8 @@ const userSession = {
   title: 'Fix login bug',
   branch: 'factory/issue-1',
   baseBranch: 'main',
-  sandboxId: 'sandbox-1',
-  sandboxWorkdir: '/repo',
+  sandboxId: null,
+  sandboxWorkdir: null,
   materializedAt: '2026-08-10T00:00:00.000Z',
   createdAt: '2026-08-10T00:00:00.000Z',
   updatedAt: '2026-08-10T00:00:00.000Z',
@@ -173,7 +173,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/metrics`, () =>
       HttpResponse.json({ error: 'Metrics unavailable in this scenario' }, { status: 500 }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ session: userSession }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/${DECISION_ID}/approve`, () => {
@@ -234,7 +234,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
@@ -377,7 +377,7 @@ describe('Board card with a proposed run', () => {
     expect(await within(card).findByText('Suggested: Build')).toBeVisible();
     const release = within(card).getByRole('button', { name: 'Start suggested run: Build' });
     expect(release).toHaveAttribute('data-variant', 'primary');
-    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'outline');
+    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
 
     await user.click(release);
 

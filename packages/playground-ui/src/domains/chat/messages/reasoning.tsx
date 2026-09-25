@@ -1,22 +1,18 @@
-import { BrainIcon, ChevronUpIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { ChevronRightIcon } from 'lucide-react';
 import { ReasoningStreamingLine } from './reasoning-streaming-line';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
+import { Shimmer } from '@/ds/components/Shimmer';
 
 export interface ReasoningProps {
   text: string;
   redacted?: boolean;
   streaming?: boolean;
+  /** Whether the passage starts expanded. Defaults to `true`. */
+  defaultOpen?: boolean;
 }
 
-export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const contentId = useId();
-
+export const Reasoning = ({ text, redacted, streaming, defaultOpen = true }: ReasoningProps) => {
   const body = redacted ? 'Reasoning was redacted by the provider.' : text;
 
   if (!body.trim()) {
@@ -24,29 +20,18 @@ export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
   }
 
   return (
-    <div className="my-1.5 min-w-0 space-y-1.5">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-expanded={!isCollapsed}
-        aria-controls={contentId}
-        onClick={() => setIsCollapsed(collapsed => !collapsed)}
-        className="gap-2 pointer-coarse:min-h-11"
-      >
-        <Icon>
-          <ChevronUpIcon className={cn('motion-safe:transition-transform', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-        </Icon>
-        <Badge icon={<BrainIcon />}>{isCollapsed ? 'Show' : 'Hide'} reasoning</Badge>
-      </Button>
+    <Collapsible defaultOpen={defaultOpen} className="my-1.5 min-w-0">
+      <CollapsibleTrigger className="flex cursor-pointer items-center gap-1.5 text-caption text-muted-foreground pointer-coarse:min-h-11">
+        <ChevronRightIcon className="size-3.5 shrink-0" />
+        {/* Shows the model is still thinking even while the passage is collapsed. */}
+        <Shimmer active={!!streaming}>Reasoning</Shimmer>
+      </CollapsibleTrigger>
 
-      <div id={contentId} hidden={isCollapsed} className="border-border1 min-w-0 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        {!isCollapsed && (
-          <MarkdownRenderer className="text-icon3 text-ui-sm" streaming={streaming && !redacted}>
-            {body}
-          </MarkdownRenderer>
-        )}
-      </div>
-    </div>
+      <CollapsibleContent className="mt-1.5 min-w-0 border-l-2 border-border pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-caption text-muted-foreground" streaming={streaming && !redacted}>
+          {body}
+        </MarkdownRenderer>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };

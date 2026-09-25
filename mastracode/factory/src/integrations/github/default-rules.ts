@@ -50,8 +50,8 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
   // Everything arrives on the routed board's initial phase (Work › Intake when
-  // no label route selects another board); arrival only stamps whether
-  // `onArrival` may suggest this card's run without a person.
+  // no label route selects another board). Trust/timing stamps remain available
+  // to custom board rules.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -100,7 +100,7 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  { idempotencyKey, autoStartCandidate }: { idempotencyKey: string; autoStartCandidate: boolean },
+  { idempotencyKey, autoStartCandidate, stage = 'intake' }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -111,7 +111,7 @@ function materializePullRequestIntake(
     sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage: 'intake',
+    stage,
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
@@ -134,6 +134,11 @@ function materializePullRequestIntake(
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
+  // Opening a pull request is evaluated once per card it concerns. This rule
+  // files the pull request's own Review card, which is the arrival — the
+  // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
+  // evaluation has nothing to file.
+  if (context.item && context.pullRequestIntake !== true) return;
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
   const autoStartCandidate =
@@ -302,6 +307,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
     return materializePullRequestIntake(context, {
       idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
       autoStartCandidate: true,
+      stage: 'review',
     });
   }
   // Already in Reviewing: a review pass is pending or running; re-entering

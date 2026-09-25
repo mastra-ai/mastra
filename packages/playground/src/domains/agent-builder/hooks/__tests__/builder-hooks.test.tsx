@@ -7,7 +7,6 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useAgentBuilderAllowedModels } from '../use-agent-builder-allowed-models';
-import { useAutoScroll } from '../use-auto-scroll';
 import { useBuilderAgentFeatures } from '../use-builder-agent-features';
 import { useCanCreateAgent } from '../use-can-create-agent';
 import { useChatDraft } from '../use-chat-draft';
@@ -381,20 +380,6 @@ describe('useCanCreateAgent', () => {
           flagWindow.MASTRA_EXPERIMENTAL_UI = prev;
         }
       }
-    });
-  });
-});
-
-describe('useAutoScroll', () => {
-  describe('when the tracked dependency changes', () => {
-    it('scrolls the ref target to the bottom', () => {
-      const scrollTo = vi.fn();
-      const { result, rerender } = renderHook(({ dep }) => useAutoScroll(dep), { initialProps: { dep: 1 } });
-      Object.defineProperties(result.current, { current: { value: { scrollHeight: 123, scrollTo }, writable: true } });
-
-      rerender({ dep: 2 });
-
-      expect(scrollTo).toHaveBeenCalledWith({ top: 123, behavior: 'smooth' });
     });
   });
 });

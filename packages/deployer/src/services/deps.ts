@@ -27,7 +27,12 @@ interface ArchitectureOptions {
 interface InstallOptions extends ArchitectureOptions {
   pnpmOverrides?: Record<string, string>;
   pnpmNodeLinker?: 'hoisted';
+  /** Patch key -> path relative to the output directory. */
+  patchedDependencies?: Record<string, string>;
 }
+
+const PNPM_PATCHES_DIR = 'pnpm-patches';
+const BUN_PATCHES_DIR = 'bun-patches';
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'allowBuilds',
@@ -111,6 +116,33 @@ function validatePnpmBuildApprovals(key: string, block: string): void {
   });
 }
 
+/**
+ * Reads the `patchedDependencies` map from a pnpm workspace file. Paths are returned as declared,
+ * i.e. relative to the workspace root. Returns an empty map for absent or unusable declarations.
+ */
+export function parsePnpmPatchedDependencies(source: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = parse(source);
+  } catch {
+    return {};
+  }
+
+  const patched = (parsed as { patchedDependencies?: unknown } | null)?.patchedDependencies;
+  if (!patched || typeof patched !== 'object' || Array.isArray(patched)) {
+    return {};
+  }
+
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(patched as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim() && key.trim()) {
+      result[key] = value.trim();
+    }
+  }
+
+  return result;
+}
+
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
@@ -163,6 +195,20 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
         ),
       ].join('\n'),
     );
+  }
+
+  if (options.patchedDependencies && Object.keys(options.patchedDependencies).length > 0) {
+    blocks.push(
+      [
+        'patchedDependencies:',
+        ...Object.entries(options.patchedDependencies).map(
+          ([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`,
+        ),
+      ].join('\n'),
+    );
+    // The bundled output only installs runtime dependencies, so patches declared for
+    // dev-only or bundled-away packages are legitimately unused here.
+    blocks.push('allowUnusedPatches: true');
   }
 
   if (options.pnpmNodeLinker) {
@@ -258,13 +304,96 @@ export class Deps extends MastraBase {
       ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
       : '';
 
+    const patchedDependencies = sourceWorkspaceYamlPath
+      ? await this.copyPnpmPatches(sourceWorkspaceYaml, path.dirname(sourceWorkspaceYamlPath), dir)
+      : undefined;
+
     await fsPromises.writeFile(
       path.join(dir, 'pnpm-workspace.yaml'),
-      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, options),
+      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, { ...options, patchedDependencies }),
       'utf-8',
     );
   }
 
+  /**
+   * Resolves a declared patch path against the source workspace and verifies that, once symlinks
+   * are followed, it still resolves inside the workspace. Returns the real path to copy from, or
+   * `undefined` when the patch escapes the workspace or its file cannot be resolved.
+   */
+  private async resolvePatchSource(
+    resolvedWorkspaceRoot: string,
+    declaredPath: string,
+    { key, label }: { key: string; label: string },
+  ): Promise<string | undefined> {
+    const sourcePath = path.resolve(resolvedWorkspaceRoot, declaredPath);
+    if (!sourcePath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)) {
+      this.logger.warn(`Skipping ${label} patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
+      return undefined;
+    }
+
+    // A patch path can stay lexically under the workspace while traversing a symlink whose target
+    // lives outside it. copyFile follows symlinks, so compare the resolved real paths before copying.
+    let realWorkspaceRoot: string;
+    let realSourcePath: string;
+    try {
+      [realWorkspaceRoot, realSourcePath] = await Promise.all([
+        fsPromises.realpath(resolvedWorkspaceRoot),
+        fsPromises.realpath(sourcePath),
+      ]);
+    } catch {
+      this.logger.warn(`Skipping ${label} patch for "${key}": patch file not found at ${sourcePath}`);
+      return undefined;
+    }
+
+    if (!realSourcePath.startsWith(`${realWorkspaceRoot}${path.sep}`)) {
+      this.logger.warn(
+        `Skipping ${label} patch for "${key}": patch file is outside the workspace at ${realSourcePath}`,
+      );
+      return undefined;
+    }
+
+    return realSourcePath;
+  }
+
+  /**
+   * Copies the patch files declared by the source workspace into the output directory and returns
+   * the patch map rewritten to output-relative paths, so the patches survive the output install.
+   */
+  private async copyPnpmPatches(
+    sourceWorkspaceYaml: string,
+    sourceWorkspaceRoot: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const declared = parsePnpmPatchedDependencies(sourceWorkspaceYaml);
+    const rewritten: Record<string, string> = {};
+    const usedFileNames = new Set<string>();
+    const resolvedWorkspaceRoot = path.resolve(sourceWorkspaceRoot);
+
+    for (const [key, declaredPath] of Object.entries(declared)) {
+      const sourcePath = await this.resolvePatchSource(resolvedWorkspaceRoot, declaredPath, {
+        key,
+        label: 'pnpm',
+      });
+      if (!sourcePath) continue;
+
+      let fileName = path.basename(sourcePath);
+      if (usedFileNames.has(fileName)) {
+        fileName = `${key.replace(/[^a-zA-Z0-9._-]/g, '_')}-${fileName}`;
+      }
+      usedFileNames.add(fileName);
+
+      await fsPromises.mkdir(path.join(dir, PNPM_PATCHES_DIR), { recursive: true });
+      await fsPromises.copyFile(sourcePath, path.join(dir, PNPM_PATCHES_DIR, fileName));
+      rewritten[key] = `${PNPM_PATCHES_DIR}/${fileName}`;
+    }
+
+    return rewritten;
+  }
+
+  /**
+   * Writes the `.yarnrc.yml` for the bundled output, recording the supported architectures so the
+   * output install only resolves optional native binaries that match the deployment target.
+   */
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
     const yarnrcPath = path.join(dir, '.yarnrc.yml');
     const config = {
@@ -281,6 +410,81 @@ export class Deps extends MastraBase {
         .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}`)
         .join('\n')}`,
     );
+  }
+
+  /**
+   * Copies the source workspace's `.yarn/patches/` directory (Yarn Berry) into the output
+   * directory so patches survive the output install. Yarn auto-discovers patches from this
+   * directory and applies them per the lockfile references.
+   */
+  private async copyYarnPatches(dir: string): Promise<void> {
+    const sourcePatchesDir = path.join(this.rootDir, '.yarn', 'patches');
+    if (!fs.existsSync(sourcePatchesDir)) return;
+
+    const outputPatchesDir = path.join(dir, '.yarn', 'patches');
+    await fsPromises.cp(sourcePatchesDir, outputPatchesDir, { recursive: true, errorOnExist: false });
+  }
+
+  /**
+   * Copies the patch files referenced by the source workspace's `patchedDependencies` in
+   * package.json into the output directory and returns the map rewritten to output-relative
+   * paths, so bun patches survive the output install.
+   */
+  private async copyBunPatches(
+    declared: Record<string, string>,
+    sourceRoot: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const rewritten: Record<string, string> = {};
+    const usedFileNames = new Set<string>();
+    const resolvedRoot = path.resolve(sourceRoot);
+
+    for (const [key, declaredPath] of Object.entries(declared)) {
+      const sourcePath = await this.resolvePatchSource(resolvedRoot, declaredPath, {
+        key,
+        label: 'bun',
+      });
+      if (!sourcePath) continue;
+
+      let fileName = path.basename(sourcePath);
+      if (usedFileNames.has(fileName)) {
+        fileName = `${key.replace(/[^a-zA-Z0-9._-]/g, '_')}-${fileName}`;
+      }
+      usedFileNames.add(fileName);
+
+      await fsPromises.mkdir(path.join(dir, BUN_PATCHES_DIR), { recursive: true });
+      await fsPromises.copyFile(sourcePath, path.join(dir, BUN_PATCHES_DIR, fileName));
+      rewritten[key] = `${BUN_PATCHES_DIR}/${fileName}`;
+    }
+
+    return rewritten;
+  }
+
+  /**
+   * Reads `patchedDependencies` from the source package.json, copies the referenced patch
+   * files into the output directory, and writes the output-relative patch map into the
+   * output's package.json so `bun install` preserves patches in the bundled output.
+   */
+  private async copyBunPatchesToOutput(dir: string): Promise<void> {
+    const sourcePackageJsonPath = path.join(this.rootDir, 'package.json');
+    if (!fs.existsSync(sourcePackageJsonPath)) return;
+
+    const sourcePkg = await readJSON(sourcePackageJsonPath);
+    const patchedDeps = sourcePkg.patchedDependencies as Record<string, string> | undefined;
+    if (!patchedDeps || Object.keys(patchedDeps).length === 0) return;
+
+    const rewritten = await this.copyBunPatches(patchedDeps, this.rootDir, dir);
+    if (Object.keys(rewritten).length === 0) return;
+
+    const outputPackageJsonPath = path.join(dir, 'package.json');
+    let outputPkg: Record<string, unknown>;
+    try {
+      outputPkg = (await readJSON(outputPackageJsonPath)) as Record<string, unknown>;
+    } catch {
+      outputPkg = {};
+    }
+    outputPkg.patchedDependencies = rewritten;
+    await writeJSON(outputPackageJsonPath, outputPkg, { spaces: 2 });
   }
 
   private getNpmArgs(options: ArchitectureOptions): string[] {
@@ -352,6 +556,10 @@ export class Deps extends MastraBase {
         if (architecture) {
           await this.writeYarnConfig(dir, architecture);
         }
+        await this.copyYarnPatches(dir);
+        break;
+      case 'bun':
+        await this.copyBunPatchesToOutput(dir);
         break;
       case 'npm':
         if (architecture) {

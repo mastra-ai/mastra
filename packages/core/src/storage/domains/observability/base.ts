@@ -102,13 +102,38 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
+/**
+ * Optional observability APIs a store can declare via {@link ObservabilityStorage.getFeatures}.
+ *
+ * - `delta-polling`: cursor-based `mode: 'delta'` on list endpoints
+ * - `metrics`: metric list/aggregate/breakdown/timeseries/percentiles
+ * - `logs`: `listLogs`
+ * - `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`,
+ *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
+ * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
+ * - `trace-query`: `queryTraces`
+ * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
+ * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
+ * - `thread-query`: `queryThreads`
+ * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
+ * - `feedback`: the feedback CRUD, review-status and analytics methods
+ */
 export type ObservabilityStorageFeature =
   | 'delta-polling'
   | 'metrics'
   | 'logs'
+  | 'entity-type-discovery'
+  | 'entity-name-discovery'
+  | 'service-name-discovery'
+  | 'environment-discovery'
+  | 'tag-discovery'
+  | 'metric-discovery'
   | 'trace-query'
+  | 'trace-query-root-duration'
   | 'trace-query-discovery'
-  | 'thread-query';
+  | 'thread-query'
+  | 'trace-query-tenant-scope'
+  | 'feedback';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

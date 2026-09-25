@@ -1,11 +1,10 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@mastra/playground-ui/components/Tooltip';
-import { format } from 'date-fns/format';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
 
 export type DatasetHeaderProps = {
@@ -45,7 +44,7 @@ export function DatasetHeader({
         <MainHeader.Description isLoading={isLoading}>{dataset?.description}</MainHeader.Description>
         <MainHeader.Description isLoading={isLoading}>
           <TextAndIcon>
-            <Calendar1Icon /> Created at {dataset?.createdAt ? format(new Date(dataset.createdAt), 'MMM d, yyyy') : ''}
+            <Calendar1Icon /> Created at {formatDate(dataset?.createdAt, 'date-time')}
           </TextAndIcon>
           <TextAndIcon>
             <HistoryIcon /> Latest version v{dataset?.version ?? ''}
@@ -53,7 +52,7 @@ export function DatasetHeader({
         </MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
-        <ButtonsGroup>
+        <div className="flex items-center gap-2">
           {experimentTriggerSlot ? (
             disableExperimentTrigger ? (
               <Tooltip>
@@ -105,7 +104,7 @@ export function DatasetHeader({
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
-        </ButtonsGroup>
+        </div>
       </MainHeader.Column>
     </MainHeader>
   );

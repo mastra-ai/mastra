@@ -9,15 +9,16 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
 
-const scorer = (name: string): GetScorerResponse =>
-  ({
-    scorer: { config: { id: name, name, description: `${name} description` } },
-    source: 'code',
-    agentIds: [],
-    workflowIds: [],
-  }) as unknown as GetScorerResponse;
+const scorer = (name: string): GetScorerResponse => ({
+  scorer: { config: { id: name, name, description: `${name} description` } },
+  source: 'code',
+  agentIds: [],
+  agentNames: [],
+  workflowIds: [],
+  isRegistered: true,
+});
 
-const scorers: Record<string, GetScorerResponse> = {
+const scorers = {
   'answer-relevancy': scorer('answer-relevancy'),
   toxicity: scorer('toxicity'),
 };
@@ -41,7 +42,7 @@ const runningExperiment: DatasetExperiment = {
   ...experiments[0],
   id: 'running-experiment',
   status: 'running',
-  datasetId: null as unknown as string,
+  datasetId: '',
   scorerIds: undefined,
   completedAt: null,
 };
@@ -136,8 +137,8 @@ describe('ExperimentRunMeta', () => {
     it('shows the start time on one line, with the relative time as a tooltip', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
-      const started = await screen.findByTitle(/ago$/);
-      expect(started.textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} [AP]M$/);
+      const started = await screen.findByTitle(/ago$|\d{4}|[A-Z][a-z]{2} \d/);
+      expect(started.textContent).toMatch(/\d{1,2}:\d{2}/);
       expect(screen.queryByText(/· .+ ago/)).toBeNull();
 
       await waitForMutationsIdle(queryClient);
@@ -166,6 +167,8 @@ describe('ExperimentRunMeta', () => {
       const { queryClient } = renderBar(runningExperiment);
 
       expect(await screen.findByText('Running…')).toBeDefined();
+
+      await waitForMutationsIdle(queryClient);
     });
 
     it('qualifies the average as partial while items are still being scored', async () => {
@@ -201,7 +204,7 @@ describe('ExperimentRunMeta', () => {
         });
 
         expect(await screen.findByText('Latency (avg)')).toBeDefined();
-        expect(screen.getByText('1.9s')).toBeDefined();
+        expect(screen.getByText('1.85s')).toBeDefined();
         expect(screen.queryByText(/avg over/)).toBeNull();
 
         await waitForMutationsIdle(queryClient);

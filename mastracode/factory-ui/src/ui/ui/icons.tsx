@@ -61,12 +61,29 @@ const FACTORY_WORDMARK_ART = `█▀▄▀█ ▄▀█ █▀ ▀█▀ █▀�
 █ ▀ █ █▀█ ▀█  █  █▀▄ █▀█   █▀  █▀█ █    █  █ █ █▀▄  █
 ▀   ▀ ▀ ▀ ▀▀  ▀  ▀ ▀ ▀ ▀   ▀   ▀ ▀ ▀▀▀  ▀  ▀▀▀ ▀ ▀  ▀`;
 
+export function GitLabIcon({ size = 16, className, title }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title ? <title>{title}</title> : null}
+      <path d="M23.955 13.587 20.613 3.307a.54.54 0 0 0-1.025 0l-2.257 6.946H6.67L4.413 3.307a.54.54 0 0 0-1.025 0L.045 13.587a1.08 1.08 0 0 0 .393 1.207L12 23.196l11.562-8.402a1.08 1.08 0 0 0 .393-1.207Z" />
+    </svg>
+  );
+}
+
 export function Wordmark({ className, brand = 'code' }: { className?: string; brand?: 'code' | 'factory' }) {
   const factory = brand === 'factory';
 
   return (
     <pre
-      className={`m-0 overflow-x-auto font-mono text-xs leading-[1.25] whitespace-pre select-none text-icon6${className ? ` ${className}` : ''}`}
+      className={`m-0 overflow-x-auto font-mono text-xs leading-[1.25] whitespace-pre select-none text-foreground${className ? ` ${className}` : ''}`}
       aria-label={factory ? 'Mastra Factory' : 'Mastra Code'}
     >
       {factory ? FACTORY_WORDMARK_ART : CODE_WORDMARK_ART}

@@ -139,7 +139,14 @@
 
 /* The buttons stack: each after the first is tucked under the one before it, its label kept clear. */
 .board-card-actions {
-  --board-pill-tuck: 1.25rem;
+  --board-pill-tuck: 1.5rem;
+  /* Every pill here is `size="sm"`, and a pill's cap radius is half its height. */
+  --board-pill-radius: calc(var(--spacing-control-sm) / 2);
+  /* Clearance from that cap. Horizontal, so it stays even from the pill's top edge
+     to its widest point — growing the cut's radius instead would bulge ~5px at the ends. */
+  --board-pill-bleed: 1px;
+  /* Where the pill before this one stops being a straight edge and becomes its cap. */
+  --board-pill-cut: calc(var(--board-pill-tuck) - var(--board-pill-radius) + var(--board-pill-bleed));
 }
 
 .board-card-actions > * {
@@ -150,6 +157,15 @@
   margin-left: calc(-1 * var(--board-pill-tuck));
   /* The button's own sm padding, then the tuck. */
   padding-left: calc(0.9em + var(--board-pill-tuck));
+  /* "Under" has to be cut, not painted over: only a filled pill hides what it
+     covers, and `default` and `outline` are translucent by construction — the
+     pill before them showed their cap arc straight through its own label. So
+     this pill removes the shape the one before it occupies (its straight body,
+     then its cap) instead of trusting that pill to be opaque. */
+  mask-image:
+    radial-gradient(circle var(--board-pill-radius) at var(--board-pill-cut) 50%, #0000 99%, #000 100%),
+    linear-gradient(to right, #0000 var(--board-pill-cut), #000 0);
+  mask-composite: intersect;
 }
 
 .board-card-actions > :nth-child(1) {

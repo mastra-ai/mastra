@@ -66,6 +66,8 @@ import {
   subscribeAgentThreadBodySchema,
   abortAgentThreadBodySchema,
   abortAgentThreadResponseSchema,
+  cancelPendingAgentSignalsBodySchema,
+  cancelPendingAgentSignalsResponseSchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
@@ -335,6 +337,7 @@ export interface SerializedSkill {
 
 export interface SerializedTool {
   id: string;
+  title?: string;
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
@@ -2194,12 +2197,26 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, resourceId, threadId, expectedRunId, requestContext: serverRequestContext }) => {
+  handler: async ({
+    mastra,
+    agentId,
+    resourceId,
+    threadId,
+    clearPendingSignals,
+    expectedRunId,
+    requestContext: serverRequestContext,
+  }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
         throw new HTTPException(501, {
           message: 'agent thread aborts are not supported by this Mastra core version',
+        });
+      }
+      if (clearPendingSignals && agent.__supportsThreadSignalCancellation !== true) {
+        throw new HTTPException(501, {
+          message:
+            'clear-on-abort requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
         });
       }
 
@@ -2210,22 +2227,70 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
-        const memory = await agent.getMemory({ requestContext: serverRequestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
-        }
-      }
+      const memory = await agent.getMemory({ requestContext: serverRequestContext });
+      const thread = await memory?.getThreadById({ threadId: effectiveThreadId });
+      await enforceThreadAccess({
+        mastra,
+        requestContext: serverRequestContext,
+        threadId: effectiveThreadId,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       const aborted = await agent.abortThreadStream({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
         expectedRunId,
       });
       return { aborted };
     } catch (error) {
       return handleError(error, 'error aborting agent thread');
+    }
+  },
+});
+
+export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/threads/signals/cancel',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: cancelPendingAgentSignalsBodySchema,
+  responseSchema: cancelPendingAgentSignalsResponseSchema,
+  summary: 'Cancel pending thread signals',
+  description: 'Cancels selected pending thread signals and propagates requested IDs through PubSub',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, signalIds, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      if (
+        typeof (agent as { cancelQueuedMessages?: unknown }).cancelQueuedMessages !== 'function' ||
+        agent.__supportsThreadSignalCancellation !== true
+      ) {
+        throw new HTTPException(501, {
+          message:
+            'thread-wide cancellation requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
+        });
+      }
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      if (!effectiveThreadId) throw new HTTPException(400, { message: 'threadId is required' });
+      const memory = await agent.getMemory({ requestContext });
+      const thread = await memory?.getThreadById({ threadId: effectiveThreadId });
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      return agent.cancelQueuedMessages({ resourceId: effectiveResourceId, threadId: effectiveThreadId, signalIds });
+    } catch (error) {
+      return handleError(error, 'error cancelling pending thread signals');
     }
   },
 });
@@ -2244,7 +2309,15 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
+  handler: async ({
+    mastra,
+    agentId,
+    resourceId,
+    threadId,
+    withInitialHistory,
+    abortSignal,
+    requestContext: serverRequestContext,
+  }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
@@ -2260,7 +2333,20 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
+      if (withInitialHistory) {
+        // History returns stored messages, so apply the same checks as the messages route.
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext: serverRequestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+        }
+      } else if (effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
@@ -2271,6 +2357,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const subscription = await agent.subscribeToThread({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
       });
 
       let cleanedUp = false;
@@ -3668,7 +3755,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
-      const identifier = path ? decodeURIComponent(path) : skillName;
+      const identifier = path ?? skillName;
 
       // Get the skill from the agent (searches both inline and workspace skills)
       const skill = await agent.getSkill(identifier, { requestContext });

@@ -18,7 +18,9 @@ import {
   useKnowledgeScopes,
 } from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import { KnowledgeApprovals } from '../domains/factory/components/knowledge/KnowledgeApprovals';
@@ -41,10 +43,14 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
  * session state live in search params so views remain linkable and back-button safe.
  */
 export function KnowledgePage() {
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
   return (
-    <FactoryPageShell>
-      {project => <KnowledgeContent key={project.id} factoryProjectId={project.id} />}
-    </FactoryPageShell>
+    <PageLayout variant="fit" {...slots}>
+      <div className="flex min-h-0 flex-col p-4">
+        <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
+      </div>
+    </PageLayout>
   );
 }
 
@@ -69,12 +75,12 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="text-icon3 mt-1 flex flex-wrap items-center gap-1 text-xs">
-      <button type="button" className="hover:text-icon5" onClick={onProjectClick}>
+    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1 text-xs">
+      <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         org
       </button>
       <ChevronRight size={11} />
-      <button type="button" className="hover:text-icon5" onClick={onProjectClick}>
+      <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         project
       </button>
       {threadId ? (
@@ -89,13 +95,13 @@ function Breadcrumb({
         <span key={`${entry.nodeId}-${index}`} className="flex items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
-            <span className="text-icon5 max-w-44 truncate" title={entry.name}>
+            <span className="text-foreground max-w-44 truncate" title={entry.name}>
               {entry.name}
             </span>
           ) : (
             <button
               type="button"
-              className="hover:text-icon5 max-w-44 truncate"
+              className="hover:text-foreground max-w-44 truncate"
               title={entry.name}
               onClick={() => onTrailClick(index)}
             >
@@ -866,7 +872,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           ? 'No knowledge captured at project scope yet — knowledge captured in sessions does not roll up here.'
           : 'No knowledge captured in this session yet — the graph fills in as factory sessions work.';
     body = (
-      <Txt as="p" variant="ui-md" className="text-icon3">
+      <Txt as="p" variant="body" className="text-muted-foreground">
         {emptyMessage}
       </Txt>
     );
@@ -1013,10 +1019,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
       <header className="shrink-0">
-        <Txt as="h1" variant="header-md" className="text-icon6 font-semibold">
+        <Txt as="h1" variant="heading" className="text-foreground font-semibold">
           Knowledge
         </Txt>
-        <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
+        <Txt as="p" variant="body" className="text-muted-foreground mt-1">
           Explore captured knowledge and review how it changes over time.
         </Txt>
         <div className="mt-3 flex items-start justify-between gap-3">

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import type * as factoryModule from '@mastra/factory';
+import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 
 const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
 vi.mock('@mastra/factory', async importOriginal => {
@@ -53,6 +54,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'GITHUB_APP_CLIENT_SECRET',
       'GITHUB_APP_SLUG',
       'GITHUB_APP_WEBHOOK_SECRET',
+      'GITLAB_ACCESS_TOKEN',
+      'GITLAB_ACCESS_TOKEN_TYPE',
+      'GITLAB_BASE_URL',
+      'GITLAB_WEBHOOK_SECRET',
+      'MASTRA_GITLAB_CONNECTION_ID',
       'LINEAR_CLIENT_ID',
       'LINEAR_CLIENT_SECRET',
       'SLACK_APP_SIGNING_SECRET',
@@ -173,6 +179,232 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(item.stages).toEqual(['planning']);
   });
 
+  it('routes a newly opened issue by its labels, three ways', { timeout: 60_000 }, async () => {
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
+    const { factoryConfigVersion } = await import('./index.js');
+    const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
+    const github = factoryConfigs[0]?.integrations?.find(
+      (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
+    );
+    if (!github) throw new Error('Expected the configured GitHub integration');
+
+    const issue = { number: 7, title: 'Issue 7', url: 'https://github.com/acme/repo/issues/7' };
+    const context = (labels: string[]) => ({
+      tenant: { orgId: 'org-1', projectId: 'project-1' },
+      actor: { type: 'github' as const, login: 'maintainer', trusted: true, factoryAuthored: false },
+      ingress: { type: 'github' as const, id: '9:issue-opened' },
+      cause: 'github.issueOpened',
+      causalChain: [],
+      configVersion: factoryConfigVersion,
+      factory: { createdAt: '2030-01-01T00:00:00.000Z' },
+      repository: { id: 10, fullName: 'acme/repo' },
+      event: 'issueOpened' as const,
+      deliveryId: 'issue-opened',
+      issue: { ...issue, labels },
+    });
+    const { issueOpened } = github.rules;
+
+    // Without the label the issue is taken to be already curated: the card
+    // skips the resting Intake column, so Triage's entry rule runs the moment
+    // it materializes and the card is left ready to plan.
+    expect(issueOpened?.(context([]))).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      idempotencyKey: '9:issue-opened:issue-intake',
+      board: 'work',
+      stage: 'triage',
+      sourceKey: 'github-issue:7',
+      title: 'Issue 7',
+    });
+
+    // With the label the built-in landing stands: the card rests in Intake
+    // until a person starts a run.
+    expect(issueOpened?.(context(['needs-triage']))).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'intake',
+    });
+
+    // `status: auto-triaged` (what the triage skill stamps when it finishes) is
+    // filed straight on Planning and runs no phase rule: triage already
+    // happened, so the card is published to the board rather than launched.
+    expect(issueOpened?.(context([AUTO_TRIAGED_LABEL]))).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'planning',
+      skipRules: true,
+    });
+
+    // A maintainer's explicit flag outranks the automated stamp.
+    expect(issueOpened?.(context([AUTO_TRIAGED_LABEL, 'needs-triage']))).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'intake',
+    });
+    expect(issueOpened?.(context([AUTO_TRIAGED_LABEL, 'needs-triage']))).not.toHaveProperty('skipRules');
+
+    // A project's own label route owns the board and its initial phase.
+    expect(issueOpened?.({ ...context(['bug']), intake: { board: 'work', initialPhase: 'planning' } })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'planning',
+    });
+
+    // The reconcile sweep replays this same rule on label drift, with the card
+    // attached. A card that has already left Intake is re-placed where the
+    // labels put it and no phase rule runs for it — it sits past Intake because
+    // a placement put it there, so it is not arriving.
+    const card = (stages: string[]) => ({
+      id: 'card-7',
+      source: 'github-issue' as const,
+      sourceKey: 'github-issue:7',
+      parentWorkItemId: null,
+      title: 'Issue 7',
+      url: issue.url,
+      stages,
+      acceptedAt: null,
+      metadata: {},
+    });
+    expect(issueOpened?.({ ...context([]), item: card(['planning']) })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'triage',
+      skipRules: true,
+    });
+    expect(issueOpened?.({ ...context(['needs-triage']), item: card(['planning']) })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'intake',
+      skipRules: true,
+    });
+    // A card still resting on Intake lands normally on that same replay, so
+    // Triage's entry rule runs and can start it.
+    expect(issueOpened?.({ ...context([]), item: card(['intake']) })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'work',
+      stage: 'triage',
+    });
+    expect(issueOpened?.({ ...context([]), item: card(['intake']) })).not.toHaveProperty('skipRules');
+  });
+
+  it('sends the item a pull request was authored from to review when it opens', { timeout: 60_000 }, async () => {
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
+    const { factoryConfigVersion } = await import('./index.js');
+    const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
+    const github = factoryConfigs[0]?.integrations?.find(
+      (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
+    );
+    if (!github) throw new Error('Expected the configured GitHub integration');
+
+    const context = {
+      tenant: { orgId: 'org-1', projectId: 'project-1' },
+      actor: { type: 'github' as const, login: 'maintainer', trusted: true, factoryAuthored: false },
+      ingress: { type: 'github' as const, id: '9:pr-opened' },
+      cause: 'github.pullRequestOpened',
+      causalChain: [],
+      configVersion: factoryConfigVersion,
+      factory: { createdAt: '2030-01-01T00:00:00.000Z' },
+      repository: { id: 10, fullName: 'acme/repo' },
+      event: 'pullRequestOpened' as const,
+      deliveryId: 'pr-opened',
+      pullRequest: {
+        number: 17,
+        title: 'PR 17',
+        url: 'https://github.com/acme/repo/pull/17',
+        createdAt: '2030-01-01T00:00:00Z',
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+        headBranch: 'factory/issue-42',
+        baseBranch: 'main',
+        factoryAuthored: false,
+      },
+    };
+    const card = {
+      id: 'card-42',
+      source: 'github-issue' as const,
+      sourceKey: 'github-issue:42',
+      parentWorkItemId: null,
+      title: 'Issue 42',
+      url: 'https://github.com/acme/repo/issues/42',
+      stages: ['execute'],
+      acceptedAt: null,
+      metadata: {},
+    };
+    const { pullRequestOpened } = github.rules;
+
+    // The arrival — the evaluation that files the pull request's own Review
+    // card — keeps the built-in behaviour, whether or not a card is bound to it.
+    expect(pullRequestOpened?.({ ...context, pullRequestIntake: true })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      source: 'github-pr',
+      board: 'review',
+      stage: 'intake',
+    });
+    expect(pullRequestOpened?.({ ...context, pullRequestIntake: true, item: card, board: 'work' })).toMatchObject({
+      source: 'github-pr',
+    });
+
+    // The item the pull request was authored from waits for review. That is a
+    // placement, not a governed transition: no phase rule runs for it and the
+    // card's own facts are left alone.
+    expect(pullRequestOpened?.({ ...context, item: card, board: 'work' })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      idempotencyKey: '9:pr-opened:work-item-review',
+      source: 'github-issue',
+      sourceKey: 'github-issue:42',
+      board: 'work',
+      stage: 'review',
+      skipRules: true,
+    });
+    // Already waiting for review, or living on a board whose phases are its
+    // own: nothing to place.
+    expect(pullRequestOpened?.({ ...context, item: { ...card, stages: ['review'] }, board: 'work' })).toBeUndefined();
+    expect(pullRequestOpened?.({ ...context, item: card, board: 'release' })).toBeUndefined();
+  });
+
+  it('carries the GitHub event-rule overrides on whichever integration is installed', { timeout: 60_000 }, async () => {
+    const { githubRules } = await import('./github-rules.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // The factory's integration signer needs a replica-stable secret; the
+    // webhook secret is the first the entry falls back to.
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
+
+    // Platform credentials and no GITHUB_APP_* group: the factory installs the
+    // Platform-backed integration itself, so the overrides ride along on
+    // `platform.github`.
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    await import('./index.js');
+    expect(factoryConfigs[0]?.integrations?.some(integration => integration.id === 'github')).toBe(false);
+    expect(factoryConfigs[0]?.platform?.github?.rules).toBe(githubRules);
+
+    vi.resetModules();
+    factoryConfigs.length = 0;
+
+    // A direct GITHUB_APP_* group supplies the integration itself, so
+    // `platform.github` stays unset: set, it would warn on every boot that an
+    // explicit integration takes precedence.
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    await import('./index.js');
+    expect(factoryConfigs[0]?.platform?.github).toBeUndefined();
+    expect(warn.mock.calls.flat().join('\n')).not.toContain("'github' config was provided");
+
+    warn.mockRestore();
+  });
+
   // Integration env groups are all-or-nothing: a partial set means the
   // integration stays un-wired, but boot must survive so the diagnostics
   // surface can report exactly which vars are missing.
@@ -185,6 +417,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_CLIENT_SECRET',
         'GITHUB_APP_SLUG',
         'GITHUB_APP_WEBHOOK_SECRET',
+        'GITLAB_ACCESS_TOKEN',
+        'GITLAB_ACCESS_TOKEN_TYPE',
+        'GITLAB_BASE_URL',
+        'GITLAB_WEBHOOK_SECRET',
+        'MASTRA_GITLAB_CONNECTION_ID',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
         'JIRA_BASE_URL',
@@ -238,6 +475,28 @@ describe('platform entry (src/mastra/index.ts)', () => {
         // The connect route is registered only by the GithubIntegration, so its
         // presence proves the direct fallback wired the integration onto the factory.
         expect(paths).toContain('/auth/github/connect');
+      },
+    );
+
+    it.each(['personal', 'group'] as const)(
+      'registers direct GitLab with a %s access token',
+      { timeout: 60_000 },
+      async accessTokenType => {
+        vi.resetModules();
+        vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+        vi.stubEnv('GITLAB_ACCESS_TOKEN', `glpat-${accessTokenType}-secret`);
+        vi.stubEnv('GITLAB_ACCESS_TOKEN_TYPE', accessTokenType);
+        vi.stubEnv('GITLAB_BASE_URL', 'https://gitlab.acme.test');
+        await import('./index.js');
+
+        const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'gitlab');
+        expect(integration?.diagnostics()).toMatchObject({
+          mode: 'direct',
+          accessTokenType,
+          endpointHost: 'gitlab.acme.test',
+        });
+        expect(JSON.stringify(integration?.diagnostics())).not.toContain(`glpat-${accessTokenType}-secret`);
       },
     );
 

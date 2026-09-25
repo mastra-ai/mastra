@@ -139,6 +139,12 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
   });
 
   afterAll(async () => {
+    // Vitest still runs afterAll when an earlier beforeAll in this scope threw
+    // (a failed docker setup, for example), so the beforeAll above may never
+    // have assigned `memory`. Cleaning up a fixture that was never built adds a
+    // TypeError pointing at teardown on top of the real setup failure, which
+    // buries the actual cause. There is nothing to clean up in that case.
+    if (!memory) return;
     await cleanupAllThreads(memory);
   });
 

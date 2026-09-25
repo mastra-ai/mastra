@@ -134,12 +134,13 @@ const MAX_DIFF_BYTES = 512 * 1024;
 const WORKSPACE_NUMSTAT_SCRIPT = `
 set -e
 workdir=$1
+base=$2
 index_file=$(mktemp)
 untracked_file=$(mktemp)
 object_dir=$(mktemp -d)
 trap 'rm -f "$index_file" "$untracked_file"; rm -rf "$object_dir"' EXIT
 rm -f "$index_file"
-git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv HEAD
+git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv "$base"
 git -C "$workdir" ls-files --others --exclude-standard -z >"$untracked_file"
 git_dir=$(git -C "$workdir" rev-parse --absolute-git-dir)
 export GIT_INDEX_FILE="$index_file"
@@ -606,6 +607,24 @@ export function parseWorkspaceChanges(output: string): WorkspaceChange[] {
 
   return changes.toSorted((a, b) => a.path.localeCompare(b.path));
 }
+export function parseWorkspaceTrackedChanges(output: string): WorkspaceChange[] {
+  const records = output.split('\0');
+  const changes: WorkspaceChange[] = [];
+  for (let index = 0; index < records.length;) {
+    const code = records[index++];
+    if (!code) continue;
+    const status = changeStatus(code);
+    if (status === 'renamed' || status === 'copied') {
+      const previousPath = records[index++];
+      const path = records[index++];
+      if (path) changes.push({ path, previousPath: previousPath || undefined, status });
+      continue;
+    }
+    const path = records[index++];
+    if (path) changes.push({ path, status });
+  }
+  return changes.toSorted((a, b) => a.path.localeCompare(b.path));
+}
 
 export function parseWorkspaceChangeStats(output: string) {
   const records = output.split('\0');
@@ -646,23 +665,53 @@ function unavailableWorkspaceChanges(workspacePath: string): WorkspaceChanges {
   return { workspacePath, available: false, changes: [] };
 }
 
+async function resolveSessionComparisonBase(
+  session: SourceControlSession,
+  sandbox: ExecutableSandbox,
+  workdir: string,
+): Promise<string> {
+  const result = await sandbox.executeCommand(
+    'git',
+    ['-C', workdir, 'merge-base', 'HEAD', `origin/${session.baseBranch}`],
+    { timeout: 30_000 },
+  );
+  const sha = result.stdout.trim();
+  return result.exitCode === 0 && /^[0-9a-f]{40,64}$/i.test(sha) ? sha : 'HEAD';
+}
+
 export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
   const handle = await sessionSandbox(session);
   if (!handle) return unavailableWorkspaceChanges(session.sessionId);
+  const comparisonBase = await resolveSessionComparisonBase(session, handle.sandbox, handle.workdir);
 
-  const [statusResult, statsResult] = await Promise.all([
+  const [statusResult, trackedResult, statsResult] = await Promise.all([
     handle.sandbox.executeCommand(
       'git',
       ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
       { timeout: 30_000 },
     ),
-    handle.sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir], {
-      timeout: 30_000,
-    }),
+    handle.sandbox.executeCommand(
+      'git',
+      ['-C', handle.workdir, 'diff', '--name-status', '-z', '--find-renames', comparisonBase],
+      { timeout: 30_000 },
+    ),
+    handle.sandbox.executeCommand(
+      'sh',
+      ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir, comparisonBase],
+      { timeout: 30_000 },
+    ),
   ]);
   if (statusResult.exitCode !== 0) return unavailableWorkspaceChanges(session.sessionId);
 
-  const changes = parseWorkspaceChanges(statusResult.stdout);
+  const statusChanges = parseWorkspaceChanges(statusResult.stdout);
+  const trackedChanges = trackedResult.exitCode === 0 ? parseWorkspaceTrackedChanges(trackedResult.stdout) : [];
+  const changesByPath = new Map(trackedChanges.map(change => [change.path, change]));
+  for (const change of statusChanges) {
+    if (trackedResult.exitCode !== 0 || change.status === 'untracked' || change.status === 'conflicted') {
+      changesByPath.set(change.path, change);
+    }
+  }
+  const changes = [...changesByPath.values()].toSorted((a, b) => a.path.localeCompare(b.path));
   if (statsResult.exitCode !== 0) {
     return { workspacePath: session.sessionId, available: true, changes };
   }
@@ -704,6 +753,7 @@ export async function readSessionWorkspaceDiff(
   const safePreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
+  const comparisonBase = await resolveSessionComparisonBase(session, handle.sandbox, handle.workdir);
 
   const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
   let result = await executeBoundedGitDiff(handle.sandbox, [
@@ -715,7 +765,7 @@ export async function readSessionWorkspaceDiff(
     '--no-ext-diff',
     '--no-color',
     '--unified=3',
-    'HEAD',
+    comparisonBase,
     '--',
     ...pathspecs,
   ]);

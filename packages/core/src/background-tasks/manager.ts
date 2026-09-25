@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Mastra } from '..';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
@@ -24,7 +23,7 @@ const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
 
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
-  private readonly workerId = randomUUID();
+  private readonly workerId = globalThis.crypto.randomUUID();
   private readonly processAffineDispatchTopic = `${TOPIC_DISPATCH}:${this.workerId}`;
   config: Required<
     Pick<
@@ -312,7 +311,7 @@ export class BackgroundTaskManager {
     if (this.initPromise) await this.initPromise;
 
     const task: BackgroundTask = {
-      id: this.#mastra?.generateId() ?? randomUUID(),
+      id: this.#mastra?.generateId() ?? globalThis.crypto.randomUUID(),
       status: 'pending',
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,
@@ -528,11 +527,10 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Restarts a previously running task. The tool executor is re-registered via
-   * `registerTaskContext(taskId, ...)` because the original
+   * Re-dispatches a previously pending or running task. The tool executor is
+   * re-registered via `registerTaskContext(taskId, ...)` because the original
    * registration is gone (e.g. process restart) — the manager doesn't
    * rehydrate executor closures from storage.
-   *
    */
   async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
     if (this.shuttingDown) {
@@ -549,9 +547,10 @@ export class BackgroundTaskManager {
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
     }
-    if (task.status !== 'running') {
-      throw new Error(`Cannot restart task in status '${task.status}' (expected 'running')`);
+    if (task.status !== 'pending' && task.status !== 'running') {
+      throw new Error(`Cannot restart task in status '${task.status}' (expected 'pending' or 'running')`);
     }
+    const isRestart = task.status === 'running';
 
     if (context) {
       this.registerTaskContext(task.id, context);
@@ -568,7 +567,7 @@ export class BackgroundTaskManager {
     }
 
     try {
-      await this.dispatch(task, true);
+      await this.dispatch(task, isRestart);
     } catch (error) {
       if (isProcessAffine) this.releaseLocalSlot(taskId);
       throw error;

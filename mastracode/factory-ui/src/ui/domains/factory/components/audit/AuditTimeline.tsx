@@ -74,17 +74,17 @@ export function AuditTimeline({
     >
       <defs>
         <linearGradient id={gridGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={0} y2={height}>
-          <stop offset="0%" stopColor="var(--border2)" stopOpacity={0} />
-          <stop offset="28%" stopColor="var(--border2)" stopOpacity={1} />
-          <stop offset="72%" stopColor="var(--border2)" stopOpacity={1} />
-          <stop offset="100%" stopColor="var(--border2)" stopOpacity={0} />
+          <stop offset="0%" stopColor="var(--border-strong)" stopOpacity={0} />
+          <stop offset="28%" stopColor="var(--border-strong)" stopOpacity={1} />
+          <stop offset="72%" stopColor="var(--border-strong)" stopOpacity={1} />
+          <stop offset="100%" stopColor="var(--border-strong)" stopOpacity={0} />
         </linearGradient>
 
         <linearGradient id={laneGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={WIDTH} y2={0}>
-          <stop offset="0%" stopColor="var(--border2)" stopOpacity={0} />
-          <stop offset="18%" stopColor="var(--border2)" stopOpacity={1} />
-          <stop offset="82%" stopColor="var(--border2)" stopOpacity={1} />
-          <stop offset="100%" stopColor="var(--border2)" stopOpacity={0} />
+          <stop offset="0%" stopColor="var(--border-strong)" stopOpacity={0} />
+          <stop offset="18%" stopColor="var(--border-strong)" stopOpacity={1} />
+          <stop offset="82%" stopColor="var(--border-strong)" stopOpacity={1} />
+          <stop offset="100%" stopColor="var(--border-strong)" stopOpacity={0} />
         </linearGradient>
       </defs>
 

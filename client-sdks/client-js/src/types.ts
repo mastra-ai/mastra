@@ -34,7 +34,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-import type { ChunkType } from '@mastra/core/stream';
+import type { ChunkType, ThreadHistoryChunk } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { SerializedStepFlowEntry, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -158,14 +158,20 @@ export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agent
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
+  /**
+   * Emit one `thread-history` chunk with the stored thread messages before any
+   * run parts; parts already covered by that history are not replayed.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
 }
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export interface AbortAgentThreadParams extends SubscribeAgentThreadParams {
-  expectedRunId?: string;
-}
+/** @experimental Agent thread cancellation is experimental. */
+export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
+
+/** @experimental Cancels pending signals on the server process handling the request. */
+export type CancelQueuedAgentMessagesParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/signals/cancel'>>;
+
+export type CancelQueuedAgentMessagesResponse = GeneratedResponse<'POST /agents/:agentId/threads/signals/cancel'>;
 
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
@@ -186,7 +192,8 @@ export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface ProcessAgentThreadStreamOptions {
-  onChunk: (chunk: ChunkType) => void | Promise<void>;
+  /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
+  onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;
   reconnect?:
     | boolean
     | {
@@ -555,7 +562,11 @@ export type UpdateMemoryThreadParams = Omit<
     agentId?: string;
   };
 
-export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>>;
+export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>> &
+  RequestContextOptions & {
+    /** Optional network ID. When provided, uses the network memory endpoint. */
+    networkId?: string;
+  };
 
 /** The route schema intentionally keeps persisted message payloads opaque. */
 export type ListMemoryThreadMessagesResponse = GeneratedResponse<'GET /memory/threads/:threadId/messages'> & {
@@ -662,6 +673,14 @@ export interface LoopVNextNetworkResponse {
 }
 
 export type McpServerListResponse = GeneratedResponse<'GET /mcp/v0/servers'>;
+
+/** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
+export type McpServerInfo = McpServerListResponse['servers'][number];
+
+export type McpServerDetailInfo = GeneratedResponse<'GET /mcp/v0/servers/:id'>;
+
+/** Protocol transports the Mastra server exposes for a registered MCP server. */
+export type McpServerTransport = NonNullable<McpServerInfo['transports']>[number];
 
 export type McpToolInfo = GeneratedResponse<'GET /mcp/:serverId/tools/:toolId'>;
 
@@ -1428,6 +1447,8 @@ export interface MastraPackage {
 }
 
 export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
+
+export type GetObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
 
 // ============================================================================
 // Workspace Types

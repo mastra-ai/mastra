@@ -40,6 +40,7 @@ type StreamObjectChunk<TType extends string> = StreamChunkBase<TType> & { object
 type StreamDataChunk<TType extends `data-${string}`> = StreamChunkBase<TType> & { data?: unknown };
 type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
+  | StreamPayloadChunk<'thread-history'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
   | StreamPayloadChunk<'reasoning-signature'>
@@ -219,6 +220,7 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 }
 
 type StreamState = {
+  threadId?: string;
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
   messageStarted: boolean;
@@ -261,9 +263,10 @@ export class SessionRunEngine {
     this.#machinery = machinery;
   }
 
-  private createEmptyAssistantMessage(): MastraDBMessage {
+  private createEmptyAssistantMessage(threadId?: string): MastraDBMessage {
     return {
       id: this.#machinery.generateId(),
+      ...(threadId ? { threadId } : {}),
       role: 'assistant',
       content: { format: 2, parts: [] },
       createdAt: new Date(),
@@ -364,7 +367,7 @@ export class SessionRunEngine {
     this.setStopReason(state.currentMessage, 'complete');
     this.finishCurrentMessage(state);
     state.lastFinishedMessage = state.currentMessage;
-    state.currentMessage = this.createEmptyAssistantMessage();
+    state.currentMessage = this.createEmptyAssistantMessage(state.threadId);
     state.spans.clear();
     state.announcedTextSpans.clear();
     state.announcedReasoningSpans.clear();
@@ -373,9 +376,10 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
-  createStreamState(): StreamState {
+  createStreamState(threadId = this.#session.thread.getId() ?? undefined): StreamState {
     return {
-      currentMessage: this.createEmptyAssistantMessage(),
+      threadId,
+      currentMessage: this.createEmptyAssistantMessage(threadId),
       messageStarted: false,
       isSuspended: false,
       spans: new MessagePartSpans({ providerMetadata: false }),
@@ -436,6 +440,7 @@ export class SessionRunEngine {
     this.emitMessagePart(state, partIndex);
     this.#session.emit({
       type: 'tool_end',
+      threadId: state.threadId,
       toolCallId,
       result,
       isError,
@@ -627,7 +632,8 @@ export class SessionRunEngine {
         const payload = getPayload(chunk);
         const toolCallId = getString(payload.toolCallId) ?? '';
         const toolName = getString(payload.toolName) ?? '';
-        this.#session.emit({ type: 'tool_input_start', toolCallId, toolName });
+        const title = getString(payload.title);
+        this.#session.emit({ type: 'tool_input_start', threadId: state.threadId, toolCallId, toolName, title });
         break;
       }
 
@@ -640,6 +646,7 @@ export class SessionRunEngine {
         if (!transform?.suppress) {
           this.#session.emit({
             type: 'tool_input_delta',
+            threadId: state.threadId,
             toolCallId,
             argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
             toolName,
@@ -650,7 +657,7 @@ export class SessionRunEngine {
 
       case 'tool-call-input-streaming-end': {
         const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
-        this.#session.emit({ type: 'tool_input_end', toolCallId });
+        this.#session.emit({ type: 'tool_input_end', threadId: state.threadId, toolCallId });
         break;
       }
 
@@ -659,6 +666,7 @@ export class SessionRunEngine {
         const toolCallId = getString(toolCall.toolCallId) ?? '';
         const toolName = getString(toolCall.toolName) ?? '';
         const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
+        const title = getString(toolCall.title);
         const toolIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({
           type: 'tool-invocation',
@@ -668,14 +676,17 @@ export class SessionRunEngine {
             toolName,
             args,
           },
+          title,
         });
         state.toolPartById.set(toolCallId, toolIndex);
         this.emitMessagePart(state, toolIndex);
         this.#session.emit({
           type: 'tool_start',
+          threadId: state.threadId,
           toolCallId,
           toolName,
           args,
+          title,
         });
         break;
       }
@@ -738,7 +749,14 @@ export class SessionRunEngine {
         }
 
         this.emitMessagePart(state, partIndex);
-        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
+        this.#session.emit({
+          type: 'tool_end',
+          threadId: state.threadId,
+          toolCallId,
+          result: reason,
+          isError: false,
+          denied: true,
+        });
         break;
       }
 
@@ -751,19 +769,30 @@ export class SessionRunEngine {
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
         const policy = this.#session.resolveToolApproval(toolName);
+        const approvalIdentity = {
+          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
+          threadId: state.threadId,
+          resourceId: this.#session.identity.getResourceId(),
+        };
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext, ...approvalIdentity });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext, ...approvalIdentity });
           break;
         }
 
         const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
-        this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
+        this.#session.emit({
+          type: 'tool_approval_required',
+          threadId: state.threadId,
+          toolCallId,
+          toolName,
+          args: toolArgs,
+        });
 
         const approval = await approvalPromise;
         this.#session.approval.clearToolName();
@@ -774,16 +803,19 @@ export class SessionRunEngine {
         // Once it lands we finish the teardown, which stops the run rather than
         // letting the model continue past the denied call.
         const deferredAbort = this.#session.run.isAbortRequested();
+        const deferredAbortOrigin = deferredAbort ? this.#session.takeDeferredAbortOrigin() : undefined;
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            ...approvalIdentity,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,
@@ -797,7 +829,7 @@ export class SessionRunEngine {
           // display state shows the denied result instead of a call stuck
           // mid-flight.
           this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort();
+          this.#session.completeDeferredAbort(deferredAbortOrigin);
         }
         break;
       }
@@ -855,6 +887,7 @@ export class SessionRunEngine {
 
         this.#session.emit({
           type: 'tool_suspended',
+          threadId: state.threadId,
           toolCallId: suspToolCallId,
           toolName: suspToolName,
           args: suspArgs,
@@ -1221,10 +1254,21 @@ export class SessionRunEngine {
       case 'data-mastracode-tool-progress': {
         const d = (chunk as any).data as Record<string, any> | undefined;
         if (d?.toolCallId && d?.progress !== undefined) {
-          this.#session.emit({ type: 'tool_update', toolCallId: d.toolCallId, partialResult: d.progress });
+          this.#session.emit({
+            type: 'tool_update',
+            threadId: state.threadId,
+            toolCallId: d.toolCallId,
+            partialResult: d.progress,
+          });
           const output = formatToolProgressOutput(d.progress);
           if (output) {
-            this.#session.emit({ type: 'shell_output', toolCallId: d.toolCallId, output, stream: 'stdout' });
+            this.#session.emit({
+              type: 'shell_output',
+              threadId: state.threadId,
+              toolCallId: d.toolCallId,
+              output,
+              stream: 'stdout',
+            });
           }
         }
         break;
@@ -1236,7 +1280,7 @@ export class SessionRunEngine {
         const output = getString(d?.output);
         const toolCallId = getString(d?.toolCallId);
         if (output && toolCallId) {
-          this.#session.emit({ type: 'shell_output', toolCallId, output, stream: 'stdout' });
+          this.#session.emit({ type: 'shell_output', threadId: state.threadId, toolCallId, output, stream: 'stdout' });
         }
         break;
       }
@@ -1245,7 +1289,7 @@ export class SessionRunEngine {
         const output = getString(d?.output);
         const toolCallId = getString(d?.toolCallId);
         if (output && toolCallId) {
-          this.#session.emit({ type: 'shell_output', toolCallId, output, stream: 'stderr' });
+          this.#session.emit({ type: 'shell_output', threadId: state.threadId, toolCallId, output, stream: 'stderr' });
         }
         break;
       }
@@ -1256,6 +1300,7 @@ export class SessionRunEngine {
         if (toolCallId && exitCode !== undefined) {
           this.#session.emit({
             type: 'command_exit',
+            threadId: state.threadId,
             toolCallId,
             exitCode,
             success: getBoolean(d?.success, exitCode === 0),
@@ -1332,6 +1377,7 @@ export class SessionRunEngine {
         if (settled) {
           this.#session.emit({
             type: 'tool_end',
+            threadId: suspension.threadId,
             toolCallId: suspension.toolCallId,
             result: ABORTED_BY_USER_REASON,
             isError: false,
@@ -1388,7 +1434,14 @@ export class SessionRunEngine {
     }
 
     this.emitMessagePart(state, partIndex);
-    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
+    this.#session.emit({
+      type: 'tool_end',
+      threadId: state.threadId,
+      toolCallId,
+      result: ABORTED_BY_USER_REASON,
+      isError: false,
+      denied: true,
+    });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
@@ -1446,7 +1499,8 @@ export class SessionRunEngine {
     this.#session.run.reset();
   }
 
-  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
+  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
+    const threadId = this.#session.thread.getId() ?? undefined;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
@@ -1461,12 +1515,14 @@ export class SessionRunEngine {
           break;
         }
 
+        if (chunk.type === 'thread-history') continue;
+
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
         if (runId && runId === abortedRunId) continue;
         if (runId && abortedRunId) abortedRunId = undefined;
 
         if (!currentRun) {
-          currentRun = this.createStreamState();
+          currentRun = this.createStreamState(threadId);
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });

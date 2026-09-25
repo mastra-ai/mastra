@@ -53,7 +53,7 @@ async function createItem(
   storage: WorkItemsStorage,
   overrides: Partial<{
     orgId: string;
-    source: 'github-issue' | 'github-pr' | 'slack-thread';
+    source: 'github-issue' | 'github-pr' | 'gitlab-pr' | 'slack-thread';
     sourceKey: string;
     board: string;
     stages: string[];
@@ -70,8 +70,8 @@ async function createItem(
       input: {
         ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
-          integrationId: source === 'slack-thread' ? 'slack' : 'github',
-          type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source === 'slack-thread' ? 'slack' : source === 'gitlab-pr' ? 'gitlab' : 'github',
+          type: source === 'slack-thread' ? 'slack-thread' : source.endsWith('-pr') ? 'pull-request' : 'issue',
           externalId: overrides.sourceKey ?? '1',
         },
         title: 'Fix the bug',
@@ -1308,9 +1308,81 @@ describe('FactoryTransitionService', () => {
     expect(result).toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
-      reason: 'The Review board does not allow moving from review to planning.',
+      reason:
+        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it('names the declared next stages when the requested stage is not a phase', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition(request(item, { stage: 'plan' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason).toMatch(
+      /^The \w+ board does not allow moving from triage to plan\. Next stages declared from triage: .*planning/,
+    );
+  });
+
+  it('says no next stage is declared when the phase has no outgoing transitions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['shipped'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'queued' }));
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The Release board does not allow moving from shipped to queued. No next stage is declared from shipped.',
+    });
+  });
+
+  it('caps a long invalid_transition reason at the rejection limit', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const targets = Array.from({ length: 40 }, (_, index) => `target-phase-number-${index}`);
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: {
+          title: 'Queued',
+          kind: 'resting',
+          outcomes: Object.fromEntries(targets.map(target => [target, target])),
+        },
+        ...Object.fromEntries(targets.map(target => [target, { title: target, kind: 'terminal' as const }])),
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['queued'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const result = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+    const replayed = await service.transition(request(item, { stage: 'missing' as FactoryRuleStage }));
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason.length).toBe(512);
+    expect(replayed).toEqual(result);
   });
 
   it('starts nothing when a person parks a card back in Intake', async () => {
@@ -1371,6 +1443,21 @@ describe('FactoryTransitionService', () => {
 
     expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('allows a GitLab merge request to enter Review like a GitHub pull request', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'review', source: 'gitlab-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(
+      service.transition({ ...request(item, { board: 'review', stage: 'review' }), cause: 'run_start' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
+    const updated = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(updated).not.toBeNull();
+    await expect(
+      service.transition(request(updated!, { board: 'work', stage: 'execute', identity: 'wrong-gitlab-board' })),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
   });
 
   it('lets the bound agent walk its parked card back into its lane without racing a second run', async () => {

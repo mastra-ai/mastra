@@ -31,6 +31,26 @@ export {
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { type LastMessageOnlyOption } from './message-selection';
 export { type ModelErrorStrategy } from './model-error-strategy';
+export {
+  ClassifierProcessor,
+  type ClassifierOnResult,
+  type ClassifierProcessorInstanceOptions,
+  type ClassifierProcessorOptions,
+  type ClassifierProcessorRegisteredOptions,
+  type ClassifierResultContext,
+} from './classifier';
+export {
+  ModelSelectionProcessor,
+  type ModelSelectionProcessorOptions,
+  type ModelSelectionSelectOptions,
+  type ModelSelectionInstanceOptions,
+  type ModelSelectionRegisteredOptions,
+  type ModelSelectionSelect,
+  type ModelSelectionChoicesOptions,
+  type ModelChoice,
+  type ModelSelectionDecision,
+  type SelectableModel,
+} from './model-selection';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,

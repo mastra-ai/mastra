@@ -6,6 +6,7 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const TRIM_PAGE_SIZE = 500;
 
 /**
  * Atomically nack a pending entry only if it is still owned by the given
@@ -86,16 +87,30 @@ export interface RedisStreamsPubSubConfig {
   maxStreamLength?: number;
   /**
    * Idle expiry (in ms): a sliding TTL refreshed on every write to the stream
-   * (publish, nack retry, group re-creation). Each write resets it, so an
-   * actively-used stream never expires mid-flight; a stream left idle for the
-   * full duration is deleted by Redis automatically.
+   * (publish, subscribe/group creation, nack retry). Each write resets it, so
+   * an actively-used stream never expires mid-flight; a stream left idle for
+   * the full duration is deleted by Redis automatically — entries, consumer
+   * groups and their pending lists included.
    *
-   * This is a BACKSTOP, not the primary cleanup. Normal cleanup is explicit:
-   * `clearTopic` deletes a topic's stream the moment its lifecycle ends. This
-   * option only bounds memory for streams that never reach a `clearTopic` call
-   * — e.g. a run that crashed before cleanup — so they don't linger forever.
+   * Defaults to 0 (disabled) to preserve existing behavior: streams live
+   * until an explicit `clearTopic`, and a stream that never reaches one stays
+   * in Redis forever. **Production deployments should set this** — see below.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior.
+   * Why a TTL matters: topics fall into two classes.
+   * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
+   *   topics) are cleaned up eagerly via `clearTopic` when their lifecycle
+   *   ends. For these the TTL is a backstop covering crashes and missed
+   *   cleanup.
+   * - *Open-ended* topics (per-conversation streams, per-project feeds) have
+   *   no moment at which any process can safely declare them finished, so
+   *   nothing ever calls `clearTopic` on them. For these the TTL is the ONLY
+   *   reclamation mechanism; with it disabled they accumulate for the
+   *   lifetime of the Redis instance.
+   *
+   * Sizing: the TTL must exceed the longest window in which an idle stream is
+   * still legitimately useful — chiefly, how long a grouped worker may be down
+   * and still expect to replay its backlog on restart. If workers can be
+   * offline longer than the TTL while publishers stay quiet, raise it.
    */
   streamIdleTtlMs?: number;
   /**
@@ -178,6 +193,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // multiple topics independently. Without the topic in the key,
   // unsubscribe(otherTopic, cb) would tear down the wrong subscription.
   #subscriptions: Map<string, Subscription> = new Map();
+  // Subscribes that are still wiring up Redis (XGROUP CREATE + reader connect).
+  // `unsubscribe` and `close` await these so an unsubscribe issued while the
+  // subscribe round trip is in flight tears the subscription down instead of
+  // no-oping — otherwise the late-registering subscription (reader connection,
+  // blocked read loop) would leak with nothing left to stop it.
+  #pendingSubscribes: Map<string, Promise<void>> = new Map();
   #cbIds: WeakMap<EventCallback, string> = new WeakMap();
   #pendingPublishes: Set<Promise<unknown>> = new Set();
   // `localOnly` publishes bypass Redis entirely so values carrying live
@@ -411,7 +432,20 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     if (this.#closed) throw new Error('RedisStreamsPubSub: cannot subscribe on closed client');
     const key = this.#subKey(topic, cb);
     if (this.#subscriptions.has(key)) return; // idempotent: same (topic, cb) already subscribed
+    const pending = this.#pendingSubscribes.get(key);
+    if (pending) return pending; // idempotent: same (topic, cb) subscribe already in flight
 
+    // Register synchronously so an unsubscribe/close racing this subscribe can
+    // find and await it. `#doSubscribe` runs synchronously up to its first
+    // await, which keeps the localOnly registration guarantee documented there.
+    const promise = this.#doSubscribe(topic, cb, key, options).finally(() => {
+      this.#pendingSubscribes.delete(key);
+    });
+    this.#pendingSubscribes.set(key, promise);
+    return promise;
+  }
+
+  async #doSubscribe(topic: string, cb: EventCallback, key: string, options?: SubscribeOptions): Promise<void> {
     // Register for `localOnly` delivery before wiring up the Redis reader so a
     // racing publisher in the same process never misses this subscriber.
     let localBucket = this.#localCallbacks.get(topic);
@@ -611,6 +645,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     }
 
     const key = this.#subKey(topic, cb);
+    // A subscribe for this (topic, cb) may still be mid-flight (XGROUP CREATE +
+    // reader connect). Wait for it to register so the teardown below actually
+    // finds it — returning early here would orphan the subscription forever.
+    const pending = this.#pendingSubscribes.get(key);
+    if (pending) await pending.catch(() => {});
     const sub = this.#subscriptions.get(key);
     if (!sub) return;
     if (sub.teardown) return sub.teardown;
@@ -708,6 +747,53 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       // warn, not debug: a failed delete means the memory leak clearTopic
       // exists to prevent is silently recurring for this topic.
       this.#logger?.warn?.('redis-streams: clearTopic failed', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  /**
+   * Deletes a run's entries with `XDEL`: pages through the stream with `XRANGE`
+   * and matches each entry's `runId`. With `producedBefore`, only unpinned
+   * entries produced at or before it are deleted. Entries of other runs,
+   * including those published by other processes, are untouched.
+   */
+  override async trimTopic(
+    topic: string,
+    { runId, producedBefore }: { runId: string; producedBefore?: number },
+  ): Promise<void> {
+    if (this.#closed) return;
+    try {
+      await this.#ensureWriterConnected();
+      const streamKey = this.#streamKey(topic);
+      let start = '-';
+      for (;;) {
+        const page = await this.#writeClient.xRange(streamKey, start, '+', { COUNT: TRIM_PAGE_SIZE });
+        const ids: string[] = [];
+        for (const entry of page) {
+          if (!entry) continue;
+          try {
+            const event = JSON.parse(entry.message.event ?? '{}') as {
+              runId?: string;
+              data?: { producedAt?: unknown; pinned?: unknown };
+            };
+            if (event.runId !== runId) continue;
+            if (producedBefore !== undefined) {
+              const producedAt = event.data?.producedAt;
+              if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;
+            }
+            ids.push(entry.id);
+          } catch {
+            // An unparseable entry can't belong to this run.
+          }
+        }
+        if (ids.length > 0) await this.#writeClient.xDel(streamKey, ids);
+        if (page.length < TRIM_PAGE_SIZE) break;
+        start = `(${page[page.length - 1]!.id}`;
+      }
+    } catch (err) {
+      this.#logger?.warn?.('redis-streams: trimTopic failed', {
         topic,
         err: err instanceof Error ? err.message : err,
       });
@@ -834,6 +920,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+
+    // Let in-flight subscribes finish registering before the snapshot below,
+    // so a subscription that lands mid-close is torn down rather than leaked.
+    if (this.#pendingSubscribes.size > 0) {
+      await Promise.allSettled([...this.#pendingSubscribes.values()]);
+    }
 
     // Walk the actual subscriptions and pass the original topic through so
     // unsubscribe's key lookup works.

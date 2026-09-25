@@ -134,6 +134,14 @@ function lastGhToken(): string | undefined {
   return update?.({}).GH_TOKEN;
 }
 
+function lastSandboxEnv(): Record<string, string | undefined> {
+  const calls = mocks.setEnv.mock.calls;
+  const update = calls[calls.length - 1]?.[0] as
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
+  return update?.({}) ?? {};
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(tempDir => fs.rm(tempDir, { recursive: true, force: true })));
   mocks.projects.splice(0);
@@ -319,6 +327,8 @@ describe('bundled Factory skill assets', () => {
     expect(assetNames).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-gitlab-rereview',
+      'factory-gitlab-review',
       'factory-plan',
       'factory-rereview',
       'factory-review',
@@ -327,6 +337,18 @@ describe('bundled Factory skill assets', () => {
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('bundles GitLab review instructions that use the scoped provider tools', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const instructions = await fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+      expect(instructions).toContain('source_control_get_change_request');
+      expect(instructions).toContain('source_control_list_change_request_reviews');
+      expect(instructions).toContain('source_control_review_change_request');
+      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).not.toMatch(/`gh pr |`glab mr /);
+    }
   });
 
   it('uses work-item-specific artifact paths for Factory handoffs', async () => {
@@ -642,6 +664,168 @@ describe('bundled Factory skill assets', () => {
     expect(phase4).toContain('compare against the shared interface or base contract');
   });
 
+  it('makes Factory reviews commit to their own design before the diff and scrutinize their own requests', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const review = await fs.readFile(path.join(assetRoot, 'factory-review', 'SKILL.md'), 'utf8');
+    const section = (heading: string, nextHeading: string) => {
+      const start = review.indexOf(heading);
+      expect(start, `section "${heading}" exists`).toBeGreaterThan(-1);
+      const end = review.indexOf(nextHeading, start);
+      expect(end, `section "${heading}" ends at "${nextHeading}"`).toBeGreaterThan(start);
+      return review.slice(start, end);
+    };
+
+    // Phase 1 is ordered: the reviewer's own design is recorded before the
+    // diff, commits, or file list are opened, so the independent model cannot
+    // be a restatement of the author's implementation.
+    const phase1 = section('## Phase 1: PR Goal & Context', '## Phase 2');
+    const designAt = phase1.indexOf('Write your own design before reading theirs');
+    const diffAt = phase1.indexOf('gh pr diff <number>');
+    expect(designAt).toBeGreaterThan(-1);
+    expect(diffAt).toBeGreaterThan(designAt);
+    expect(phase1).toContain('Do not open the diff, commits, or changed-file list yet');
+    expect(phase1).toContain('the simplest design that satisfies those requirements');
+    expect(phase1).toContain('what you would deliberately not add');
+    expect(phase1).toContain('not a forecast of the author');
+    expect(phase1).toContain('Agreement is valid when independently justified; disagreement needs evidence');
+    expect(phase1).not.toContain('Gauge the author');
+
+    // Probes must be able to detect the claimed failure, and never mutate the
+    // session checkout in place.
+    const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
+    expect(phase3).toContain('A probe must be able to fail');
+    expect(phase3).toContain('test a relevant broken control as well as the fix');
+    expect(phase3).toContain("capture the command's own exit status rather than a pipeline's or wrapper's");
+    expect(phase3).toContain(
+      'disposable worktree or temporary project, never by editing the session checkout in place',
+    );
+
+    // Approach is judged against the recorded design, not only the implementation.
+    const phase4 = section('## Phase 4: History & Architecture', '## Phase 5');
+    expect(phase4).toContain('against the design you recorded in Phase 1');
+    expect(phase4).toContain('is there a simpler way to achieve the required outcome');
+    expect(phase4).toContain('fewer lines or several implementation defects alone do not prove a better design');
+
+    // The self-scrutiny step precedes the adversarial check and the gates, and
+    // requires tracing the reviewer's own requests through affected callers.
+    const verdict = section('## Phase 5: Verdict', '## Phase 6');
+    const scrutinyAt = verdict.indexOf('Scrutinize your own requests as critically as the PR');
+    const adversarialAt = verdict.indexOf('Adversarial check — required before every approve');
+    expect(scrutinyAt).toBeGreaterThan(-1);
+    expect(adversarialAt).toBeGreaterThan(scrutinyAt);
+    expect(verdict).toContain(
+      'whether the approach and scope are justified, not just whether the implementation works',
+    );
+    expect(verdict).toContain('Establish why each requested change belongs in this PR');
+    expect(verdict).toContain('assume the author follows your requests exactly as written');
+    expect(verdict).toContain('without introducing another failure or unnecessary change');
+    expect(verdict).toContain('The verdict and the requests must tell the same story');
+
+    // The handoff carries the approach judgment and unhedged requests.
+    const handoff = section('## Phase 6: Handoff & Transition', '## Behavior Rules');
+    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('imperative and present tense');
+    expect(handoff).toContain('No softened requests');
+    expect(handoff).toContain('Preserve qualifications that express real limits of evidence');
+    expect(review).toContain('**Your design before theirs.**');
+  });
+
+  it('bundles the review category references and loads them between the design and the diff', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const reviewRoot = path.join(assetRoot, 'factory-review');
+    const referencesRoot = path.join(reviewRoot, 'references');
+
+    // The README index is the entry point the skills name; every page it lists
+    // must ship, and the archaeology recipes the pages cite must ship with them.
+    const readme = await fs.readFile(path.join(referencesRoot, 'categories', 'README.md'), 'utf8');
+    const listedPages = [...readme.matchAll(/^\| `([^`]+\.md)` +\|/gm)].map(match => match[1]!);
+    expect(listedPages.length).toBeGreaterThanOrEqual(15);
+    for (const page of listedPages) {
+      await expect(fs.stat(path.join(referencesRoot, 'categories', page))).resolves.toMatchObject({});
+    }
+    const archaeology = await fs.readFile(path.join(referencesRoot, 'archaeology.md'), 'utf8');
+    expect(archaeology).toContain('## Callers');
+    expect(archaeology).toContain('## Test on base');
+    // Interactive-only procedures stay out of the autonomous bundle: publishing
+    // and follow-up pushes are governed by the skill's own contract.
+    expect(archaeology).not.toContain('## Posting');
+    expect(archaeology).not.toContain('## Pushing trivial cleanup');
+    expect(archaeology).not.toContain('mastra_expert');
+    // Category pages that execute PR code carry the token-stripping rule.
+    expect(archaeology).toContain('env -u GH_TOKEN -u GITHUB_TOKEN xargs -a .test-files pnpm vitest run');
+    for (const page of listedPages) {
+      const body = await fs.readFile(path.join(referencesRoot, 'categories', page), 'utf8');
+      expect(body, `${page} uses the factory handoff vocabulary`).not.toMatch(/briefing|Needs you/);
+    }
+
+    // The bundled source serves the sibling files under the mount, which is the
+    // path the core skill_read tool reads through.
+    const mount = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+    const source = new FactorySkillSource(
+      {
+        exists: async () => false,
+        stat: async () => {
+          throw new Error('not used');
+        },
+        readFile: async () => {
+          throw new Error('not used');
+        },
+        readdir: async () => [],
+      } as any,
+      [],
+      undefined,
+    );
+    const servedReadme = String(
+      await source.readFile(path.join(mount, 'factory-review', 'references', 'categories', 'README.md')),
+    );
+    expect(servedReadme).toBe(readme);
+    const servedNames = (await source.readdir(path.join(mount, 'factory-review', 'references', 'categories')))
+      .map(entry => entry.name)
+      .sort();
+    expect(servedNames).toEqual(['README.md', ...listedPages].sort());
+
+    // Every review skill loads the guidance after recording its design and
+    // before opening the diff, and re-reviews point at factory-review's copy.
+    const read = (name: string) => fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+    const review = await read('factory-review');
+    const reviewPhase1 = review.slice(review.indexOf('## Phase 1: PR Goal & Context'), review.indexOf('## Phase 2'));
+    const reviewDesignAt = reviewPhase1.indexOf('Write your own design before reading theirs');
+    const reviewLoadAt = reviewPhase1.indexOf('Load the category guidance before opening the diff');
+    const reviewDiffAt = reviewPhase1.indexOf('gh pr diff <number>');
+    expect(reviewDesignAt).toBeGreaterThan(-1);
+    expect(reviewLoadAt).toBeGreaterThan(reviewDesignAt);
+    expect(reviewDiffAt).toBeGreaterThan(reviewLoadAt);
+    expect(reviewPhase1).toContain('`references/categories/README.md`');
+    expect(reviewPhase1).toContain('Reassess the categories against the actual change');
+
+    const rereview = await read('factory-rereview');
+    const rereviewPhase1 = rereview.slice(
+      rereview.indexOf('## Phase 1: PR Goal & Prior Pass'),
+      rereview.indexOf('## Phase 2'),
+    );
+    const rereviewDesignAt = rereviewPhase1.indexOf('Recover or write your own design before reading theirs');
+    const rereviewLoadAt = rereviewPhase1.indexOf('Load the category guidance before opening the cumulative diff');
+    const rereviewDiffAt = rereviewPhase1.indexOf('gh pr diff <number>');
+    expect(rereviewDesignAt).toBeGreaterThan(-1);
+    expect(rereviewLoadAt).toBeGreaterThan(rereviewDesignAt);
+    expect(rereviewDiffAt).toBeGreaterThan(rereviewLoadAt);
+    expect(rereviewPhase1).toContain('from the `factory-review` skill');
+
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      expect(await read(name), `${name} loads the shared category guidance`).toContain(
+        '`references/categories/README.md` from the `factory-review` skill',
+      );
+    }
+
+    // The GitLab re-review recovers the design before inspecting any diff, so
+    // the independent model cannot be a restatement of the push.
+    const gitlabRereview = await read('factory-gitlab-rereview');
+    const gitlabDesignAt = gitlabRereview.indexOf('Before inspecting any diff, recover the required outcome');
+    const gitlabDiffAt = gitlabRereview.indexOf('Identify changes since the previous reviewed head');
+    expect(gitlabDesignAt).toBeGreaterThan(-1);
+    expect(gitlabDiffAt).toBeGreaterThan(gitlabDesignAt);
+  });
+
   it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const instructions = await fs.readFile(path.join(assetRoot, 'factory-rereview', 'SKILL.md'), 'utf8');
@@ -714,6 +898,32 @@ describe('bundled Factory skill assets', () => {
     expect(handoff).toContain('- **Issue and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
+
+    // Design-first ordering and self-scrutiny mirror factory-review: the
+    // design is recovered from the prior pass (or rewritten) before the
+    // cumulative diff opens, and every carried-forward request is re-justified.
+    const designAt = goalAndPriorPass.indexOf('Recover or write your own design before reading theirs');
+    const diffAt = goalAndPriorPass.indexOf('gh pr diff <number>');
+    expect(designAt).toBeGreaterThan(-1);
+    expect(diffAt).toBeGreaterThan(designAt);
+    expect(goalAndPriorPass).toContain('Do not open the cumulative diff, commits, or changed-file list yet');
+    expect(goalAndPriorPass).toContain('a push does not soften that standard');
+    expect(qualityGate).toContain('A probe must be able to fail');
+    expect(qualityGate).toContain('never by editing the session checkout in place');
+    expect(freshPass).toContain('against the design you recorded in Phase 1');
+    expect(freshPass).toContain('a push that patched the repairs has not answered it');
+    const verdict = section('## Phase 6: Verdict', '## Phase 7');
+    const scrutinyAt = verdict.indexOf('Scrutinize your own requests as critically as the PR');
+    const adversarialAt = verdict.indexOf('Adversarial check — required before every approve');
+    expect(scrutinyAt).toBeGreaterThan(-1);
+    expect(adversarialAt).toBeGreaterThan(scrutinyAt);
+    expect(verdict).toContain('carried forward or new');
+    expect(verdict).toContain(
+      'A prior-pass request that the push showed to be wrong is corrected here, not carried out of loyalty',
+    );
+    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('No softened requests');
+    expect(instructions).toContain('**Your design before theirs.**');
   });
 });
 
@@ -801,6 +1011,57 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('materializes a GitLab-backed session through its provider storage and clone URL', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-gitlab-sessions-'));
+    tempDirs.push(root);
+    mocks.localRoot = root;
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getRepositoryAccess = vi.fn(async () => ({
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
+    }));
+    const workspace = eager(
+      createWorkspaceFactory({
+        sandbox: mocks.createSandbox as any,
+        sourceControls: [
+          {
+            id: 'gitlab',
+            versionControl: { getRepositoryAccess },
+            storage: sourceControl as any,
+          },
+        ],
+      }),
+    );
+    addProject({ repoFullName: 'acme/platform/app' });
+    addSession({ id: 'session-a', branch: 'factory/gitlab-mr-6-2c3b494988ac' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoInfo: expect.objectContaining({
+          repoFullName: 'acme/platform/app',
+          cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+          authUsername: 'oauth2',
+        }),
+        token: 'glpat-secret',
+      }),
+    );
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(String),
+      expect.objectContaining({
+        repoFullName: 'acme/platform/app',
+        cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+        authUsername: 'oauth2',
+        mergeRequestNumber: 6,
+      }),
+    );
+    expect(lastGhToken()).toBeUndefined();
+    expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
@@ -2274,6 +2535,8 @@ describe('FactorySkillSource layering', () => {
     expect(names).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-gitlab-rereview',
+      'factory-gitlab-review',
       'factory-plan',
       'factory-rereview',
       'factory-review',

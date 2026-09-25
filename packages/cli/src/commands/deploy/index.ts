@@ -26,7 +26,7 @@ import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failu
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
-import { abortableDelay } from '../../utils/polling.js';
+import { abortableDelay, isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -203,7 +203,7 @@ export async function resolveWorkersDeployMode(input: {
   if (input.workersOption === 'dedicated') {
     if (!input.redisRequirementMet) {
       throw new WorkersRedisRequirementError(
-        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file, or run `mastra deploy` without --workers and accept the managed Redis attach when prompted.',
+        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file.',
       );
     }
     return 'dedicated';
@@ -1063,7 +1063,7 @@ export async function resolveEnvironment(
 /*  Upload to environment deploy endpoint                             */
 /* ------------------------------------------------------------------ */
 
-async function uploadToEnvironment(
+export async function uploadToEnvironment(
   token: string,
   orgId: string,
   projectId: string,
@@ -1075,9 +1075,29 @@ async function uploadToEnvironment(
     envVars?: Record<string, string>;
     mastraVersion?: string;
     disablePlatformObservability?: boolean;
+    dedicatedWorkersEnabled?: boolean;
   },
 ): Promise<{ id: string; uploadUrl: string }> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
+
+  if (opts.dedicatedWorkersEnabled) {
+    const workersResp = await fetch(`${apiUrl}/v1/projects/${projectId}/workers`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+      body: JSON.stringify({ workersEnabled: true }),
+    });
+
+    if (!workersResp.ok) {
+      const err = await workersResp.json().catch(() => ({}));
+      throw new Error(
+        `Failed to enable dedicated workers: ${(err as { detail?: string }).detail || workersResp.statusText}`,
+      );
+    }
+  }
 
   // Create deploy via environment endpoint.
   //
@@ -1236,7 +1256,9 @@ async function streamEnvironmentDeployLogs(
   }
 }
 
-async function pollEnvironmentDeploy(
+class RetryableDeployPollError extends Error {}
+
+export async function pollEnvironmentDeploy(
   token: string,
   orgId: string,
   projectId: string,
@@ -1265,39 +1287,104 @@ async function pollEnvironmentDeploy(
     streamState,
   ).catch(() => {});
 
+  let lastError: string | undefined;
+  let lastRetryNoticeAt: number | undefined;
+  let recoveryNoticePending = false;
+  const pollAbort = new AbortController();
+  const timeoutError = () => new Error(`Status polling timed out${lastError ? `: ${lastError}` : ''}`);
+  const pollTimeout = setTimeout(() => pollAbort.abort(timeoutError()), Math.max(0, maxWaitMs - (Date.now() - start)));
+
   try {
-    while (Date.now() - start < maxWaitMs) {
-      const resp = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-          'x-organization-id': orgId,
+    while (Date.now() - start < maxWaitMs && !pollAbort.signal.aborted) {
+      const result = await withPollingRetries(
+        async () => {
+          let resp: Response;
+          let body: string;
+          const requestAbort = new AbortController();
+          const requestTimeout = setTimeout(() => requestAbort.abort(), 30_000);
+          try {
+            resp = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${currentToken}`,
+                'x-organization-id': orgId,
+              },
+              signal: AbortSignal.any([pollAbort.signal, requestAbort.signal]),
+            });
+            // Fetch resolves at the headers; the body read must also be retried on connection loss.
+            body = await resp.text();
+          } catch (err) {
+            lastError = err instanceof Error ? err.message : String(err);
+            if (!requestAbort.signal.aborted && !isRetryablePollingError(err)) throw err;
+            throw new RetryableDeployPollError(lastError, { cause: err });
+          } finally {
+            clearTimeout(requestTimeout);
+          }
+
+          if (!resp.ok && resp.status !== 401) {
+            let detail: string | undefined;
+            try {
+              detail = (JSON.parse(body) as { detail?: string } | null)?.detail;
+            } catch {
+              // Gateway errors often contain HTML rather than JSON.
+            }
+            lastError = `Poll failed: ${detail || resp.statusText || resp.status}`;
+            if (resp.status < 500) throw new Error(lastError);
+            throw new RetryableDeployPollError(lastError);
+          }
+
+          // Parse inside the retry operation, but never retry malformed JSON.
+          return resp.status === 401 ? undefined : (JSON.parse(body) as { deploy: UnifiedDeployStatus });
         },
-      });
+        {
+          maxRetries: Infinity,
+          initialDelayMs: 2000,
+          maxDelayMs: 30_000,
+          shouldRetry: error => error instanceof RetryableDeployPollError,
+          onRetry: (_error, _attempt, delayMs) => {
+            const now = Date.now();
+            if (lastRetryNoticeAt !== undefined && now - lastRetryNoticeAt < 30_000) return;
+            logWriter.flush({ resetWindow: true });
+            p.log.warn(
+              `${recoveryNoticePending ? 'Still unable' : 'Unable'} to check deployment status. ` +
+                (maxWaitMs - (now - start) > delayMs
+                  ? `Retrying in ${delayMs / 1000}s; deployment may still be running.`
+                  : 'No time remains for another retry; deployment may still be running.'),
+            );
+            lastRetryNoticeAt = now;
+            recoveryNoticePending = true;
+          },
+        },
+        pollAbort.signal,
+      );
 
-      if (resp.status === 401) {
-        currentToken = await getToken();
-        // Back off before retrying so a persistently-401 token cannot spin
-        // the poll loop into a tight retry storm against the platform API.
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
+      if (result === undefined) {
+        currentToken = await getToken(pollAbort.signal);
+      } else {
+        if (recoveryNoticePending) {
+          logWriter.flush({ resetWindow: true });
+          p.log.info('Deployment status checks resumed.');
+          recoveryNoticePending = false;
+        }
+        lastError = undefined;
+        const { deploy } = result;
+        if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
+          return deploy;
+        }
       }
 
-      if (!resp.ok) {
-        const err = (await resp.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(`Poll failed: ${err.detail || resp.statusText}`);
-      }
-
-      const { deploy } = (await resp.json()) as { deploy: UnifiedDeployStatus };
-
-      if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
-        return deploy;
-      }
-
-      await new Promise(r => setTimeout(r, 2000));
+      await abortableDelay(2000, pollAbort.signal);
     }
 
-    throw new Error('Deploy timed out');
+    throw pollAbort.signal.reason ?? timeoutError();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Unable to confirm deployment status; deployment may still be running. ${detail}\n` +
+        `Check deployment ${deployId}: ${deployDashboardUrl('environment', { orgId, projectId, deployId })}`,
+      { cause: err },
+    );
   } finally {
+    clearTimeout(pollTimeout);
     // Give a connected stream a moment to deliver events already in flight,
     // stop it, wait for the reader to settle, then draw whatever is queued so
     // nothing is lost and nothing prints after the outcome message.
@@ -1829,6 +1916,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
     disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
+    dedicatedWorkersEnabled: workersMode === 'dedicated' && workersEnabled,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

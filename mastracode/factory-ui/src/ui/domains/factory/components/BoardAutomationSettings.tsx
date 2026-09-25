@@ -21,8 +21,8 @@ function AutomationSwitch({
     <Tooltip>
       <TooltipTrigger
         render={
-          <div className="text-icon3 flex items-center gap-2">
-            <Txt as="span" variant="ui-sm">
+          <div className="text-muted-foreground flex items-center gap-2">
+            <Txt as="span" variant="caption">
               {label}
             </Txt>
             <Switch

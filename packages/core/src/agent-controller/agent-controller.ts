@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
@@ -409,8 +407,15 @@ export class AgentController<TState = {}> {
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
-      subscribeToThread: ({ agent, resourceId, threadId }) =>
-        (agent ?? this.getCurrentAgent(session)).subscribeToThread({ resourceId, threadId }),
+      // History lets the runtime skip retained run parts that storage already
+      // covers, so a fresh session never re-acts on finished runs.
+      subscribeToThread: async ({ agent, resourceId, threadId }) =>
+        (agent ?? this.getCurrentAgent(session)).subscribeToThread({
+          resourceId,
+          threadId,
+          withInitialHistory: true,
+          requestContext: await this.buildRequestContext(session),
+        }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
@@ -765,7 +770,7 @@ export class AgentController<TState = {}> {
       this.#sessionsBeingDeleted.add(session);
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
-      session.abort();
+      session.abort({ localOnly: true });
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
@@ -1742,7 +1747,7 @@ export class AgentController<TState = {}> {
    * Load observational memory progress for the current thread.
    * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
-  async loadOMProgress(session: Session<TState>): Promise<void> {
+  async loadOMProgress(session: Session<TState>, isCurrent: () => boolean = () => true): Promise<void> {
     const threadId = session.thread.getId();
     if (!threadId) return;
 
@@ -1826,6 +1831,7 @@ export class AgentController<TState = {}> {
       // and picks up the real step number from the next live status update.
       const stepNumber = 0;
 
+      if (!isCurrent()) return;
       session.emit({
         type: 'om_status',
         windows: {
@@ -1929,6 +1935,7 @@ export class AgentController<TState = {}> {
     tracingOptions,
     untilIdle,
     abortSignal,
+    threadId,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
@@ -1936,8 +1943,11 @@ export class AgentController<TState = {}> {
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
     abortSignal?: AbortSignal;
+    threadId?: string;
   }): Promise<Record<string, unknown>> {
-    const runThreadId = session.thread.getId();
+    // A caller may name the thread the run belongs to (a claimed thread woken by
+    // a peer); otherwise the run belongs to whichever thread the session holds.
+    const runThreadId = threadId ?? session.thread.getId();
     if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
@@ -1995,10 +2005,21 @@ export class AgentController<TState = {}> {
         const data = chunk.data as { toolCallId?: string; progress?: unknown } | undefined;
         if (!data?.toolCallId || data.progress === undefined) return;
 
-        session.emit({ type: 'tool_update', toolCallId: data.toolCallId, partialResult: data.progress });
+        session.emit({
+          type: 'tool_update',
+          threadId: runThreadId,
+          toolCallId: data.toolCallId,
+          partialResult: data.progress,
+        });
         const output = this.formatToolProgressOutput(data.progress);
         if (output) {
-          session.emit({ type: 'shell_output', toolCallId: data.toolCallId, output, stream: 'stdout' });
+          session.emit({
+            type: 'shell_output',
+            threadId: runThreadId,
+            toolCallId: data.toolCallId,
+            output,
+            stream: 'stdout',
+          });
         }
       },
       ...(tracingContext && { tracingContext }),
@@ -2083,7 +2104,7 @@ export class AgentController<TState = {}> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role,
       threadId,
       resourceId,
@@ -2477,6 +2498,6 @@ export class AgentController<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return randomUUID();
+    return globalThis.crypto.randomUUID();
   }
 }

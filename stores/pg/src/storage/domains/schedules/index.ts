@@ -20,10 +20,11 @@ import {
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSchemaName, schemaNamePrefix } from '../../../shared/schema-name';
 import type { DbClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { resolveTargets, runPrune } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -149,7 +150,7 @@ export class SchedulesPG extends SchedulesStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(SchedulesPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -198,7 +199,7 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return SchedulesPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -230,7 +231,7 @@ export class SchedulesPG extends SchedulesStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     statements.push(
@@ -263,7 +264,7 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   #table(tableName: typeof TABLE_SCHEDULES | typeof TABLE_SCHEDULE_TRIGGERS): string {
-    const schema = parseSqlIdentifier(this.#schema, 'schema name');
+    const schema = parseSchemaName(this.#schema);
     return getTableName(tableName, getSchemaName(schema));
   }
 
@@ -373,10 +374,10 @@ export class SchedulesPG extends SchedulesStorage {
     if ('status' in patch && patch.status !== undefined) push('status = ?', patch.status);
     if ('nextFireAt' in patch && patch.nextFireAt !== undefined) push('next_fire_at = ?', patch.nextFireAt);
     if ('target' in patch && patch.target !== undefined) {
-      push('target = ?::jsonb', JSON.stringify(patch.target));
+      push('target = ?::jsonb', toPgJson(patch.target));
     }
     if ('metadata' in patch) {
-      push('metadata = ?::jsonb', patch.metadata != null ? JSON.stringify(patch.metadata) : null);
+      push('metadata = ?::jsonb', patch.metadata != null ? toPgJson(patch.metadata) : null);
     }
     if ('ownerType' in patch) push('owner_type = ?', (patch.ownerType as string | undefined) ?? null);
     if ('ownerId' in patch) push('owner_id = ?', (patch.ownerId as string | undefined) ?? null);

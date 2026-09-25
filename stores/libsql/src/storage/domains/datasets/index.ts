@@ -12,6 +12,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   safelyParseJSON,
   ensureDate,
   hasErrorCode,
@@ -49,6 +50,11 @@ import { tenancyWhere } from '../utils';
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
+}
+
+/** Arbitrary JSON fields distinguish authored JSON null from an absent SQL value. */
+function jsonDataArg(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
 }
 
 export class DatasetsLibSQL extends DatasetsStorage {
@@ -160,7 +166,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return {
       id: row.id as string,
       name: row.name as string,
-      description: row.description as string | undefined,
+      description: (row.description as string | null) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
       groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
@@ -481,6 +487,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const filterConditions: string[] = [];
@@ -539,7 +549,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ${whereClause} ORDER BY ${orderBy.field} ${orderBy.direction}, id ASC LIMIT ? OFFSET ?`,
         args: [...filterParams, limitValue, start],
       });
 
@@ -591,9 +601,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
               args.externalId ?? null,
               args.datasetId,
               args.datasetId,
-              jsonbArg(args.input)!,
-              jsonbArg(args.groundTruth),
-              jsonbArg(args.expectedTrajectory),
+              jsonDataArg(args.input),
+              jsonDataArg(args.groundTruth),
+              jsonDataArg(args.expectedTrajectory),
               jsonbArg(args.toolMocks),
               args.unmockedToolPolicy ?? null,
               jsonbArg(args.scorerIds),
@@ -725,9 +735,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
               existing.externalId ?? null,
               organizationId,
               projectId,
-              jsonbArg(mergedInput)!,
-              jsonbArg(mergedGroundTruth),
-              jsonbArg(mergedExpectedTrajectory),
+              jsonDataArg(mergedInput),
+              jsonDataArg(mergedGroundTruth),
+              jsonDataArg(mergedExpectedTrajectory),
               jsonbArg(mergedToolMocks),
               mergedUnmockedToolPolicy ?? null,
               jsonbArg(mergedScorerIds),
@@ -827,9 +837,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
               existing.externalId ?? null,
               dataset.organizationId ?? null,
               dataset.projectId ?? null,
-              jsonbArg(existing.input)!,
-              jsonbArg(existing.groundTruth),
-              jsonbArg(existing.expectedTrajectory),
+              jsonDataArg(existing.input),
+              jsonDataArg(existing.groundTruth),
+              jsonDataArg(existing.expectedTrajectory),
               jsonbArg(existing.toolMocks),
               existing.unmockedToolPolicy ?? null,
               jsonbArg(existing.scorerIds),
@@ -993,6 +1003,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
       const { page, perPage: perPageInput } = args.pagination;
+      const itemsOrderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
 
       if (args.version !== undefined) {
         // SCD-2 time-travel query — T3.14, T3.22 (no window functions)
@@ -1040,7 +1054,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const end = perPageInput === false ? total : start + perPage;
 
         const result = await this.#client.execute({
-          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY ${itemsOrderBy.field} ${itemsOrderBy.direction}, id ASC LIMIT ? OFFSET ?`,
           args: [...queryParams, limitValue, start],
         });
 
@@ -1095,7 +1109,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY ${itemsOrderBy.field} ${itemsOrderBy.direction}, id ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
@@ -1257,9 +1271,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
                   item.externalId ?? null,
                   dataset.organizationId ?? null,
                   dataset.projectId ?? null,
-                  jsonbArg(item.input)!,
-                  jsonbArg(item.groundTruth),
-                  jsonbArg(item.expectedTrajectory),
+                  jsonDataArg(item.input),
+                  jsonDataArg(item.groundTruth),
+                  jsonDataArg(item.expectedTrajectory),
                   jsonbArg(item.toolMocks),
                   item.unmockedToolPolicy ?? null,
                   jsonbArg(item.scorerIds),
@@ -1376,9 +1390,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
                 item.externalId ?? null,
                 dataset.organizationId ?? null,
                 dataset.projectId ?? null,
-                jsonbArg(item.input)!,
-                jsonbArg(item.groundTruth),
-                jsonbArg(item.expectedTrajectory),
+                jsonDataArg(item.input),
+                jsonDataArg(item.groundTruth),
+                jsonDataArg(item.expectedTrajectory),
                 jsonbArg(item.toolMocks),
                 item.unmockedToolPolicy ?? null,
                 jsonbArg(item.scorerIds),

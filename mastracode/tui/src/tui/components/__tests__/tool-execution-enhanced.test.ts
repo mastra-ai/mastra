@@ -13,6 +13,128 @@ function stripAnsi(text: string): string {
     .replace(/\u001b\]8;;\u0007/g, '');
 }
 
+describe('completed shell/process background status', () => {
+  it.each(['execute_command', 'get_process_output', 'kill_process'])(
+    '%s preserves terminal background badges',
+    toolName => {
+      for (const isError of [false, true]) {
+        const component = new ToolExecutionComponentEnhanced(toolName, { command: 'echo done', pid: '123' }, {}, ui);
+        component.setBackgroundTaskId('shell-task');
+        component.updateResult({ content: [{ type: 'text', text: 'done' }], isError });
+        expect(stripAnsi(component.render(120).join('\n'))).toContain(`${isError ? '✗' : '✓'} background · shell-task`);
+        component.cancelBackground();
+        expect(stripAnsi(component.render(120).join('\n'))).toContain('■ background · shell-task');
+      }
+    },
+  );
+
+  it('preserves inferred shell errors with and without background identity', () => {
+    for (const background of [false, true]) {
+      const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'example' }, {}, ui);
+      if (background) component.setBackgroundTaskId('shell-task');
+      component.updateResult({ content: [{ type: 'text', text: 'Error: failed' }], isError: false });
+      const output = stripAnsi(component.render(120).join('\n'));
+      expect(output).toContain(background ? '✗ background · shell-task' : '✗');
+      if (!background) expect(output).not.toContain('background');
+    }
+  });
+});
+
+describe('agent_signal_send rendering', () => {
+  const args = {
+    targetId: 'code-agent:resource-2:thread-2',
+    message: ['Please review the auth refactor.', 'Focus on session renewal.', 'Report any blocking issues.'].join(
+      '\n',
+    ),
+    priority: 'high',
+    expectsReply: true,
+  };
+
+  it('shows the full sent message and routing outcome', () => {
+    const component = new ToolExecutionComponentEnhanced('agent_signal_send', args, {}, ui);
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain('target:');
+    expect(visible).toContain(args.targetId);
+    expect(visible).toContain('priority: high');
+    expect(visible).toContain('expects reply: yes');
+    expect(visible).toContain('Please review the auth refactor.');
+    expect(visible).toContain('Focus on session renewal.');
+    expect(visible).toContain('Report any blocking issues.');
+    expect(visible).toContain('Delivered high signal to "Peer Reviewer" in run run-1');
+  });
+
+  it.each([
+    ['standard', {}],
+    ['quiet', { quietDisplayMode: 'quiet' as const, quietPreviewLineLimit: 20, collapsedByDefault: true }],
+  ])('preserves paragraphs and grapheme clusters in %s mode', (mode, options) => {
+    const message = `First paragraph.\n\n${'👩‍💻'.repeat(40)}`;
+    const component = new ToolExecutionComponentEnhanced('agent_signal_send', { ...args, message }, options, ui);
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const lines = stripAnsi(component.render(80).join('\n')).split('\n');
+    const firstParagraph = lines.findIndex(line => line.includes('First paragraph.'));
+    const emojiParagraph = lines.findIndex(line => line.includes('👩‍💻'));
+    expect(emojiParagraph - firstParagraph).toBe(2);
+    const visible = lines.join('\n');
+    const graphemes = visible.match(/👩‍💻/gu) ?? [];
+    if (mode === 'standard') expect(graphemes).toHaveLength(40);
+    else expect(graphemes.length).toBeGreaterThan(0);
+    expect(visible.replaceAll('👩‍💻', '')).not.toMatch(/[👩💻‍�]/u);
+  });
+
+  it.each([40, 80, 120, 180])('keeps every word of mixed emoji and text lines in quiet mode at width %i', width => {
+    const message =
+      'This message has two paragraphs and an emoji sequence 👩‍💻👩‍💻👩‍💻 to check wrapping. Please reply with the exact phrase: RECEIVED FULL MESSAGE, and confirm.';
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      { ...args, message },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      ui,
+    );
+
+    const rendered = stripAnsi(component.render(width).join('\n'));
+    const previewText = rendered
+      .split('\n')
+      .filter(line => line.startsWith('  │ '))
+      .map(line => line.slice(4).trimEnd())
+      .join(' ');
+
+    expect(previewText).not.toContain('…');
+    expect(previewText.replace(/\s+/g, '')).toBe(message.replace(/\s+/g, ''));
+  });
+
+  it('shows the opening lines of the message up to the quiet preview line limit', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      args,
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain('send');
+    expect(visible).toContain(args.targetId);
+    expect(visible).toContain('high');
+    expect(visible).toContain('reply expected');
+    expect(visible).toContain('Please review the auth refactor.');
+    expect(visible).toContain('Focus on session renewal.');
+    expect(visible).not.toContain('Report any blocking issues.');
+    expect(visible).not.toContain('Delivered high signal to "Peer Reviewer" in run run-1');
+  });
+});
+
 describe('ToolExecutionComponentEnhanced quiet display', () => {
   it('shows the latest lines from partial generic tool progress in quiet mode', () => {
     const component = new ToolExecutionComponentEnhanced(
@@ -994,14 +1116,14 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('limits quiet shell output to fifteen content lines', () => {
+  it('shows the quiet shell command plus the last N output lines at the preview limit', () => {
+    const command = 'pnpm --filter ./mastracode/tui exec vitest run src/tui --reporter=dot --bail 1 && echo done';
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command: 'printf lines' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
-
     component.updateResult(
       {
         content: [{ type: 'text', text: Array.from({ length: 16 }, (_, i) => `line ${i + 1}`).join('\n') }],
@@ -1010,13 +1132,145 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       false,
     );
 
-    const output = component.render(100).join('\n');
-    const lines = output.split('\n');
-    expect(output).toContain(theme.fg('success', ' ✓'));
-    expect(output).toContain('line 2');
-    expect(output).toContain('line 16');
-    expect(lines.some(line => line.includes('line 1 ') || line.includes('line 1│'))).toBe(false);
-    expect(lines.filter(line => line.includes('line '))).toHaveLength(15);
+    const rendered = component.render(60);
+    const visible = stripAnsi(rendered.join('\n'));
+    expect(rendered.join('\n')).toContain(theme.fg('success', ' ✓'));
+    expect(visible).toContain('╭');
+    expect(visible).toContain('╰');
+    expect(visible).toContain('⋯ (+14 lines)');
+    expect(visible).toContain('line 15');
+    expect(visible).toContain('line 16');
+    expect(visible).not.toMatch(/line 1\b/);
+    expect(visible).not.toContain('line 14');
+    // The `$` prompt identifies the shell box; the tool name would only cost width.
+    expect(visible).toContain('│ $ pnpm');
+    expect(visible).not.toContain('execute_command');
+    // The command wraps rather than truncates so the whole thing is still readable.
+    expect(visible).toContain('--reporter=dot');
+    expect(visible).toContain('echo done');
+  });
+
+  it('streams the last N quiet shell output lines while the command is running', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'pnpm test' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.appendStreamingOutput(['stream 1', 'stream 2', 'stream 3', 'stream 4'].join('\n'));
+
+    const streaming = stripAnsi(component.render(60).join('\n'));
+    expect(streaming).not.toContain('stream 1');
+    expect(streaming).not.toContain('stream 2');
+    expect(streaming).toContain('stream 3');
+    expect(streaming).toContain('stream 4');
+    expect(streaming).toContain('⋯ (+2 lines)');
+  });
+
+  it('shows one extra quiet shell line instead of a marker that would take the same row', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'printf "a\\nb\\nc"' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(60).join('\n'));
+    expect(visible).toContain('out 1');
+    expect(visible).toContain('out 2');
+    expect(visible).toContain('out 3');
+    expect(visible).not.toContain('⋯ (+');
+  });
+
+  it('hides quiet shell output entirely when the preview limit is None', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'seq 1 5' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: '1\n2\n3\n4\n5' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(60).join('\n'));
+    expect(visible).toContain('$ seq 1 5');
+    expect(visible).not.toMatch(/^\s*│ [1-5]/m);
+    expect(visible).not.toContain('⋯ (+');
+    // top, command line, bottom
+    expect(visible.split('\n')).toHaveLength(3);
+  });
+
+  it('expanding a quiet shell tool reveals the full command and output', () => {
+    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', 'EOF'].join('\n');
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 1 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
+
+    const collapsed = stripAnsi(component.render(80).join('\n'));
+    expect(collapsed).not.toContain('open(p)');
+    expect(collapsed).not.toContain('out 1');
+    expect(collapsed).toContain('out 3');
+
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(80).join('\n'));
+    expect(expanded).toContain('open(p)');
+    expect(expanded).toContain('out 1');
+    expect(expanded).toContain('out 3');
+    expect(expanded).not.toContain('⋯ (+');
+
+    component.setExpanded(false);
+    expect(stripAnsi(component.render(80).join('\n'))).not.toContain('out 1');
+  });
+
+  it('caps long quiet shell commands at the preview limit with a hidden-line count', () => {
+    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', "open(p, 'w').write(s)", 'EOF'].join(
+      '\n',
+    );
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain("$ python3 - <<'EOF'");
+    expect(visible).toContain("p = 'file.ts'");
+    expect(visible).not.toContain('open(p)');
+    expect(visible).toContain('⋯ (+3 lines)');
+    expect(visible).toContain('ok');
+    // top, output line, divider, 2 command lines, marker (with status suffix), bottom
+    expect(visible.split('\n')).toHaveLength(7);
+
+    component.setQuietModeDisplay('normal');
+    const full = stripAnsi(component.render(80).join('\n'));
+    expect(full).toContain('open(p)');
+    expect(full).not.toContain('⋯ (+');
+  });
+
+  it('keeps the error tail visible when a quiet shell command fails', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'ls /definitely-not-a-real-path' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult(
+      {
+        content: [{ type: 'text', text: 'ls: /definitely-not-a-real-path: No such file or directory' }],
+        isError: true,
+      },
+      false,
+    );
+
+    const output = component.render(80).join('\n');
+    expect(output).toContain(theme.fg('error', ' ✗'));
+    expect(stripAnsi(output)).toContain('No such file or directory');
   });
 
   it('keeps quiet shell box borders aligned for long git output', () => {
@@ -1055,7 +1309,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1127,7 +1381,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf START-' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1196,7 +1450,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1231,7 +1485,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 

@@ -70,6 +70,13 @@ Add the processor to an agent's `inputProcessors`. Each invocation injects at mo
     isOptional: true,
     description: 'Select a reader for this request. Returning undefined keeps the instance defaults.',
   },
+  {
+    name: 'getBasePath',
+    type: '(args: ProcessInputStepArgs) => string | undefined',
+    isOptional: true,
+    description:
+      'Return the project root for this request. Relative tool paths resolve against it instead of `process.cwd()`, and instruction files outside it are never loaded. Returning undefined keeps `process.cwd()` resolution with no boundary.',
+  },
 ]}
 />
 

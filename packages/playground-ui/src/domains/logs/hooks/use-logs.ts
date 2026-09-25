@@ -24,8 +24,13 @@ interface UseLogsReturn {
 const LOGS_PER_PAGE = 20;
 const LOGS_REFETCH_INTERVAL_MS = 10000;
 
+export type LogsOrderBy = NonNullable<ListLogsArgs['orderBy']>;
+
+const DEFAULT_LOGS_ORDER_BY: LogsOrderBy = { field: 'timestamp', direction: 'DESC' };
+
 export interface LogsFilters {
   filters?: ListLogsArgs['filters'];
+  orderBy?: LogsOrderBy;
 }
 
 function getNextPageParam(lastPage: ListLogsResponse | undefined, _allPages: unknown, lastPageParam: number) {
@@ -64,17 +69,20 @@ export function getLogsRefetchInterval(query: { state: { error: unknown } }) {
   return LOGS_REFETCH_INTERVAL_MS;
 }
 
-export const useLogs: (props?: LogsFilters) => UseLogsReturn = ({ filters }: LogsFilters = {}) => {
+export const useLogs: (props?: LogsFilters) => UseLogsReturn = ({
+  filters,
+  orderBy = DEFAULT_LOGS_ORDER_BY,
+}: LogsFilters = {}) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery<ListLogsResponse, Error, ReturnType<typeof selectLogs>, readonly unknown[], number>({
-    queryKey: ['logs', filters],
+    queryKey: ['logs', filters, orderBy],
     queryFn: ({ pageParam }) =>
       client.listLogsVNext({
         pagination: { page: pageParam, perPage: LOGS_PER_PAGE },
         filters,
-        orderBy: { field: 'timestamp', direction: 'DESC' },
+        orderBy,
       }),
     initialPageParam: 0,
     getNextPageParam,

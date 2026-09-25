@@ -10,6 +10,8 @@ export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LA
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
   'github-pr': 'PR Review',
+  'gitlab-issue': 'GitLab',
+  'gitlab-pr': 'MR Review',
   'linear-issue': 'Linear',
   'jira-issue': 'Jira',
   'incidentio-follow-up': 'incident.io',
@@ -27,11 +29,39 @@ export function metadataLabels(metadata: Record<string, unknown>): string[] {
     : [];
 }
 
+export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
+  if (!metadata.labelColors || typeof metadata.labelColors !== 'object' || Array.isArray(metadata.labelColors))
+    return {};
+  return Object.fromEntries(
+    Object.entries(metadata.labelColors).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' &&
+        (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(entry[1]) || /^[a-z]+$/i.test(entry[1])),
+    ),
+  );
+}
+
 export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
+  if (item.source !== 'github-issue' && item.source !== 'github-pr') return;
   const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
   if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
   return itemNumber;
+}
+
+/** The change-request number a review card carries: a GitHub PR number or a GitLab MR iid. */
+export function changeRequestNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
+  if (item.source === 'github-pr') return githubNumberForItem(item);
+  if (item.source !== 'gitlab-pr') return;
+  const iid = item.metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? iid : undefined;
+}
+
+export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source === 'gitlab-issue' && typeof item.metadata.identifier === 'string') return item.metadata.identifier;
+  if (item.source !== 'gitlab-pr') return;
+  const iid = item.metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
 }
 
 /** The human issue key a Linear card carries (`ENG-123`), when it has one. */
@@ -100,6 +130,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return 'Open in GitLab';
   if (source === 'linear-issue') return 'Open in Linear';
   if (source === 'jira-issue') return 'Open in Jira';
   if (source === 'incidentio-follow-up') return 'Open in incident.io';
@@ -121,7 +152,10 @@ export function workItemMeta(item: WorkItem): string {
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
   const issueIdentifier =
-    linearIdentifierForItem(item) ?? jiraIdentifierForItem(item) ?? incidentioIdentifierForItem(item);
+    gitlabIdentifierForItem(item) ??
+    linearIdentifierForItem(item) ??
+    jiraIdentifierForItem(item) ??
+    incidentioIdentifierForItem(item);
   const issueOwner = assignee ?? author;
   if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
@@ -132,7 +166,11 @@ export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | '
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
   const number = githubNumberForItem(card);
-  const identifier = linearIdentifierForItem(card) ?? jiraIdentifierForItem(card) ?? incidentioIdentifierForItem(card);
+  const identifier =
+    gitlabIdentifierForItem(card) ??
+    linearIdentifierForItem(card) ??
+    jiraIdentifierForItem(card) ??
+    incidentioIdentifierForItem(card);
   const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
   return named.some(text => text.toLowerCase().includes(needle));
 }
@@ -150,11 +188,13 @@ export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: 
  * The card's single conversation. A work item keeps one threadId for its whole
  * lifecycle — every run reuses the worktree's thread — so the card title links
  * to exactly one thread. Items filed while session scoping was broken may
- * still carry divergent role refs; the last-filed ref wins (runs converge them
- * back onto one thread the next time they file).
+ * still carry divergent role refs; prefer the earliest lifecycle role because
+ * JSON object key order is not a stable record of which ref was filed first.
  */
 export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | undefined {
-  return Object.values(sessions).at(-1);
+  return (
+    sessions.triage ?? sessions.plan ?? sessions.work ?? sessions.review ?? sessions.chat ?? Object.values(sessions)[0]
+  );
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

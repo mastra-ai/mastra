@@ -15,7 +15,16 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
-import { backgroundPlaceholderOptOutScenario } from './background-placeholder-opt-out.js';
+import {
+  backgroundAdoptionDeferredScenario,
+  backgroundAdoptionAwaitedScenario,
+  backgroundAdoptionCancelScenario,
+  backgroundAdoptionFailureScenario,
+} from './background-adoption.js';
+import {
+  backgroundPlaceholderOptInScenario,
+  backgroundPlaceholderOptOutScenario,
+} from './background-placeholder-opt-out.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
@@ -25,6 +34,8 @@ import { browserModelPickerScenario } from './browser-model-picker.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
+import { browserStatusChatModelScenario } from './browser-status-chat-model.js';
+import { browserStatusModelScenario } from './browser-status-model.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
 import { browserViewportScenario } from './browser-viewport.js';
@@ -70,6 +81,12 @@ import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
+import {
+  initialPromptResumeScenario,
+  initialPromptScenario,
+  initialPromptSkillScenario,
+  tuiPromptResumeScenario,
+} from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
@@ -125,6 +142,7 @@ import {
   pluginsGithubInstallMissingCorepackScenario,
   pluginsGithubInstallPnpm10Scenario,
   pluginsGithubInstallPnpm11Scenario,
+  pluginsGithubInstallPnpm12Scenario,
   pluginsGithubPollUpdateScenario,
   pluginsGithubProviderSwapScenario,
   pluginsLocalHotReloadScenario,
@@ -166,6 +184,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
+import { statusFooterInlineStartScenario } from './status-footer-inline-start.js';
 import { steerDrainFailureRecoveryScenario } from './steer-drain-failure-recovery.js';
 import { storageFallbackHistoryReloadScenario } from './storage-fallback-history-reload.js';
 import { storageSettingsScenario } from './storage-settings.js';
@@ -222,6 +241,11 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
+  'background-adoption-deferred': backgroundAdoptionDeferredScenario,
+  'background-adoption-awaited': backgroundAdoptionAwaitedScenario,
+  'background-adoption-cancel': backgroundAdoptionCancelScenario,
+  'background-adoption-failure': backgroundAdoptionFailureScenario,
+  'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
@@ -230,6 +254,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-model-picker': browserModelPickerScenario,
   'browser-viewport': browserViewportScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
+  'browser-status-model': browserStatusModelScenario,
+  'browser-status-chat-model': browserStatusChatModelScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-tool-unavailable': browserToolUnavailableScenario,
   'browserbase-startup-restore': browserbaseStartupRestoreScenario,
@@ -273,6 +299,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-resume-single-render': goalResumeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
+  'initial-prompt': initialPromptScenario,
+  'initial-prompt-skill': initialPromptSkillScenario,
+  'initial-prompt-resume': initialPromptResumeScenario,
+  'tui-prompt-resume': tuiPromptResumeScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
@@ -325,6 +355,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
   'plugins-github-install-gh-cli-pnpm-11': pluginsGithubInstallPnpm11Scenario,
+  'plugins-github-install-gh-cli-pnpm-12': pluginsGithubInstallPnpm12Scenario,
   'plugins-github-install-missing-corepack': pluginsGithubInstallMissingCorepackScenario,
   'plugins-github-install-invalid-package-manager': pluginsGithubInstallInvalidPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
@@ -369,6 +400,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'skill-tab-autocomplete': skillTabAutocompleteScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'skills-symlink-dedupe': skillsSymlinkDedupeScenario,
+  'status-footer-inline-start': statusFooterInlineStartScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,

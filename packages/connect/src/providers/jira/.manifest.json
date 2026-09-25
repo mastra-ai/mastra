@@ -3,8 +3,8 @@
   "localId": "jira",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-15T21:35:21.386Z",
-  "toolCount": 37,
+  "generatedAt": "2026-09-22T15:56:53.002Z",
+  "toolCount": 38,
   "skippedActions": [
     {
       "action": "add-attachment",
@@ -13,15 +13,11 @@
     {
       "action": "add-watcher",
       "reason": "exec uses unsupported template SDK helpers: proxy"
-    },
-    {
-      "action": "get-field",
-      "reason": "exec uses unsupported template SDK helpers: zodValidateInput"
     }
   ],
   "files": {
     "index.ts": "1e1ca2fa820b5dc32cbbcff64e4b254adb8b9a6ea4f37be51d08c0bf7f69fec4",
-    "tools.ts": "41a545fc275c14358b353a5f39280f00b2372ca10dd91915d65316a7c89ed729",
+    "tools.ts": "16c051cec5e6d4e9bbb005fcff38d9f69781fc6996ea45a7dffcd99853f230c0",
     "tools/add-comment.ts": "21cd03314a512e7b964d86374f84fdbd55e43d4e4b10808a879181c339fead5d",
     "tools/add-worklog.ts": "78aeac8d6e5ae07a181140181bf39a01ec809bdd572cf956ab978418cec0d289",
     "tools/create-issue-link.ts": "8ac751b89f8eedfb2c00705583e211a9b9413db29993c6bf766cbd52c0fc8d47",
@@ -33,6 +29,7 @@
     "tools/delete-worklog.ts": "29627a94958d25116e5452bb1323fe0f35ac4bfdd2578803a8a54104390c84cf",
     "tools/get-create-issue-metadata.ts": "3d304d8864c87ae0157eda67564addb3f932228e3fac06f1312ddb08da25c23d",
     "tools/get-edit-issue-metadata.ts": "3e87be270c7a35c82917e8034b37b176cc0ae58f09a322b110bf46fd12a1df7a",
+    "tools/get-field.ts": "02e02c4cb16a1650fea5e226e6922b26f022e21f979fd8e3c2220b676f18510b",
     "tools/get-issue-changelog.ts": "a76deeaf26220c53cfc76bb16502cb13a18ea0084defbbcbfcae71d50cdeb404",
     "tools/get-issue-type.ts": "7b81c92f003b5fdff704c76d8a3fb73612ac82fb4718730496b46d3bcb0ea33f",
     "tools/get-issue.ts": "288bf88e69eb3e16718b2fdd32f397bedcb7d32dffe35f74591e15166bd217ce",
@@ -56,7 +53,7 @@
     "tools/remove-watcher.ts": "282152c2fa402a8f71369dcf4ff890c6db83eda3ded21e74cea86318581c9899",
     "tools/search-issues.ts": "55f6fbba552fed8f3ec06465808d2f569d0064d72b521ea11e88090f4b77f7e3",
     "tools/transition-issue.ts": "f8b8a1a9d2c4c2d43e3276b44971d23f6e97d9c87370afdb65867b8043c4f329",
-    "tools/update-comment.ts": "c7d9f28a043ab151cdad29a4ef5ea4fb01df64a8343adff7624f5ae83a9b8e33",
+    "tools/update-comment.ts": "b2fb551454273260fc548cdea8c9be41b15f05c9fc80c822efcef3f144742fa2",
     "tools/update-issue.ts": "d0672edd798d24c1aaac5d880775bcffe2d6a286473810795277f875b54e0ab2",
     "tools/update-worklog.ts": "b3f830b4e9c661baa75d573149c23439d03785301a64c952e293e7d20abcb924"
   }

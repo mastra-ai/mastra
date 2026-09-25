@@ -832,4 +832,74 @@ describe('WorkingMemory', () => {
       expect(mockStorage.getThreadById).not.toHaveBeenCalled();
     });
   });
+
+  describe('Empty working memory', () => {
+    const templates: WorkingMemoryTemplate[] = [
+      { format: 'markdown', content: '# User Profile\n- Name:' },
+      { format: 'json', content: { type: 'object', properties: { name: { type: 'string' } } } },
+    ];
+
+    it.each([
+      ...templates.flatMap(template => [
+        { mode: 'tool', useVNext: false, scope: 'thread' as const, template },
+        { mode: 'tool', useVNext: false, scope: 'resource' as const, template },
+        { mode: 'vNext', useVNext: true, scope: 'thread' as const, template },
+        { mode: 'vNext', useVNext: true, scope: 'resource' as const, template },
+      ]),
+    ])(
+      'renders a fallback instead of "null" ($mode, $scope, $template.format)',
+      async ({ useVNext, scope, template }) => {
+        const processor = new WorkingMemory({ storage: mockStorage, scope, useVNext, template });
+
+        requestContext.set('MastraMemory', {
+          thread: {
+            id: 'thread-123',
+            resourceId: 'resource-1',
+            title: 'Test',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          resourceId: 'resource-1',
+        });
+        vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+          id: 'thread-123',
+          resourceId: 'resource-1',
+          title: 'Test Thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        vi.mocked(mockStorage.getResourceById).mockResolvedValue(null);
+
+        const messageList = new MessageList();
+        messageList.add(
+          [
+            {
+              id: 'msg-1',
+              role: 'user',
+              content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+              createdAt: new Date(),
+            },
+          ],
+          'input',
+        );
+
+        const result = await processor.processInput({
+          messages: [],
+          messageList,
+          abort: () => {
+            throw new Error('Aborted');
+          },
+          requestContext,
+        });
+
+        const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+        expect(resultMessages[0].role).toBe('system');
+        expect(resultMessages[0].content).toContain(
+          '<working_memory_data>\nNo working memory data available.\n</working_memory_data>',
+        );
+        expect(resultMessages[0].content).not.toContain('<working_memory_data>\nnull');
+      },
+    );
+  });
 });

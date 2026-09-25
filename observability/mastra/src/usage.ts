@@ -20,6 +20,8 @@ interface AnthropicMetadata {
   cacheReadInputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheCreation?: AnthropicCacheCreation;
+  /** Raw API usage object; @ai-sdk/anthropic passes the TTL split through here, not as `cacheCreation`. */
+  usage?: { cache_creation?: AnthropicCacheCreation };
 }
 
 interface GoogleUsageMetadata {
@@ -190,6 +192,21 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   if (!isDefined(inputDetails.cacheWrite) && isDefined(usage.cacheCreationInputTokens)) {
     inputDetails.cacheWrite = usage.cacheCreationInputTokens;
   }
+  // Anthropic cache-creation TTL split. @ai-sdk/anthropic never sets `cacheCreation`; the split
+  // arrives raw as `cache_creation` on providerMetadata.anthropic.usage and on usage.raw.
+  const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
+  const cacheCreation =
+    anthropic?.cacheCreation ??
+    anthropic?.usage?.cache_creation ??
+    (usage.raw as { cache_creation?: AnthropicCacheCreation } | undefined)?.cache_creation;
+  const cacheWrite5m = cacheCreation?.ephemeral_5m_input_tokens ?? cacheCreation?.ephemeral5mInputTokens;
+  const cacheWrite1h = cacheCreation?.ephemeral_1h_input_tokens ?? cacheCreation?.ephemeral1hInputTokens;
+  if (!isDefined(inputDetails.cacheWrite5m) && isDefined(cacheWrite5m)) {
+    inputDetails.cacheWrite5m = cacheWrite5m;
+  }
+  if (!isDefined(inputDetails.cacheWrite1h) && isDefined(cacheWrite1h)) {
+    inputDetails.cacheWrite1h = cacheWrite1h;
+  }
   if (
     !isDefined(inputDetails.cacheWrite) &&
     (isDefined(inputDetails.cacheWrite5m) || isDefined(inputDetails.cacheWrite1h))
@@ -203,10 +220,7 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   }
 
   // ===== Anthropic =====
-  // Cache tokens are in providerMetadata.anthropic
   // inputTokens does NOT include cache tokens - need to sum them
-  const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
-
   if (anthropic) {
     const rawV3InputUsage = isV3RawUsage(usage.raw) ? usage.raw.inputTokens : undefined;
     const hasV3CachedTotals =
@@ -216,22 +230,8 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     if (!isDefined(inputDetails.cacheRead) && isDefined(anthropic.cacheReadInputTokens)) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
-    const cacheWrite5m =
-      anthropic.cacheCreation?.ephemeral_5m_input_tokens ?? anthropic.cacheCreation?.ephemeral5mInputTokens;
-    const cacheWrite1h =
-      anthropic.cacheCreation?.ephemeral_1h_input_tokens ?? anthropic.cacheCreation?.ephemeral1hInputTokens;
-    if (!isDefined(inputDetails.cacheWrite5m) && isDefined(cacheWrite5m)) {
-      inputDetails.cacheWrite5m = cacheWrite5m;
-    }
-    if (!isDefined(inputDetails.cacheWrite1h) && isDefined(cacheWrite1h)) {
-      inputDetails.cacheWrite1h = cacheWrite1h;
-    }
-    if (!isDefined(inputDetails.cacheWrite)) {
-      if (isDefined(anthropic.cacheCreationInputTokens)) {
-        inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
-      } else if (isDefined(cacheWrite5m) || isDefined(cacheWrite1h)) {
-        inputDetails.cacheWrite = (cacheWrite5m ?? 0) + (cacheWrite1h ?? 0);
-      }
+    if (!isDefined(inputDetails.cacheWrite) && isDefined(anthropic.cacheCreationInputTokens)) {
+      inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
     // Skip adjustment when inputTokens already includes cache tokens (V3 raw or any positive Mastra-aggregated cache field).

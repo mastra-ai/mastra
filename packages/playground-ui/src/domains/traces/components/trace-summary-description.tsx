@@ -6,22 +6,28 @@ import {
   TimerIcon,
 } from 'lucide-react';
 import type { TraceUsageSummary } from '../trace-list-columns';
-import {
-  formatSpanDuration,
-  formatSpanDurationExact,
-  formatSpanTimestamp,
-  formatSpanTimestampExact,
-} from '../utils/span-utils';
-import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
+import { getSpanDurationMs } from '../utils/span-utils';
+import { TraceStatusValue } from './trace-status-value';
+import type { TraceStatusValueStatus } from './trace-status-value';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { formatCompactNumber, formatCost } from '@/lib/cost';
+import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
+import { formatDuration, formatDurationPrecise } from '@/utils/duration';
 
 function formatEntityType(entityType: string): string {
   return entityType
     .split('_')
     .map(word => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
     .join(' ');
+}
+
+function computeTraceStatus(span: { error?: unknown; endedAt?: Date | string | null }): TraceStatusValueStatus {
+  if (span.error != null) return 'error';
+  if (span.endedAt == null) return 'running';
+  return 'success';
 }
 
 /** Lightweight root-span fields available from `useTraceLightSpans`. */
@@ -31,6 +37,7 @@ type RootSpanSummary = {
   entityType?: string | null;
   startedAt: Date | string;
   endedAt?: Date | string | null;
+  error?: unknown;
 };
 
 export interface TraceSummaryDescriptionProps {
@@ -45,10 +52,10 @@ export interface TraceSummaryDescriptionProps {
 export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkComponent }: TraceSummaryDescriptionProps) {
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
-  const duration = formatSpanDuration(startedAt, endedAt);
-  const exactDuration = formatSpanDurationExact(startedAt, endedAt);
-  const startedAtTimestamp = formatSpanTimestamp(startedAt);
-  const exactStartedAtTimestamp = formatSpanTimestampExact(startedAt);
+  const duration = formatDuration(getSpanDurationMs(startedAt, endedAt));
+  const exactDuration = formatDurationPrecise(getSpanDurationMs(startedAt, endedAt));
+  const startedAtTimestamp = formatDate(startedAt, 'time');
+  const exactStartedAtTimestamp = formatTimestampPrecise(startedAt);
 
   const entityName = rootSpan.entityName || rootSpan.entityId;
   const entityType = rootSpan.entityType;
@@ -72,6 +79,9 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
             {entityName}
           </DataPanel.Meta>
         ))}
+      <DataPanel.Meta tooltip="Trace status">
+        <TraceStatusValue status={computeTraceStatus(rootSpan)} />
+      </DataPanel.Meta>
       {startedAtTimestamp && exactStartedAtTimestamp && (
         <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
           {startedAtTimestamp}
@@ -79,16 +89,18 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
       )}
       {duration && exactDuration && (
         <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
-          {duration}
+          <Txt as="span" variant="label" font="mono">
+            {duration}
+          </Txt>
         </DataPanel.Meta>
       )}
       {usage && (
         <>
           <DataPanel.Meta icon={<ArrowDownToLineIcon />} tooltip="Input tokens">
-            {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
+            {usage.inputTokens === undefined ? '—' : formatCompactNumber(usage.inputTokens)}
           </DataPanel.Meta>
           <DataPanel.Meta icon={<ArrowUpFromLineIcon />} tooltip="Output tokens">
-            {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
+            {usage.outputTokens === undefined ? '—' : formatCompactNumber(usage.outputTokens)}
           </DataPanel.Meta>
           <DataPanel.Meta icon={<CircleDollarSignIcon />} tooltip="Estimated cost">
             {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}

@@ -8,7 +8,7 @@ const meta: Meta<typeof AskUser> = {
   args: { onSubmit: fn() },
   decorators: [
     Story => (
-      <div className="w-full max-w-lg p-4">
+      <div className="w-full max-w-3xl p-4">
         <Story />
       </div>
     ),

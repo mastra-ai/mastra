@@ -1,3 +1,5 @@
+import { ChartTooltip } from '@/ds/components/ChartTooltip';
+
 export function MetricsLineChartTooltip({
   active,
   payload,
@@ -11,18 +13,18 @@ export function MetricsLineChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="border-border1 bg-surface2 text-ui-sm rounded-md border px-3 py-2 shadow-lg">
-      <p className="text-icon6 mb-1 font-medium">{label}</p>
+    <ChartTooltip>
+      <p className="mb-1 text-column text-foreground">{label}</p>
       {payload.map(entry => (
-        <p key={entry.name} className="text-icon2">
+        <p key={entry.name} className="text-foreground">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}:{' '}
           <span className="font-mono">
-            {entry.value}
+            {typeof entry.value === 'number' ? entry.value.toLocaleString('en-US') : entry.value}
             {suffix}
           </span>
         </p>
       ))}
-    </div>
+    </ChartTooltip>
   );
 }

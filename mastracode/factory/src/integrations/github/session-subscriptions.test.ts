@@ -132,6 +132,27 @@ describe('parseCreatedPullRequest', () => {
   ])('rejects unsafe, failed, or ambiguous output', context => {
     expect(parseCreatedPullRequest(context)).toBeUndefined();
   });
+
+  it('reads the pull request URL from a successful shared change-request tool result', () => {
+    expect(
+      parseCreatedPullRequest({
+        toolName: 'source_control_create_change_request',
+        input: { title: 'Fix' },
+        output: { id: '123', url: 'https://github.com/mastra-ai/mastra/pull/123/' },
+      }),
+    ).toBe('https://github.com/mastra-ai/mastra/pull/123');
+  });
+
+  it.each([
+    { output: { url: 'https://gitlab.com/acme/app/-/merge_requests/9' } },
+    { output: { url: 'https://github.com/mastra-ai/mastra/issues/123' } },
+    { output: 'https://github.com/mastra-ai/mastra/pull/123' },
+    { output: { url: 'https://github.com/mastra-ai/mastra/pull/123' }, error: new Error('failed') },
+  ])('ignores shared change-request results that are not a GitHub pull request: %o', context => {
+    expect(
+      parseCreatedPullRequest({ toolName: 'source_control_create_change_request', input: {}, ...context }),
+    ).toBeUndefined();
+  });
 });
 
 describe('GitHub subscription entry points', () => {
@@ -279,22 +300,41 @@ describe('GitHub subscription entry points', () => {
       .github_upsert_factory_triage_comment;
     expect(tool).toBeDefined();
     expect(tool.inputSchema.safeParse({ issueNumber: 7, body: 'not marked' }).success).toBe(false);
-    expect(tool.inputSchema.safeParse({ issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' }).success).toBe(true);
+    expect(
+      tool.inputSchema.safeParse({ issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' }).success,
+    ).toBe(true);
   });
 
   it('serializes concurrent publications so the second call observes the first result', async () => {
     let published = false;
     mocks.upsertTriageComment.mockImplementation(async () => {
-      if (published) return { action: 'updated' as const, commentId: '42', url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-42' };
+      if (published)
+        return {
+          action: 'updated' as const,
+          commentId: '42',
+          url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-42',
+        };
       await new Promise(resolve => setTimeout(resolve, 5));
       published = true;
-      return { action: 'created' as const, commentId: '42', url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-42' };
+      return {
+        action: 'created' as const,
+        commentId: '42',
+        url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-42',
+      };
     });
 
     await expect(
       Promise.all([
-        upsertFactoryTriageComment(authenticatedRequestContext(), { issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' }, githubStub),
-        upsertFactoryTriageComment(authenticatedRequestContext(), { issueNumber: 7, body: '<!-- mastra-factory-triage -->\nFinal' }, githubStub),
+        upsertFactoryTriageComment(
+          authenticatedRequestContext(),
+          { issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' },
+          githubStub,
+        ),
+        upsertFactoryTriageComment(
+          authenticatedRequestContext(),
+          { issueNumber: 7, body: '<!-- mastra-factory-triage -->\nFinal' },
+          githubStub,
+        ),
       ]),
     ).resolves.toMatchObject([{ action: 'created' }, { action: 'updated' }]);
     expect(mocks.upsertTriageComment).toHaveBeenCalledTimes(2);

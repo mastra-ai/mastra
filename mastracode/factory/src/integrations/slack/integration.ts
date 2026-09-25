@@ -71,23 +71,18 @@ export interface SlackIntegrationConfig {
   adapterOptions?: SlackAdapterChannelConfig;
 }
 
-const factoryTypingStatus: TypingStatusFn = (chunk, ctx) => {
+const factoryTypingStatus: TypingStatusFn = chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
-      return `is thinking${nextDots(ctx.currentStatus)}`;
+      return 'is thinking...';
     case 'text-delta':
       return 'is typing...';
     case 'tool-call':
-      return `is working${nextDots(ctx.currentStatus)}`;
+      return 'is working...';
     default:
       return undefined;
   }
 };
-
-function nextDots(currentStatus: string | undefined): string {
-  const dotCount = currentStatus?.match(/\.*$/)?.[0].length ?? 1;
-  return '.'.repeat(dotCount >= 5 ? 2 : dotCount + 1);
-}
 
 /**
  * Drops keys the caller set to `undefined` so spreading the overrides cannot
@@ -126,10 +121,11 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
-    // Repo-backed sessions come from the factory's source-control owner
-    // (GitHub, when registered) — no config-level wiring by the entry.
-    const sourceControlOwner = ctx.storage.sourceControlOwner;
-    this.#repoBackedSessions = Boolean(sourceControlOwner);
+    // Repo-backed sessions select the source-control provider from the linked
+    // repository on each Factory project.
+    const sourceControls =
+      ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
+    this.#repoBackedSessions = sourceControls.length > 0;
     return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,
@@ -139,8 +135,9 @@ export class SlackIntegration implements FactoryIntegration {
       },
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
-      sourceControl: sourceControlOwner,
+      sourceControls,
       memorySettings: ctx.storage.memorySettings,
+      modelPacks: ctx.storage.modelPacks,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
       adapterOptions: {

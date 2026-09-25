@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.18.9-alpha.1",
+  "version": "1.19.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,10 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "pretest": "docker compose up -d --wait || (echo '--- docker compose up failed; dumping diagnostics ---' && docker compose ps -a && docker compose logs && df -h && exit 1)",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:fidelity",
+    "pretest:fidelity": "docker compose --profile fidelity up -d --wait mongodb-fidelity",
+    "test:fidelity": "MONGODB_REPLICA_SET_URL='mongodb://localhost:27019/?directConnection=true' vitest run src/storage/dataset-fidelity.test.ts",
+    "posttest:fidelity": "docker compose --profile fidelity stop mongodb-fidelity",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
@@ -43,6 +46,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
@@ -50,7 +54,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.67.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.68.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

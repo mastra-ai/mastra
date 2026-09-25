@@ -2,6 +2,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { useMaybeSidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import type { SidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
+import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -145,9 +146,7 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="text-ui-xs text-foreground pointer-events-none relative font-semibold tabular-nums">
-          {value}
-        </span>
+        <span className="pointer-events-none relative text-meta text-foreground tabular-nums">{value}</span>
       </div>
     );
   }
@@ -160,7 +159,7 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       data-state={state}
       className={cn(
         'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-border bg-background px-3',
-        href && 'transition-colors hover:bg-card',
+        href && surfaceStateLayerStyle,
         className,
       )}
       style={{ height: CARD_HEIGHT }}
@@ -172,14 +171,14 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       <div className="pointer-events-none relative">
         <div className="flex items-center gap-1.5">
           {tone === 'neutral' ? null : icon}
-          <span className="text-ui-sm text-muted-foreground font-medium">{label}</span>
+          <span className="text-column text-muted-foreground">{label}</span>
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="text-ui-lg text-foreground mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
+        <p className="mt-0.5 text-heading leading-tight text-foreground tabular-nums">{value}</p>
 
         {status ? (
-          <div className="text-ui-xs mt-1">
+          <div className="mt-1 text-meta">
             <p className={cn('truncate', current.text)}>{status}</p>
           </div>
         ) : null}

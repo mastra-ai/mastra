@@ -243,7 +243,8 @@ describe('defineBoard', () => {
     expect(reviewBoard.allowsTransition('review', 'intake')).toBe(true);
     expect(reviewBoard.allowsTransition('done', 'review')).toBe(true);
     expect(reviewBoard.allowsTransition('canceled', 'review')).toBe(true);
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(reviewBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
     expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(reviewBoard.phaseKind('intake')).toBe('resting');
     expect(reviewBoard.roleForPhase('review')).toBe('review');
@@ -259,7 +260,9 @@ describe('defineBoard', () => {
         expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(true);
       }
     }
-    expect(workBoard.rules.intake?.issue?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
+    expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.planning?.manual?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.execute?.issue?.onEnter).toBeTypeOf('function');

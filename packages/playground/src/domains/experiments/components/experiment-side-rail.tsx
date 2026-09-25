@@ -1,13 +1,13 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExperimentFlowChain } from './experiment-flow-chain';
 import { ExperimentRunMeta } from './experiment-run-meta';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import type { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentSideRailProps {
   experiment: DatasetExperiment;
@@ -19,7 +19,7 @@ export interface ExperimentSideRailProps {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h2 className="text-ui-md text-neutral2 tracking-widest uppercase">{title}</h2>
+      <h2 className="text-body tracking-widest text-placeholder uppercase">{title}</h2>
       {children}
     </section>
   );
