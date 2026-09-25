@@ -937,6 +937,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         threadId,
         resourceId,
+        structuredOutput: registryEntry.structuredOutput as any,
         onChunk: streamOptions?.onChunk,
         onStepFinish: streamOptions?.onStepFinish,
         onFinish: async result => {
@@ -1130,6 +1131,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
+        structuredOutput: existingEntry.structuredOutput as any,
         onChunk: resumeOptions?.onChunk,
         onStepFinish: resumeOptions?.onStepFinish,
         onFinish: async result => {
@@ -1351,6 +1353,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        structuredOutput: globalRunRegistry.get(runId)?.structuredOutput as any,
         onChunk: observeOptions?.onChunk,
         onStepFinish: observeOptions?.onStepFinish,
         onFinish: observeOptions?.onFinish,

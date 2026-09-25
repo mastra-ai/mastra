@@ -21,6 +21,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
 import { InngestExecutionEngine } from '../execution-engine';
@@ -1291,6 +1292,82 @@ describe('InngestAgent parity surface', () => {
     // durable replacement is the function defined on the inngestAgent object
     // itself, so it should NOT be the agent's bound generate.
     expect(durableAgent.generate).not.toBe((durableAgent.agent as any).generate);
+  });
+
+  describe('structuredOutput (issue #25148)', () => {
+    const citySchema = z.object({ city: z.string(), country: z.string() });
+
+    async function publishJsonTextRun(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string) {
+      const json = JSON.stringify({ city: 'Paris', country: 'France' });
+      const chunks = [
+        { type: 'text-start', payload: { id: 'text-1' } },
+        { type: 'text-delta', payload: { id: 'text-1', text: json } },
+        { type: 'text-end', payload: { id: 'text-1' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      ];
+      for (const data of chunks) {
+        await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data });
+      }
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: {
+          output: { text: json, steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          stepResult: { reason: 'stop' },
+        },
+      });
+    }
+
+    it('generate() populates object from the model JSON text', async () => {
+      const durableAgent = makeIsolatedAgent('structured-generate');
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async (event: any) => {
+        await publishJsonTextRun(durableAgent, event.data.runId);
+      });
+
+      try {
+        const result = await durableAgent.generate([{ role: 'user', content: 'Paris?' }], {
+          structuredOutput: { schema: citySchema },
+        });
+
+        expect(result.text).toBe('{"city":"Paris","country":"France"}');
+        expect(result.object).toEqual({ city: 'Paris', country: 'France' });
+      } finally {
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('resumeGenerate() populates object using the in-process registry entry', async () => {
+      const durableAgent = makeIsolatedAgent('structured-resume-generate');
+      setSuspendedSnapshot(durableAgent);
+      const runId = 'structured-resume-generate-run';
+      globalRunRegistry.set(runId, {
+        tools: {},
+        model: undefined as any,
+        structuredOutput: { schema: citySchema },
+      } as any);
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.SUSPENDED,
+        data: { suspendedPaths: { 'agentic-loop': ['agentic-loop'] } },
+      });
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+        await publishJsonTextRun(durableAgent, runId);
+      });
+
+      try {
+        const result = await durableAgent.resumeGenerate(runId, { approved: true });
+
+        expect(result.object).toEqual({ city: 'Paris', country: 'France' });
+      } finally {
+        globalRunRegistry.delete(runId);
+        sendSpy.mockRestore();
+      }
+    });
   });
 });
 
