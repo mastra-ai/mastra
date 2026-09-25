@@ -2490,6 +2490,13 @@ describe('GithubRules', () => {
   it('closes the merged Review card and wakes the work item it was opened from', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await createLinkedIssue(workItems, project.id);
+    // The last review asked for changes; the merge overrides it.
+    await workItems.update({
+      orgId: 'org-1',
+      id: work.id,
+      userId: 'user-1',
+      patch: { metadata: { reviewVerdict: 'request changes' } },
+    });
     const card = await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -2535,6 +2542,9 @@ describe('GithubRules', () => {
         }),
       ]),
     );
+
+    // The merge settles the review, so the builder may close its work.
+    expect((await workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.reviewVerdict).toBeNull();
 
     // The fan-out rides the same delivery, so replaying it must stay inert for
     // both cards rather than sending the work item a second reminder.

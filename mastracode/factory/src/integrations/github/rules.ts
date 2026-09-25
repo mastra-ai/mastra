@@ -705,7 +705,20 @@ export class GithubRules {
     const stampClosed = async () => {
       if ((event !== 'pullRequestMerged' && event !== 'pullRequestClosed') || !pullRequestNumber) return;
       for (const card of [relatedItem, linked]) {
-        if (card?.externalSource?.type !== 'pull-request') continue;
+        if (!card) continue;
+        if (card.externalSource?.type !== 'pull-request') {
+          // A merge settles the review, so the authoring Work item's mirrored
+          // "request changes" no longer stops it from being closed.
+          if (event === 'pullRequestMerged' && card.metadata?.reviewVerdict === 'request changes') {
+            await this.options.storage.update({
+              orgId: card.orgId,
+              id: card.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { reviewVerdict: null } },
+            });
+          }
+          continue;
+        }
         await this.options.storage.update({
           orgId: card.orgId,
           id: card.id,

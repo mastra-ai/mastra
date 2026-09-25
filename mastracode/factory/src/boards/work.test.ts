@@ -48,3 +48,33 @@ describe('work board build prompt', () => {
     expect(decision.prompt).toContain('Open a pull request when the work is ready for review.');
   });
 });
+
+describe('work board done policy', () => {
+  function toDone(actor: { type: string; id: string; role?: string }, reviewVerdict?: string | null) {
+    return workBoard.transitionPolicy!({
+      actor,
+      fromStage: 'review',
+      toStage: 'done',
+      isHumanTransition: actor.type === 'human',
+      plansAutoApproved: false,
+      planApproved: false,
+      item: { ...executeContext('issue').item, stages: ['review'], triageType: 'bug', metadata: { reviewVerdict } },
+    } as never);
+  }
+
+  it('keeps the builder from closing work while a review requests changes', () => {
+    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'request changes')).toMatchObject({
+      type: 'reject',
+      code: 'invalid_transition',
+    });
+  });
+
+  it('lets the builder close work once the review approves or the merge settles it', () => {
+    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'approve')).toMatchObject({ type: 'allow' });
+    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, null)).toMatchObject({ type: 'allow' });
+  });
+
+  it('still lets a maintainer close work with changes requested', () => {
+    expect(toDone({ type: 'human', id: 'user-1' }, 'request changes')).toMatchObject({ type: 'allow' });
+  });
+});

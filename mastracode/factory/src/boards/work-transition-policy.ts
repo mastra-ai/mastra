@@ -34,6 +34,16 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
         'Auto-approve plans is off: a maintainer must approve the plan or move this work item into Building from the Factory UI.',
     };
   }
+  // A Factory review requested changes on this item's pull request. Closing the
+  // work now would bury the finding; the next push re-reviews and updates it.
+  if (toStage === 'done' && actor.type === 'agent' && item.metadata?.reviewVerdict === 'request changes') {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason:
+        'The latest Factory review requested changes on this pull request. Address them and push; the re-review updates the verdict. A merge or a maintainer can still close the work.',
+    };
+  }
   const triageType = item.triageType ?? requestedTriageType;
   const entersWork = toStage === 'planning' || toStage === 'execute';
   // An intermediate phase is not evidence of human approval.
