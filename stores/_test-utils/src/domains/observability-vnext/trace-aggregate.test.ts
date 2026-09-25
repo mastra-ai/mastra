@@ -238,6 +238,33 @@ describe('trace-aggregate conformance cases', () => {
     expect(traceAggregateResponseMismatch({ ...response(2900), truncated: true }, { expected })).toMatch(/^truncated/);
   });
 
+  it('traceAggregateResponseMismatch compares buckets as instants, not strings', () => {
+    const expected = {
+      rows: [{ bucket: '2026-08-01T00:00:00.000Z', measures: { count: 1 } }],
+      truncated: false,
+    };
+    for (const bucket of ['2026-08-01T00:00:00Z', '2026-08-01T00:00:00+00:00', '2026-08-01T02:00:00+02:00']) {
+      expect(
+        traceAggregateResponseMismatch({ rows: [{ bucket, measures: { count: 1 } }], truncated: false }, { expected }),
+      ).toBeNull();
+    }
+    expect(
+      traceAggregateResponseMismatch(
+        { rows: [{ bucket: '2026-08-01T00:00:00.001Z', measures: { count: 1 } }], truncated: false },
+        { expected },
+      ),
+    ).toMatch(/^rows\[0\]\.bucket/);
+    expect(
+      traceAggregateResponseMismatch({ rows: [{ measures: { count: 1 } }], truncated: false }, { expected }),
+    ).toMatch(/^rows\[0\]\.bucket/);
+    expect(
+      traceAggregateResponseMismatch(
+        { rows: [{ bucket: 'not-a-date', measures: { count: 1 } }], truncated: false },
+        { expected },
+      ),
+    ).toMatch(/^rows\[0\]\.bucket/);
+  });
+
   it('traceAggregateResponseMismatch ignores record key order but not row order', () => {
     const expected = {
       rows: [

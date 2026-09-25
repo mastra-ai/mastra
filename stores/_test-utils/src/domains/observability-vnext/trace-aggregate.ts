@@ -614,7 +614,8 @@ export function traceAggregateResponseMismatch(
         return `${at}.dimensions.${key}: expected ${JSON.stringify(expectedRow.dimensions![key])}, got ${JSON.stringify(actualRow.dimensions![key])}`;
       }
     }
-    if (actualRow.bucket !== expectedRow.bucket) {
+    // The schema accepts any ISO-8601 offset form, so buckets compare as instants, not strings.
+    if (bucketInstant(actualRow.bucket) !== bucketInstant(expectedRow.bucket)) {
       return `${at}.bucket: expected ${expectedRow.bucket}, got ${actualRow.bucket}`;
     }
     if (sortedKeys(actualRow.measures) !== sortedKeys(expectedRow.measures)) {
@@ -633,6 +634,10 @@ export function traceAggregateResponseMismatch(
     }
   }
   return null;
+}
+
+function bucketInstant(bucket: string | undefined): number | undefined {
+  return bucket === undefined ? undefined : Date.parse(bucket);
 }
 
 function sortedKeys(record: object | undefined): string {
