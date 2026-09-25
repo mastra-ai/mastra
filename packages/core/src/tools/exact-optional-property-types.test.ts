@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tsconfig = join(here, '__tests__/exact-optional/tsconfig.json');
+const fixture = join(here, '__tests__/exact-optional/fixture.ts');
 const tscBin = join(dirname(createRequire(import.meta.url).resolve('typescript/package.json')), 'bin/tsc');
 
 describe('exactOptionalPropertyTypes compatibility', () => {
@@ -16,6 +17,14 @@ describe('exactOptionalPropertyTypes compatibility', () => {
       maxBuffer: 256 * 1024 * 1024,
     });
     expect(result.error).toBeUndefined();
+
+    const files = spawnSync(process.execPath, [tscBin, '-p', tsconfig, '--listFilesOnly'], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    expect(files.status).toBe(0);
+    expect(files.stdout.split('\n').map(line => line.trim())).toContain(fixture);
+
     const output = `${result.stdout}${result.stderr}`;
     const fixtureErrors = output.split('\n').filter(line => line.includes('exact-optional/fixture.ts'));
     expect(fixtureErrors).toEqual([]);
