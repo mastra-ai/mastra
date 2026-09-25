@@ -3238,10 +3238,11 @@ ${formattedMessages}
       if (!result.observed) break;
 
       observed = true;
-      if (observeOtherThreads) {
+      chunk.forEach(message => compactedIds.add(message.id));
+      // In resource scope the strategy observes every pending message of the resource, including
+      // ones beyond this chunk, so use the record's ids rather than just the chunk's.
+      if (this.scope === 'resource') {
         result.record.observedMessageIds?.forEach(id => compactedIds.add(id));
-      } else {
-        chunk.forEach(message => compactedIds.add(message.id));
       }
       status = await this.getStatus(statusArgs());
       const madeProgress = status.pendingTokens < pendingTokens;
