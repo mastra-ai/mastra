@@ -183,12 +183,14 @@ async function validateDurableToolCallAccess({
   runId,
   toolCallId,
   requestContext,
+  threadId,
 }: {
   mastra: any;
   agent: Agent;
   runId: string;
-  toolCallId: string;
+  toolCallId?: string;
   requestContext: RequestContext;
+  threadId?: string;
 }): Promise<void> {
   if (!isDurableAgentLike(agent)) return;
 
@@ -225,11 +227,16 @@ async function validateDurableToolCallAccess({
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
   }
 
+  const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
+  if (threadId && typeof persistedThreadId === 'string' && persistedThreadId && persistedThreadId !== threadId) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+  }
+
   if (
     !snapshot ||
     snapshot.status !== 'suspended' ||
     input?.agentId !== agent.id ||
-    !hasSuspendedToolCall(snapshot, toolCallId)
+    (toolCallId !== undefined && !hasSuspendedToolCall(snapshot, toolCallId))
   ) {
     throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
   }
@@ -2973,6 +2980,15 @@ export const RESUME_STREAM_ROUTE = createRoute({
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId,
+        toolCallId,
+        requestContext: serverRequestContext,
+        threadId: effectiveThreadId,
+      });
+
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
@@ -3165,6 +3181,15 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
           ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId,
+        toolCallId,
+        requestContext: serverRequestContext,
+        threadId: effectiveThreadId,
+      });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
