@@ -291,6 +291,7 @@ export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
+  protected defaultExternalsPreset = false;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -470,7 +471,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableMinify, enableEsmShim, externals }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals, externalsPreset }: BundlerOptions,
     additionalEntries: Record<string, string>,
     toolProjectRoot: string,
   ) {
@@ -491,7 +492,8 @@ export abstract class Bundler extends MastraBundler {
         workspaceRoot,
         projectRoot,
         enableEsmShim,
-        externalsPreset: externals === true,
+        externalsPreset: externals === true || !!externalsPreset,
+        explicitExternals: Array.isArray(externals) ? externals : [],
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, toolProjectRoot);
@@ -602,12 +604,15 @@ export abstract class Bundler extends MastraBundler {
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
     const additionalEntries = this.getAdditionalEntries();
+    const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
+    const entryProjectRoot = closestPkgJson ? dirname(closestPkgJson) : projectRoot;
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
       enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
+      externalsPreset: this.defaultExternalsPreset && bundlerOptions.externals !== false,
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
     };
@@ -620,7 +625,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         {
           outputDir: analyzeDir,
-          projectRoot,
+          projectRoot: entryProjectRoot,
           platform: this.platform,
           bundlerOptions: internalBundlerOptions,
         },
@@ -646,7 +651,7 @@ export abstract class Bundler extends MastraBundler {
 
     const { workspaceRoot } = await getWorkspaceInformation({ dir: projectRoot, mastraEntryFile });
     const sourceDependencyConstraints = await getSourceDependencyConstraints({
-      projectRoot,
+      projectRoot: entryProjectRoot,
       mastraEntryFile,
       workspaceRoot,
     });
