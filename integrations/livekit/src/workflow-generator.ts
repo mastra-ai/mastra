@@ -129,6 +129,11 @@ export function pipeAgentReplyToWriter(
   return forwarded.pipeTo(writer).then(() => text);
 }
 
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new Error(error === undefined ? 'workflow run failed' : String(error));
+}
+
 /**
  * A {@link VoiceReplyGenerator} backed by a Mastra workflow. Per turn it starts a fresh run to
  * completion (LiveKit owns the turn boundary, so there is no suspend/resume and no conversation
@@ -142,11 +147,6 @@ export function pipeAgentReplyToWriter(
  * but silently drops tool calls, so {@link WorkflowReplyGeneratorOptions.toolFeedback} and
  * {@link WorkflowReplyGeneratorOptions.onTurnComplete}'s `result.toolCalls` stay empty.
  */
-function toError(error: unknown): Error {
-  if (error instanceof Error) return error;
-  return new Error(error === undefined ? 'workflow run failed' : String(error));
-}
-
 export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOptions): VoiceReplyGenerator {
   const { workflow, workflowInput, replyStep, resultText, toolFeedback, onTurnComplete } = options;
   return async ctx => {
@@ -184,12 +184,13 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
         try {
           for await (const chunk of output.fullStream) {
             if (cancelled) break;
-            // Step failures don't throw into fullStream; they surface as a failed finish status.
+            // Step failures don't throw into fullStream; stop reading on a failed finish status and
+            // let the output.result check below throw the run's actual error.
             if (
               chunk.type === 'workflow-finish' &&
               (chunk.payload as { workflowStatus?: unknown } | undefined)?.workflowStatus === 'failed'
             ) {
-              throw toError(undefined);
+              break;
             }
             if (chunk.type !== 'workflow-step-output') continue;
             const payload = chunk.payload as { output?: unknown; stepName?: unknown };

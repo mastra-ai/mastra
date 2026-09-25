@@ -265,7 +265,7 @@ describe('createWorkflowReplyGenerator', () => {
     });
 
     it('errors the stream when the run fails mid-reply', async () => {
-      await expectFailedTurn([stepOutput('partial '), failedFinish], failedResult, 'workflow run failed');
+      await expectFailedTurn([stepOutput('partial '), failedFinish], failedResult, 'step boom');
     });
 
     it('errors the stream when the run fails after the reply streamed', async () => {
