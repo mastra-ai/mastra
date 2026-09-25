@@ -285,6 +285,15 @@ describe('annotateObservationTextDates', () => {
     expect(annotateObservationTextDates(input, now)).toBe(input);
   });
 
+  it('leaves ISO dates inside identifiers, versions and paths unchanged', () => {
+    const input = [
+      '* Switched to `gpt-4o-2024-08-06` with api-version=2024-02-15-preview.',
+      '* Added migrations/2024-01-10-add-users.sql on release/2025-09-01; see https://example.com/blog/2024-05-01-launch.',
+      '* Ran `date -d 2024-01-10`.',
+    ].join('\n');
+    expect(annotateObservationTextDates(input, now)).toBe(input);
+  });
+
   it('leaves Date: headers and meaning/estimated notes to their own passes', () => {
     const input = 'Date: Mar 20, 2025\n* Launch (meaning Mar 22, 2025) and (estimated June 2025).';
     expect(annotateObservationTextDates(input, now)).toBe(input);

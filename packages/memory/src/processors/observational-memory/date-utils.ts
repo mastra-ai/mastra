@@ -91,8 +91,9 @@ const RANGE_SEP = String.raw`(?:\s*[–—]\s*|\s*-\s*|\s+(?:to|through|until)\s
 /**
  * Dates written into observation text that carry their own year, longest forms first:
  * "Mar 1 - Mar 18, 2025", "May 27-28, 2023", "January 10, 2024 at 3:00 PM",
- * "June–July 2022", "Dec 2021 – June 2023", "late April 2023", "2024-01-10".
- * Bare years and dates without a year are deliberately not matched.
+ * "June–July 2022", "Dec 2021 – June 2023", "late April 2023".
+ * Bare years, dates without a year, and ISO dates (often part of model IDs, API versions,
+ * paths and branch names) are deliberately not matched.
  */
 const FREE_TEXT_DATE = new RegExp(
   [
@@ -101,7 +102,6 @@ const FREE_TEXT_DATE = new RegExp(
     String.raw`\b${MONTH}\s+${DAY},?\s+${YEAR}${TIME}?`,
     String.raw`\b${QUALIFIER}?${MONTH}(?:\s+${YEAR})?${RANGE_SEP}${QUALIFIER}?${MONTH}\s+${YEAR}`,
     String.raw`\b${QUALIFIER}?${MONTH}\s+${YEAR}`,
-    String.raw`\b${YEAR.replace('(?!\\d)', '')}-\d{2}-\d{2}\b`,
   ].join('|'),
   'g',
 );
