@@ -31,6 +31,7 @@ describe('Settings', () => {
     expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-subheading');
     expect(screen.getByText('Stored in this browser.').classList).toContain('text-caption');
     expect(screen.getByText('Theme').classList).toContain('text-label');
+    expect(screen.getByText('Theme').classList).toContain('wrap-anywhere');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
     expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
     expect(document.querySelector('header')?.classList).toContain('sm:items-center');

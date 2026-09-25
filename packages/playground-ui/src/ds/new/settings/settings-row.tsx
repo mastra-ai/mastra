@@ -59,11 +59,18 @@ export function SettingsRowLayout({
       )}
       {...props}
     >
-      <div className={cn('min-w-0', !isSectionLayout && 'flex flex-col', layout === 'factory' && 'gap-0.5')}>
+      <div
+        className={cn(
+          // Flex rows: the label column grows into the free space so the control
+          // keeps its own width, but never collapses under a full-width control.
+          isSectionLayout ? 'min-w-0' : 'flex min-w-[min(100%,12rem)] flex-1 flex-col',
+          layout === 'factory' && 'gap-0.5',
+        )}
+      >
         <LabelElement
           htmlFor={htmlFor}
           className={cn(
-            'text-label text-foreground',
+            'text-label wrap-anywhere text-foreground',
             viewOnly && 'text-muted-foreground',
             tone === 'destructive' && 'text-destructive',
           )}

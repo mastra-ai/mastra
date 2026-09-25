@@ -12,6 +12,7 @@ import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { Input } from '@/ds/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
 import { ThemeToggle } from '@/ds/components/ThemeToggle';
@@ -47,6 +48,33 @@ export const General: Story = {
         </SettingsRow>
         <SettingsRow label="Notifications" description="Notify when a run finishes">
           <Switch aria-label="Notifications" defaultChecked />
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsGroup>
+  ),
+};
+
+export const LongLabel: Story = {
+  render: () => (
+    <SettingsGroup>
+      <SettingsHeader>
+        <SettingsTitle>Linear routing</SettingsTitle>
+        <SettingsDescription>Labels wrap inside the row instead of overflowing it.</SettingsDescription>
+      </SettingsHeader>
+      <SettingsContainer>
+        <SettingsRow
+          label="linear-project:eyJ3b3Jrc3BhY2VJZCI6IjI0MjZiMDMzLWQ3YmYtNDdjOC1hNDc5LWNlYzEwNjIxYTE5YSIsInByb2plY3RJZCI6IjAwYTM2N2U4LTVjOWEtNGY2Ny04ZDQyLTQ3MjY4MjY4YzUyYiJ9"
+          description="Not routed — this source's issues won't be picked up."
+        >
+          <Select defaultValue="unrouted">
+            <SelectTrigger size="sm" aria-label="Factory for source" className="w-auto">
+              Not routed
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unrouted">Not routed</SelectItem>
+              <SelectItem value="shipyard">Shipyard</SelectItem>
+            </SelectContent>
+          </Select>
         </SettingsRow>
       </SettingsContainer>
     </SettingsGroup>
