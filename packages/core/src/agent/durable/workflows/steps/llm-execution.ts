@@ -57,6 +57,7 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+import { durableOptionsSchema } from '../shared/schemas';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -109,7 +110,7 @@ const durableLLMInputSchema = z.object({
       }),
     )
     .optional(),
-  options: z.any(),
+  options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
   // JSON-safe request context snapshot, forwarded from iteration state so the

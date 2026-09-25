@@ -31,6 +31,7 @@ import {
   modelListEntrySchema,
   durableAgenticOutputSchema,
   baseIterationStateSchema,
+  durableOptionsSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
@@ -114,7 +115,7 @@ const durableAgenticInputSchema = z.object({
   modelList: z.array(modelListEntrySchema).optional(),
   // Serializable scorers configuration, resolved from Mastra by name at runtime
   scorers: z.record(z.string(), z.any()).optional(),
-  options: z.any(),
+  options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
   // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
