@@ -347,6 +347,41 @@ describe('attachment download recovery', () => {
       expect(prompts).toHaveLength(1);
       expect(promptAttachments(prompts[0]!).placeholders).toEqual(['[Attachment unavailable: image/svg+xml]']);
     });
+
+    it('records the attachment on stored messages that carry a URL recorded elsewhere in history', async () => {
+      const { run, memory, prompts } = setup({ durable });
+      await memory.saveThread({
+        thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+      });
+      const stored = (id: string, createdAt: Date, metadata?: Record<string, unknown>) => ({
+        id,
+        role: 'user' as const,
+        threadId: 'thread',
+        resourceId: 'resource',
+        createdAt,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'file' as const, mimeType: 'application/pdf', data: url }],
+          ...(metadata ? { metadata } : {}),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          stored('recorded', new Date(1_000), { mastra: { sealed: true, unavailableAttachments: [url] } }),
+          stored('unrecorded', new Date(2_000), { mastra: { sealed: true } }),
+        ],
+      });
+      const result = await run('Continue');
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      expect(requests).toBe(0);
+      expect(promptAttachments(prompts[0]!).placeholders).toHaveLength(2);
+      const { messages } = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
+      expect(messages.find(message => message.id === 'unrecorded')?.content.metadata?.mastra).toEqual({
+        sealed: true,
+        unavailableAttachments: [url],
+      });
+    });
   });
 
   it.each([0, 2])('bounds unsuccessful processor retries to %i before skipping the attachment', async budget => {
