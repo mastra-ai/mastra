@@ -330,6 +330,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     }
 
     if (!args.traceId) {
+      await this.#emitRecordedEvent(buildScoreEvent({ spanId: args.spanId, score: args.score }));
       return;
     }
 
@@ -339,12 +340,13 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
     if (!event) {
       this.logger?.warn(
-        `Score event was dropped because the target trace/span was not found in observability storage (traceId: ${args.traceId}, spanId: ${args.spanId})`,
+        `Score event was emitted without trace context because the target trace/span was not found in observability storage (traceId: ${args.traceId}, spanId: ${args.spanId})`,
       );
-      return;
     }
 
-    await this.#emitRecordedEvent(event);
+    await this.#emitRecordedEvent(
+      event ?? buildScoreEvent({ traceId: args.traceId, spanId: args.spanId, score: args.score }),
+    );
   }
 
   async addFeedback(args: {
@@ -369,6 +371,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     }
 
     if (!args.traceId) {
+      await this.#emitRecordedEvent(buildFeedbackEvent({ spanId: args.spanId, feedback: args.feedback }));
       return;
     }
 
@@ -378,12 +381,13 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
     if (!event) {
       this.logger?.warn(
-        `Feedback event was dropped because the target trace/span was not found in observability storage (traceId: ${args.traceId}, spanId: ${args.spanId})`,
+        `Feedback event was emitted without trace context because the target trace/span was not found in observability storage (traceId: ${args.traceId}, spanId: ${args.spanId})`,
       );
-      return;
     }
 
-    await this.#emitRecordedEvent(event);
+    await this.#emitRecordedEvent(
+      event ?? buildFeedbackEvent({ traceId: args.traceId, spanId: args.spanId, feedback: args.feedback }),
+    );
   }
 
   /** Register a named observability instance, optionally marking it as default. */
@@ -480,6 +484,10 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     traceId: string,
     build: (trace: GetTraceResponse) => TEvent | null,
   ): Promise<TEvent | null> {
+    if (!(await this.#getObservabilityStorage())) {
+      return null;
+    }
+
     for (const delayMs of [0, ...RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS]) {
       if (delayMs > 0) {
         await new Promise(resolve => setTimeout(resolve, delayMs));

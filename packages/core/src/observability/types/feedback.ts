@@ -10,6 +10,12 @@ import type { CorrelationContext } from './core';
  * Used with recordedSpan.addFeedback() and recordedTrace.addFeedback().
  */
 export interface FeedbackInput {
+  /** Caller-supplied id for this feedback record; generated when omitted */
+  feedbackId?: string;
+
+  /** Initial review workflow status; defaults to `needs-review` */
+  reviewStatus?: 'needs-review' | 'reviewed';
+
   /**
    * @deprecated Use `feedbackSource` instead.
    * Source of the feedback (e.g., "user", "admin", "qa")
@@ -62,7 +68,7 @@ export interface FeedbackInput {
  * User-defined metadata is inherited from the span/trace receiving feedback.
  */
 export interface ExportedFeedback {
-  /** Unique identifier for this feedback event, generated at emission time */
+  /** Unique identifier for this feedback event, generated at emission time unless the caller supplied one */
   feedbackId: string;
 
   /** When the feedback was recorded */
@@ -117,6 +123,9 @@ export interface ExportedFeedback {
    * Inherited from the span/trace receiving feedback, merged with feedback-specific metadata.
    */
   metadata?: Record<string, unknown>;
+
+  /** Review workflow status; storage defaults to `needs-review` when omitted */
+  reviewStatus?: 'needs-review' | 'reviewed';
 }
 
 // ============================================================================

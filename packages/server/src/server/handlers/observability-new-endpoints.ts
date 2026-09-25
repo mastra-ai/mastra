@@ -655,10 +655,27 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
   },
 });
 
+/** HTTP bodies allow `null` for optional fields; the event bus inputs only take `undefined`. */
+function withoutNulls<T extends object>(value: T): { [K in keyof T]: Exclude<T[K], null> } {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null)) as {
+    [K in keyof T]: Exclude<T[K], null>;
+  };
+}
+
 export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   bodySchema: createScoreBodySchema,
   responseSchema: createScoreResponseSchema,
   handler: async ({ mastra, score }) => {
+    const { traceId, spanId, ...input } = score;
+    const observability = mastra.observability;
+    if (observability?.addScore && observability.listInstances().size > 0) {
+      await observability.addScore({
+        ...(traceId ? { traceId } : {}),
+        ...(spanId ? { spanId } : {}),
+        score: withoutNulls(input),
+      });
+      return { success: true };
+    }
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createScore({
       score: { ...score, scoreId: score.scoreId ?? generateSignalId(), timestamp: new Date() },
@@ -778,13 +795,25 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   handler: async ({ mastra, requestContext, feedback }) => {
     const user = requestContext.get(MASTRA_USER_KEY);
     const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
+    const attribution =
+      typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+        ? { feedbackUserId: authenticatedId }
+        : {};
+    const { traceId, spanId, ...input } = feedback;
+    const observability = mastra.observability;
+    if (observability?.addFeedback && observability.listInstances().size > 0) {
+      await observability.addFeedback({
+        ...(traceId ? { traceId } : {}),
+        ...(spanId ? { spanId } : {}),
+        feedback: { ...withoutNulls(input), ...attribution },
+      });
+      return { success: true };
+    }
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createFeedback({
       feedback: {
         ...feedback,
-        ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
-          ? { feedbackUserId: authenticatedId }
-          : {}),
+        ...attribution,
         feedbackId: feedback.feedbackId ?? generateSignalId(),
         timestamp: new Date(),
         reviewStatus: feedback.reviewStatus ?? 'needs-review',
