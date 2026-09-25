@@ -13,6 +13,7 @@ import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBM
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
+import { stableStringify } from './cache/stable-stringify';
 import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
@@ -130,6 +131,59 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
     return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
   });
   return changed ? { ...live, content: { ...live.content, parts } } : live;
+}
+
+/**
+ * Moves tool calls held by a sealed message forward, in place, with the matching calls from a later
+ * copy of that message (e.g. an approved call that now has its result). Returns whether any moved.
+ */
+function advanceFrozenToolInvocations(frozen: MastraDBMessage, incoming: MastraDBMessage): boolean {
+  const frozenStates = new Map<string, MastraToolInvocation['state']>();
+  for (const part of frozen.content.parts) {
+    if (part.type === 'tool-invocation') frozenStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+  }
+  const advancing = incoming.content.parts.filter(part => {
+    if (part.type !== 'tool-invocation') return false;
+    const frozenState = frozenStates.get(part.toolInvocation.toolCallId);
+    return !!frozenState && advancesToolInvocationState(frozenState, part.toolInvocation.state);
+  });
+  if (advancing.length === 0) return false;
+  MessageMerger.merge(frozen, { ...incoming, content: { format: 2, parts: advancing } });
+  return true;
+}
+
+// Identifies a part by its content: seal markers (metadata) and add-time stamps (createdAt) differ
+// between copies of the same part.
+function partContentKey(part: MastraMessagePart): string {
+  const { metadata: _metadata, createdAt: _createdAt, ...content } = part as MastraMessagePart & { metadata?: unknown };
+  return stableStringify(content);
+}
+
+/**
+ * Returns the parts of a later copy of a sealed message that belong in a new message. Parts past
+ * the seal boundary are new. A copy that doesn't extend past the boundary (e.g. the whole message
+ * re-added with a call resolved) contributes only parts the sealed message doesn't already hold.
+ * Tool calls the sealed message holds are never copied - they move forward in place - and neither
+ * is signed reasoning: repeating it makes providers such as Anthropic reject the thread.
+ */
+function partsMissingFromFrozenMessage(frozen: MastraDBMessage, incoming: MastraDBMessage): MastraMessagePart[] {
+  const frozenParts = frozen.content.parts;
+  const sealedIndex = frozenParts.findLastIndex(
+    part => !!(part as { metadata?: { mastra?: { sealedAt?: number } } }).metadata?.mastra?.sealedAt,
+  );
+  const sealedPartCount = sealedIndex === -1 ? frozenParts.length : sealedIndex + 1;
+  const frozenToolCallIds = new Set(
+    frozenParts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [])),
+  );
+  const isFrozenToolCall = (part: MastraMessagePart) =>
+    part.type === 'tool-invocation' && frozenToolCallIds.has(part.toolInvocation.toolCallId);
+
+  if (incoming.content.parts.length > sealedPartCount) {
+    return incoming.content.parts.slice(sealedPartCount).filter(part => !isFrozenToolCall(part));
+  }
+
+  const frozenPartKeys = new Set(frozenParts.map(partContentKey));
+  return incoming.content.parts.filter(part => !isFrozenToolCall(part) && !frozenPartKeys.has(partContentKey(part)));
 }
 
 /**
@@ -2231,63 +2285,25 @@ export class MessageList {
       if (shouldReplace && existingMessage) {
         const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
 
-        // If the existing message is sealed (e.g., after observation), don't replace it.
-        // Instead, generate a new ID for the incoming message and add it as a new message.
-        if (MessageMerger.isSealed(existingMessage)) {
-          // Find the last part with sealedAt metadata in the EXISTING message.
-          // The existing message has the seal boundary marker from insertObservationMarker.
-          const existingParts = existingMessage.content?.parts || [];
-          let sealedPartCount = 0;
-
-          for (let i = existingParts.length - 1; i >= 0; i--) {
-            const part = existingParts[i] as { metadata?: { mastra?: { sealedAt?: number } } };
-            if (part?.metadata?.mastra?.sealedAt) {
-              // The seal is at index i, so sealed content is parts 0 through i (inclusive)
-              sealedPartCount = i + 1;
-              break;
-            }
+        // A sealed message (e.g., after observation), or one at or before the latest seal, must not
+        // be replaced or grown. Tool calls it already holds move forward in place; any other parts it
+        // doesn't have yet go into a new message with a fresh ID.
+        if (MessageMerger.isSealed(existingMessage) || existingIsAtOrBeforeSealedBoundary) {
+          if (messagesAreEqual(existingMessage, messageV2)) {
+            return this;
           }
 
-          // If no sealedAt found, use the entire existing message length as the boundary
-          if (sealedPartCount === 0) {
-            sealedPartCount = existingParts.length;
+          if (advanceFrozenToolInvocations(existingMessage, messageV2) && messageSource !== 'memory') {
+            this.pushMessageToSource(existingMessage, messageSource);
           }
 
-          // Get parts from incoming message that are beyond the sealed boundary
-          const incomingParts = messageV2.content.parts;
-
-          let newParts: typeof incomingParts;
-
-          if (incomingParts.length <= sealedPartCount) {
-            // Incoming message has fewer or equal parts than the sealed boundary.
-            // Check if these are truly stale (same content as the sealed message) or
-            // new content flushed independently (e.g., text deltas flushed with the
-            // same messageId but only containing a text part).
-            if (messagesAreEqual(existingMessage, messageV2)) {
-              // Stale message, ignore - don't replace, don't create new
-              return this;
-            }
-            // Not stale — these are fresh parts (e.g., a text flush). Treat all as new.
-            newParts = incomingParts;
-          } else {
-            newParts = incomingParts.slice(sealedPartCount);
+          const newParts = partsMissingFromFrozenMessage(existingMessage, messageV2);
+          if (newParts.length === 0) {
+            return this;
           }
-
-          // Only create a new message if there are actually new parts
-          if (newParts.length > 0) {
-            // Generate a new ID for the incoming message
-            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
-            // Replace the parts with only the new ones
-            messageV2.content.parts = newParts;
-            // Ensure the new message has a timestamp after the sealed message
-            if (messageV2.createdAt <= existingMessage.createdAt) {
-              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
-            }
-            this.messages.push(messageV2);
-          }
-          // If no new parts, don't add anything (the sealed message already has all the content)
-        } else if (existingIsAtOrBeforeSealedBoundary) {
           messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+          messageV2.content.parts = newParts;
+          // Ensure the new message has a timestamp after the sealed message
           if (messageV2.createdAt <= existingMessage.createdAt) {
             messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
           }

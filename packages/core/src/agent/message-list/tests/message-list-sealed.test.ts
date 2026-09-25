@@ -420,4 +420,136 @@ describe('MessageList sealed message handling', () => {
     expect(newAssistant).toBeDefined();
     expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('new content after boundary');
   });
+
+  // https://github.com/mastra-ai/mastra/issues/22802
+  describe('same-id copy of a sealed message whose tool call has resolved', () => {
+    const signedReasoning = (): MastraMessagePart =>
+      ({
+        type: 'reasoning',
+        reasoning: '',
+        details: [{ type: 'text', text: 'Need approval first.', signature: 'sig-1' }],
+        providerMetadata: { anthropic: { signature: 'sig-1' } },
+      }) as MastraMessagePart;
+
+    const approvalMessage = (state: 'call' | 'result', options: { sealed: boolean }): MastraDBMessage =>
+      ({
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+        content: {
+          format: 2,
+          parts: [
+            signedReasoning(),
+            { type: 'text', text: 'May I run the workflow?' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state,
+                toolCallId: 'call-1',
+                toolName: 'runWorkflow',
+                args: { id: 'wf-1' },
+                ...(state === 'result' ? { result: 'complete' } : {}),
+              },
+              ...(options.sealed ? { metadata: { mastra: { sealedAt: 1 } } } : {}),
+            },
+          ] as MastraMessagePart[],
+          ...(options.sealed ? { metadata: { mastra: { sealed: true } } } : {}),
+        },
+      }) as MastraDBMessage;
+
+    const createList = () => {
+      const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Run the workflow' }] },
+        } as MastraDBMessage,
+        'memory',
+      );
+      return messageList;
+    };
+
+    const assistantMessages = (messageList: MessageList) =>
+      messageList.get.all.db().filter(message => message.role === 'assistant');
+
+    const signatureCountInPrompt = (messageList: MessageList) =>
+      JSON.stringify(messageList.get.all.aiV5.model()).match(/sig-1/g)?.length ?? 0;
+
+    const toolInvocation = (message: MastraDBMessage | undefined) =>
+      message?.content.parts.find(part => part.type === 'tool-invocation')?.toolInvocation;
+
+    it('resolves the call in the sealed message instead of copying its reasoning into a new message', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      messageList.add(approvalMessage('result', { sealed: false }), 'response');
+
+      const assistants = assistantMessages(messageList);
+      expect(assistants).toHaveLength(1);
+      expect(assistants[0]!.id).toBe('assistant-1');
+      expect(assistants[0]!.content.parts.filter(part => part.type === 'reasoning')).toHaveLength(1);
+      expect(toolInvocation(assistants[0])).toMatchObject({ state: 'result', result: 'complete' });
+      expect(assistants[0]!.content.metadata?.mastra).toMatchObject({ sealed: true });
+      expect(signatureCountInPrompt(messageList)).toBe(1);
+      // The resolved call must be persisted.
+      expect(messageList.get.response.db().map(message => message.id)).toContain('assistant-1');
+    });
+
+    it('ignores a reloaded stored copy that still has the call pending', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('result', { sealed: true }), 'response');
+
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      const assistants = assistantMessages(messageList);
+      expect(assistants).toHaveLength(1);
+      expect(toolInvocation(assistants[0])).toMatchObject({ state: 'result', result: 'complete' });
+      expect(signatureCountInPrompt(messageList)).toBe(1);
+    });
+
+    it('splits only content added after the seal into a new message', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      const resumed = approvalMessage('result', { sealed: false });
+      resumed.content.parts.push({ type: 'text', text: 'The workflow finished.' });
+      messageList.add(resumed, 'response');
+
+      const assistants = assistantMessages(messageList);
+      expect(assistants).toHaveLength(2);
+      expect(toolInvocation(assistants[0])).toMatchObject({ state: 'result', result: 'complete' });
+      expect(assistants[1]!.id).not.toBe('assistant-1');
+      expect(assistants[1]!.content.parts).toEqual([
+        expect.objectContaining({ type: 'text', text: 'The workflow finished.' }),
+      ]);
+      expect(signatureCountInPrompt(messageList)).toBe(1);
+    });
+
+    it('does not copy a message before the seal boundary when its call resolves', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: false }), 'memory');
+      messageList.add(
+        {
+          id: 'sealed-boundary',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:02.000Z'),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Later reply', metadata: { mastra: { sealedAt: 2 } } }],
+            metadata: { mastra: { sealed: true } },
+          },
+        } as MastraDBMessage,
+        'memory',
+      );
+
+      messageList.add(approvalMessage('result', { sealed: false }), 'response');
+
+      const assistants = assistantMessages(messageList);
+      expect(assistants.map(message => message.id)).toEqual(['assistant-1', 'sealed-boundary']);
+      expect(toolInvocation(assistants[0])).toMatchObject({ state: 'result', result: 'complete' });
+      expect(signatureCountInPrompt(messageList)).toBe(1);
+    });
+  });
 });
