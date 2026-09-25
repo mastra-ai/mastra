@@ -99,6 +99,9 @@ describe('OpenAISchemaCompatLayer', () => {
         expect(ratio).not.toHaveProperty(keyword);
       }
       expect(ratio.anyOf.map((b: any) => b.type)).toEqual(['number', 'null']);
+      expect(ratio.description).toContain('greater than or equal to 0');
+      expect(ratio.description).toContain('lower than or equal to 1');
+      expect(ratio.description).toContain('multiple of 0.5');
       expect(count).toEqual({
         description: 'constraints: greater than 0',
         anyOf: [{ type: 'integer', format: 'int64' }, { type: 'null' }],
