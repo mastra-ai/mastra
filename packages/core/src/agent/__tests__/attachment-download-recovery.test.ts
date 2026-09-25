@@ -13,12 +13,15 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
 
-function makeModel(supported = false) {
+function makeModel(supported: boolean | 'data-urls' = false) {
   const prompts: LanguageModelV2Prompt[] = [];
   const model = new MockLanguageModelV2({
-    supportedUrls: supported
-      ? { 'image/*': [/^http:\/\/127\.0\.0\.1:/], 'application/pdf': [/^http:\/\/127\.0\.0\.1:/] }
-      : {},
+    supportedUrls:
+      supported === 'data-urls'
+        ? { '*/*': [/^data:/] }
+        : supported
+          ? { 'image/*': [/^http:\/\/127\.0\.0\.1:/], 'application/pdf': [/^http:\/\/127\.0\.0\.1:/] }
+          : {},
     doGenerate: async ({ prompt }) => {
       prompts.push(prompt);
       return {
@@ -385,6 +388,76 @@ describe('attachment download recovery', () => {
         }
       },
     );
+
+    // Models that accept data URLs get them as-is, so invalid content would reach the provider
+    // (and be rejected on every turn) without being caught by a download failure.
+    it.each([
+      ['a new file part with an extensionless relative path', 'input', '/api/attachments/123', 'image/png'],
+      [
+        'a stored data URL wrapping a relative path',
+        'stored',
+        'data:image/png;base64,/api/images/foo.png',
+        'image/png',
+      ],
+      ['image data that is not an image', 'input', 'data:image/png;base64,aGVsbG8=', 'image/png'],
+      ['PDF data that is not a PDF', 'input', 'data:application/pdf;base64,aGVsbG8=', 'application/pdf'],
+    ] as const)(
+      'gives %s the placeholder when the model accepts data URLs',
+      async (_label, source, data, mediaType) => {
+        const dataUrlModel = makeModel('data-urls');
+        const { run, memory } = setup({ durable, models: [dataUrlModel.model] });
+        const filePart = { type: 'file' as const, data, mediaType };
+        if (source === 'stored') {
+          await memory.saveThread({
+            thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+          });
+          await memory.saveMessages({
+            messages: [
+              {
+                id: 'poisoned',
+                role: 'user',
+                threadId: 'thread',
+                resourceId: 'resource',
+                createdAt: new Date(),
+                content: { format: 2, parts: [{ type: 'file', mimeType: mediaType, data }] },
+              },
+            ],
+          });
+        } else {
+          const result = await run([{ role: 'user', content: [filePart] }]);
+          expect(result.errors).toEqual([]);
+        }
+        const result = await run('Continue');
+        expect(result.errors).toEqual([]);
+        expect(result.text).toBe('ok');
+        for (const prompt of dataUrlModel.prompts) {
+          expect(promptAttachments(prompt)).toEqual({
+            files: [],
+            placeholders: [`[Attachment unavailable: ${mediaType}]`],
+          });
+        }
+      },
+    );
+
+    it.each([
+      [
+        'PNG',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'image/png',
+      ],
+      ['JPEG labelled as PNG', '/9j/4AAQSkZJRgABAQ==', 'image/png'],
+      ['SVG', 'PHN2Zz48L3N2Zz4=', 'image/svg+xml'],
+      ['PDF', 'JVBERi0xLjQK', 'application/pdf'],
+    ] as const)('still sends real %s content to a model that accepts data URLs', async (_label, data, mediaType) => {
+      const dataUrlModel = makeModel('data-urls');
+      const { run } = setup({ durable, models: [dataUrlModel.model] });
+      const result = await run([{ role: 'user', content: [{ type: 'file', data, mediaType }] }]);
+      expect(result.errors).toEqual([]);
+      expect(dataUrlModel.prompts).toHaveLength(1);
+      const { files, placeholders } = promptAttachments(dataUrlModel.prompts[0]!);
+      expect(placeholders).toEqual([]);
+      expect(files).toHaveLength(1);
+    });
 
     it('records the attachment on stored messages that carry a URL recorded elsewhere in history', async () => {
       const { run, memory, prompts } = setup({ durable });

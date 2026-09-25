@@ -1002,7 +1002,8 @@ export class MessageList {
           downloadRetries: options?.downloadRetries,
           supportedUrls: options?.supportedUrls,
           cache: this.assetDownloads,
-          isUnavailable: url => unavailableUrls.has(url),
+          // Invalid inline content gets the placeholder below; don't try to decode it first.
+          isUnavailable: url => unavailableUrls.has(url) || (url.startsWith('data:') && !isSendableFileData(url)),
           onUnavailable: (url, error) => {
             const isDataUrl = url.startsWith('data:');
             // A network download failure goes to error processors and fallback models first.
@@ -1039,11 +1040,12 @@ export class MessageList {
                   if (part.type === 'image' || part.type === 'file') {
                     const assetUrl = getAssetUrl(part);
                     const data = part.type === 'image' ? part.image : part.data;
-                    const unsendable = typeof data === 'string' && !isSendableFileData(data);
+                    const unsendable = typeof data === 'string' && !isSendableFileData(data, part.mediaType);
                     if (unsendable) {
-                      this.logger?.warn(
-                        `Skipping an attachment that is neither a URL nor base64: ${data.slice(0, 100)}`,
-                      );
+                      const shown = data.startsWith('data:')
+                        ? `${data.slice(0, data.indexOf(',') + 1)}<${data.length} chars>`
+                        : data.slice(0, 100);
+                      this.logger?.warn(`Skipping an attachment that is not a URL or valid file content: ${shown}`);
                     }
                     if (unsendable || (assetUrl && unavailableUrls.has(assetUrl))) {
                       const name = (part.type === 'file' && part.filename) || part.mediaType || part.type;

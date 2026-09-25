@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat/media';
 import { convertDataContentToBase64String } from './data-content';
 
 /**
@@ -188,13 +189,47 @@ export function isBase64Like(data: string): boolean {
   return BASE64_PATTERN.test(data);
 }
 
+const STRICT_BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+const SIGNED_IMAGE_MEDIA_TYPES = new Set<string>([
+  ...imageMediaTypeSignatures.map(signature => signature.mediaType),
+  'image/jpg',
+]);
+
 /**
- * Checks whether file/image part data can be sent to a model: a data URL, an OpenAI file
- * ID (`file-...`), an absolute URL (any scheme), or raw base64. Anything else, such as a
- * relative or protocol-relative path, can't be downloaded or decoded.
+ * Checks whether inline base64 content can be decoded and, for image types with a known
+ * file signature (and PDF), whether it starts like one. Mislabelled images are fine: any
+ * known image signature passes. Providers reject anything else on every turn.
  */
-export function isSendableFileData(data: string): boolean {
-  return data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || isBase64Like(data);
+function isValidInlineContent(base64: string, mediaType: string | undefined): boolean {
+  const payload = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!payload || !STRICT_BASE64_PATTERN.test(payload)) return false;
+  const unpaddedLength = payload.replace(/=+$/, '').length;
+  if (unpaddedLength % 4 === 1 || (unpaddedLength !== payload.length && payload.length % 4 !== 0)) return false;
+
+  if (mediaType && SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+    return detectMediaType({ data: payload, signatures: imageMediaTypeSignatures }) !== undefined;
+  }
+  if (mediaType === 'application/pdf') return payload.startsWith('JVBER'); // "%PDF"
+  return true;
+}
+
+/**
+ * Checks whether file/image part data can be sent to a model: an OpenAI file ID (`file-...`),
+ * an absolute URL (any scheme), or inline content (raw base64 or a data URL) that decodes and,
+ * for images and PDFs, looks like one. Anything else, such as a relative path or a path that
+ * was wrapped as a base64 data URL, can't be downloaded or decoded.
+ */
+export function isSendableFileData(data: string, mediaType?: string): boolean {
+  if (data.startsWith('data:')) {
+    const comma = data.indexOf(',');
+    if (comma === -1) return false;
+    const header = data.slice(5, comma);
+    // Only base64 data URLs carry content to check; percent-encoded ones are plain text.
+    if (!/;base64$/i.test(header)) return true;
+    return isValidInlineContent(data.slice(comma + 1), header.split(';')[0] || mediaType);
+  }
+  if (data.startsWith('file-') || isAbsoluteUrl(data)) return true;
+  return isValidInlineContent(data, mediaType);
 }
 
 /**
