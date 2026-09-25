@@ -6,7 +6,7 @@ import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
-import { startFactoryRun } from '../ui/domains/factory/services/workItems';
+import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
 
 export interface StartFactoryRunWorkItem {
@@ -24,6 +24,7 @@ export interface StartFactoryRunInput {
   branch: string;
   threadTitle: string;
   workItem: StartFactoryRunWorkItem;
+  repositorySlug?: string;
 }
 
 /**
@@ -36,12 +37,20 @@ export function useStartFactoryRun() {
   const factoryQuery = useFactoryQuery(factoryId);
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const repository = factoryQuery.data?.repositories[0];
+  const repositories = factoryQuery.data?.repositories ?? [];
 
   const mutation = useMutation({
-    mutationFn: async ({ branch, threadTitle, workItem }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
-      if (!repository) throw new Error('Select a repository before starting a Factory run');
+      const targetSlug = repositorySlug ?? (typeof workItem.metadata?.repository === 'string' ? workItem.metadata.repository : undefined);
+      const repository = targetSlug
+        ? repositories.find(candidate => candidate.slug === targetSlug)
+        : repositories.length === 1 ? repositories[0] : undefined;
+      if (!repository) throw new Error('Choose a repository before starting this Factory run');
+      const metadata = { ...workItem.metadata, repository: repository.slug };
+      if (workItem.metadata?.repository !== repository.slug) {
+        await updateWorkItem(baseUrl, workItem.id, { metadata });
+      }
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
 
@@ -59,7 +68,7 @@ export function useStartFactoryRun() {
             title: workItem.title,
             url: workItem.url ?? null,
             stages: ['intake'],
-            metadata: workItem.metadata,
+            metadata,
           },
         },
       });
@@ -78,5 +87,5 @@ export function useStartFactoryRun() {
     },
   });
 
-  return { start: mutation, enabled: Boolean(factoryId && repository) };
+  return { start: mutation, enabled: Boolean(factoryId && repositories.length > 0), repositories };
 }

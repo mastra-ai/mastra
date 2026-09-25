@@ -24,6 +24,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     stage: context.intake?.initialPhase ?? 'intake',
     metadata: {
       linearIssueId: context.issue.id,
+      ...(context.issue.sourceId ? { linearProjectId: context.issue.sourceId } : {}),
       identifier: context.issue.identifier,
       sourceCreatedAt: context.issue.createdAt,
       linearState: context.issue.state,

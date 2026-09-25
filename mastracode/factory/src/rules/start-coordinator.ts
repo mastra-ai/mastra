@@ -4,6 +4,8 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
+import { resolveWorkItemRepository } from '../session/work-item-repository.js';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -26,6 +28,17 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
+}
+
+export class WorkItemRepositoryError extends Error {
+  constructor(
+    readonly code: 'repository_mismatch' | 'repository_ambiguous' | 'repository_unlinked',
+    message: string,
+    readonly candidates: string[] = [],
+  ) {
+    super(message);
+    this.name = 'WorkItemRepositoryError';
+  }
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -92,6 +105,7 @@ export class FactoryStartCoordinator {
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   readonly #memorySettings?: MemorySettingsStorage;
+  readonly #intake?: IntakeStorage;
 
   constructor(
     controller: FactoryController,
@@ -103,12 +117,14 @@ export class FactoryStartCoordinator {
           request: FactoryStartRequest,
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     memorySettings?: MemorySettingsStorage,
+    intake?: IntakeStorage,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
+    this.#intake = intake;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -117,6 +133,33 @@ export class FactoryStartCoordinator {
       typeof this.#sourceControl === 'function' ? await this.#sourceControl(request) : this.#sourceControl;
     if (!sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(sourceControl, request);
+    const storedItem = request.workItem.id
+      ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
+      : null;
+    const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
+    const repository = await resolveWorkItemRepository({
+      sourceControl,
+      orgId: request.orgId,
+      factoryProjectId: request.factoryProjectId,
+      item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
+      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+    });
+    if (repository.status === 'ambiguous') {
+      throw new WorkItemRepositoryError(
+        'repository_ambiguous',
+        `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
+        repository.candidates,
+      );
+    }
+    if (repository.status === 'unlinked') {
+      throw new WorkItemRepositoryError('repository_unlinked', repository.hint);
+    }
+    if (repository.projectRepositoryId !== sourceSession.projectRepositoryId) {
+      throw new WorkItemRepositoryError(
+        'repository_mismatch',
+        `This run session is bound to a different repository than ${repository.slug}.`,
+      );
+    }
     const requestContext = request.requestContext ?? new RequestContext();
     // Factory runs resolve model credentials org > user: the org's shared keys
     // win, with the acting user's personal credentials as a fallback — a board
@@ -163,12 +206,18 @@ export class FactoryStartCoordinator {
     // caller created without them — so autonomous runs never depend on a
     // browser connecting to populate the state. `untrustedCheckout` is a
     // boolean so it rides only on state (tags are string-valued).
+    const targetRepositoryInstruction = `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.`;
+    const existingPluginInstructions = session.state.get()?.pluginInstructions ?? [];
     await session.state.set({
       ...sessionTags,
       // The authoritative org id for every downstream identity read (the
       // memory seam's organizationId): the session owner is a USER id, not an
       // org, so it must never be improvised from ownerId.
       factoryOrgId: request.orgId,
+      pluginInstructions: [
+        ...existingPluginInstructions.filter(instruction => instruction !== targetRepositoryInstruction),
+        targetRepositoryInstruction,
+      ],
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
     // Board runs are org-shared: hydrate with the factory's default model and

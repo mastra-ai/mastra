@@ -424,6 +424,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     labels: readonly string[];
     createdAt: string;
     updatedAt: string;
+    sourceId?: string | null;
   };
 }
 

@@ -420,6 +420,18 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(within(linearSection).getByText('1 selected')).toBeInTheDocument());
     });
 
+    it('saves a Linear project repository mapping from linked repositories', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers();
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
+    });
+
     it('shows how many items are selected', async () => {
       seedGithubProject();
       useIntakeHandlers({

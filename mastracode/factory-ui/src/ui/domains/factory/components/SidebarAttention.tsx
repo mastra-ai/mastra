@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { RepositoryPickerDialog } from './RepositoryPickerDialog';
 import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { attentionCountsIn, latestUnreadOrNewestIn } from '../services/attention';
 import type { FactoryAttentionGroup } from '../services/attention';
@@ -40,7 +41,7 @@ export function SidebarAttention() {
   // The badge and the sound stay on the always-mounted query; the tab reads its own.
   const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const preview = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, group);
-  const rowProps = useAttentionItemActions(factoryId);
+  const actions = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
   const items = preview.data?.items ?? [];
   const kinds = attention.data?.kinds;
@@ -151,7 +152,7 @@ export function SidebarAttention() {
                       className="animate-in fade-in slide-in-from-bottom-1"
                       style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
                     >
-                      <AttentionItemRow factoryId={factoryId} {...rowProps(item)} onOpen={() => setOpen(false)} />
+                      <AttentionItemRow factoryId={factoryId} {...actions.rowProps(item)} onOpen={() => setOpen(false)} />
                     </li>
                   ))}
                 </ul>
@@ -163,6 +164,13 @@ export function SidebarAttention() {
             )}
           </TabContent>
         </Tabs>
+        {actions.repositorySelection ? (
+          <RepositoryPickerDialog
+            repositories={actions.repositories}
+            onClose={actions.closeRepositorySelection}
+            onSelect={actions.selectRepository}
+          />
+        ) : null}
       </PopoverContent>
     </Popover>
   );

@@ -602,6 +602,10 @@ describe('Board card pending states', () => {
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
+        const body = (await request.json()) as { metadata: Record<string, unknown> };
+        return HttpResponse.json({ workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata } });
+      }),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
       ),
@@ -637,6 +641,10 @@ describe('Board card pending states', () => {
         workItemRequests += 1;
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
+        const body = (await request.json()) as { metadata: Record<string, unknown> };
+        return HttpResponse.json({ workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata } });
       }),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
