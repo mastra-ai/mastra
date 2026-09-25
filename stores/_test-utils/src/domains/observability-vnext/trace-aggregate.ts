@@ -1,11 +1,9 @@
 import {
   compareTraceQueryStrings,
-  isTraceAggregateCanonicalDimension,
   parseTraceAggregateRequest,
   planTraceAggregate,
   TRACE_AGGREGATE_INTERVAL_MS,
   type TraceAggregateCountDistinctField,
-  type TraceAggregateDimension,
   type TraceAggregateRequest,
   type TraceAggregateResponse,
   type TraceAggregateRow,
@@ -18,6 +16,7 @@ import {
 import {
   makeTraceQuerySpan as span,
   selectTraceQueryRoots,
+  traceQueryDimensionValue,
   type RawTraceQuerySpan,
   type TraceQueryFixtureData,
 } from './trace-query';
@@ -32,46 +31,6 @@ import {
  * re-checked here.
  */
 
-const METADATA_PREFIX = 'metadata.';
-
-export function traceAggregateDimensionValue(
-  root: RawTraceQuerySpan,
-  dimension: TraceAggregateDimension,
-): string | null {
-  if (!isTraceAggregateCanonicalDimension(dimension)) {
-    const value = root.metadata?.[dimension.slice(METADATA_PREFIX.length)];
-    if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-  switch (dimension) {
-    case 'status':
-      return root.error === null ? 'success' : 'error';
-    case 'entityType':
-      return root.entityType;
-    case 'entityName':
-      return root.entityName;
-    case 'environment':
-      return root.environment;
-    case 'threadId':
-      return root.threadId;
-    case 'resourceId':
-      return root.resourceId;
-    case 'organizationId':
-      return root.organizationId;
-    case 'serviceName':
-      return root.serviceName ?? null;
-    case 'executionSource':
-      return root.executionSource ?? null;
-    case 'userId':
-      return root.userId ?? null;
-    case 'sessionId':
-      return root.sessionId ?? null;
-    case 'experimentId':
-      return root.experimentId ?? null;
-  }
-}
-
 /** Linear interpolation between order statistics (`percentile_cont` / `quantile_cont` semantics). */
 export function traceAggregatePercentile(sortedValues: number[], p: number): number {
   const rank = (sortedValues.length - 1) * p;
@@ -83,7 +42,7 @@ export function traceAggregatePercentile(sortedValues: number[], p: number): num
 }
 
 function countDistinctValue(root: RawTraceQuerySpan, field: TraceAggregateCountDistinctField): string | null {
-  return field === 'traceId' ? root.traceId : traceAggregateDimensionValue(root, field);
+  return field === 'traceId' ? root.traceId : traceQueryDimensionValue(root, field);
 }
 
 function durationMs(root: RawTraceQuerySpan): number {
@@ -117,7 +76,7 @@ function computeMeasures(roots: RawTraceQuerySpan[], plan: TrustedTraceAggregate
         values.set(measure.name, errorCount);
         break;
       case 'errorRate':
-        values.set(measure.name, count === 0 ? 0 : errorCount / count);
+        values.set(measure.name, errorCount / count);
         break;
       case 'duration.avg':
         values.set(measure.name, durations().reduce((sum, value) => sum + value, 0) / count);
@@ -238,7 +197,7 @@ export function evaluateTraceAggregate(
 
   const groupsByKey = new Map<string, Group>();
   for (const root of roots) {
-    const dimensions = plan.dimensions.map(dimension => traceAggregateDimensionValue(root, dimension));
+    const dimensions = plan.dimensions.map(dimension => traceQueryDimensionValue(root, dimension));
     const key = JSON.stringify(dimensions);
     let group = groupsByKey.get(key);
     if (!group) {
@@ -618,6 +577,58 @@ export interface TraceAggregateConformanceCase {
   request: TraceAggregateRequest;
   scope?: TraceQueryTenantScope;
   expected: TraceAggregateExpectedResponse;
+  /**
+   * Absolute per-measure tolerance for store conformance. Percentile semantics are
+   * backend-native (Decision 3: `percentile_cont` on PostgreSQL, `quantile` on ClickHouse), so
+   * only `duration.p*` measures carry a tolerance; counts, sums, and rates stay exact.
+   */
+  tolerance?: Record<string, number>;
+}
+
+/**
+ * Describes the first way `actual` diverges from a conformance case's expectation, or `null`
+ * when it matches. Measures listed in `tolerance` may differ by at most that absolute amount;
+ * everything else — `truncated`, row order, dimensions, buckets, measure keys and values — is
+ * compared exactly.
+ */
+export function traceAggregateResponseMismatch(
+  actual: TraceAggregateResponse | TraceAggregateExpectedResponse,
+  testCase: Pick<TraceAggregateConformanceCase, 'expected' | 'tolerance'>,
+): string | null {
+  const { expected, tolerance = {} } = testCase;
+  if (actual.truncated !== expected.truncated) {
+    return `truncated: expected ${expected.truncated}, got ${actual.truncated}`;
+  }
+  if (actual.rows.length !== expected.rows.length) {
+    return `rows: expected ${expected.rows.length}, got ${actual.rows.length}`;
+  }
+  for (const [index, expectedRow] of expected.rows.entries()) {
+    const actualRow = actual.rows[index]!;
+    const at = `rows[${index}]`;
+    if (JSON.stringify(actualRow.dimensions ?? null) !== JSON.stringify(expectedRow.dimensions ?? null)) {
+      return `${at}.dimensions: expected ${JSON.stringify(expectedRow.dimensions)}, got ${JSON.stringify(actualRow.dimensions)}`;
+    }
+    if (actualRow.bucket !== expectedRow.bucket) {
+      return `${at}.bucket: expected ${expectedRow.bucket}, got ${actualRow.bucket}`;
+    }
+    const expectedKeys = Object.keys(expectedRow.measures);
+    const actualKeys = Object.keys(actualRow.measures);
+    if (JSON.stringify(actualKeys) !== JSON.stringify(expectedKeys)) {
+      return `${at}.measures keys: expected ${JSON.stringify(expectedKeys)}, got ${JSON.stringify(actualKeys)}`;
+    }
+    for (const key of expectedKeys) {
+      const expectedValue = expectedRow.measures[key]!;
+      const actualValue = (actualRow.measures as Record<string, number>)[key]!;
+      const allowed = tolerance[key];
+      const matches =
+        allowed === undefined ? actualValue === expectedValue : Math.abs(actualValue - expectedValue) <= allowed;
+      if (!matches) {
+        const within = allowed === undefined ? '' : ` (±${allowed})`;
+        return `${at}.measures.${key}: expected ${expectedValue}${within}, got ${actualValue}`;
+      }
+    }
+  }
+  return null;
 }
 
 const triage = { entityName: 'triage' };
@@ -865,5 +876,121 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
       ],
       truncated: false,
     },
+    // Backend-native percentiles of {1000, 3000} land anywhere between the interpolated value and
+    // the upper order statistic; the tolerance is the distance to 3000.
+    tolerance: { 'duration.p50': 1000, 'duration.p90': 200, 'duration.p95': 100, 'duration.p99': 20 },
+  },
+  {
+    name: 'status dimension derives from the root error and countDistinct.traceId counts traces',
+    request: { timeRange: aggregateRange, groupBy: ['status'], measures: ['count', 'countDistinct.traceId'] },
+    expected: {
+      rows: [
+        { dimensions: { status: 'success' }, measures: { count: 15, 'countDistinct.traceId': 15 } },
+        { dimensions: { status: 'error' }, measures: { count: 5, 'countDistinct.traceId': 5 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'null in the second dimension sorts last within the first dimension tie-break',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['status', 'metadata.tenant'],
+      measures: ['count'],
+      orderBy: { field: 'status', direction: 'asc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: { status: 'error', 'metadata.tenant': 'acme' }, measures: { count: 2 } },
+        { dimensions: { status: 'error', 'metadata.tenant': null }, measures: { count: 3 } },
+        { dimensions: { status: 'success', 'metadata.tenant': 'acme' }, measures: { count: 6 } },
+        { dimensions: { status: 'success', 'metadata.tenant': 'globex' }, measures: { count: 2 } },
+        { dimensions: { status: 'success', 'metadata.tenant': null }, measures: { count: 7 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'countDistinct over a nullable dimension skips null values',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['environment'],
+      measures: ['count', 'countDistinct.entityName', 'countDistinct.metadata.tenant'],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { environment: 'production' },
+          measures: { count: 18, 'countDistinct.entityName': 4, 'countDistinct.metadata.tenant': 2 },
+        },
+        {
+          dimensions: { environment: 'staging' },
+          measures: { count: 2, 'countDistinct.entityName': 1, 'countDistinct.metadata.tenant': 1 },
+        },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'having combines or, not, and in over group measures',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['count', 'errorCount'],
+      having: {
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'in', value: { path: 'count' }, set: [2, 4] },
+              { op: 'gte', left: { path: 'errorCount' }, right: { literal: 2 } },
+            ],
+          },
+          { op: 'not', arg: { op: 'eq', left: { path: 'errorCount' }, right: { literal: 0 } } },
+        ],
+      },
+    },
+    expected: {
+      rows: [
+        { dimensions: triage, measures: { count: 6, errorCount: 2 } },
+        { dimensions: support, measures: { count: 4, errorCount: 1 } },
+        { dimensions: research, measures: { count: 2, errorCount: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'a window starting mid-bucket labels the first bucket at the interval floor before from',
+    request: {
+      timeRange: { from: '2026-08-01T10:30:00Z', to: '2026-08-03T00:00:00Z' },
+      interval: '1d',
+      measures: ['count'],
+    },
+    expected: {
+      rows: [
+        { bucket: day(1), measures: { count: 1 } },
+        { bucket: day(2), measures: { count: 7 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'an empty population returns no rows even for an ungrouped request',
+    request: {
+      timeRange: { from: '2026-08-04T00:00:00Z', to: '2026-08-05T00:00:00Z' },
+      measures: ['count', 'errorRate', 'duration.avg'],
+    },
+    expected: { rows: [], truncated: false },
+  },
+  {
+    name: 'a having that removes every group returns no rows and is not truncated',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['count'],
+      having: { op: 'gt', left: { path: 'count' }, right: { literal: 100 } },
+    },
+    expected: { rows: [], truncated: false },
   },
 ];

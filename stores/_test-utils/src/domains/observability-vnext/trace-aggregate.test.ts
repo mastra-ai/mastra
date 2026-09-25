@@ -9,13 +9,14 @@ import {
   evaluateTraceAggregateRequest,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
-  traceAggregateDimensionValue,
   traceAggregatePercentile,
+  traceAggregateResponseMismatch,
 } from './trace-aggregate';
 import {
   evaluateTraceQuery,
   makeTraceQuerySpan as span,
   TRACE_QUERY_FIXTURE_DATA,
+  traceQueryDimensionValue,
   type TraceQueryFixtureData,
 } from './trace-query';
 
@@ -172,15 +173,15 @@ describe('trace-aggregate reference evaluator', () => {
     const root = span(1, 't', 't', {
       metadata: { padded: '  tenant-a ', empty: '', numeric: 42, nested: { child: 'value' }, blank: '   ' },
     });
-    expect(traceAggregateDimensionValue(root, 'metadata.padded')).toBe('tenant-a');
-    expect(traceAggregateDimensionValue(root, 'metadata.empty')).toBeNull();
-    expect(traceAggregateDimensionValue(root, 'metadata.blank')).toBeNull();
-    expect(traceAggregateDimensionValue(root, 'metadata.numeric')).toBeNull();
-    expect(traceAggregateDimensionValue(root, 'metadata.nested')).toBeNull();
-    expect(traceAggregateDimensionValue(root, 'metadata.missing')).toBeNull();
-    expect(traceAggregateDimensionValue(span(2, 'u', 'u'), 'metadata.padded')).toBeNull();
-    expect(traceAggregateDimensionValue(span(3, 'e', 'e', { error: { message: 'x' } }), 'status')).toBe('error');
-    expect(traceAggregateDimensionValue(span(4, 's', 's'), 'status')).toBe('success');
+    expect(traceQueryDimensionValue(root, 'metadata.padded')).toBe('tenant-a');
+    expect(traceQueryDimensionValue(root, 'metadata.empty')).toBeNull();
+    expect(traceQueryDimensionValue(root, 'metadata.blank')).toBeNull();
+    expect(traceQueryDimensionValue(root, 'metadata.numeric')).toBeNull();
+    expect(traceQueryDimensionValue(root, 'metadata.nested')).toBeNull();
+    expect(traceQueryDimensionValue(root, 'metadata.missing')).toBeNull();
+    expect(traceQueryDimensionValue(span(2, 'u', 'u'), 'metadata.padded')).toBeNull();
+    expect(traceQueryDimensionValue(span(3, 'e', 'e', { error: { message: 'x' } }), 'status')).toBe('error');
+    expect(traceQueryDimensionValue(span(4, 's', 's'), 'status')).toBe('success');
   });
 });
 
@@ -190,8 +191,12 @@ describe('trace-aggregate conformance cases', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it.each(TRACE_AGGREGATE_CONFORMANCE_CASES)('$name', ({ request, scope, expected }) => {
-    expect(evaluateTraceAggregateRequest(TRACE_AGGREGATE_FIXTURE_DATA, request, scope)).toEqual(expected);
+  it.each(TRACE_AGGREGATE_CONFORMANCE_CASES)('$name', testCase => {
+    const actual = evaluateTraceAggregateRequest(TRACE_AGGREGATE_FIXTURE_DATA, testCase.request, testCase.scope);
+    // The reference evaluator defines the expected values, so it must match exactly even where
+    // stores are allowed a percentile tolerance.
+    expect(actual).toEqual(testCase.expected);
+    expect(traceAggregateResponseMismatch(actual, testCase)).toBeNull();
   });
 
   it('hand-written expectations satisfy the response contract and project exactly the requested measures', () => {
@@ -203,7 +208,34 @@ describe('trace-aggregate conformance cases', () => {
         expect(Object.keys(row.dimensions ?? {}), testCase.name).toEqual(groupBy);
         expect('bucket' in row, testCase.name).toBe(testCase.request.interval !== undefined);
       }
+      for (const measure of Object.keys(testCase.tolerance ?? {})) {
+        expect(measure, testCase.name).toMatch(/^duration\.p\d+$/);
+        expect(testCase.request.measures, testCase.name).toContain(measure);
+      }
     }
+  });
+
+  it('covers an empty population for both ungrouped requests and an all-filtering having', () => {
+    const empty = TRACE_AGGREGATE_CONFORMANCE_CASES.filter(testCase => testCase.expected.rows.length === 0);
+    expect(
+      empty.some(testCase => testCase.request.groupBy === undefined && testCase.request.having === undefined),
+    ).toBe(true);
+    expect(empty.some(testCase => testCase.request.having !== undefined)).toBe(true);
+  });
+
+  it('traceAggregateResponseMismatch applies tolerance only to the listed measures', () => {
+    const expected = { rows: [{ measures: { count: 2, 'duration.p95': 2900 } }], truncated: false };
+    const tolerance = { 'duration.p95': 100 };
+    const response = (p95: number, count = 2) => ({
+      rows: [{ measures: { count, 'duration.p95': p95 } }],
+      truncated: false,
+    });
+    expect(traceAggregateResponseMismatch(response(3000), { expected, tolerance })).toBeNull();
+    expect(traceAggregateResponseMismatch(response(3001), { expected, tolerance })).toMatch(/duration\.p95.*±100/);
+    expect(traceAggregateResponseMismatch(response(2900, 3), { expected, tolerance })).toMatch(/measures\.count/);
+    expect(traceAggregateResponseMismatch(response(3000), { expected })).toMatch(/duration\.p95/);
+    expect(traceAggregateResponseMismatch({ rows: [], truncated: false }, { expected })).toMatch(/^rows:/);
+    expect(traceAggregateResponseMismatch({ ...response(2900), truncated: true }, { expected })).toMatch(/^truncated/);
   });
 
   it('aggregates exactly the population evaluateTraceQuery selects for every case', () => {
@@ -219,7 +251,9 @@ describe('trace-aggregate conformance cases', () => {
         { timeRange, where, measures: ['count'] },
         testCase.scope,
       );
-      expect(aggregate.rows[0]!.measures.count, testCase.name).toBe(traces.traces.length);
+      const counted = aggregate.rows.length === 0 ? 0 : aggregate.rows[0]!.measures.count;
+      expect(aggregate.rows.length, testCase.name).toBe(traces.traces.length === 0 ? 0 : 1);
+      expect(counted, testCase.name).toBe(traces.traces.length);
     }
   });
 });
