@@ -16,6 +16,11 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * AIMock's 429 responses carry `Retry-After: 1` (its default), so each retry
  * waits ~1s of real time; the request counts below are the source suite's
  * expectations verbatim.
+ *
+ * Like the source suite, every scenario passes `errorProcessors: []` so the
+ * counts measure model-call retries alone. The agent's default
+ * `StreamErrorRetryProcessor` also retries provider errors marked retryable,
+ * which would multiply these counts.
  */
 
 const RATE_LIMITED = {
@@ -29,6 +34,7 @@ describeForAllEngines('AIMock loop scenario: model-call retry maxRetries precede
   it('does not retry when neither the agent nor the call configures retries', async () => {
     const { requests } = await runLoopScenario({
       engine,
+      errorProcessors: [],
       llm: getMock(),
       prompt: 'hi',
       fixtures: llm => {
@@ -42,6 +48,7 @@ describeForAllEngines('AIMock loop scenario: model-call retry maxRetries precede
   it('honors call-time modelSettings.maxRetries when the agent retry count is implicit', async () => {
     const { requests } = await runLoopScenario({
       engine,
+      errorProcessors: [],
       llm: getMock(),
       prompt: 'hi',
       modelSettings: { maxRetries: 2 },
@@ -56,6 +63,7 @@ describeForAllEngines('AIMock loop scenario: model-call retry maxRetries precede
   it('keeps a non-zero explicit agent maxRetries over call-time modelSettings', async () => {
     const { requests } = await runLoopScenario({
       engine,
+      errorProcessors: [],
       llm: getMock(),
       prompt: 'hi',
       maxRetries: 1,
@@ -71,6 +79,7 @@ describeForAllEngines('AIMock loop scenario: model-call retry maxRetries precede
   it('keeps an explicit zero agent maxRetries over call-time modelSettings', async () => {
     const { requests } = await runLoopScenario({
       engine,
+      errorProcessors: [],
       llm: getMock(),
       prompt: 'hi',
       maxRetries: 0,
