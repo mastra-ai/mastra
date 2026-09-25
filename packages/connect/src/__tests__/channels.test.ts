@@ -383,6 +383,59 @@ describe('channels()', () => {
     expect(discord.getInfo().isConfigured).toBe(true);
   });
 
+  it('discards the previous connection identity when the platform switches Discord connections (end to end)', async () => {
+    // REAL @mastra/discord: pins the security property that switching the
+    // active platform connection replaces the app config. If configure()
+    // merged instead, connection A's Ed25519 publicKey would keep verifying
+    // inbound webhooks while connection B's bot token is live — letting A's
+    // owner forge interactions against B.
+    vi.doUnmock('@mastra/discord');
+    vi.stubEnv('DISCORD_BOT_TOKEN', undefined as unknown as string);
+    vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
+    vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
+    const state: PlatformState = {
+      connections: [makeConnection({ id: 'c_a', integrationId: 'discord' })],
+      credentials: { c_a: { type: 'oauth2', accessToken: 'discord-bot-A', expiresAt: null } },
+      contexts: {
+        c_a: { connection_config: null, metadata: { applicationId: 'A_app_id', publicKey: 'A_public_key' } },
+      },
+    };
+    const fetchMock = platformFetch(state);
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock, { ttlMs: 0 }));
+    const providers = await resolver();
+    const discord = providers.discord as unknown as {
+      connect(agentId: string): Promise<{ type: string; authorizationUrl: string }>;
+    };
+
+    // The platform swaps connection A for connection B — token only.
+    state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
+    state.credentials = { c_b: { type: 'oauth2', accessToken: 'discord-bot-B', expiresAt: null } };
+    state.contexts = {};
+    resolver.invalidate();
+    await resolver();
+
+    // B's identity must come from B's token via /applications/@me — never
+    // from A's leftover metadata.
+    const B = { id: 'B_app_id', verify_key: 'B_public_key' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/applications/@me'))
+          return Response.json({ id: B.id, name: 'App B', verify_key: B.verify_key });
+        throw new Error(`unexpected fetch: ${url}`);
+      }),
+    );
+    try {
+      const result = await discord.connect('agent-1');
+      const url = new URL(result.authorizationUrl);
+      expect(url.searchParams.get('client_id')).toBe(B.id);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('resolves slack + telegram + discord together into a single ChannelProvider map', async () => {
     const fetchMock = platformFetch({
       connections: [

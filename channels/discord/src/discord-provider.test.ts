@@ -72,15 +72,12 @@ function makeProvider(config: Partial<ConstructorParameters<typeof DiscordProvid
 }
 
 /** Stub `GET /applications/@me` — the bot-token validation call. */
-function stubValidateApp(opts: { ok?: boolean; name?: string; verifyKey?: string } = {}) {
-  const { ok = true, name = 'Test App', verifyKey = APP.publicKey } = opts;
+function stubValidateApp(opts: { ok?: boolean; name?: string; verifyKey?: string; id?: string } = {}) {
+  const { ok = true, name = 'Test App', verifyKey = APP.publicKey, id = APP.applicationId } = opts;
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: '/api/v10/applications/@me', method: 'GET' })
-    .reply(
-      ok ? 200 : 401,
-      ok ? { id: APP.applicationId, name, verify_key: verifyKey } : { message: '401: Unauthorized', code: 0 },
-    );
+    .reply(ok ? 200 : 401, ok ? { id, name, verify_key: verifyKey } : { message: '401: Unauthorized', code: 0 });
 }
 
 /** Stub `GET /guilds/{id}` —200 when the bot is a member, 403 otherwise. */
@@ -612,6 +609,56 @@ describe('DiscordProvider.configure — cache invalidation', () => {
     const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
     expect(stored?.publicKey).toBe('fedcba9876543210');
     expect(stored?.botToken).toBe(APP.botToken); // untouched fields survive
+  });
+
+  it('replaces the app config when a different bot token is supplied — no stale publicKey survives', async () => {
+    const { provider, storage } = makeProvider();
+    stubValidateApp();
+    await provider.connect('agent-1'); // persists app A's config (incl. its Ed25519 key)
+
+    // Switch to application B: only its token is known. Merging would keep
+    // A's publicKey verifying B's inbound webhooks — it must be dropped.
+    await provider.configure({ botToken: 'bot-token-B' });
+
+    const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(stored).toBeNull();
+
+    // The next resolution derives B's identity from B's token, not A's leftovers.
+    const B = { id: '444444444444444444', verifyKey: 'bbbbbbbbbbbbbbbb' };
+    stubValidateApp({ id: B.id, verifyKey: B.verifyKey });
+    const result = await provider.connect('agent-2');
+    const url = new URL((result as { authorizationUrl: string }).authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(B.id);
+    const persisted = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(persisted).toMatchObject({ botToken: 'bot-token-B', publicKey: B.verifyKey, applicationId: B.id });
+  });
+
+  it('drops a stale stored config from a previous process when configured with a different token', async () => {
+    // Simulate a restart: storage still holds app A's config, but the platform
+    // connection now points at app B.
+    const storage = new InMemoryChannelsStorage();
+    await new DiscordInstallStore(storage, undefined).saveAppConfig(APP);
+    const provider = new DiscordProvider({ storage });
+
+    await provider.configure({ botToken: 'bot-token-B' });
+
+    expect(await new DiscordInstallStore(storage, undefined).getAppConfig()).toBeNull();
+    expect(provider.isConfigured()).toBe(true); // B's token alone is enough
+  });
+
+  it('still merges when the same bot token is re-supplied alongside a rotated key', async () => {
+    const { provider, storage } = makeProvider();
+    stubValidateApp();
+    await provider.connect('agent-1');
+
+    await provider.configure({ botToken: APP.botToken, publicKey: 'fedcba9876543210' });
+
+    const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(stored).toMatchObject({
+      botToken: APP.botToken,
+      publicKey: 'fedcba9876543210',
+      applicationId: APP.applicationId, // untouched field survives the merge
+    });
   });
 
   it('drops adapters when the app config is cleared', async () => {
