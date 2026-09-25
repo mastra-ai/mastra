@@ -328,7 +328,7 @@ const schedules = await mastra.schedules.list({
           },
           {
             name: 'status',
-            type: "'active' | 'paused'",
+            type: "'active' | 'paused' | 'completed'",
             description: 'Return only schedules with this status.',
             isOptional: true,
           },
