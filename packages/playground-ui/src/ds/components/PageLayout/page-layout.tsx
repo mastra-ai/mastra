@@ -53,7 +53,8 @@ export function PageLayout({
           'min-h-0 flex-1 overflow-y-auto',
           variant === 'container' && 'p-4',
           // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
-          variant === 'fit' && (header ? 'grid grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-rows-[minmax(0,1fr)]'),
+          variant === 'fit' &&
+            (header ? 'grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-cols-1 grid-rows-1'),
         )}
       >
         {variant === 'narrow' ? (
@@ -62,7 +63,7 @@ export function PageLayout({
           <div
             data-slot="page-layout-container"
             className={cn(
-              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-[minmax(0,1fr)] p-4',
+              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
               header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
             )}
           >
