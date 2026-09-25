@@ -342,6 +342,14 @@ type AcceptedIdleMessage = {
    * waiting on a run that will never start.
    */
   terminalReason?: string;
+  /**
+   * Set while the first delivery attempt is still resolving its admission — the
+   * owner's stream options, the thread control subscription, the execution lease.
+   * A duplicate arriving in that window waits on this promise for the real
+   * outcome; answering it from the provisional reservation would report a
+   * delivery for a wake the first attempt may yet reject.
+   */
+  admission?: Promise<AcceptedIdleMessage>;
 };
 
 type AgentThreadRuntimeState = {
@@ -1516,6 +1524,16 @@ export class AgentThreadStreamRuntime {
     incomingStreamOptions?: AgentExecutionOptions<any>,
   ): Promise<{ runId: string; error?: string; output?: MastraModelOutput<OUTPUT> } | undefined> {
     const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
+    let admissionSettled = false;
+    // Records this attempt's real admission outcome for the logical message and
+    // resolves a duplicate that raced in behind the reservation on it. `keep`
+    // retains the reservation (the message queued or ran); otherwise the
+    // reservation is released so a later retry can route.
+    let settleMessageIdentity: ((result: AcceptedIdleMessage, keep?: boolean) => void) | undefined;
+    // Releases the reservation for an admission that produced no result to report.
+    // A duplicate waiting on the reservation is rejected with the same failure
+    // instead of being told the message was delivered.
+    let failMessageIdentity: ((error: unknown) => void) | undefined;
     if (messageIdentity) {
       const acceptedMessage = state.acceptedIdleMessagesByIdentity.get(messageIdentity);
       if (acceptedMessage) {
@@ -1523,29 +1541,54 @@ export class AgentThreadStreamRuntime {
         // The sender regenerates the transport request id when it retries, so
         // `handledIdleSignals` cannot catch this — and admitting it again would run
         // the wake a second time and repeat the turn's tools' side effects. Resolve
-        // the retry to what the first attempt reached.
-        return acceptedMessage.terminalReason
-          ? { runId: acceptedMessage.runId, error: acceptedMessage.terminalReason }
-          : { runId: acceptedMessage.runId };
+        // the retry to what the first attempt reached, waiting for an admission that
+        // is still in flight: answering now would report a delivery for a wake that
+        // may yet be rejected.
+        const settled = acceptedMessage.admission ? await acceptedMessage.admission : acceptedMessage;
+        return settled.terminalReason
+          ? { runId: settled.runId, error: settled.terminalReason }
+          : { runId: settled.runId };
       }
       // Reserve the identity before the first await, so two delivery attempts of the
       // same logical message racing into this method cannot both admit a run. The
-      // reservation is released below if this attempt turns out not to admit one.
-      state.acceptedIdleMessagesByIdentity.set(messageIdentity, { runId });
+      // reservation carries the pending admission so a duplicate that arrives in that
+      // window settles on this attempt's real outcome instead of a provisional one.
+      // It is released below if this attempt turns out not to admit a run.
+      const admission = new Promise<AcceptedIdleMessage>((resolve, reject) => {
+        settleMessageIdentity = (result, keep = true) => {
+          admissionSettled = true;
+          if (state.acceptedIdleMessagesByIdentity.get(messageIdentity)?.runId === runId) {
+            if (keep) state.acceptedIdleMessagesByIdentity.set(messageIdentity, result);
+            else state.acceptedIdleMessagesByIdentity.delete(messageIdentity);
+          }
+          resolve(result);
+        };
+        failMessageIdentity = error => {
+          admissionSettled = true;
+          if (state.acceptedIdleMessagesByIdentity.get(messageIdentity)?.runId === runId) {
+            state.acceptedIdleMessagesByIdentity.delete(messageIdentity);
+          }
+          reject(error);
+        };
+      });
+      // A reservation nobody is waiting on must not surface as an unhandled
+      // rejection when this attempt fails.
+      void admission.catch(() => {});
+      state.acceptedIdleMessagesByIdentity.set(messageIdentity, { runId, admission });
     }
     // Releases the reservation for an attempt that did not admit the message, so a
-    // later retry of the same logical message is still free to route.
-    const releaseMessageIdentity = () => {
-      if (messageIdentity && state.acceptedIdleMessagesByIdentity.get(messageIdentity)?.runId === runId) {
-        state.acceptedIdleMessagesByIdentity.delete(messageIdentity);
-      }
+    // later retry of the same logical message is still free to route. A duplicate
+    // already waiting on it observes the same failure.
+    const releaseMessageIdentity = (failure: string | Error) => {
+      if (typeof failure === 'string') settleMessageIdentity?.({ runId, terminalReason: failure }, false);
+      else failMessageIdentity?.(failure);
     };
     if (!isOwnerActive()) {
-      releaseMessageIdentity();
+      releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
       return { runId, error: `Claimed thread owner was released for ${key}` };
     }
     if (Date.now() >= expiresAt) {
-      releaseMessageIdentity();
+      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
       return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
     }
     // Resolving the owner's stream options can reject. A later retry of the same
@@ -1556,7 +1599,7 @@ export class AgentThreadStreamRuntime {
       ownerStreamOptions =
         typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
     } catch (error) {
-      releaseMessageIdentity();
+      releaseMessageIdentity(getErrorFromUnknown(error));
       throw error;
     }
     // The run executes inside the claiming owner's session, so the owner's
@@ -1573,16 +1616,18 @@ export class AgentThreadStreamRuntime {
       incomingStreamOptions?.requestContext === undefined
         ? ownerStreamOptions
         : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
-    const control = this.#ensureThreadControlSubscription(state, pubsub, key);
-    control.references++;
+    let control: ThreadControlSubscription | undefined;
     try {
-      await control.ready;
+      const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
+      control = subscription;
+      subscription.references++;
+      await subscription.ready;
       if (!isOwnerActive()) {
-        releaseMessageIdentity();
+        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
         return { runId, error: `Claimed thread owner was released for ${key}` };
       }
       if (Date.now() >= expiresAt) {
-        releaseMessageIdentity();
+        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
         return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
       }
 
@@ -1604,7 +1649,10 @@ export class AgentThreadStreamRuntime {
         }
         // No run starts here — the signal joins the in-flight run and is drained
         // later. Returning without `output` is what tells the caller this queued
-        // instead of running, so it reports `deliver` rather than `wake`.
+        // instead of running, so it reports `deliver` rather than `wake`. Queueing
+        // is an admission, so a duplicate waiting on this reservation is told the
+        // same thing rather than left to start a second run.
+        settleMessageIdentity?.({ runId });
         return { runId };
       }
       if (activeRunId) {
@@ -1612,7 +1660,7 @@ export class AgentThreadStreamRuntime {
       }
 
       if (!isOwnerActive()) {
-        releaseMessageIdentity();
+        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
         return { runId, error: `Claimed thread owner was released for ${key}` };
       }
       state.activeThreadRunIds.set(key, runId);
@@ -1623,7 +1671,7 @@ export class AgentThreadStreamRuntime {
       } catch (error) {
         // No run and no lease exist for this attempt yet, so unwind the run
         // bookkeeping it just claimed and let a retry of the logical message route.
-        releaseMessageIdentity();
+        releaseMessageIdentity(getErrorFromUnknown(error));
         state.activeThreadRunIds.delete(key);
         state.threadKeysByRunId.delete(runId);
         throw error;
@@ -1634,14 +1682,16 @@ export class AgentThreadStreamRuntime {
         // This attempt admitted no run of its own — the owner went away, the
         // deadline passed, or the wake was handed to another live lease owner — so
         // a later retry of the same logical message must be free to route.
-        releaseMessageIdentity();
         state.activeThreadRunIds.delete(key);
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
+          const error = !ownerActive
+            ? `Claimed thread owner was released for ${key}`
+            : `Claimed thread owner acceptance expired for ${key}`;
+          releaseMessageIdentity(error);
           const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
-          if (!ownerActive) return { runId, error: `Claimed thread owner was released for ${key}` };
-          return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+          return { runId, error };
         }
         if (lease.owner) {
           this.#publish(pubsub, key, {
@@ -1650,8 +1700,13 @@ export class AgentThreadStreamRuntime {
             signal: this.#serializeSignal(signal),
             sourceId: this.#getSourceId(),
           });
+          // Another live lease owner took the wake, so this attempt delivered it
+          // without running it here. Report that to a duplicate instead of leaving
+          // it waiting, while still releasing the reservation so a later retry routes.
+          settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
+        releaseMessageIdentity(new Error(`Claimed thread owner could not acquire the execution lease for ${key}`));
         await this.#drainPendingIdleSignals(state, pubsub, key);
         return undefined;
       }
@@ -1662,6 +1717,8 @@ export class AgentThreadStreamRuntime {
           runId,
           memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
         });
+        // The run started, so the admission a duplicate is waiting on succeeded.
+        settleMessageIdentity?.({ runId });
         return { runId, output };
       } catch (error) {
         const message = getErrorFromUnknown(error).message;
@@ -1670,9 +1727,7 @@ export class AgentThreadStreamRuntime {
         // rather than run that turn's tools a second time. Only settle the identity
         // this run reserved — a newer reservation for the same logical message must
         // survive an older run's failure.
-        if (messageIdentity && state.acceptedIdleMessagesByIdentity.get(messageIdentity)?.runId === runId) {
-          state.acceptedIdleMessagesByIdentity.set(messageIdentity, { runId, terminalReason: message });
-        }
+        settleMessageIdentity?.({ runId, terminalReason: message });
         state.threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(state, runId);
         if (state.activeThreadRunIds.get(key) === runId) {
@@ -1690,8 +1745,16 @@ export class AgentThreadStreamRuntime {
         return { runId, error: message };
       }
     } finally {
-      control.references--;
-      this.#releaseUnusedThreadControlSubscription(state, key);
+      // An unexpected failure before admission settled (a control subscription that
+      // never became ready, for example) must not leave a duplicate waiting on an
+      // outcome that will never arrive.
+      if (!admissionSettled) {
+        failMessageIdentity?.(new Error(`Claimed thread owner admission for ${key} did not complete`));
+      }
+      if (control) {
+        control.references--;
+        this.#releaseUnusedThreadControlSubscription(state, key);
+      }
     }
   }
 

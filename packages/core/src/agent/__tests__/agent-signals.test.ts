@@ -2291,6 +2291,70 @@ describe('Agent signals', () => {
     }
   });
 
+  it('holds a concurrent retry until the first admission resolves, so a rejected wake is not reported as delivered', async () => {
+    const scope = { resourceId: 'race-admission', threadId: 'race-admission' };
+    const pubsub = new ControlledLeasePubSub();
+    const model = createTextStreamModel('unused');
+    const agent = new Agent({ id: 'race-admission', name: 'Race Admission', instructions: 'Test', model, pubsub });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const entering = new Promise<void>(resolve => {
+      entered = resolve;
+    });
+    let streamOptionsCalls = 0;
+    const claim = await agent.claimThreadOwnership({
+      ...scope,
+      streamOptions: async () => {
+        streamOptionsCalls += 1;
+        entered();
+        await gate;
+        throw new Error('concurrent retry rejected');
+      },
+    });
+    const attributes = { messageId: 'race-admission-message', sourcePeerId: 'race-admission-peer' };
+    const first = agent.sendSignal({ type: 'user-message', contents: 'race the admission', attributes }, scope);
+    void first.accepted.catch(() => {});
+    try {
+      // The first delivery has reserved the logical message and is still resolving
+      // its admission: it has neither queued nor started a run, and may still reject.
+      await entering;
+
+      // The retry carries the same logical identity with a fresh transport request
+      // id, so only the shared reservation can recognise it. It must wait for the
+      // first attempt's real admission instead of being answered from the
+      // provisional reservation, which would report a delivery for a wake that
+      // never ran.
+      const retry = agent.sendSignal({ type: 'user-message', contents: 'race the admission', attributes }, scope);
+      let retrySettled = false;
+      const retryAccepted = retry.accepted.then(
+        value => {
+          retrySettled = true;
+          return value;
+        },
+        error => {
+          retrySettled = true;
+          throw error;
+        },
+      );
+      void retryAccepted.catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(retrySettled).toBe(false);
+      // The retry did not start an admission of its own while the first was pending.
+      expect(streamOptionsCalls).toBe(1);
+
+      release();
+      await expect(first.accepted).rejects.toThrow('concurrent retry rejected');
+      await expect(retryAccepted).rejects.toThrow('concurrent retry rejected');
+      expect(model.doStreamCalls).toHaveLength(0);
+    } finally {
+      release();
+      claim.unsubscribe();
+    }
+  });
+
   it('reports a failed run to a retry of the same logical message instead of running it again', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
