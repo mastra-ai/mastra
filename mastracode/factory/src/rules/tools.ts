@@ -77,6 +77,7 @@ export async function createFactoryTransitionTools(options: {
   }
 
   return {
+    ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
@@ -125,6 +126,64 @@ export async function createFactoryTransitionTools(options: {
         });
 
         return result;
+      },
+    }),
+  };
+}
+
+export const REVIEW_VERDICTS = ['approve', 'request changes'] as const;
+
+const reviewVerdictInputSchema = z.object({
+  verdict: z.enum(REVIEW_VERDICTS),
+  reviewedHeadSha: z.string().regex(/^[0-9a-f]{7,64}$/i),
+});
+
+/**
+ * A review pass ends by recording its verdict on the card, which stays in
+ * Reviewing: Done is reserved for the merge, and a verdict is not a lane. The
+ * next push re-reviews from the recorded verdict.
+ */
+function createReviewVerdictTool(
+  options: { requestContext: RequestContext; storage: WorkItemsStorage; sessions?: FactorySessionSourceLookup },
+  boundWorkItemId: string,
+): IntegrationTools {
+  return {
+    factory_record_review_verdict: createTool({
+      id: 'factory_record_review_verdict',
+      description:
+        'Record the published review verdict and the PR head SHA it covers on the Review card bound to this thread. The card stays in Reviewing; this ends the review pass.',
+      inputSchema: reviewVerdictInputSchema,
+      requireApproval: false,
+      execute: async ({ verdict, reviewedHeadSha }, execution) => {
+        const resolution = await resolveFactorySessionAddress({
+          requestContext: execution.requestContext,
+          storage: options.storage,
+          sessions: options.sessions,
+        });
+        const binding = resolution ? await options.storage.findActiveRunBinding(resolution.address) : null;
+        if (!binding || binding.workItemId !== boundWorkItemId || binding.role !== 'review') {
+          throw new Error('Factory review binding is unavailable, revoked, or no longer matches this session.');
+        }
+        const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+        if (!item) throw new Error('Bound Factory work item not found.');
+        if (boardForWorkItem(item) !== 'review' || item.stages[0] !== 'review') {
+          throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
+        }
+        const reviewedAt = new Date().toISOString();
+        await options.storage.update({
+          orgId: binding.orgId,
+          id: item.id,
+          userId: `agent:${binding.id}`,
+          patch: {
+            metadata: {
+              ...(item.metadata ?? {}),
+              reviewVerdict: verdict,
+              reviewedHeadSha: reviewedHeadSha.toLowerCase(),
+              reviewedAt,
+            },
+          },
+        });
+        return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt };
       },
     }),
   };

@@ -346,7 +346,8 @@ describe('bundled Factory skill assets', () => {
       expect(instructions).toContain('source_control_get_change_request');
       expect(instructions).toContain('source_control_list_change_request_reviews');
       expect(instructions).toContain('source_control_review_change_request');
-      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).toContain('factory_record_review_verdict');
+      expect(instructions).not.toContain('factory_transition_work_item');
       expect(instructions).not.toMatch(/`gh pr |`glab mr /);
     }
   });
@@ -392,8 +393,11 @@ describe('bundled Factory skill assets', () => {
 
     for (const skillName of ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview']) {
       const prose = await read(skillName);
-      // Terminal batched handoff + governed transition, never a mid-run human gate.
-      expect(prose).toContain('factory_transition_work_item');
+      // Terminal batched handoff + governed terminal call, never a mid-run human gate.
+      // Review passes end by recording the verdict; the card stays in Reviewing.
+      expect(prose).toContain(
+        skillName.includes('review') ? 'factory_record_review_verdict' : 'factory_transition_work_item',
+      );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
       expect(prose).not.toContain('ask_user');
@@ -577,7 +581,7 @@ describe('bundled Factory skill assets', () => {
       "don't send it to the conversation yet",
       'gh pr review <number> --approve --body-file',
       'gh pr review <number> --request-changes --body-file',
-      'Then make your terminal `factory_transition_work_item` call',
+      'Then make your terminal `factory_record_review_verdict` call',
       'post the handoff as your final conversation message',
     );
 
@@ -628,7 +632,7 @@ describe('bundled Factory skill assets', () => {
     // qualify as follow-up work — both rules inside the follow-up procedure.
     const followUps = section(
       'Non-blocking follow-ups become a PR, not homework',
-      'Then make your terminal `factory_transition_work_item` call',
+      'Then make your terminal `factory_record_review_verdict` call',
     );
     expect(followUps).toContain('Never mix blocking findings into a follow-up PR');
     expect(followUps).toContain(

@@ -880,6 +880,17 @@ describe('built-in board and integration handlers', () => {
       });
     });
 
+    it('re-enters Reviewing when review is re-requested on a card resting with a recorded verdict', async () => {
+      const rule = defaultGithubRules.pullRequestReviewRequested;
+      const resting = { ...prItem, stages: ['review'], metadata: { ...prItem.metadata, reviewVerdict: 'approve' } };
+      expect(await rule?.(reReviewContext({ item: resting }))).toMatchObject({
+        type: 'transition',
+        idempotencyKey: 'delivery-1:re-review-requested',
+        stage: 'review',
+        reenter: true,
+      });
+    });
+
     it('ignores re-requests that do not target Factory or come from untrusted senders', async () => {
       const rule = defaultGithubRules.pullRequestReviewRequested;
       for (const context of [

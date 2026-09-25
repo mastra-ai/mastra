@@ -1,3 +1,4 @@
+import { hasRecordedVerdict } from '../../boards/review.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GithubRuleOverrides = Partial<
@@ -100,7 +101,11 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  { idempotencyKey, autoStartCandidate, stage = 'intake' }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
+  {
+    idempotencyKey,
+    autoStartCandidate,
+    stage = 'intake',
+  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -310,14 +315,17 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
       stage: 'review',
     });
   }
-  // Already in Reviewing: a review pass is pending or running; re-entering
-  // would be a same-stage no-op anyway (stage rules only fire on change).
-  if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
+  // Already in Reviewing with no verdict yet: a pass is pending or running.
+  // Once a verdict is recorded the card rests in Reviewing, so a fresh request
+  // re-enters the stage to start another pass.
+  const reviewing = context.item.stages.length === 1 && context.item.stages[0] === 'review';
+  if (reviewing && !hasRecordedVerdict(context.item)) return;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
     board: 'review',
     stage: 'review',
+    ...(reviewing ? { reenter: true } : {}),
   } as const;
 }
 

@@ -634,6 +634,87 @@ describe('factory_transition_work_item', () => {
     expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
   });
 
+  describe('factory_record_review_verdict', () => {
+    async function reviewingItem(storage: WorkItemsStorage, stage = 'review') {
+      const prepared = await prepareBoundItem(storage, 'github-pr');
+      await storage.update({
+        orgId: 'org-1',
+        id: prepared.item.id,
+        userId: 'user-1',
+        patch: { stages: [stage], metadata: { authorTrusted: true, factoryAuthored: true } },
+      });
+      return prepared.item.id;
+    }
+
+    it('records the verdict on a Reviewing card and leaves it in Reviewing', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await reviewingItem(storage);
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition: vi.fn() } as never,
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+          verdict: 'request changes',
+          reviewedHeadSha: 'ABC1234DEF',
+        }),
+      ).resolves.toMatchObject({ status: 'recorded', verdict: 'request changes' });
+
+      const item = await storage.get({ orgId: 'org-1', id });
+      expect(item?.stages).toEqual(['review']);
+      expect(item?.metadata).toMatchObject({
+        factoryAuthored: true,
+        reviewVerdict: 'request changes',
+        reviewedHeadSha: 'abc1234def',
+        reviewedAt: expect.any(String),
+      });
+    });
+
+    it('rejects a verdict for a card that is no longer Reviewing', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await reviewingItem(storage, 'done');
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition: vi.fn() } as never,
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+          verdict: 'approve',
+          reviewedHeadSha: 'abc1234',
+        }),
+      ).rejects.toThrow('Only a card in Reviewing records a verdict');
+    });
+
+    it('is offered only to review bindings and bounds its input', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await prepareBoundItem(storage, 'github-issue');
+      const workTools = await createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        transitionService: { transition: vi.fn() } as never,
+      });
+      expect(workTools).not.toHaveProperty('factory_record_review_verdict');
+
+      const reviewStorage = (await createFactoryStorageForTests()).workItems;
+      await reviewingItem(reviewStorage);
+      const tools = await createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage: reviewStorage,
+        transitionService: { transition: vi.fn() } as never,
+      });
+      const schema = (tools.factory_record_review_verdict as ExecutableTool).inputSchema;
+      expect(schema.safeParse({ verdict: 'approve', reviewedHeadSha: 'abc1234' }).success).toBe(true);
+      expect(schema.safeParse({ verdict: 'merge', reviewedHeadSha: 'abc1234' }).success).toBe(false);
+      expect(schema.safeParse({ verdict: 'approve', reviewedHeadSha: 'HEAD; rm' }).success).toBe(false);
+    });
+  });
+
   it.each(['github-pr', 'gitlab-pr'] as const)(
     'recovers a %s review binding after crash-resume wipes session state and heals the security posture',
     async source => {
