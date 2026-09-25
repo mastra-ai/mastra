@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Clarified two rules in the `TrustedTraceAggregatePlan` contract that every `aggregateTraces()` backend must follow: null dimension values sort last in both directions, and an empty population returns `rows: []` with no synthesised zero row.
+Documented two `aggregateTraces()` result rules: null dimension values sort last in both sort directions, and a time range with no matching traces returns `rows: []` rather than a single zero-valued row.
