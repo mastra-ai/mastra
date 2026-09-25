@@ -1870,7 +1870,7 @@ describe('TokenLimiterProcessor', () => {
           content: { format: 2, content: 'First message', parts: [{ type: 'text', text: 'First message' }] },
           createdAt: new Date('2023-01-01T00:00:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {
@@ -1888,7 +1888,7 @@ describe('TokenLimiterProcessor', () => {
           },
           createdAt: new Date('2023-01-01T00:01:00Z'),
         },
-        'input',
+        'memory',
       );
       messageList.add(
         {

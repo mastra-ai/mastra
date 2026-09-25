@@ -289,8 +289,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     // Messages from the current run (the triggering prompt, tool calls/results, partial answers) are never
     // trimmed: removing them mid-run hides the prompt or tool data from the next step and makes the model loop.
+    // Only the trailing input message is the actual triggering prompt — earlier messages tagged 'input'
+    // (e.g. a full history re-sent without memory) are ordinary trimmable history.
     const sources = messageList.makeMessageSourceChecker();
-    const currentRunIds = new Set([...sources.input, ...sources.output, ...sources.context]);
+    const currentRunIds = this.getCurrentRunIds(messages, sources);
     let responseTokens = 0;
     for (const message of messages) {
       if (!currentRunIds.has(message.id)) continue;
@@ -342,6 +344,27 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     if (idsToRemove.length > 0) {
       messageList.removeByIds(idsToRemove);
     }
+  }
+
+  /**
+   * The current run's protected messages: the triggering prompt plus anything produced during
+   * this run (tool calls/results, partial answers, caller-supplied context). Only the trailing
+   * `input`-sourced message is the actual triggering prompt — earlier messages tagged `input`
+   * (e.g. a full conversation re-sent in one call without memory) are ordinary trimmable history.
+   */
+  private getCurrentRunIds(
+    messages: MastraDBMessage[],
+    sources: { input: Set<string>; output: Set<string>; context: Set<string> },
+  ): Set<string> {
+    const ids = new Set([...sources.output, ...sources.context]);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message && sources.input.has(message.id)) {
+        ids.add(message.id);
+        break;
+      }
+    }
+    return ids;
   }
 
   /**
@@ -463,10 +486,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const protectedGroups = new Set<PromptMessage[]>();
     if (messageList) {
       const sources = messageList.makeMessageSourceChecker();
-      const currentRunIds = new Set([...sources.input, ...sources.output, ...sources.context]);
-      const currentRunCount = messageList.get.all
-        .db()
-        .filter(message => currentRunIds.has(message.id) && message.role !== 'system').length;
+      const dbMessages = messageList.get.all.db();
+      const currentRunIds = this.getCurrentRunIds(dbMessages, sources);
+      const currentRunCount = dbMessages.filter(
+        message => currentRunIds.has(message.id) && message.role !== 'system',
+      ).length;
       const protectedList = nonSystemGroups.slice(Math.max(0, nonSystemGroups.length - currentRunCount));
       for (const group of protectedList) {
         protectedGroups.add(group);
