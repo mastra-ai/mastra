@@ -21,6 +21,9 @@ import type { Container, Exec, ExecInspectInfo } from 'dockerode';
  */
 const PROC_DIR = '/tmp/.mastra-proc';
 
+/** Maximum time to wait for the Docker kill helper and its inspect calls to complete. */
+const KILL_OPERATION_TIMEOUT_MS = 10_000;
+
 /**
  * Wrapper (run as the exec command) that places the user command in its own
  * process group and records the group's PGID so kill() can signal the whole
@@ -132,6 +135,10 @@ class DockerProcessHandle extends ProcessHandle {
   /** @internal Set by the timeout path to distinguish timeout kills from explicit kills */
   _timedOut = false;
   private _waitPromise: Promise<CommandResult> | null = null;
+  private _waitResolver: ((result: CommandResult) => void) | null = null;
+  private _settled = false;
+  private _streamEnded = false;
+  private _terminationPromise: Promise<boolean> | null = null;
   private _stdinStream: Duplex | null = null;
   private _execStream: NodeJS.ReadWriteStream | null = null;
   /** @internal Container path of the file holding this process group's PGID. */
@@ -168,6 +175,138 @@ class DockerProcessHandle extends ProcessHandle {
     this._waitPromise = p;
   }
 
+  /** @internal Set the resolver used by the single settlement path */
+  _setWaitResolver(resolve: (result: CommandResult) => void): void {
+    this._waitResolver = resolve;
+  }
+
+  /** @internal Mark a timeout request before kill confirmation is available */
+  _markTimedOut(): void {
+    this._timedOut = true;
+  }
+
+  /** @internal Whether wait() has already settled */
+  _isSettled(): boolean {
+    return this._settled;
+  }
+
+  private _buildResult(exitCode: number, termination?: { killed: boolean; timedOut: boolean }): CommandResult {
+    return {
+      success: exitCode === 0 && termination?.timedOut !== true,
+      exitCode,
+      stdout: this.stdout,
+      stderr: this.stderr,
+      executionTimeMs: Date.now() - this._startTime,
+      ...(termination ? { killed: termination.killed, timedOut: termination.timedOut } : {}),
+    };
+  }
+
+  private _settle(result: CommandResult): void {
+    if (this._settled) return;
+    this._settled = true;
+    const resolve = this._waitResolver;
+    this._waitResolver = null;
+    resolve?.(result);
+  }
+
+  private async _awaitKillStep<T>(
+    promise: Promise<T>,
+    deadline: number,
+    onLateResolve?: (value: T) => void,
+  ): Promise<T> {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      if (onLateResolve) {
+        void promise.then(onLateResolve).catch(() => {});
+      }
+      throw new Error('kill helper confirmation timed out');
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (onLateResolve) {
+          void promise.then(onLateResolve).catch(() => {});
+        }
+        reject(new Error('kill helper confirmation timed out'));
+      }, remaining);
+
+      promise.then(
+        value => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        error => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  /** @internal Settle after the main exec stream ends, waiting for any kill confirmation first */
+  async _settleAfterStreamEnd(exitCode: number): Promise<void> {
+    if (this._settled) return;
+    this._streamEnded = true;
+    this._setExitCode(exitCode);
+
+    const termination = this._terminationPromise;
+    if (termination) {
+      await termination;
+    }
+    if (this._settled) return;
+
+    if (this._killed) {
+      this._settle(this._buildResult(137, { killed: true, timedOut: this._timedOut }));
+    } else if (this._timedOut) {
+      this._settle(this._buildResult(exitCode, { killed: false, timedOut: true }));
+    } else {
+      this._settle(this._buildResult(exitCode));
+    }
+  }
+
+  /** @internal Settle a timeout whose kill helper could not confirm termination */
+  _settleTimeoutFallback(): void {
+    if (this._settled) return;
+    this._timedOut = true;
+    this._setExitCode(137);
+    this._settle(this._buildResult(137, { killed: false, timedOut: true }));
+  }
+
+  /** @internal Settle a stream close when termination was already confirmed */
+  _settleOnClose(): void {
+    if (this._settled || !this._killed) return;
+    this._setExitCode(137);
+    this._settle(this._buildResult(137, { killed: true, timedOut: this._timedOut }));
+  }
+
+  /** @internal Settle a stream error after any pending termination has resolved */
+  async _settleStreamError(): Promise<void> {
+    if (this._settled) return;
+
+    const termination = this._terminationPromise;
+    if (termination) {
+      await termination;
+    }
+    if (this._settled) return;
+
+    if (this._killed) {
+      this._setExitCode(137);
+      this._settle(this._buildResult(137, { killed: true, timedOut: this._timedOut }));
+      return;
+    }
+
+    if (this._timedOut) {
+      this._settleTimeoutFallback();
+      return;
+    }
+
+    this._setExitCode(1);
+    this._settle({
+      ...this._buildResult(1),
+      stderr: this.stderr || 'Stream error',
+    });
+  }
+
   /** @internal Set the exec stream so kill() can destroy it */
   _setExecStream(stream: NodeJS.ReadWriteStream): void {
     this._execStream = stream;
@@ -189,45 +328,64 @@ class DockerProcessHandle extends ProcessHandle {
     };
   }
 
-  async kill(): Promise<boolean> {
-    if (this._exitCode !== undefined) return false;
+  kill(): Promise<boolean> {
+    if (this._settled || this._streamEnded || this._exitCode !== undefined) {
+      return Promise.resolve(false);
+    }
+    if (this._terminationPromise) {
+      return this._terminationPromise;
+    }
 
+    this._terminationPromise = this._killProcessGroup();
+    return this._terminationPromise;
+  }
+
+  private async _killProcessGroup(): Promise<boolean> {
+    const deadline = Date.now() + KILL_OPERATION_TIMEOUT_MS;
     try {
       // Kill the process group inside the *container's* PID namespace. We must
       // not use exec.inspect().Pid here: that is the host/daemon-namespace PID
       // and does not correspond to PIDs an in-container `kill` can address. The
       // recorded PGID targets a kernel-owned group, so descendants that were
       // re-parented to PID 1 are still caught.
-      const killExec = await this._container.exec({
-        // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
-        // $1=path) so no runtime value is ever interpolated into the command.
-        Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
-        AttachStdout: false,
-        AttachStderr: false,
-      });
-      const killStream = await killExec.start({});
+      const killExec = await this._awaitKillStep(
+        this._container.exec({
+          // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
+          // $1=path) so no runtime value is ever interpolated into the command.
+          Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
+          AttachStdout: false,
+          AttachStderr: false,
+        }),
+        deadline,
+      );
+      let killStream: NodeJS.ReadWriteStream | null = null;
 
       try {
+        killStream = await this._awaitKillStep(killExec.start({}), deadline, stream => stream.destroy());
         // Exec.start() resolves when the exec stream is opened, not when the
         // helper script exits. Poll inspect() until it finishes so we only report
         // success once the process tree has actually been killed — otherwise
         // wait() could resolve with exit 137 while targets are still running.
-        let killInfo = await killExec.inspect();
+        let killInfo = await this._awaitKillStep(killExec.inspect(), deadline);
         while (killInfo.Running) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-          killInfo = await killExec.inspect();
+          await this._awaitKillStep(new Promise(resolve => setTimeout(resolve, 10)), deadline);
+          killInfo = await this._awaitKillStep(killExec.inspect(), deadline);
         }
         if (killInfo.ExitCode !== 0) {
           throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
         }
 
-        // Mark as killed and destroy stream so wait() resolves.
-        // Docker exec streams don't close automatically when the process is killed externally.
+        // Only publish termination metadata after the helper confirms the group
+        // is gone. Settling before destroying the stream keeps an early stream
+        // 'end' event from resolving wait() without that metadata.
         this._killed = true;
+        this._setExitCode(137);
+        this._settle(this._buildResult(137, { killed: true, timedOut: this._timedOut }));
+        // Docker exec streams don't close automatically when the process is killed externally.
         this._destroyStream();
         return true;
       } finally {
-        killStream.destroy();
+        killStream?.destroy();
       }
     } catch (error: unknown) {
       // ESRCH / "no such process" is expected if the process exited between inspect and kill
@@ -237,6 +395,10 @@ class DockerProcessHandle extends ProcessHandle {
         console.warn(`[DockerProcessManager] kill(${this.pid}) failed unexpectedly:`, error);
       }
       return false;
+    } finally {
+      if (!this._settled) {
+        this._terminationPromise = null;
+      }
     }
   }
 
@@ -347,6 +509,8 @@ export class DockerProcessManager extends SandboxProcessManager {
 
     // Create the wait promise that resolves when the stream ends
     const waitPromise = new Promise<CommandResult>(resolve => {
+      handle._setWaitResolver(resolve);
+
       // Demux the multiplexed stream into stdout/stderr
       // Docker multiplexes stdout/stderr into a single stream with 8-byte headers
       // when Tty is false. We need to parse these headers.
@@ -385,60 +549,26 @@ export class DockerProcessManager extends SandboxProcessManager {
       });
 
       stream.on('end', async () => {
-        // Get exit code from exec inspect
+        // Get exit code from exec inspect. Settlement is coordinated through
+        // the handle so a kill helper that is still confirming termination can
+        // win the race without losing killed/timedOut metadata.
+        let exitCode = 1;
         try {
           const info = await exec.inspect();
-          const exitCode = info.ExitCode ?? 1;
-          handle._setExitCode(exitCode);
-          resolve({
-            success: exitCode === 0,
-            exitCode,
-            stdout: handle.stdout,
-            stderr: handle.stderr,
-            executionTimeMs: Date.now() - startTime,
-          });
+          exitCode = info.ExitCode ?? 1;
         } catch {
-          handle._setExitCode(1);
-          resolve({
-            success: false,
-            exitCode: 1,
-            stdout: handle.stdout,
-            stderr: handle.stderr,
-            executionTimeMs: Date.now() - startTime,
-          });
+          exitCode = 1;
         }
+        await handle._settleAfterStreamEnd(exitCode);
       });
 
       // 'close' fires when stream.destroy() is called (e.g., from kill or timeout).
-      // Only resolve with SIGKILL exit code when the process was explicitly killed;
-      // natural stream close should be handled by the 'end' event above.
-      // Note: Docker multiplexed streams always emit 'end' before 'close' for
-      // natural exits, so the !_killed guard won't silently drop natural closes.
       stream.on('close', () => {
-        if (handle.exitCode !== undefined) return; // Already resolved via 'end'
-        if (!handle._killed) return; // Natural close — 'end' handles it
-        handle._setExitCode(137); // SIGKILL
-        resolve({
-          success: false,
-          exitCode: 137,
-          stdout: handle.stdout,
-          stderr: handle.stderr,
-          executionTimeMs: Date.now() - startTime,
-          killed: true,
-          timedOut: handle._timedOut,
-        });
+        handle._settleOnClose();
       });
 
       stream.on('error', () => {
-        if (handle.exitCode !== undefined) return; // Already resolved
-        handle._setExitCode(1);
-        resolve({
-          success: false,
-          exitCode: 1,
-          stdout: handle.stdout,
-          stderr: handle.stderr || 'Stream error',
-          executionTimeMs: Date.now() - startTime,
-        });
+        void handle._settleStreamError();
       });
     });
 
@@ -448,19 +578,16 @@ export class DockerProcessManager extends SandboxProcessManager {
     if (resolvedTimeout > 0) {
       const timeoutMs = resolvedTimeout;
       const timer = setTimeout(() => {
-        if (handle.exitCode === undefined) {
-          handle._killed = true;
-          handle._timedOut = true;
+        if (handle.exitCode === undefined && !handle._isSettled()) {
+          handle._markTimedOut();
           // Await kill() so the process tree is actually terminated before the
           // stream is torn down. Destroying the stream first would resolve
           // wait() with exit 137 while the targets are still running — the exact
           // bug this fix addresses. Only force-destroy the stream if kill()
           // fails to make progress, as a last resort to unblock wait().
           const forceClose = () => {
-            if (handle.exitCode === undefined) {
-              handle._killed = true;
-              handle._destroyStream();
-            }
+            handle._settleTimeoutFallback();
+            handle._destroyStream();
           };
           handle
             .kill()

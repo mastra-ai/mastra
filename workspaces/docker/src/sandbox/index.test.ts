@@ -1378,6 +1378,147 @@ describe('DockerSandbox', () => {
       expect(result.timedOut).toBe(false);
     });
 
+    it('should preserve explicit kill metadata when the stream ends before kill confirmation', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      let confirmKill!: (info: { Running: boolean; ExitCode: number }) => void;
+      const killInspect = new Promise<{ Running: boolean; ExitCode: number }>(resolve => {
+        confirmKill = resolve;
+      });
+      const killStream = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(killStream),
+        inspect: vi.fn().mockReturnValue(killInspect),
+      });
+
+      // The main stream can report its exit before the kill helper's inspect
+      // call confirms that the process group is gone.
+      mockExec.inspect.mockResolvedValueOnce({ Running: false, ExitCode: 137, Pid: 42 });
+      const killPromise = handle.kill();
+      const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+      const endPromise = endHandler();
+
+      confirmKill({ Running: false, ExitCode: 0 });
+
+      await expect(killPromise).resolves.toBe(true);
+      await endPromise;
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+      expect(killStream.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('should settle as a natural exit when the kill helper fails after stream end', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sh -c "exit 7"');
+      const waitPromise = handle.wait();
+
+      let confirmKill!: (info: { Running: boolean; ExitCode: number }) => void;
+      const killInspect = new Promise<{ Running: boolean; ExitCode: number }>(resolve => {
+        confirmKill = resolve;
+      });
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+        inspect: vi.fn().mockReturnValue(killInspect),
+      });
+
+      mockExec.inspect.mockResolvedValueOnce({ Running: false, ExitCode: 7, Pid: 42 });
+      const killPromise = handle.kill();
+      const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+      const endPromise = endHandler();
+
+      confirmKill({ Running: false, ExitCode: 1 });
+
+      await expect(killPromise).resolves.toBe(false);
+      await endPromise;
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(7);
+      expect(result.killed).toBeUndefined();
+      expect(result.timedOut).toBeUndefined();
+    });
+
+    it('should preserve confirmed kill metadata when the stream errors during kill confirmation', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      let confirmKill!: (info: { Running: boolean; ExitCode: number }) => void;
+      const killInspect = new Promise<{ Running: boolean; ExitCode: number }>(resolve => {
+        confirmKill = resolve;
+      });
+      const killStream = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(killStream),
+        inspect: vi.fn().mockReturnValue(killInspect),
+      });
+
+      const killPromise = handle.kill();
+      const errorHandler = mockStream.on.mock.calls.find(([event]) => event === 'error')?.[1] as () => void;
+      errorHandler();
+
+      await Promise.resolve();
+      confirmKill({ Running: false, ExitCode: 0 });
+
+      await expect(killPromise).resolves.toBe(true);
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+      expect(killStream.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('should preserve timeout fallback when a timed-out kill fails during a stream error', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      let confirmKill!: (info: { Running: boolean; ExitCode: number }) => void;
+      const killInspect = new Promise<{ Running: boolean; ExitCode: number }>(resolve => {
+        confirmKill = resolve;
+      });
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+        inspect: vi.fn().mockReturnValue(killInspect),
+      });
+
+      const killPromise = handle.kill();
+      (handle as any)._markTimedOut();
+      const errorHandler = mockStream.on.mock.calls.find(([event]) => event === 'error')?.[1] as () => void;
+      errorHandler();
+
+      await Promise.resolve();
+      confirmKill({ Running: false, ExitCode: 1 });
+
+      await expect(killPromise).resolves.toBe(false);
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(false);
+      expect(result.timedOut).toBe(true);
+    });
+
     it('should mark timeout results as killed and timed out', async () => {
       vi.useFakeTimers();
       try {
@@ -1398,6 +1539,63 @@ describe('DockerSandbox', () => {
         expect(result.exitCode).toBe(137);
         expect(result.killed).toBe(true);
         expect(result.timedOut).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should retain timeout without claiming an unconfirmed kill when the helper fails', async () => {
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        mockContainer.exec.mockResolvedValueOnce({
+          id: 'kill-exec',
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+        });
+
+        await vi.advanceTimersByTimeAsync(50);
+        const result = await waitPromise;
+
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(false);
+        expect(result.timedOut).toBe(true);
+        expect(mockStream.destroy).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should bound a kill helper inspection that never settles', async () => {
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        mockContainer.exec.mockResolvedValueOnce({
+          id: 'kill-exec',
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          inspect: vi.fn().mockReturnValue(new Promise(() => {})),
+        });
+
+        await vi.advanceTimersByTimeAsync(50);
+        await vi.advanceTimersByTimeAsync(10_000);
+        const result = await waitPromise;
+
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(false);
+        expect(result.timedOut).toBe(true);
+        expect(mockStream.destroy).toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
