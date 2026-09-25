@@ -10,6 +10,14 @@ const tscBin = join(dirname(createRequire(import.meta.url).resolve('typescript/p
 
 describe('exactOptionalPropertyTypes compatibility', () => {
   it('allows createTool tools to be registered with new Mastra({ tools })', () => {
+    const files = spawnSync(process.execPath, [tscBin, '-p', tsconfig, '--listFilesOnly'], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    expect(files.error).toBeUndefined();
+    expect(files.status).toBe(0);
+    expect(files.stdout.split('\n').some(line => line.trim().endsWith('exact-optional/fixture.ts'))).toBe(true);
+
     // Core source has unrelated diagnostics under this flag, so only the fixture's own errors are checked.
     const result = spawnSync(process.execPath, [tscBin, '-p', tsconfig], {
       encoding: 'utf8',
