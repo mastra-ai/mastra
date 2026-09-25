@@ -1051,6 +1051,69 @@ describe('UnixSocketPubSub', () => {
       }
     });
 
+    it('does not restore broker membership for a group callback that is unsubscribing during reconnect', async () => {
+      const path = await socketPath();
+      const members = new Map<net.Socket, Set<string>>();
+      const deferredAcks: Array<() => void> = [];
+      let deferAcks = false;
+      const server = net.createServer((socket: net.Socket) => {
+        members.set(socket, new Set());
+        socket.on('close', () => members.delete(socket));
+        socket.on('error', () => {});
+        socket.setEncoding('utf8');
+        let pending = '';
+        socket.on('data', (chunk: string) => {
+          pending += chunk;
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const frame = JSON.parse(line);
+            if (frame.type !== 'subscribe' && frame.type !== 'unsubscribe') continue;
+            const key = `${frame.topic}:${frame.group}`;
+            if (frame.type === 'subscribe') members.get(socket)?.add(key);
+            else members.get(socket)?.delete(key);
+            const type = frame.type === 'subscribe' ? 'subscribed' : 'unsubscribed';
+            const ack = () => socket.write(`${JSON.stringify({ type, topic: frame.topic, group: frame.group })}\n`);
+            if (deferAcks) deferredAcks.push(ack);
+            else ack();
+          }
+        });
+      });
+      await new Promise<void>(resolve => server.listen(path, () => resolve()));
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const leaving = vi.fn();
+      await pubsub.subscribe('topic-a', vi.fn(), { group: 'workers' });
+      await pubsub.subscribe('topic-b', leaving, { group: 'workers' });
+
+      try {
+        // Drop the client and hold acks so the reconnect's resubscribe pauses on
+        // topic-a while topic-b is being unsubscribed.
+        deferAcks = true;
+        for (const socket of members.keys()) socket.destroy();
+        await waitFor(() => expect(deferredAcks).toHaveLength(1));
+
+        const unsubscribe = pubsub.unsubscribe('topic-b', leaving);
+        await waitFor(() => expect(deferredAcks).toHaveLength(2));
+
+        deferAcks = false;
+        deferredAcks[0]!();
+        // Let the resubscribe loop move on to topic-b before the unsubscribe is acknowledged.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        deferredAcks[1]!();
+        await unsubscribe;
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        const liveMembership = [...members.values()].some(keys => keys.has('topic-b:workers'));
+        expect(liveMembership).toBe(false);
+      } finally {
+        await pubsub.close();
+        for (const socket of members.keys()) socket.destroy();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
+
     it('rejects publish with a closed-transport error when close races broker loss', async () => {
       const path = await socketPath();
       const broker = await startAckingBroker(path);

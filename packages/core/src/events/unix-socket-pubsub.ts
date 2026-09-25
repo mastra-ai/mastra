@@ -293,6 +293,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #closed = false;
   #starting?: Promise<void>;
   #subscriptions = new Map<string, Map<EventCallback, LocalSubscription>>();
+  // Subscriptions whose unsubscribe is in flight. A reconnect must not
+  // re-register them with the broker, or the membership outlives local cleanup.
+  #leavingSubscriptions = new Set<LocalSubscription>();
   #localGroupCursors = new Map<string, number>();
   #brokerGroupCursors = new Map<string, number>();
   #subscribeWaiters = new Map<string, MembershipWaiter[]>();
@@ -507,6 +510,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       candidate => candidate.callback !== cb && candidate.group === subscription.group,
     );
     if (membershipWillEnd && !this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
+      this.#leavingSubscriptions.add(subscription);
       try {
         await this.#sendUnsubscribeToBroker(topic, subscription.group);
         const membershipReplaced = [...subscriptions.values()].some(
@@ -521,6 +525,8 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
         // subscriptions still registered locally. Finish the local cleanup
         // instead of failing teardown.
         if (!this.#closed && !isBrokerConnectionError(error)) throw error;
+      } finally {
+        this.#leavingSubscriptions.delete(subscription);
       }
     }
 
@@ -1065,7 +1071,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
         socket.off('error', onError);
         this.#clientSocket = socket;
         this.#isBroker = false;
-        readFrames(socket, frame => this.#handleServerFrame(frame), this.#maxInboundFrameBytes);
+        readFrames(socket, frame => this.#handleServerFrame(socket, frame), this.#maxInboundFrameBytes);
         // NOTE: keep this exact message in sync with isBrokerConnectionError.
         socket.on('close', () =>
           this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
@@ -1081,7 +1087,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   async #resubscribeClient() {
     for (const [topic, subscriptions] of this.#subscriptions) {
-      const groups = new Set([...subscriptions.values()].map(subscription => subscription.group));
+      const groups = new Set(
+        [...subscriptions.values()]
+          .filter(subscription => !this.#leavingSubscriptions.has(subscription))
+          .map(subscription => subscription.group),
+      );
       for (const group of groups) {
         await this.#sendSubscribeToBroker(topic, group);
       }
@@ -1351,7 +1361,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  #handleServerFrame(frame: ServerFrame) {
+  #handleServerFrame(socket: net.Socket, frame: ServerFrame) {
+    // Membership acks are only meaningful from the current connection. A late
+    // ack from a replaced socket must not settle a waiter for a retried frame.
+    if ((frame.type === 'subscribed' || frame.type === 'unsubscribed') && socket !== this.#clientSocket) return;
     if (frame.type === 'subscribed') {
       this.#settleMembershipWaiters(this.#subscribeWaiters, membershipKey(frame.topic, frame.group));
       return;
@@ -1512,10 +1525,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
           await this.#sendToActiveBroker(frame);
         } else {
           if (this.#closed) throw closedError(lastError);
-          beforeAttempt?.();
           const failedSocket = this.#clientSocket;
           this.#clientSocket = undefined;
           failedSocket?.destroy();
+          beforeAttempt?.();
           await this.#ensureStarted(true);
           await this.#sendToActiveBroker(frame);
         }
