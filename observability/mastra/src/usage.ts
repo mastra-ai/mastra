@@ -20,6 +20,8 @@ interface AnthropicMetadata {
   cacheReadInputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheCreation?: AnthropicCacheCreation;
+  /** Raw API usage object; @ai-sdk/anthropic passes the TTL split through here, not as `cacheCreation`. */
+  usage?: { cache_creation?: AnthropicCacheCreation };
 }
 
 interface GoogleUsageMetadata {
@@ -216,10 +218,12 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     if (!isDefined(inputDetails.cacheRead) && isDefined(anthropic.cacheReadInputTokens)) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
-    const cacheWrite5m =
-      anthropic.cacheCreation?.ephemeral_5m_input_tokens ?? anthropic.cacheCreation?.ephemeral5mInputTokens;
-    const cacheWrite1h =
-      anthropic.cacheCreation?.ephemeral_1h_input_tokens ?? anthropic.cacheCreation?.ephemeral1hInputTokens;
+    const cacheCreation =
+      anthropic.cacheCreation ??
+      anthropic.usage?.cache_creation ??
+      (usage.raw as { cache_creation?: AnthropicCacheCreation } | undefined)?.cache_creation;
+    const cacheWrite5m = cacheCreation?.ephemeral_5m_input_tokens ?? cacheCreation?.ephemeral5mInputTokens;
+    const cacheWrite1h = cacheCreation?.ephemeral_1h_input_tokens ?? cacheCreation?.ephemeral1hInputTokens;
     if (!isDefined(inputDetails.cacheWrite5m) && isDefined(cacheWrite5m)) {
       inputDetails.cacheWrite5m = cacheWrite5m;
     }
