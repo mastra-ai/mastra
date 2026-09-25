@@ -1,18 +1,12 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import {
-  DialogAction,
-  DialogBody,
-  DialogCancel,
-  DialogDescription,
-  DialogFooter,
-} from '@mastra/playground-ui/components/Dialog';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
+import { Combobox } from '@/ds/components/Combobox';
+import { DialogAction, DialogBody, DialogCancel, DialogDescription, DialogFooter } from '@/ds/components/Dialog';
+import { Notice } from '@/ds/components/Notice';
+import { TextAndIcon } from '@/ds/components/Text';
+import { toast } from '@/utils/toast';
 
 export interface SpanScoringProps {
   traceId?: string;

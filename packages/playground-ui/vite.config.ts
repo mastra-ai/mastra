@@ -96,6 +96,7 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
       entry: {
         style: resolve(srcDir, 'style.ts'),
         tokens: resolve(srcDir, 'ds/tokens/index.ts'),
+        'lib/framework': resolve(srcDir, 'lib/framework.tsx'),
         ...fileEntries('src/utils', 'utils'),
         ...fileEntries('src/domains', 'domains'),
         ...fileEntries('src/ee', 'ee'),

@@ -1,4 +1,6 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -16,8 +18,6 @@ import {
   weatherWorkflow,
 } from '../../__tests__/fixtures/workflow';
 import { WorkflowLayout } from '../../workflow-layout';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

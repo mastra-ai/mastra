@@ -290,6 +290,11 @@ function mapMastraToLangfuseAttributes(
   environment?: string,
   release?: string,
 ): void {
+  if (attributes['gen_ai.usage.reasoning_tokens'] !== undefined) {
+    attributes['gen_ai.usage.reasoning.output_tokens'] = attributes['gen_ai.usage.reasoning_tokens'];
+    delete attributes['gen_ai.usage.reasoning_tokens'];
+  }
+
   // Environment and release: set directly since onStart() is not called
   if (environment) {
     attributes['langfuse.environment'] = environment;

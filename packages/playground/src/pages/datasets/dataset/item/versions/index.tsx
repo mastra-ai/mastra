@@ -7,6 +7,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
@@ -15,7 +16,6 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {

@@ -5,10 +5,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
 import { DatasetFieldErrors } from './dataset-field-errors';
 
