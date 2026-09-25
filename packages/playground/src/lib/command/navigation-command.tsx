@@ -14,6 +14,7 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import {
   Cpu,
   EyeIcon,
@@ -37,7 +38,6 @@ import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';

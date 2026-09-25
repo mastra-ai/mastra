@@ -11,6 +11,7 @@ import {
   ThreadListItems,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
@@ -19,7 +20,6 @@ import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { getRunResourceId, getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowRecentRunsProps {
   workflowId: string;

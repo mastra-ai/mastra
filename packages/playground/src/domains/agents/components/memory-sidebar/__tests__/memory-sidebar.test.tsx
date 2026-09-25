@@ -1,5 +1,7 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -32,8 +34,6 @@ import {
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { MemoryTimelineProvider, useMemoryTimeline } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

@@ -1,7 +1,7 @@
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 
 /**
  * Anchor stub for tests that render components which route through the framework

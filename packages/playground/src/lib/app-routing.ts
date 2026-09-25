@@ -1,7 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { redirect } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 
 export const agentThreadsIndexLoader = ({ params }: LoaderFunctionArgs) =>
   redirect(`/agents/${params.agentId}/threads/new`);

@@ -2,12 +2,12 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ClipboardCheck, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '@/domains/experiments/components/rename-experiment-dialog';
 import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
 import { experimentReviewQueueLink } from '@/lib/app-routing';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
   experiment: DatasetExperiment;

@@ -2,12 +2,12 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
-import { useLinkComponent } from '@/lib/framework';
 
 function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
   if (!score) return false;
