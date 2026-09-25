@@ -1,21 +1,21 @@
 'use client';
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
-import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
-import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { DatabaseIcon, Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { useDatasets } from '../hooks/use-datasets';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Label } from '@/ds/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
+import { SideDialog } from '@/ds/components/SideDialog';
+import type { SideDialogRootProps } from '@/ds/components/SideDialog';
+import { TextAndIcon } from '@/ds/components/Text';
+import { toast } from '@/utils/toast';
 
-type SaveAsDatasetItemDialogProps = {
+export type SaveAsDatasetItemDialogProps = {
   initialInput: string;
   initialGroundTruth: string;
   /** JSON string of the expected trajectory */
@@ -253,7 +253,7 @@ export function SaveAsDatasetItemDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
-            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-30" />
           </div>
 
           <div className="grid gap-2">
@@ -262,7 +262,7 @@ export function SaveAsDatasetItemDialog({
               value={groundTruth}
               onChange={handleGroundTruthChange}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 
@@ -272,7 +272,7 @@ export function SaveAsDatasetItemDialog({
               value={expectedTrajectory}
               onChange={handleExpectedTrajectoryChange}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 
@@ -282,7 +282,7 @@ export function SaveAsDatasetItemDialog({
               value={toolMocks}
               onChange={handleToolMocksChange}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 

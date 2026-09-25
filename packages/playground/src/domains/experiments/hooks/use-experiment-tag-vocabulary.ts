@@ -1,7 +1,6 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
+import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { useMemo } from 'react';
-
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 /**
  * Every tag known for an experiment: the dataset's own tags (when the dataset

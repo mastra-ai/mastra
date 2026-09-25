@@ -4,12 +4,12 @@ import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { SaveAsDatasetItemDialog } from '@mastra/playground-ui/domains/datasets';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import type { SpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 
 type TraceAsItemDialogProps = {
   /** Full span record — if provided, used directly (no fetch). */

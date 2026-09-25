@@ -7,7 +7,7 @@ export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement>;
 // Define the actual component type with ref attributes
 export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAttributes<HTMLAnchorElement>>;
 
-type LinkComponentPaths = {
+export type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
@@ -52,6 +52,8 @@ type LinkComponentPaths = {
   datasetItemLink: (datasetId: string, itemId: string) => string;
   experimentLink: (experimentId: string) => string;
   experimentItemLink: (experimentId: string, itemId: string) => string;
+
+  traceLink: (traceId: string, spanId?: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -100,6 +102,7 @@ const LinkComponentContext = createContext<{
     datasetItemLink: () => '',
     experimentLink: () => '',
     experimentItemLink: () => '',
+    traceLink: () => '',
   },
 });
 
