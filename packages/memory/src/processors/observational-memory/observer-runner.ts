@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { AgentMemoryOption, MastraDBMessage } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -296,6 +296,7 @@ export class ObserverRunner {
       ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory, activeExtractors)
       : this.createAgent(resolvedModel.model, false, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
+    let attemptMemory: AgentMemoryOption | undefined;
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
@@ -336,11 +337,12 @@ export class ObserverRunner {
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
                 try {
+                  attemptMemory = temporaryMemory?.newThread();
                   const streamResult = await agent.stream(observerMessages, {
                     maxSteps: 1,
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
-                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(attemptMemory ? { memory: attemptMemory } : {}),
                     ...(abortSignal ? { abortSignal } : {}),
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
@@ -391,7 +393,7 @@ export class ObserverRunner {
       agent,
       source: 'observer',
       extractors: activeExtractors,
-      memory: temporaryMemory?.options,
+      memory: attemptMemory,
       priorExtractedValues: options?.priorExtractedValues,
       requestContext: internalRequestContext,
       observabilityContext: options?.observabilityContext,
@@ -594,7 +596,6 @@ export class ObserverRunner {
       return { results, usage: totalUsage };
     }
 
-    let temporaryMemory: Awaited<ReturnType<typeof createTemporaryOmMemoryContext>> | undefined;
     const agent = this.createAgent(resolvedModel.model, true, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
 
@@ -650,7 +651,6 @@ export class ObserverRunner {
                     maxSteps: 1,
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
-                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
                     ...(abortSignal ? { abortSignal } : {}),
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,

@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import type { MessageList } from '@mastra/core/agent';
+import type { AgentMemoryOption, MessageList } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -379,6 +379,7 @@ export class ReflectorRunner {
       ? this.createAgent(resolvedModel.model, temporaryMemory.memory, activeExtractors)
       : this.createAgent(resolvedModel.model, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
+    let attemptMemory: AgentMemoryOption | undefined;
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -434,13 +435,14 @@ export class ReflectorRunner {
                 // Reset chunk counter per attempt so retry-after-transient-error
                 // doesn't get tagged with the previous attempt's chunk count.
                 chunkCount = 0;
+                attemptMemory = temporaryMemory?.newThread();
                 const streamResult = await agent.stream(prompt, {
                   maxSteps: 1,
                   modelSettings: {
                     ...this.reflectionConfig.modelSettings,
                   },
                   providerOptions: this.reflectionConfig.providerOptions as any,
-                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                  ...(attemptMemory ? { memory: attemptMemory } : {}),
                   ...(abortSignal ? { abortSignal } : {}),
                   ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
@@ -583,7 +585,7 @@ export class ReflectorRunner {
       agent,
       source: 'reflector',
       extractors: activeExtractors,
-      memory: temporaryMemory?.options,
+      memory: attemptMemory,
       priorExtractedValues,
       requestContext: internalRequestContext,
       observabilityContext,
