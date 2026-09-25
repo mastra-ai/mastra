@@ -285,8 +285,8 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'gte', label: 'at least' },
   { id: 'lt', label: 'less than' },
   { id: 'lte', label: 'at most' },
-  { id: 'matches', label: 'matches' },
-  { id: 'notMatches', label: 'does not match' },
+  { id: 'matches', label: 'matches', freeText: true },
+  { id: 'notMatches', label: 'does not match', freeText: true },
 ];
 
 const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
