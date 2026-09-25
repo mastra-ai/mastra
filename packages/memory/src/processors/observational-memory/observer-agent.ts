@@ -1522,7 +1522,7 @@ export function parseMultiThreadObserverOutput(
   const threads = new Map<string, ObserverResult>();
 
   // Check for degenerate repetition on the whole output
-  if (detectDegenerateRepetition(output)) {
+  if (detectDegenerateRepetition(prepareForDegenerateCheck(output))) {
     return { threads, rawOutput: output, degenerate: true };
   }
 
@@ -1712,8 +1712,7 @@ function getStringExtractedValue(values: Record<string, unknown>, slug: string):
 }
 
 export function parseObserverOutput(output: string, extractors: readonly Extractor<any>[] = []): ObserverResult {
-  // Check for degenerate repetition before parsing (operates on raw output)
-  if (detectDegenerateRepetition(output)) {
+  if (detectDegenerateRepetition(prepareForDegenerateCheck(output))) {
     return {
       observations: '',
       rawOutput: output,
@@ -1852,6 +1851,29 @@ export function sanitizeObservationLines(observations: string): string {
     }
   }
   return changed ? lines.join('\n') : observations;
+}
+
+/**
+ * Normalize observer output before degenerate detection: truncate giant lines
+ * (so a single long-but-legitimate line is trimmed rather than rejected) and
+ * collapse runs of consecutive identical lines, which is how faithful
+ * summaries of repetitive tool output look (e.g. many "execute_command → ok").
+ * Non-consecutive repetition loops are still caught by the detector.
+ */
+function prepareForDegenerateCheck(output: string): string {
+  const lines = sanitizeObservationLines(output).split('\n');
+  return lines.filter((line, i) => i === 0 || line.trim() === '' || line !== lines[i - 1]).join('\n');
+}
+
+/**
+ * Error thrown when the Observer keeps producing degenerate output after a retry.
+ * Observation strategies treat it as a skipped cycle rather than a fatal failure.
+ */
+export class DegenerateObserverOutputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DegenerateObserverOutputError';
+  }
 }
 
 /**
