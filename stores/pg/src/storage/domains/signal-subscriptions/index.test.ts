@@ -1,3 +1,4 @@
+import { createSignalSubscriptionsConformanceTests } from '@internal/storage-test-utils';
 import { SignalSubscriptionFenceError } from '@mastra/core/storage';
 import type { SignalSubscriptionIdentity } from '@mastra/core/storage';
 import { Pool } from 'pg';
@@ -148,7 +149,13 @@ describe('SignalSubscriptionsPG', () => {
       metadata: { a: 1, nested: { x: 1 } },
       deliveryOptions: { ifIdle: true },
     });
-    await store.claimSubscription({ agentId: 'agent-a', id: created.id, owner: 'o', ttlMs: 60_000, cadenceMs: CADENCE });
+    await store.claimSubscription({
+      agentId: 'agent-a',
+      id: created.id,
+      owner: 'o',
+      ttlMs: 60_000,
+      cadenceMs: CADENCE,
+    });
     await store.updateSubscription({ agentId: 'agent-a', id: created.id, patch: { cursor: { page: 2 } } });
 
     const merged = await replica.upsertSubscription({ ...identity(), metadata: { nested: { y: 2 }, b: true } });
@@ -162,7 +169,9 @@ describe('SignalSubscriptionsPG', () => {
     });
     expect(merged.createdAt).toEqual(created.createdAt);
     expect(merged.nextPollAt).toBeInstanceOf(Date);
-    expect((await store.upsertSubscription({ ...identity(), enabled: false, deliveryOptions: {} })).enabled).toBe(false);
+    expect((await store.upsertSubscription({ ...identity(), enabled: false, deliveryOptions: {} })).enabled).toBe(
+      false,
+    );
     expect((await store.upsertSubscription(identity())).enabled).toBe(false);
 
     for (const variant of [
@@ -240,7 +249,9 @@ describe('SignalSubscriptionsPG', () => {
     const { id } = await store.upsertSubscription(identity());
     const ref = { agentId: 'agent-a', id };
     await store.claimSubscription({ ...ref, owner: 'a', ttlMs: 60_000, cadenceMs: CADENCE });
-    expect(await replica.claimSubscription({ ...ref, owner: 'b', ttlMs: TTL, cadenceMs: CADENCE, force: true })).toBeNull();
+    expect(
+      await replica.claimSubscription({ ...ref, owner: 'b', ttlMs: TTL, cadenceMs: CADENCE, force: true }),
+    ).toBeNull();
     await store.releaseSubscriptionClaim({ ...ref, owner: 'a' });
     const before = Date.now();
     const forced = await replica.claimSubscription({ ...ref, owner: 'b', ttlMs: TTL, cadenceMs: 5_000, force: true });
@@ -298,7 +309,9 @@ describe('SignalSubscriptionsPG', () => {
     expect(
       await store.beginSubscriptionOperation({ ...ref, kind: 'unsubscribe', owner: 'u1', ttlMs: TTL }),
     ).toMatchObject({ operationKind: 'unsubscribe', operationOwner: 'u1' });
-    expect(await replica.beginSubscriptionOperation({ ...ref, kind: 'unsubscribe', owner: 'u2', ttlMs: TTL })).toBeNull();
+    expect(
+      await replica.beginSubscriptionOperation({ ...ref, kind: 'unsubscribe', owner: 'u2', ttlMs: TTL }),
+    ).toBeNull();
     expect(await store.renewSubscriptionOperation({ ...ref, owner: 'u2', ttlMs: TTL })).toBe(false);
     expect(await store.renewSubscriptionOperation({ ...ref, owner: 'u1', ttlMs: TTL })).toBe(true);
     await store.setSubscriptionEnabled({ ...ref, enabled: false });
@@ -319,7 +332,13 @@ describe('SignalSubscriptionsPG', () => {
   });
 
   it('fences owned documents and releases ownership only when no rows remain', async () => {
-    const doc = { key: 'doc-1', agentId: 'agent-a', providerId: 'github', resourceId: 'resource-1', threadId: 'thread-1' };
+    const doc = {
+      key: 'doc-1',
+      agentId: 'agent-a',
+      providerId: 'github',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    };
     const owner = (await store.claimDocumentOwner(doc))!;
     expect((await replica.claimDocumentOwner(doc))?.fencingToken).toBe(owner.fencingToken);
     expect(await replica.claimDocumentOwner({ ...doc, agentId: 'agent-b' })).toBeNull();
@@ -449,5 +468,21 @@ describe('SignalSubscriptionsPG', () => {
     expect(await store.isEmpty()).toBe(false);
     await store.dangerouslyClearAll();
     expect(await store.isEmpty()).toBe(true);
+  });
+});
+
+describe('SignalSubscriptionsPG conformance', () => {
+  const pools = new Map<SignalSubscriptionsPG, Pool>();
+
+  createSignalSubscriptionsConformanceTests({
+    storeName: 'PostgreSQL',
+    createStore: async () => {
+      const pool = new Pool({ connectionString });
+      const store = new SignalSubscriptionsPG({ pool });
+      pools.set(store, pool);
+      await store.init();
+      return store;
+    },
+    closeStore: async store => pools.get(store as SignalSubscriptionsPG)?.end(),
   });
 });
