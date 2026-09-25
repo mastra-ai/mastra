@@ -72,9 +72,9 @@ export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>)
   // Merge the builder's stability processors with any caller-supplied list:
   // the peer range allows cores that predate the framework defaults, so
   // relying on the resolver to add them would silently drop this stack on
-  // older cores. Defaults a caller replaces by id are filtered out so the
-  // caller's instance takes that slot instead of duplicating it; caller
-  // processors run after the remaining defaults so they can observe or
+  // older cores. A caller instance with a default's id replaces that default
+  // at its position, so repairs keep running ahead of retries; caller
+  // processors with other ids run after the defaults so they can observe or
   // extend retries the defaults trigger. An explicitly empty array opts out.
   // A function-typed override (DynamicArgument) is passed through unchanged —
   // callers using the dynamic form manage the full list.
@@ -82,10 +82,12 @@ export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>)
   const errorProcessors = Array.isArray(callerErrorProcessors)
     ? callerErrorProcessors.length
       ? [
-          ...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(
-            processor => !callerErrorProcessors.some(caller => caller.id === processor.id),
+          ...DEFAULT_BUILDER_ERROR_PROCESSORS.map(
+            processor => callerErrorProcessors.find(caller => caller.id === processor.id) ?? processor,
           ),
-          ...callerErrorProcessors,
+          ...callerErrorProcessors.filter(
+            caller => !DEFAULT_BUILDER_ERROR_PROCESSORS.some(processor => processor.id === caller.id),
+          ),
         ]
       : callerErrorProcessors
     : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
