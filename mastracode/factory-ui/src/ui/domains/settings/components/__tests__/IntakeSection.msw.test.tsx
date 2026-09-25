@@ -1127,6 +1127,38 @@ describe('IntakeSection', () => {
       expect(toggle).toBeEnabled();
       expect(await within(section).findByRole('checkbox', { name: 'Incident follow-ups (acme)' })).toBeChecked();
     });
+
+    it('keeps intake gated while the API key still needs an organization', async () => {
+      seedFactories();
+      useIntakeHandlers({
+        config: { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+      });
+      // An organization-required key cannot list follow-ups yet, so the
+      // section must not offer controls or fire the sources request.
+      let sourceRequests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: true,
+            mode: 'api-key',
+            organizationRequired: true,
+            reason: 'organization_required',
+          }),
+        ),
+        http.get(INTAKE_SOURCES_URL, () => {
+          sourceRequests += 1;
+          return HttpResponse.json({ sources: [], failures: [] });
+        }),
+      );
+
+      renderIntakeSection();
+
+      // Let the rest of the page settle so the absence assertion is meaningful.
+      await screen.findByRole('switch', { name: 'Sync GitHub issues' });
+      expect(screen.queryByRole('region', { name: 'incident.io follow-ups' })).not.toBeInTheDocument();
+      expect(sourceRequests).toBe(0);
+    });
   });
 
   describe('given the server omits unregistered integrations', () => {

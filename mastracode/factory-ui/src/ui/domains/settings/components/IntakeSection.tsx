@@ -396,9 +396,9 @@ function IncidentioIntakeSection({
   // and route sources.
   const directConfigured = Boolean(
     statusQuery.data?.enabled &&
-      statusQuery.data.configured &&
-      statusQuery.data.mode === 'api-key' &&
-      statusQuery.data.reason === 'ready',
+    statusQuery.data.configured &&
+    statusQuery.data.mode === 'api-key' &&
+    statusQuery.data.reason === 'ready',
   );
   const active = connectionsQuery.data?.filter(connection => connection.status === 'active') ?? [];
   const credentialActive = active.length > 0 || directConfigured;
