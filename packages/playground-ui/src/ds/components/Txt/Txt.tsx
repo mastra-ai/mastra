@@ -8,7 +8,7 @@ export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelEleme
   ref?: Ref<HTMLElement>;
   variant?: TextRole;
   tone?: keyof typeof tones;
-  font?: 'mono';
+  font?: keyof typeof fonts;
   htmlFor?: string;
   className?: string;
   title?: string;
@@ -16,6 +16,7 @@ export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelEleme
 }
 
 const fonts = {
+  body: '',
   mono: 'font-mono',
 };
 
@@ -44,13 +45,9 @@ const tones = {
   faint: 'text-placeholder',
 };
 
-export const Txt = ({ as: Root = 'p', className, variant = 'body', tone, font, ref, ...props }: TxtProps) => {
+export const Txt = ({ as: Root = 'p', className, variant = 'body', tone, font = 'body', ref, ...props }: TxtProps) => {
   // Cast needed: `Root` is polymorphic, so TS narrows the expected ref to a single element type.
   return (
-    <Root
-      ref={ref as never}
-      className={cn(roles[variant], tone && tones[tone], font && fonts[font], className)}
-      {...props}
-    />
+    <Root ref={ref as never} className={cn(roles[variant], tone && tones[tone], fonts[font], className)} {...props} />
   );
 };

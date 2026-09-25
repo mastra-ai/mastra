@@ -85,6 +85,18 @@ export interface ChannelAdapterBaseConfig {
   onAbort?: 'flush' | 'discard';
 
   /**
+   * Whether this adapter can render interactive approval buttons.
+   *
+   * When `false`, runs auto-resume suspended tools (e.g. `requireApproval`
+   * tools or `ask_user`) instead of waiting on an approval the user can't
+   * answer. Only consulted for `toolDisplay: 'hidden'`; `'text'` always
+   * auto-resumes and `'cards'`/`'timeline'`/`'grouped'` imply buttons.
+   *
+   * @default `true` for Slack, Discord, Teams, Google Chat and Telegram; `false` otherwise.
+   */
+  approvalButtons?: boolean;
+
+  /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).
    *
@@ -892,6 +904,41 @@ export interface ChannelProvider {
    * Returns public info only (no secrets).
    */
   listInstallations?(): Promise<ChannelInstallationInfo[]>;
+}
+
+/**
+ * Context passed to a {@link ChannelsResolver} when Mastra invokes it.
+ * Mirrors the callback shape of `DynamicArgument` used for agent tools.
+ */
+export interface ChannelsResolverContext {
+  /** The Mastra instance resolving channels, when available. */
+  mastra?: Mastra;
+  /** Reserved for signature symmetry with per-request dynamic arguments; channel resolution is instance-scoped, not request-scoped. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * A live channel-provider source, accepted by `Mastra({ channels })` in place
+ * of a static record. Lets an external system of record (e.g. the Mastra
+ * platform via `@mastra/connect`'s `channels()`) add or remove channel
+ * providers at runtime without redeploying the app.
+ *
+ * Contract:
+ * - **Callable** — returns the current provider map. Mastra invokes it on
+ *   `resolveChannels()`; the resolver owns freshness (caching/TTL), so calls
+ *   must be cheap when nothing changed.
+ * - **`getRoutes()`** — the union of API routes for *every* provider this
+ *   resolver can ever produce, available synchronously at Mastra
+ *   construction. Routes are mounted once, up front; providers late-bind, so
+ *   a route may exist before its provider has an active connection.
+ * - **Stability** — return the *same* provider instance across calls while
+ *   its underlying connection is unchanged. Mastra attaches and initializes
+ *   each distinct instance exactly once.
+ */
+export interface ChannelsResolver<TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>> {
+  (context?: ChannelsResolverContext): Promise<TChannels>;
+  /** Static route surface for every channel this resolver can produce. */
+  getRoutes(): ApiRoute[];
 }
 
 /**

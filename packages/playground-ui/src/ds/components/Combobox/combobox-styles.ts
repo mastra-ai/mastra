@@ -3,6 +3,7 @@ import { buttonVariants, isIconButtonSize } from '../Button/Button';
 import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
+import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -49,6 +50,7 @@ export function comboboxTriggerClass({
 
   return cn(
     buttonVariants({ variant: visualVariant, size }),
+    visualVariant === 'default' && fieldTriggerStyle,
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.

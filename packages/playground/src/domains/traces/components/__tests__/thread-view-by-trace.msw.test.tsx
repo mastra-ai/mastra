@@ -92,12 +92,12 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
-const renderView = ({ search = '' }: { search?: string } = {}) =>
+const renderView = ({ search = '', withFeedback = true }: { search?: string; withFeedback?: boolean } = {}) =>
   renderWithProviders(
     <TestLinkProvider>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
-          <ThreadViewByTrace threadId={THREAD_ID} />
+          <ThreadViewByTrace threadId={THREAD_ID} withQueryTrace withFeedback={withFeedback} />
         </ActivatedSkillsProvider>
       </BrowserToolCallsProvider>
     </TestLinkProvider>,
@@ -552,7 +552,7 @@ describe('ThreadViewByTrace', () => {
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('true');
       expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
 
-      fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
+      fireEvent.click(await firstRow.findByRole('tab', { name: /Feedback/ }));
 
       expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
@@ -607,7 +607,7 @@ describe('ThreadViewByTrace', () => {
       renderView();
 
       await screen.findByText('Chef agent run');
-      fireEvent.click(screen.getAllByRole('tab', { name: /Feedback/ })[0]);
+      fireEvent.click((await screen.findAllByRole('tab', { name: /Feedback/ }))[0]);
 
       const input = await screen.findByPlaceholderText('Leave feedback...');
       fireEvent.change(input, { target: { value: 'great turn' } });
@@ -617,6 +617,26 @@ describe('ThreadViewByTrace', () => {
       expect(onPost.mock.calls[0][0]).toMatchObject({
         feedback: { traceId: 'trace-a', value: 'great turn' },
       });
+    });
+  });
+
+  describe('when feedback is disabled', () => {
+    it('shows no Feedback tab and never requests feedback', async () => {
+      installHandlers();
+      const onFeedback = vi.fn();
+      server.use(
+        http.get(FEEDBACK_URL, () => {
+          onFeedback();
+          return HttpResponse.json(listFeedbackResponse([]));
+        }),
+      );
+      renderView({ withFeedback: false });
+
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+
+      expect(firstRow.getByRole('tab', { name: /Scores/ })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: /Feedback/ })).toBeNull();
+      expect(onFeedback).not.toHaveBeenCalled();
     });
   });
 });

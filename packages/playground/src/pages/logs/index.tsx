@@ -3,9 +3,9 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
-import { LogDetailsView } from '@mastra/playground-ui/domains/logs/components/log-details-view';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { LogDataPanel } from '@mastra/playground-ui/domains/logs/components/log-data-panel';
 import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/logs-error-content';
-import { LogsLayout } from '@mastra/playground-ui/domains/logs/components/logs-layout';
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
 import { LogsToolbar } from '@mastra/playground-ui/domains/logs/components/logs-toolbar';
 import { NoLogsInfo } from '@mastra/playground-ui/domains/logs/components/no-logs-info';
@@ -18,12 +18,9 @@ import {
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
 } from '@mastra/playground-ui/domains/logs/log-filters';
-import { SpanDetailsView } from '@mastra/playground-ui/domains/traces/components/span-details-view';
-import { TraceDetailsView } from '@mastra/playground-ui/domains/traces/components/trace-details-view';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
-import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -31,6 +28,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 
 const crumbs = [navCrumb('/logs')];
 
@@ -40,6 +38,8 @@ const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const url = useLogsUrlState(searchParams, setSearchParams);
+  // Servers without the trace-query API list threads through `listTracesLight` and don't expose feedback.
+  const traceQuery = useTraceQueryAvailable();
   const { sort, onSortChange } = useUrlSort({
     searchParams,
     setSearchParams,
@@ -56,7 +56,6 @@ export default function LogsPage() {
   const persistence = useLogsFilterPersistence(searchParams, setSearchParams);
 
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
-  const [logDetailsCollapsed, setLogDetailsCollapsed] = useState(false);
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
@@ -120,10 +119,6 @@ export default function LogsPage() {
   );
 
   const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans(url.featuredTraceId ?? null);
-  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(
-    url.featuredTraceId ?? '',
-    url.featuredSpanId ?? '',
-  );
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),
@@ -136,11 +131,7 @@ export default function LogsPage() {
     (traceId: string, spanId: string) => url.handleFeaturedChange({ traceId, spanId }),
     [url],
   );
-  const handleTraceClose = useCallback(() => {
-    url.handleFeaturedChange({ traceId: null, spanId: null });
-    setLogDetailsCollapsed(false);
-  }, [url]);
-  const handleSpanClose = useCallback(() => url.handleFeaturedChange({ spanId: null }), [url]);
+  const handleTraceClose = useCallback(() => url.handleFeaturedChange({ traceId: null, spanId: null }), [url]);
   const handleSpanSelect = useCallback(
     (spanId: string | undefined) => url.handleFeaturedChange({ spanId: spanId ?? null }),
     [url],
@@ -208,58 +199,36 @@ export default function LogsPage() {
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
       <h1 className="sr-only">Logs</h1>
-      <LogsLayout
-        logCollapsed={logDetailsCollapsed}
-        listSlot={
-          <LogsListView
-            logs={logs}
-            isLoading={isLoadingLogs}
-            isFetchingNextPage={isFetchingNextPage}
-            hasNextPage={hasNextPage}
-            setEndOfListElement={setEndOfListElement}
-            logIdMap={logIdMap}
-            featuredLogId={url.featuredLogId}
-            onLogClick={handleLogClick}
-            timestampSort={sort?.direction}
-            onSortChange={onSortChange}
-          />
-        }
-        logPanelSlot={
-          featuredLog ? (
-            <LogDetailsView
-              log={featuredLog}
-              onClose={handleLogClose}
-              onTraceClick={handleTraceClick}
-              onSpanClick={handleSpanClick}
-              onPrevious={handlePreviousLog}
-              onNext={handleNextLog}
-              collapsed={logDetailsCollapsed}
-              onCollapsedChange={setLogDetailsCollapsed}
-            />
-          ) : null
-        }
-        tracePanelSlot={
-          url.featuredTraceId ? (
-            <TraceDetailsView
-              traceId={url.featuredTraceId}
-              spans={traceSpansData?.spans}
-              isLoading={isLoadingTraceSpans}
-              onClose={handleTraceClose}
-              onSpanSelect={handleSpanSelect}
-              selectedSpanId={url.featuredSpanId}
-            />
-          ) : null
-        }
-        spanPanelSlot={
-          url.featuredTraceId && url.featuredSpanId ? (
-            <SpanDetailsView
-              spanId={url.featuredSpanId}
-              span={spanDetailData?.span}
-              isLoading={isLoadingSpanDetail}
-              onClose={handleSpanClose}
-            />
-          ) : null
-        }
+      <LogsListView
+        logs={logs}
+        isLoading={isLoadingLogs}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        logIdMap={logIdMap}
+        featuredLogId={url.featuredLogId}
+        onLogClick={handleLogClick}
+        timestampSort={sort?.direction}
+        onSortChange={onSortChange}
+      />
+      <LogDataPanel
+        log={featuredLog ?? undefined}
+        onClose={handleLogClose}
+        onTraceClick={handleTraceClick}
+        onSpanClick={handleSpanClick}
+        onPrevious={handlePreviousLog}
+        onNext={handleNextLog}
+      />
+      <TraceSpanPanel
+        depth={2}
+        traceId={featuredLog ? (url.featuredTraceId ?? undefined) : undefined}
+        spans={traceSpansData?.spans}
+        isLoadingSpans={isLoadingTraceSpans}
+        selectedSpanId={url.featuredSpanId ?? null}
+        onSpanSelect={handleSpanSelect}
+        onClose={handleTraceClose}
+        withQueryTrace={traceQuery.enabled}
+        withFeedback={traceQuery.enabled}
       />
     </PageLayout>
   );

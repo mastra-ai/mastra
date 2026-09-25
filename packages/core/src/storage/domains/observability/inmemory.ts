@@ -136,10 +136,31 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   override getFeatures() {
     if (!this.deltaPollingFeatureEnabled()) {
-      return undefined;
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'feedback',
+      ] as const;
     }
 
-    return ['delta-polling'] as const;
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'feedback',
+    ] as const;
   }
 
   async dangerouslyClearAll(): Promise<void> {

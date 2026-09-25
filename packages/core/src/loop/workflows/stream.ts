@@ -10,6 +10,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
@@ -36,7 +37,19 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async controller => {
+    start: async streamController => {
+      // Stamp chunks when the loop produces them; consumers may read them much later.
+      const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
+        enqueue: chunk => {
+          if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+          streamController.enqueue(chunk);
+        },
+        close: () => streamController.close(),
+        error: reason => streamController.error(reason),
+        get desiredSize() {
+          return streamController.desiredSize;
+        },
+      };
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
 
@@ -237,9 +250,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         timeoutType: 'total',
       });
 
-      const restWithTimeoutSignal = totalTimeoutPromise
-        ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } }
-        : rest;
+      // A run-owned signal linked to the caller's. Callers often reuse one long-lived signal
+      // across many runs, so run internals listen here rather than on the caller's signal;
+      // the single link back is removed in the `finally` below. Tools and sub-agents still
+      // receive the caller's signal unchanged through `options.abortSignal`.
+      const upstreamAbortSignal = totalTimeoutPromise ? totalTimeoutSignal : rest.options?.abortSignal;
+      const runAbortController = upstreamAbortSignal ? new AbortController() : undefined;
+      const onUpstreamAbort = () => runAbortController?.abort(upstreamAbortSignal?.reason);
+      if (upstreamAbortSignal?.aborted) {
+        onUpstreamAbort();
+      } else {
+        upstreamAbortSignal?.addEventListener('abort', onUpstreamAbort, { once: true });
+      }
+
+      const restWithTimeoutSignal = {
+        ...(totalTimeoutPromise ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } } : rest),
+        runAbortSignal: runAbortController?.signal,
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -447,7 +474,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...executionResult.result,
             stepResult: {
               ...executionResult.result.stepResult,
-              // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
+              // runtime reason can be 'tripwire' | 'retry' from processors
               reason: executionResult.result.stepResult.reason,
             },
           },
@@ -455,6 +482,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
         if (!keepRegisteredForResume) {

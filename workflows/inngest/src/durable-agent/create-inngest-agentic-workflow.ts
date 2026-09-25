@@ -315,6 +315,13 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .dowhile(singleIterationWorkflow, async ({ inputData }) => {
         const state = inputData as IterationState;
 
+        // bail() from a delegation hook is a hard stop. The flag travels on
+        // serialized iteration state (set by the tool-call step, aggregated by
+        // llm-mapping), so it survives the wire to this cross-process predicate.
+        if (state.delegationBailed) {
+          return false;
+        }
+
         // Check if we should continue
         const shouldContinue = state.lastStepResult?.isContinued === true;
         // Use maxSteps from options (per-request), falling back to workflow-level default
@@ -338,7 +345,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           let finalText = lastStep?.text;
 
           // Run finish side effects directly. This mapping already executes inside the
-          // engine's durable boundary (`wrapDurableOperation` -> `inngestStep.run`), so
+          // engine's durable step boundary (`inngestStep.run`), so
           // wrapping this call in `params.engine.step.run(...)` would create a nested
           // Inngest step, which the Inngest protocol does not support: the nested step's
           // callback never executes and its promise never settles, hanging the run and

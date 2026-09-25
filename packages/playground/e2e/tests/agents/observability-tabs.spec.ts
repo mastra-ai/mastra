@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
+import { mockTraceQueryCapabilities } from '../__utils__/mock-trace-query-capabilities';
 import { resetStorage } from '../__utils__/reset-storage';
 
 /**
@@ -27,6 +28,7 @@ test.afterEach(async ({ page }) => {
 });
 
 async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
+  await mockTraceQueryCapabilities(page);
   await page.route('**/api/system/packages', async route => {
     await route.fulfill({
       status: 200,

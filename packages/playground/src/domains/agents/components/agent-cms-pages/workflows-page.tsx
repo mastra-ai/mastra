@@ -3,6 +3,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
@@ -13,12 +14,12 @@ import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: workflows } = useWorkflows();
+  const { data: workflows } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
   const variables = useWatch({ control, name: 'variables' });
   const [search, setSearch] = useState('');

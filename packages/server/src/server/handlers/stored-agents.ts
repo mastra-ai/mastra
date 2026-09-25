@@ -577,6 +577,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     skills,
     workspace,
     browser,
+    durable,
     requestContextSchema,
   }) => {
     try {
@@ -676,6 +677,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         skills,
         workspace,
         browser: resolvedBrowser,
+        durable,
         requestContextSchema,
       } as StorageCreateAgentInput;
 
@@ -783,6 +785,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     skills,
     workspace,
     browser,
+    durable,
     requestContextSchema,
     // Version options
     changeMessage,
@@ -895,6 +898,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         skills,
         workspace,
         browser: resolvedBrowser,
+        durable,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 
@@ -918,6 +922,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         skills,
         workspace,
         browser: resolvedBrowser,
+        durable,
         requestContextSchema,
       };
 

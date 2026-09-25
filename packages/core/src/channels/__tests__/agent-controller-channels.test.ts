@@ -855,6 +855,43 @@ describe('AgentControllerChannels', () => {
       expect(adapter.editMessage).toHaveBeenCalled();
     }, 30_000);
 
+    it.each([
+      { policy: 'allow' as const, executes: true },
+      { policy: 'deny' as const, executes: false },
+    ])(
+      'posts no approval card for $policy-policy tools the session resolves itself',
+      async ({ policy, executes }) => {
+        const { tool, executeSpy } = createDeployTool();
+        const { adapter, controller, mastra, channels } = await createSetup({
+          model: createApprovalFlowModel(),
+          tools: { deployTool: tool },
+        });
+        const threadId = `chan-1:t-${policy}`;
+        const resourceId = `channel:${threadId}`;
+        const session = await controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+        await session.permissions.setForTool({ toolName: 'deployTool', policy });
+        const chatThread = createChatThread(adapter, threadId);
+
+        await (channels as any).processChatMessage(
+          chatThread,
+          createMessage('m-1', 'please deploy'),
+          mastra,
+          new RequestContext(),
+        );
+
+        await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed successfully.'), {
+          what: 'continuation rendered',
+        });
+        expect(session.approval.isArmed()).toBe(false);
+        expect(executeSpy).toHaveBeenCalledTimes(executes ? 1 : 0);
+        // Cards are posted then edited in place, so check both paths.
+        expect(allPostedText(adapter, chatThread) + JSON.stringify(adapter.editMessage.mock.calls)).not.toContain(
+          'tool_approve:',
+        );
+      },
+      30_000,
+    );
+
     it('resolves the gate as a decline without executing the tool', async () => {
       const { tool, executeSpy } = createDeployTool();
       const { adapter, controller, mastra, channels } = await createSetup({
