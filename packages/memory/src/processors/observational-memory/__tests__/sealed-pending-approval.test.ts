@@ -1,11 +1,18 @@
 /**
  * https://github.com/mastra-ai/mastra/issues/22802
  *
- * If the assistant message holding signed reasoning and a tool call waiting for approval is sealed
- * while the run is suspended, the resumed run reloads the stored copy of that message (call still
- * pending) next to the live copy (call resolved). The two copies share an id, and the signed
- * reasoning must reach the model only once - Anthropic rejects a thread whose latest assistant
- * message repeats a thinking block.
+ * Guards the MessageList invariant that a sealed message's signed reasoning is never copied into a
+ * second message. Observational memory's own guards don't seal an assistant message while its tool
+ * call is still pending, and no current path is known to do so, so this test seals the pending
+ * approval message itself (`createPendingApprovalSealer`). If such a message is sealed while the
+ * run is suspended, the resumed run reloads the stored copy (call still pending) next to the live
+ * copy (call resolved) under the same id. Anthropic rejects a thread whose latest assistant message
+ * repeats a thinking block, so each signature must reach the model once.
+ *
+ * Only the resumed request is checked for the approved call. Observational memory doesn't re-save a
+ * sealed message without an observation marker, so the stored row keeps the pending call and later
+ * turns don't see its result. That is a consequence of sealing a pending call at all, not of the
+ * duplicate this test guards against.
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
@@ -77,7 +84,7 @@ function createObserverModel() {
 const hasPendingCall = (message: MastraDBMessage) =>
   message.content.parts.some(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'call');
 
-// Seals the pending approval message the way observational memory seals buffered messages.
+// Marks the pending approval message sealed with the same metadata observational memory writes.
 const createPendingApprovalSealer = (): Processor => ({
   id: 'seal-pending-approval',
   processOutputStep: async ({ messageList }) => {
@@ -94,7 +101,7 @@ const createPendingApprovalSealer = (): Processor => ({
   },
 });
 
-describe('sealed pending approval message across suspend and resume', () => {
+describe('pending approval message sealed while suspended (simulated)', () => {
   it.each([
     ['async buffering', { messageTokens: 3000, bufferTokens: 0.2 }],
     ['synchronous observation', { messageTokens: 800, bufferTokens: false as const }],
