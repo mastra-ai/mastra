@@ -134,4 +134,92 @@ describe('thread ownership (#24878)', () => {
     subscription.unsubscribe();
     run.complete();
   });
+
+  it('ignores a live same-source redelivery for a finished local run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    pubsub.retain = true;
+    const threadId = 'same-source-thread';
+    const resourceId = 'same-source-user';
+    const topic = `agent.thread-stream.${encodeURIComponent([resourceId, threadId].join('\u0000'))}`;
+    const agent = { id: 'same-source-agent' } as unknown as Agent<any, any, any, any>;
+
+    const runA = registerRun(runtime, agent, pubsub, 'run-a', threadId, resourceId);
+    await runA.registered;
+    runA.markFinished();
+    pubsub.owners.clear();
+    const runB = registerRun(runtime, agent, pubsub, 'run-b', threadId, resourceId);
+    await runB.registered;
+
+    // Without initial history nothing counts as backlog, so only the
+    // same-source rule stands between run A's redelivery and the thread.
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const registeredA = pubsub
+      .retainedEvents(topic)
+      .find(event => event.data?.type === 'run-registered' && event.runId === 'run-a');
+    await pubsub.publish(topic, registeredA);
+    await nextTicks(20);
+
+    expect(subscription.activeRunId()).toBe('run-b');
+    subscription.unsubscribe();
+    runA.complete();
+    runB.complete();
+  });
+
+  it('does not deliver a signal to a remote run owned by a different agent', async () => {
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const ownerAgent = { id: 'owner-agent' } as unknown as Agent<any, any, any, any>;
+    const senderAgent = { id: 'sender-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'cross-agent-thread';
+    const resourceId = 'cross-agent-user';
+
+    const subscription = await senderRuntime.subscribeToThread(senderAgent, { threadId, resourceId }, pubsub);
+    const run = registerRun(ownerRuntime, ownerAgent, pubsub, 'owner-run', threadId, resourceId);
+    await run.registered;
+    await vi.waitFor(() => expect(subscription.activeRunId()).toBe('owner-run'));
+
+    const result = senderRuntime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'hello' },
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toEqual({ action: 'blocked', reason: 'thread-blocked', runId: 'owner-run' });
+    expect((senderAgent as any).stream).not.toHaveBeenCalled();
+
+    subscription.unsubscribe();
+    run.complete();
+  });
+
+  it('forgets remote ownership once the last observer leaves', async () => {
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const agent = { id: 'observer-gap-agent' } as unknown as Agent<any, any, any, any>;
+    const threadId = 'observer-gap-thread';
+    const resourceId = 'observer-gap-user';
+
+    const first = await senderRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const run = registerRun(ownerRuntime, agent, pubsub, 'gap-run', threadId, resourceId);
+    await run.registered;
+    await vi.waitFor(() => expect(first.activeRunId()).toBe('gap-run'));
+    first.unsubscribe();
+
+    // The run can finish while nobody observes it; a later observer must not
+    // inherit the stale remote ownership.
+    run.complete();
+    await nextTicks(20);
+    const second = await senderRuntime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const result = senderRuntime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'late' },
+      { resourceId, threadId, ifIdle: { behavior: 'discard' } },
+      pubsub,
+    );
+    await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    second.unsubscribe();
+  });
 });
