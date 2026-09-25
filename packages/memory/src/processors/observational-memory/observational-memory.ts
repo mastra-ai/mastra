@@ -3148,6 +3148,11 @@ ${formattedMessages}
     const { threadId, resourceId, messageList } = opts;
     const maxIterations = opts.maxIterations ?? 10;
     const currentMessages = () => (messageList ? getObservableMessages(messageList) : opts.messages);
+    // In resource scope the live list only carries the current thread, so measuring pending
+    // tokens from it under-reports the resource's other threads. Read the resource-wide status
+    // there instead; the in-flight messages were just persisted, so storage has them.
+    const statusArgs = (): { threadId: string; resourceId?: string; messages?: MastraDBMessage[] } =>
+      this.scope === 'resource' ? { threadId, resourceId } : { threadId, resourceId, messages: currentMessages() };
     const compactedIds = new Set<string>();
 
     // The failed request's in-flight messages (the user's prompt, any partial response) may be
@@ -3161,7 +3166,7 @@ ${formattedMessages}
 
     await BufferingCoordinator.awaitBuffering(threadId, resourceId ?? null, this.scope);
 
-    const initialStatus = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
+    const initialStatus = await this.getStatus(statusArgs());
     let activated = false;
     if (initialStatus.canActivate) {
       const activation = await this.activate({
@@ -3175,9 +3180,7 @@ ${formattedMessages}
       activation.activatedMessageIds?.forEach(id => compactedIds.add(id));
     }
 
-    let status = activated
-      ? await this.getStatus({ threadId, resourceId, messages: currentMessages() })
-      : initialStatus;
+    let status = activated ? await this.getStatus(statusArgs()) : initialStatus;
     // A context-overflow error means OM's estimate is already too low, so a threshold-relative
     // target could make the recovery a no-op. Compact everything pending by default.
     const targetTokens = opts.targetTokens ?? 0;
@@ -3240,7 +3243,7 @@ ${formattedMessages}
       } else {
         chunk.forEach(message => compactedIds.add(message.id));
       }
-      status = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
+      status = await this.getStatus(statusArgs());
       const madeProgress = status.pendingTokens < pendingTokens;
       pendingTokens = status.pendingTokens;
       if (!madeProgress) break;
