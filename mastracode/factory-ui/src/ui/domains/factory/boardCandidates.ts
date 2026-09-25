@@ -147,6 +147,7 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
       state: issue.state,
       assignee: issue.assignee,
       creator: issue.creator ?? null,
+      labels: issue.labels,
     },
   };
 }
