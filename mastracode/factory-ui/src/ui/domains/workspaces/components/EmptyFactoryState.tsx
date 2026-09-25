@@ -164,8 +164,12 @@ export function EmptyFactoryState() {
                   aria-label="Go back to previous step"
                   // A pending chooseRepository run ends with goTo('project-management');
                   // letting Back fire mid-flight would move the user forward again
-                  // right after they chose to go back.
-                  disabled={createFactory.isPending || linkRepository.isPending}
+                  // right after they chose to go back. connectingRepositoryId covers
+                  // the whole run — including the factories invalidation await after
+                  // both mutations have settled.
+                  disabled={
+                    createFactory.isPending || linkRepository.isPending || connectingRepositoryId !== null
+                  }
                 >
                   <ArrowLeft aria-hidden="true" />
                   Back
