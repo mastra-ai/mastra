@@ -283,7 +283,7 @@ describe('Intake candidate paging', () => {
     expect(requestedTriagePages).toEqual(['1', '2']);
   });
 
-  it('does not show a card skeleton while an empty visible column scroll-loads', async () => {
+  it('announces loading without showing a card skeleton while an empty visible column scroll-loads', async () => {
     const { scrollSentinel } = stubIntersectionObserver(false);
     const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
     const { client } = renderWorkBoard('?q=signup');
@@ -296,7 +296,9 @@ describe('Intake candidate paging', () => {
 
     scrollSentinel(true);
     await waitFor(() => expect(requestedTriagePages).toEqual(['1', '2']));
-    expect(within(triage).queryByRole('status', { name: 'Loading more candidates' })).not.toBeInTheDocument();
+    const loadingStatus = within(triage).getByRole('status');
+    expect(loadingStatus).toHaveTextContent('Loading more candidates');
+    expect(loadingStatus.children).toHaveLength(0);
     releaseSecondPage();
 
     await waitFor(() => expect(within(triage).getByText('Triage signup')).toBeInTheDocument());

@@ -18,7 +18,11 @@ export function IntakeColumnExtras({ feed, currentColumnLength }: { feed?: Intak
       loadingIndicator={
         currentColumnLength > 0 ? (
           <SkeletonRows label="Loading more candidates" rows={1} rowClassName="h-24 w-full" />
-        ) : null
+        ) : (
+          <span role="status" className="sr-only">
+            Loading more candidates
+          </span>
+        )
       }
     />
   );
