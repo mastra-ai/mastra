@@ -769,7 +769,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
  * - For objects/no-schema: emits the object as JSON
  */
 export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
-  let previousArrayLength = 0;
+  let emittedElements = 0;
   let hasStartedArray = false;
   // The first array chunk is held back instead of being emitted immediately.
   // A single object chunk may already contain the complete array (coarse or
@@ -779,6 +779,11 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
   // arrives or the stream ends. Emitting it closed too early produced invalid
   // JSON like a closed array followed by more elements (see #18758).
   let pendingFirstArrayChunk: unknown[] | undefined;
+  // The trailing element of the latest chunk is held back too: with
+  // token-by-token streaming the trailing element is still partial and a later
+  // chunk completes it in place, so it is only emitted once a following
+  // element proves it complete -- or the stream ends.
+  let latestArray: unknown[] | undefined;
   const outputSchema = getTransformedSchema(schema);
 
   return new TransformStream<ChunkType<OUTPUT>, string>({
@@ -788,16 +793,14 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       }
 
       if (outputSchema?.outputFormat === 'array' && Array.isArray(chunk.object)) {
+        latestArray = chunk.object;
         if (pendingFirstArrayChunk !== undefined) {
           // A second chunk arrived, so the buffered chunk was only the first
-          // slice. Switch to incremental mode and replay the buffered elements.
+          // slice. Switch to incremental mode. The current chunk supersedes the
+          // buffered one: it is the same array with its elements further
+          // completed, so the buffered elements are not replayed verbatim.
           controller.enqueue('[');
           hasStartedArray = true;
-          for (let i = 0; i < pendingFirstArrayChunk.length; i++) {
-            const elementJson = JSON.stringify(pendingFirstArrayChunk[i]);
-            controller.enqueue(i > 0 ? ',' + elementJson : elementJson);
-          }
-          previousArrayLength = pendingFirstArrayChunk.length;
           pendingFirstArrayChunk = undefined;
         } else if (!hasStartedArray) {
           // First chunk -- buffer it and wait to see whether the stream ends here.
@@ -805,16 +808,14 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
           return;
         }
 
-        // Emit new elements that were added
-        for (let i = previousArrayLength; i < chunk.object.length; i++) {
+        // Emit elements that are proven complete: every element except the
+        // trailing one, which a later chunk may still complete in place.
+        const completeElementCount = Math.max(chunk.object.length - 1, 0);
+        for (let i = emittedElements; i < completeElementCount; i++) {
           const elementJson = JSON.stringify(chunk.object[i]);
-          if (i > 0) {
-            controller.enqueue(',' + elementJson);
-          } else {
-            controller.enqueue(elementJson);
-          }
+          controller.enqueue(i > 0 ? ',' + elementJson : elementJson);
         }
-        previousArrayLength = chunk.object.length;
+        emittedElements = Math.max(emittedElements, completeElementCount);
       } else {
         // For non-array objects, just emit as JSON
         controller.enqueue(JSON.stringify(chunk.object));
@@ -831,8 +832,13 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
         const firstChunk = pendingFirstArrayChunk;
         pendingFirstArrayChunk = undefined;
         controller.enqueue(firstChunk.length > 0 ? JSON.stringify(firstChunk) : '[]');
-      } else if (hasStartedArray) {
-        // Close the incrementally-streamed array.
+      } else if (hasStartedArray && latestArray) {
+        // The stream end proves the held-back trailing element complete, so
+        // emit it before closing the array.
+        for (let i = emittedElements; i < latestArray.length; i++) {
+          const elementJson = JSON.stringify(latestArray[i]);
+          controller.enqueue(i > 0 ? ',' + elementJson : elementJson);
+        }
         controller.enqueue(']');
       }
     },

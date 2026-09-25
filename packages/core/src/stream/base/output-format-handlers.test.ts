@@ -1606,5 +1606,70 @@ Want to work on challenging problems"}`;
 
       expect(chunks).toEqual(['[', '{"a":1}', ',{"a":2}', ']']);
     });
+
+    it('re-emits elements that later chunks complete in place', async () => {
+      // With token-by-token provider streaming the trailing element of an
+      // object chunk is still partial and later chunks complete it in place
+      // instead of appending a new index. Replaying the buffered first chunk
+      // verbatim and only emitting indices past the previous array length
+      // dropped those completions from textStream.
+      const schema = z.array(z.object({ a: z.number(), b: z.number() }));
+      const transformer = createJsonTextStreamTransformer(schema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([
+        objectChunk([{ a: 1 }]),
+        objectChunk([{ a: 1, b: 2 }]),
+        objectChunk([
+          { a: 1, b: 2 },
+          { a: 2, b: 4 },
+        ]),
+      ]).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const text = chunks.join('');
+      expect(text).toBe('[{"a":1,"b":2},{"a":2,"b":4}]');
+      expect(JSON.parse(text)).toEqual([
+        { a: 1, b: 2 },
+        { a: 2, b: 4 },
+      ]);
+    });
+
+    it('keeps the textStream pipeline equal to the final array across token-by-token deltas', async () => {
+      // The exact textStream pipeline for array schemas (as composed in
+      // output.ts): text deltas -> createObjectStreamTransformer ->
+      // createJsonTextStreamTransformer.
+      const schema = z.array(z.object({ a: z.number(), b: z.number() }));
+      const deltas = ['{"elements":', '[{"a":1', ',"b":2}', ',{"a":2,"b":4}', ']}'];
+      const inputChunks = [
+        ...deltas.map(text => ({
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text },
+        })),
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1' },
+        },
+      ] as unknown as ChunkType<typeof schema>[];
+
+      const objectStream = convertArrayToReadableStream(inputChunks).pipeThrough(
+        createObjectStreamTransformer({ structuredOutput: { schema } }),
+      );
+      const objectChunks = (await convertAsyncIterableToArray(objectStream)).filter(chunk => chunk?.type === 'object');
+
+      const transformer = createJsonTextStreamTransformer(schema);
+      // @ts-expect-error - web/stream readable stream type error
+      const textStream = convertArrayToReadableStream(objectChunks).pipeThrough(transformer);
+      const text = (await convertAsyncIterableToArray(textStream as never)).join('');
+
+      expect(text).toBe('[{"a":1,"b":2},{"a":2,"b":4}]');
+      expect(JSON.parse(text)).toEqual([
+        { a: 1, b: 2 },
+        { a: 2, b: 4 },
+      ]);
+    });
   });
 });

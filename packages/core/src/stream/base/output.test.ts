@@ -1769,4 +1769,56 @@ describe('MastraModelOutput', () => {
       expect(seen).toEqual(['text-delta']);
     });
   });
+
+  describe('array structured output streams', () => {
+    // Token-by-token provider deltas for {"elements":[{"a":1,"b":2},{"a":2,"b":4}]}:
+    // the trailing element of each intermediate object chunk is partial and is
+    // only completed in place by a later chunk.
+    const deltas = ['{"elements":', '[{"a":1', ',"b":2}', ',{"a":2,"b":4}', ']}'];
+
+    const createArrayOutput = () => {
+      const runId = 'array-stream-run';
+      return new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          ...deltas.map(delta => createTextDeltaChunk(runId, delta)),
+          { type: 'text-end', runId, from: ChunkFrom.AGENT, payload: { id: 'text-1' } },
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          isLLMExecutionStep: true,
+          structuredOutput: { schema: z.array(z.object({ a: z.number(), b: z.number() })) },
+        },
+      });
+    };
+
+    it('textStream ends with the complete final array, not stale partial elements', async () => {
+      const output = createArrayOutput();
+
+      let text = '';
+      for await (const chunk of output.textStream) {
+        text += chunk;
+      }
+
+      expect(text).toBe('[{"a":1,"b":2},{"a":2,"b":4}]');
+    });
+
+    it('elementStream publishes completed elements, not stale partial ones', async () => {
+      const output = createArrayOutput();
+
+      const elements = [];
+      for await (const element of output.elementStream) {
+        elements.push(element);
+      }
+
+      expect(elements).toEqual([
+        { a: 1, b: 2 },
+        { a: 2, b: 4 },
+      ]);
+    });
+  });
 });
