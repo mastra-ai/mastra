@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { IncidentioIssue } from './services/incidentio';
 import type { JiraIssue } from './services/jira';
-import { incidentioCandidate, jiraCandidate } from './boardCandidates';
+import type { LinearIssue } from './services/linear';
+import { incidentioCandidate, jiraCandidate, linearCandidate } from './boardCandidates';
 
 const issue: JiraIssue = {
   id: 'jira-issue:encoded-reference',
@@ -61,6 +62,28 @@ describe('incidentioCandidate', () => {
         updatedAt: '2026-09-02T12:00:00Z',
       },
     });
+  });
+});
+
+describe('linearCandidate', () => {
+  it('retains the Linear project needed for repository routing when filing an issue', () => {
+    const linearIssue: LinearIssue = {
+      id: 'linear-issue-1',
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: null,
+      team: 'Engineering',
+      sourceId: 'linear-project-1',
+      labels: [],
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    };
+
+    expect(linearCandidate(linearIssue).metadata).toMatchObject({ linearProjectId: 'linear-project-1' });
   });
 });
 

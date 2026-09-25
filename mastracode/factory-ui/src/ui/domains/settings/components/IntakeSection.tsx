@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -10,7 +11,11 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useIntakeBindingsQuery,
+  useIntakeConfigQuery,
+  useSaveIntakeConfigMutation,
+} from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
@@ -22,9 +27,9 @@ import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/service
 import type { GitLabProject, GitLabStatus } from '../../factory/services/gitlab';
 import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
-import type { IntakeConfig } from '../../factory/services/intake';
+import type { IntakeConfig, IntakeSourceBinding } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import type { GithubStatus } from '../../workspaces/services/github';
+import type { FactoryProject, GithubStatus } from '../../workspaces/services/github';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
@@ -194,6 +199,8 @@ function GitLabIntakeSection({
   );
 }
 
+const NO_REPOSITORY_MAPPING = '__no_repository_mapping__';
+
 function LinearIntakeSection({
   config,
   busy,
@@ -205,6 +212,8 @@ function LinearIntakeSection({
   reauthRequired,
   showPickers,
   baseUrl,
+  factories,
+  bindings,
 }: SourceSectionProps & {
   status: LinearStatus | undefined;
   connected: boolean;
@@ -214,7 +223,18 @@ function LinearIntakeSection({
 
   showPickers: boolean;
   baseUrl: string;
+  factories: FactoryProject[];
+  bindings: IntakeSourceBinding[];
 }) {
+  const routedProjects = projects.flatMap(project => {
+    if (!config.linear.sourceIds?.includes(project.id)) return [];
+    const binding = bindings.find(
+      candidate => candidate.integrationId === 'linear' && candidate.sourceId === project.id,
+    );
+    const factory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
+    const repositorySlugs = [...new Set(factory?.repositories.map(repository => repository.slug) ?? [])];
+    return repositorySlugs.length ? [{ project, repositorySlugs }] : [];
+  });
   const serverConfigured = status?.enabled !== false;
   const description = !serverConfigured
     ? 'Linear is not configured on this server.'
@@ -269,6 +289,45 @@ function LinearIntakeSection({
               })
             }
           />
+        )}
+
+        {routedProjects.length > 0 && (
+          <div className="flex flex-col">
+            <Txt as="p" variant="caption" className="text-muted-foreground">
+              Map Linear projects to repositories so their issues start in the intended repository.
+            </Txt>
+            {routedProjects.map(({ project, repositorySlugs }) => {
+              const mappedRepository = config.linear.repositoryByLinearProject?.[project.id];
+              return (
+                <SettingsRow key={project.id} label={project.name}>
+                  <Select
+                    value={mappedRepository ?? NO_REPOSITORY_MAPPING}
+                    disabled={busy}
+                    onValueChange={value => {
+                      const repositoryByLinearProject = { ...config.linear.repositoryByLinearProject };
+                      if (value === NO_REPOSITORY_MAPPING) delete repositoryByLinearProject[project.id];
+                      else repositoryByLinearProject[project.id] = value;
+                      update({ ...config, linear: { ...config.linear, repositoryByLinearProject } });
+                    }}
+                  >
+                    <SelectTrigger size="sm" aria-label={`Repository for ${project.name}`} className="w-auto">
+                      <Txt as="span" variant="caption">
+                        {mappedRepository ?? 'No repository mapping'}
+                      </Txt>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_REPOSITORY_MAPPING}>No repository mapping</SelectItem>
+                      {repositorySlugs.map(slug => (
+                        <SelectItem key={slug} value={slug}>
+                          {slug}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </SettingsRow>
+              );
+            })}
+          </div>
         )}
       </SettingsContainer>
     </SettingsSubsection>
@@ -520,6 +579,7 @@ export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const bindingsQuery = useIntakeBindingsQuery();
   const githubStatusQuery = useGithubStatusQuery();
   const githubConnected = githubStatusQuery.data?.connected === true;
   const gitlabStatusQuery = useGitLabStatusQuery();
@@ -656,6 +716,8 @@ export function IntakeSection() {
         reauthRequired={reauthRequired}
         showPickers={linearReady}
         baseUrl={baseUrl}
+        factories={factoriesQuery.data ?? []}
+        bindings={bindingsQuery.data ?? []}
       />
       {linearReady && routedProjectIds.length > 0 && (
         <SettingsSubsection

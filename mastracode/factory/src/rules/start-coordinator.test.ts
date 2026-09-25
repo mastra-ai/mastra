@@ -54,7 +54,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
   };
 }
 
-function makeSourceControl() {
+function makeSourceControl(integrationId = 'github') {
   const sessions = new Map([
     [
       'session-1',
@@ -82,11 +82,28 @@ function makeSourceControl() {
     ],
   ]);
   return {
+    integrationId,
     sessions: { getBySessionId: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null) },
     projectRepositories: {
       get: vi.fn(async ({ id }: { id: string }) => ({ id, connectionId: `connection-${id}` })),
+      list: vi.fn(async ({ connectionId }: { connectionId: string }) => {
+        const suffix = connectionId.endsWith('2') ? '2' : '1';
+        return [{ id: `project-repository-${suffix}`, repositoryId: `repository-${suffix}` }];
+      }),
     },
-    connections: { get: vi.fn(async () => ({ factoryProjectId: PROJECT_ID })) },
+    repositories: {
+      get: vi.fn(async ({ id }: { id: string }) => ({
+        id,
+        externalId: id.endsWith('2') ? '2' : '1',
+        slug: 'owner/repo',
+      })),
+    },
+    connections: {
+      get: vi.fn(async () => ({ factoryProjectId: PROJECT_ID })),
+      list: vi.fn(async ({ orgId }: { orgId: string }) => [
+        { id: `connection-project-repository-${orgId === 'org-2' ? '2' : '1'}`, integrationId },
+      ]),
+    },
   };
 }
 
@@ -154,6 +171,13 @@ describe('FactoryStartCoordinator', () => {
       toolName: 'factory_transition_work_item',
       policy: 'allow',
     });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',
@@ -175,7 +199,7 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = makeController();
     const githubSourceControl = makeSourceControl();
-    const gitlabSourceControl = makeSourceControl();
+    const gitlabSourceControl = makeSourceControl('gitlab');
     const resolveSourceControl = vi.fn(request =>
       request.workItem.input.externalSource?.integrationId === 'gitlab'
         ? (gitlabSourceControl as never)
@@ -394,11 +418,16 @@ describe('FactoryStartCoordinator', () => {
     // Bound-agent gates (transition tool, factory-phase processor) resolve the
     // session address from controller state — the coordinator must seed it
     // server-side, never relying on a browser connecting to set it.
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.create).not.toHaveBeenCalled();
@@ -422,13 +451,18 @@ describe('FactoryStartCoordinator', () => {
     // reads this flag to skip AGENTS.md/CLAUDE.md ingestion for the session.
     // `baseRef` carries the trusted ref (the session's base branch) that the
     // SDK may serve instruction files from instead.
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-      untrustedCheckout: true,
-      baseRef: 'main',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        untrustedCheckout: true,
+        baseRef: 'main',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
   });
 
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
@@ -444,13 +478,18 @@ describe('FactoryStartCoordinator', () => {
     request.workItem.input.metadata = { baseBranch: 'release-1.x' };
     await coordinator.prepare(request);
 
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-      untrustedCheckout: true,
-      baseRef: 'release-1.x',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        untrustedCheckout: true,
+        baseRef: 'release-1.x',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
   });
 
   it('does not tag issue work sessions with untrustedCheckout', async () => {
@@ -465,11 +504,16 @@ describe('FactoryStartCoordinator', () => {
 
     await coordinator.prepare(startRequest());
 
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
   });
 
   it('reuses the exact Factory session thread across roles', async () => {

@@ -420,6 +420,49 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(within(linearSection).getByText('1 selected')).toBeInTheDocument());
     });
 
+    it('maps a Linear project only to repositories in its routed Factory', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers({
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: ['lproj-1'] } },
+      });
+      server.use(
+        http.get(BINDINGS_URL, () =>
+          HttpResponse.json({
+            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1', board: 'work' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({
+            projects: [
+              { id: 'fp-1', name: 'mastra' },
+              { id: 'fp-2', name: 'Other Factory' },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/source-control-connections`, () =>
+          HttpResponse.json({
+            connections: [
+              {
+                id: 'conn-fp-2',
+                repositories: [
+                  { id: 'ghp-2', branch: null, repository: { slug: 'unrelated/repo', defaultBranch: 'main' } },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      expect(screen.queryByRole('option', { name: 'unrelated/repo' })).not.toBeInTheDocument();
+      await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
+      expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
+    });
+
     it('shows how many items are selected', async () => {
       seedGithubProject();
       useIntakeHandlers({
@@ -1076,6 +1119,7 @@ describe('IntakeSection', () => {
   describe('given the config endpoint fails', () => {
     it('shows the unavailable notice', async () => {
       server.use(
+        http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: [] })),
         http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
         http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubReadyStatus)),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
