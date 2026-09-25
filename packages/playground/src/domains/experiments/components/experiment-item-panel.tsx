@@ -1,9 +1,9 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback, useMemo } from 'react';
 
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';

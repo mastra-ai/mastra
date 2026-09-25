@@ -79,4 +79,6 @@ export const paths: LinkComponentProviderProps['paths'] = {
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
   experimentItemLink: (experimentId: string, itemId: string) =>
     `/experiments/${experimentId}/items/${encodeURIComponent(itemId)}`,
+  traceLink: (traceId: string, spanId?: string) =>
+    `/traces?traceId=${encodeURIComponent(traceId)}${spanId ? `&spanId=${encodeURIComponent(spanId)}` : ''}`,
 };

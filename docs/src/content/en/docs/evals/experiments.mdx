@@ -61,7 +61,9 @@ You can also delete experiments with the [Core API](/reference/datasets/deleteEx
 
 ## Experiment targets
 
-You can point an experiment at a registered agent, workflow, or scorer.
+Use `targetType` and `targetId` to select an agent, workflow, or scorer registered on your Mastra instance. The target processes each dataset item. The experiment's `scorers` evaluate the target's output afterward.
+
+For custom execution, pass an inline `task` function instead. See [dataset experiments with an inline task](/docs/evals/evals-with-memory#dataset-experiments-with-an-inline-task) for an example that controls each item's memory thread.
 
 ### Registered agent
 
@@ -76,25 +78,27 @@ const summary = await dataset.startExperiment({
 })
 ```
 
-Each item's `input` is passed directly to `agent.generate()`, so it must be a `string`, `string[]`, or `CoreMessage[]`.
+Each item's `input` is passed directly to the agent. Use a supported message format, such as a prompt string, a message object, or an array of messages. See the [`agent.generate()` reference](/reference/agents/generate) for accepted inputs.
 
 #### Memory-enabled agents
 
-When the target agent has its own memory and the request context carries a resource id (`MASTRA_RESOURCE_ID_KEY`, set by auth middleware, the experiment or item `requestContext`, or the Studio **Run Experiment** form), the experiment runner injects a fresh memory thread for each item. A resource id in the request context means "run as this resource": each item's conversation persists as a thread under that resource, and retried items get a new thread per attempt so earlier failed attempts can't leak into the retry's context.
+When the target agent has its own memory, the experiment runner injects a fresh memory thread for each item and retry. Without a resource id in the request context, each thread gets an isolated, experiment-owned resource.
+
+To run against an existing resource, set `MASTRA_RESOURCE_ID_KEY` in the experiment's `requestContext` or in an item's `requestContext`. Item values override experiment values. The runner still creates a fresh thread for each item and retry, but all threads using the same resource id share that resource's memory.
 
 Injected threads are tagged so you can map them back to the run: thread metadata carries the `experimentId` and the dataset item's id as `experimentItemId`. No thread title is generated for them.
 
-Because the threads belong to the caller's resource, resource-scoped memory features both read and write that resource's state during the run:
+When items share a resource, resource-scoped memory features can read and write the same state:
 
-- Resource-scoped working memory updates persist to the resource, and later items in the run see updates made by earlier items.
+- Resource-scoped working memory updates persist to the resource and can affect other items. Items run concurrently by default, so don't rely on an execution order.
 - Resource-scoped semantic recall can surface the resource's prior conversations to the experiment, and experiment transcripts become recallable in that resource's later conversations.
 
 Use this approach to evaluate an agent against a real user's accumulated context. To keep experiment runs from touching real user state, use a dedicated evaluation resource id instead.
 
 Thread injection is skipped in the following cases:
 
-- If the request context also sets `MASTRA_THREAD_ID_KEY`, the runner uses that thread as-is, so every item (and retry) shares the same conversation.
-- If the agent has no memory, or the request context has no resource id, the run is memoryless and nothing is persisted.
+- If the request context sets `MASTRA_THREAD_ID_KEY`, the runner uses that thread as-is. Items and retries using the same thread id share a conversation.
+- If the agent has no memory, or the request context explicitly sets the resource id to an empty string or `null`, the runner skips thread injection.
 
 ### Registered workflow
 
@@ -109,13 +113,24 @@ const summary = await dataset.startExperiment({
 })
 ```
 
-The workflow receives each item's `input` as its trigger data.
+The workflow receives each item's `input` as `inputData` in `run.start()`. Structure the input to match the workflow's input schema.
 
 ### Registered scorer
 
-Point to a scorer to evaluate an LLM judge against ground truth:
+Use a scorer as the target to evaluate the judge itself. The runner calls `scorer.run(item.input)`, so the dataset item's `input` must contain the full payload the scorer expects.
+
+This example assumes a registered `accuracy` scorer that accepts string `input`, `output`, and `groundTruth` fields. Adapt those fields to your scorer's expected shape:
 
 ```typescript title="src/mastra/experiments/scorer-target.ts"
+await dataset.addItem({
+  input: {
+    input: 'What is the capital of France?',
+    output: 'Paris',
+    groundTruth: 'Paris',
+  },
+  groundTruth: { score: 1 },
+})
+
 const summary = await dataset.startExperiment({
   name: 'judge-accuracy-eval',
   targetType: 'scorer',
@@ -123,7 +138,12 @@ const summary = await dataset.startExperiment({
 })
 ```
 
-The scorer receives each item's `input` and `groundTruth`. LLM-based judges can drift over time as underlying models change, so it's important to periodically realign them against known-good labels. A dataset gives you a stable benchmark to detect that drift.
+The two `groundTruth` fields serve different purposes:
+
+- `input.groundTruth` is the reference answer passed to the judge: `'Paris'`.
+- The top-level `groundTruth` is the expected result from the judge: `{ score: 1 }`. It isn't passed to the target scorer.
+
+The target's output contains its `score` and `reason`. To evaluate that output against the top-level ground truth, add another scorer through the experiment's `scorers` option. Without an additional scorer, the experiment records the judge's output but doesn't score its agreement with the expected result.
 
 ## Scoring results
 

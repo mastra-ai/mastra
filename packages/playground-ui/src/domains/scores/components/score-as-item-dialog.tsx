@@ -3,14 +3,14 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
-import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { CalculatorIcon } from 'lucide-react';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
+import { SaveAsDatasetItemDialog } from '@/domains/datasets';
+import type { SideDialogRootProps } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 
 type ScoreForDatasetItem = ScoreRowData | ClientScoreRowData;
 
-type ScoreAsItemDialogProps = {
+export type ScoreAsItemDialogProps = {
   score?: ScoreForDatasetItem;
   isOpen: boolean;
   onClose: () => void;

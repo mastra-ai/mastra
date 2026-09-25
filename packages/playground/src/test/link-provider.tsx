@@ -67,6 +67,7 @@ const paths: Record<string, (...args: string[]) => string> = {
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
   experimentItemLink: (id, itemId) => `/experiments/${id}/items/${itemId}`,
+  traceLink: (traceId, spanId) => `/traces?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
 };
 
 // eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.

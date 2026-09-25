@@ -47,6 +47,7 @@ const paths: LinkComponentPaths = {
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
   experimentLink: experimentId => `/experiments/${experimentId}`,
   experimentItemLink: (experimentId, itemId) => `/experiments/${experimentId}/items/${itemId}`,
+  traceLink: (traceId, spanId) => `/traces?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
 };
 
 const AgentEntry = () => {
