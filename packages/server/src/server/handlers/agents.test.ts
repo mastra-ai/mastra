@@ -1658,8 +1658,8 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
     const resumeRoutes = [
-      { name: 'resume-stream', route: RESUME_STREAM_ROUTE },
-      { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE },
+      { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
+      { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
     ] as const;
 
     function callResume(route: any, { resourceId, toolCallId = 'tool-call-1', thread }: any) {
@@ -1675,11 +1675,9 @@ describe('Agent Routes Authorization', () => {
       });
     }
 
-    it.each(resumeRoutes)('$name rejects a durable run owned by another resource', async ({ route }) => {
+    it.each(resumeRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
       await persistSuspendedDurableRun({ resourceId: 'user-b' });
-      const execution = vi
-        .spyOn(mockAgent as any, 'resumeStream')
-        .mockResolvedValue({ fullStream: new ReadableStream() });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
@@ -1687,10 +1685,8 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
 
-    it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route }) => {
-      const execution = vi
-        .spyOn(mockAgent as any, 'resumeStream')
-        .mockResolvedValue({ fullStream: new ReadableStream() });
+    it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
@@ -1698,11 +1694,9 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
 
-    it.each(resumeRoutes)('$name rejects a durable run bound to a different thread', async ({ route }) => {
+    it.each(resumeRoutes)('$name rejects a durable run bound to a different thread', async ({ route, method }) => {
       await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
-      const execution = vi
-        .spyOn(mockAgent as any, 'resumeStream')
-        .mockResolvedValue({ fullStream: new ReadableStream() });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
@@ -1710,11 +1704,19 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
 
-    it.each(resumeRoutes)('$name resumes a durable run owned by the caller', async ({ route }) => {
+    it.each(resumeRoutes)('$name rejects a thread when the durable run has none', async ({ route, method }) => {
       await persistSuspendedDurableRun({ resourceId: 'user-a' });
-      const execution = vi
-        .spyOn(mockAgent as any, 'resumeStream')
-        .mockResolvedValue({ fullStream: new ReadableStream() });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name resumes a durable run owned by the caller', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await callResume(route, { resourceId: 'user-a' });
       expect(execution).toHaveBeenCalled();

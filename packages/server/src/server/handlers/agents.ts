@@ -228,7 +228,7 @@ async function validateDurableToolCallAccess({
   }
 
   const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
-  if (threadId && typeof persistedThreadId === 'string' && persistedThreadId && persistedThreadId !== threadId) {
+  if (threadId && persistedThreadId !== threadId) {
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
   }
 
