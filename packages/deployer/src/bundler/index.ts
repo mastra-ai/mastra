@@ -663,7 +663,7 @@ export abstract class Bundler extends MastraBundler {
     }
 
     const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of analyzedBundleInfo.dependencies.keys()) {
+    for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
         initialWorkspaceDependencies.add(pkgName);
