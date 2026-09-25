@@ -13,7 +13,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
+import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
 
@@ -94,7 +95,7 @@ async function startProcess() {
     recovery: { durableAgents: 'auto' },
   });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { durableAgent, workflows, globalRunRegistry };
+  return { durableAgent, workflows, globalRunRegistry, pubsub: mastra.pubsub };
 }
 
 function activeStepIds(snapshot: WorkflowRunState | undefined) {
@@ -121,20 +122,28 @@ function knownUnrecoverable({ outer, inner }: Checkpoint): string | undefined {
   // "This workflow run was not active".
   if (activeStepIds(outer).includes(DurableStepIds.AGENTIC_EXECUTION) && !inner) return 'nested start race';
 
-  // The run already finished its last model turn; restarting at scorer
-  // execution completes the workflow but the recovered stream never closes.
-  const target = outer.serializedStepGraph?.[outer.activePaths?.[0] ?? -1];
-  if (target && 'id' in target && target.id === 'execute-scorers') return 'recovered stream hangs at end of run';
-
   return undefined;
 }
 
+// FINISH went out before the crash, so recovery must publish it again.
+function finishedBeforeCrash({ outer }: Checkpoint) {
+  return outer?.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+}
+
 async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<string> {
-  const { durableAgent, workflows, globalRunRegistry } = await startProcess();
+  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess();
   for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
 
+  let finishEvents = 0;
+  const countFinish = async (event: { type: string }, ack?: () => Promise<void>) => {
+    if (event.type === AgentStreamEventTypes.FINISH) finishEvents++;
+    await ack?.();
+  };
+  await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), countFinish);
+  let onFinishCalls = 0;
+
   const attempt = (async () => {
-    const recovered = await durableAgent.recover(runId);
+    const recovered = await durableAgent.recover(runId, { onFinish: () => void onFinishCalls++ });
     const execution = globalRunRegistry.get(runId)?.workflowExecution;
     const errors: string[] = [];
     // Read the answer from the finish payload: a checkpoint saved after the final
@@ -151,6 +160,8 @@ async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<strin
     if (errors.length) return `stream error: ${errors[0]}`;
     if (executionError) return `workflow error: ${executionError}`;
     if (finalText === undefined) return 'stream closed without finish';
+    if (finishEvents !== 1) return `published FINISH ${finishEvents} times`;
+    if (onFinishCalls !== 1) return `onFinish fired ${onFinishCalls} times`;
     return finalText === 'done' ? 'ok' : `finished with text ${JSON.stringify(finalText)}`;
   })();
 
@@ -165,6 +176,7 @@ async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<strin
     ]);
   } finally {
     clearTimeout(timer);
+    await pubsub.unsubscribe(AGENT_STREAM_TOPIC(runId), countFinish);
   }
 }
 
@@ -210,6 +222,13 @@ describe('DurableAgent crash recovery', () => {
     expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL))).toBe(true);
     expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).length === 0)).toBe(true);
     expect(recoverable.some(c => inner(c) && activeStepIds(c.outer).length === 0)).toBe(true);
+    // FINISH already went out: once with map-final-output as the step to resume
+    // from, once with scorer execution running.
+    const outerTarget = (c: Checkpoint) => c.outer?.serializedStepGraph?.[c.outer.activePaths?.[0] ?? -1];
+    const targets = (id: string) =>
+      recoverable.some(c => finishedBeforeCrash(c) && (outerTarget(c) as { id?: string } | undefined)?.id === id);
+    expect(targets(MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
+    expect(targets('execute-scorers')).toBe(true);
 
     const failures: string[] = [];
     for (const [index, checkpoint] of checkpoints.entries()) {
@@ -218,6 +237,6 @@ describe('DurableAgent crash recovery', () => {
       if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
     }
     expect(failures).toEqual([]);
-    expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(4);
+    expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
   }, 120_000);
 });

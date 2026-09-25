@@ -32,7 +32,7 @@ import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
-import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
+import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type {
   AgentStepFinishEventData,
@@ -43,6 +43,7 @@ import type {
   SerializableModelListEntry,
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
+import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RECOVERY_LEASE_TTL_MS = 30_000;
@@ -848,10 +849,10 @@ export class DurableAgent<
     };
   }
 
-  async #loadRecoverableWorkflowInput(
+  async #loadRecoverableSnapshot(
     workflowsStore: WorkflowsStorage,
     runId: string,
-  ): Promise<DurableAgenticWorkflowInput> {
+  ): Promise<{ snapshot: WorkflowRunState; workflowInput: DurableAgenticWorkflowInput }> {
     const persisted = await workflowsStore.getWorkflowRunById({
       runId,
       workflowName: DurableStepIds.AGENTIC_LOOP,
@@ -893,7 +894,7 @@ export class DurableAgent<
       });
     }
 
-    return workflowInput;
+    return { snapshot, workflowInput };
   }
 
   /**
@@ -2880,7 +2881,7 @@ export class DurableAgent<
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
-    let workflowInput = await this.#loadRecoverableWorkflowInput(workflowsStore, runId);
+    let { workflowInput } = await this.#loadRecoverableSnapshot(workflowsStore, runId);
 
     // A crashed run that was executing a stored version must recover on
     // *that* version — rehydration rebuilds tools/model/instructions from
@@ -2935,11 +2936,21 @@ export class DurableAgent<
     const recoveryLease = await this.#acquireRecoveryLease(runId, abortController);
 
     let recoveryState: RehydratedRecoveryState;
+    let finishPublishedBeforeCrash: boolean;
     try {
       // The lease RPC itself may have waited while an earlier owner completed.
       // Re-read after acquisition and recover from that authoritative snapshot,
       // never from the pre-claim copy.
-      workflowInput = await this.#loadRecoverableWorkflowInput(workflowsStore, runId);
+      const loaded = await this.#loadRecoverableSnapshot(workflowsStore, runId);
+      workflowInput = loaded.workflowInput;
+      // map-final-output publishes FINISH before its result is saved, so a saved
+      // success means FINISH went out before the crash. The default engine
+      // continues after a finished step instead of re-running it, so FINISH is
+      // never published again, and the recovered stream (subscribed from the
+      // topic's current end) would wait for it forever. The evented engine
+      // re-runs the step, which publishes FINISH itself.
+      finishPublishedBeforeCrash =
+        this.workflowEngine === 'default' && loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
       recoveryLease.assertOwned();
       recoveryState = await this.#rehydrateRecoveryState({
         runId,
@@ -3040,6 +3051,13 @@ export class DurableAgent<
           recoveryLease,
         );
         recoveryLease.assertOwned();
+        if (finishPublishedBeforeCrash && result?.status === 'success') {
+          // The run's result is map-final-output's saved output, passed through
+          // execute-scorers unchanged: the same payload the lost FINISH carried.
+          const { output: finalOutput, stepResult } = result.result;
+          await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
+          recoveryLease.assertOwned();
+        }
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()
         // contract.
