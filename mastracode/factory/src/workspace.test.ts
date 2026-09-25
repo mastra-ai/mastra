@@ -485,6 +485,8 @@ describe('bundled Factory skill assets', () => {
     // A push can land mid-review; publishing must re-check the head first.
     for (const skill of [review, await read('factory-rereview')]) {
       expect(skill).toContain('**The head must not have moved.**');
+      expect(skill).toContain('gh pr view <number> --json headRefOid --jq .headRefOid');
+      expect(skill).toContain('Name the reviewed head SHA in the handoff.');
       expect(skill).toContain('If the head moved, do not publish');
     }
     // Existing review signal (bot and human) must be collected from every
