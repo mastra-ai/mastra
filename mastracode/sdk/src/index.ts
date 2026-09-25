@@ -22,6 +22,7 @@ import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications'
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
+  CyberRefusalHandler,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -1086,11 +1087,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
-    // Mastra Code contributes no output processors of its own; the lane exists
-    // so plugins can. Like the input lane, plugin processors sit last — after
-    // the layers they customize, before the channel and memory layers the
-    // Agent appends.
+    // Like the input lane, plugin processors sit last — after the layers they
+    // customize, before the channel and memory layers the Agent appends.
     outputProcessors: () => [
+      // Anthropic cyber refusals finish a step instead of throwing, so they are
+      // handled here; OpenAI's throw and are handled in the error lane below.
+      new CyberRefusalHandler(),
       ...readPluginProcessors().output.map(entry => entry.value),
       ...(pluginSignalLane?.getOutputProcessors() ?? []),
     ],
@@ -1102,6 +1104,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // short-circuit on the first `retry: true`, so a blind retry first would resend
       // the broken history and fail again.
       new ProviderHistoryCompat(),
+      // Same ordering reason: OpenAI surfaces some cyber refusals as retryable
+      // 5xx errors, and a blind retry would resend the request without the
+      // `continue` nudge and spend the one retry this handler allows.
+      new CyberRefusalHandler(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },

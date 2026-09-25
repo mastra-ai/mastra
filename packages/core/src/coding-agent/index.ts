@@ -2,6 +2,7 @@ import { Agent } from '../agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../agent/goal/objective';
 import type { AgentConfig } from '../agent/types';
 import {
+  CyberRefusalHandler,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -44,18 +45,19 @@ function isECONNRESETError(error: unknown): boolean {
 }
 
 /**
- * Builds the portable default error processors: provider-history compatibility
- * and prefill-error recovery first, then catch-all stream retries with
- * specialized ECONNRESET and bad-request policies.
+ * Builds the portable default error processors: provider-history compatibility,
+ * prefill-error recovery, and cyber-refusal recovery first, then catch-all
+ * stream retries with specialized ECONNRESET and bad-request policies.
  */
 function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
   return [
     // Repairs must run before StreamErrorRetryProcessor: error processors
     // short-circuit on the first `retry: true`, and the retry below claims the
-    // same 400s these two repair. A blind retry first resends the unrepaired
-    // request, and both of these decline once `retryCount > 0`.
+    // same errors these repair. A blind retry first resends the unrepaired
+    // request, and all of these decline once `retryCount > 0`.
     new ProviderHistoryCompat(),
     new PrefillErrorHandler(),
+    new CyberRefusalHandler(),
     new StreamErrorRetryProcessor({
       retryUnknownErrors: true,
       maxRetries: 2,
@@ -116,8 +118,11 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  *   an empty array when none are provided). This avoids wiring
  *   {@link TaskSignalProvider} — which requires a memory-backed thread — into
  *   agents that have no memory.
+ * - `outputProcessors` is used verbatim when provided; otherwise it defaults to
+ *   {@link CyberRefusalHandler}, which retries once after an Anthropic cyber
+ *   classifier stop.
  * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
- *   the provider-history and prefill repair processors, followed by catch-all
+ *   the provider-history, prefill, and cyber-refusal repair processors, followed by catch-all
  *   stream retries with specialized ECONNRESET/bad-request policies.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
@@ -136,7 +141,7 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * ```
  */
 export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
-  const { basePath, workspace: _workspace, signals, errorProcessors, goal, memory, ...rest } = config;
+  const { basePath, workspace: _workspace, signals, outputProcessors, errorProcessors, goal, memory, ...rest } = config;
 
   // Distinguish an absent `workspace` key (build the default) from an explicit
   // `workspace: undefined` (caller opts out — e.g. when the workspace is wired
@@ -158,6 +163,10 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     memory,
     workspace,
     signals: resolvedSignals,
+    // CyberRefusalHandler also sits in the error lane (see defaultErrorProcessors)
+    // for OpenAI refusals; here it catches Anthropic refusals, which finish a
+    // step instead of throwing.
+    outputProcessors: outputProcessors ?? [new CyberRefusalHandler()],
     errorProcessors: errorProcessors ?? defaultErrorProcessors(),
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });
