@@ -286,6 +286,12 @@ Under the default persistence policy, these `running` checkpoints are only writt
 
 Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which holds a recovery lease and registers thread runtimes before re-driving each run.
 
+:::warning
+
+Automatic and manual recovery re-run the agentic loop from the last persisted snapshot, which can reissue LLM calls (with real cost) and re-execute tool calls. A sub-agent delegation is one generated `agent-<name>` tool call, and recovery doesn't checkpoint the LLM or tool calls inside that delegation independently. If recovery replays the delegation step, the entire sub-agent run starts again and can repeat inner LLM calls and already-completed tool side effects. Make tools, including tools used by sub-agents, idempotent, or deduplicate their external side effects.
+
+:::
+
 ### Snapshot persistence
 
 The `shouldPersistSnapshot` option on `createDurableAgent()` (also accepted in the agent-level `durable` config) controls which workflow snapshots a durable agent writes. The default policy:
@@ -320,12 +326,6 @@ export const mastra = new Mastra({
 ```
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
-
-:::warning
-
-Recovery re-runs the agentic loop from the last snapshot, which re-issues LLM calls (real cost) and re-executes tool calls. Make sure your tools are idempotent before enabling automatic recovery.
-
-:::
 
 ### Manual recovery
 
