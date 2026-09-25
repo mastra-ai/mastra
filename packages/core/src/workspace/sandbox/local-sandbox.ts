@@ -205,10 +205,12 @@ export class LocalSandbox extends MastraSandbox<string> {
   private _activeMountPaths: Set<string> = new Set();
   /** Snapshot of `readWritePaths` from ctor; entries here are never removed on unmount. */
   private readonly _initialReadWritePaths: Set<string>;
-  /** Refcount for isolation paths added by mounts (not present in `_initialReadWritePaths`). */
+  /** Snapshot of `denyWritePaths` from ctor; entries here are never removed on unmount. */
+  private readonly _initialDenyWritePaths: Set<string>;
+  /** Refcount for isolation paths added by mounts, keyed by `<list>:<path>`. */
   private _mountIsolationRefCount = new Map<string, number>();
-  /** Normalized mount path → canonical isolation path recorded for that mount. */
-  private _mountPathToIsolationPath = new Map<string, string>();
+  /** Normalized mount path → canonical isolation path and the list it was added to. */
+  private _mountPathToIsolationPath = new Map<string, { path: string; list: 'readWritePaths' | 'denyWritePaths' }>();
   /** Named checkpoint to seed from on start and persist to on snapshot. */
   private readonly _checkpointName?: string;
   /** Boot-only fallback checkpoint used when `_checkpointName` has no state. */
@@ -252,8 +254,10 @@ export class LocalSandbox extends MastraSandbox<string> {
       ...options.nativeSandbox,
       readWritePaths: [...(options.nativeSandbox?.readWritePaths ?? [])],
       readOnlyPaths: [...(options.nativeSandbox?.readOnlyPaths ?? [])],
+      denyWritePaths: [...(options.nativeSandbox?.denyWritePaths ?? [])],
     };
     this._initialReadWritePaths = new Set(this._nativeSandboxConfig.readWritePaths ?? []);
+    this._initialDenyWritePaths = new Set(this._nativeSandboxConfig.denyWritePaths ?? []);
     this.isolation = requestedIsolation;
     this._instructionsOverride = options.instructions;
     this._checkpointName = options.checkpointName;
@@ -287,6 +291,7 @@ export class LocalSandbox extends MastraSandbox<string> {
         ...this._nativeSandboxConfig,
         readWritePaths: [...this._initialReadWritePaths],
         readOnlyPaths: [...(this._nativeSandboxConfig.readOnlyPaths ?? [])],
+        denyWritePaths: [...this._initialDenyWritePaths],
       },
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
       ...((options.checkpointName ?? this._checkpointName) !== undefined && {
@@ -628,6 +633,7 @@ export class LocalSandbox extends MastraSandbox<string> {
                 allowNetwork: this._nativeSandboxConfig.allowNetwork ?? false,
                 readOnlyPaths: this._nativeSandboxConfig.readOnlyPaths,
                 readWritePaths: this._nativeSandboxConfig.readWritePaths,
+                denyWritePaths: this._nativeSandboxConfig.denyWritePaths,
               }
             : undefined,
       },
@@ -704,7 +710,7 @@ export class LocalSandbox extends MastraSandbox<string> {
       });
       this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
       this._activeMountPaths.add(mountPath);
-      this.addMountPathToIsolation(mountPath, hostPath);
+      this.addMountPathToIsolation(mountPath, hostPath, filesystem.readOnly === true);
       return { success: true, mountPath };
     } else if (existingMount === 'foreign') {
       // Something is already mounted/symlinked here but we didn't create it — refuse to touch it
@@ -776,7 +782,7 @@ export class LocalSandbox extends MastraSandbox<string> {
     await this.writeMarkerFile(mountPath, hostPath);
 
     // Dynamically add host path to isolation allowlist
-    this.addMountPathToIsolation(mountPath, hostPath);
+    this.addMountPathToIsolation(mountPath, hostPath, filesystem.readOnly === true);
 
     this.logger.debug('Mounted', { mountPath, hostPath });
     return { success: true, mountPath };
@@ -935,22 +941,31 @@ export class LocalSandbox extends MastraSandbox<string> {
   }
 
   /**
-   * Dynamically add a mount path to the sandbox isolation allowlist.
+   * Dynamically add a mount path to the sandbox isolation config.
    *
-   * - Seatbelt: pushes to readWritePaths (wrapCommand reads config each call)
-   * - Bwrap: pushes to readWritePaths (buildBwrapCommand reads config each call)
+   * Read-write mounts go to `readWritePaths`; mounts whose filesystem is
+   * `readOnly` go to `denyWritePaths` so subprocesses can read but never write
+   * them, matching what file tools enforce. Both backends read the config on
+   * every wrapCommand() call, so the change takes effect immediately.
    *
    * Local mounts are symlinks under `workingDirectory`. Bubblewrap cannot
    * `--bind` a symlink (it fails with "Unable to mount source on destination"),
    * so we store the canonical path (`realpath`) of the mount point — the same
    * directory the symlink refers to.
    */
-  private addMountPathToIsolation(mountPath: string, hostPath: string): void {
+  private addMountPathToIsolation(mountPath: string, hostPath: string, readOnly: boolean): void {
     if (this.isolation === 'none') return;
 
     const normMount = normalizeMountPath(mountPath);
-    if (this._mountPathToIsolationPath.has(normMount)) {
+    const list = readOnly ? 'denyWritePaths' : 'readWritePaths';
+    const existing = this._mountPathToIsolationPath.get(normMount);
+    if (existing?.list === list) {
       return;
+    }
+    if (existing) {
+      // Re-mounted with a different readOnly flag (the mount config itself
+      // matched, so mount() skipped the unmount): drop the stale grant/deny.
+      this.removeMountIsolationForPath(normMount);
     }
 
     let isolationPath = hostPath;
@@ -958,46 +973,51 @@ export class LocalSandbox extends MastraSandbox<string> {
       isolationPath = realpathSync(hostPath);
     } catch {
       // Symlink not visible yet or race; keep literal path for best-effort allowlist
+      this.logger.warn('Could not resolve mount path for isolation; using unresolved path', { hostPath });
     }
 
-    if (!this._nativeSandboxConfig.readWritePaths) {
-      this._nativeSandboxConfig = { ...this._nativeSandboxConfig, readWritePaths: [] };
+    if (!this._nativeSandboxConfig[list]) {
+      this._nativeSandboxConfig = { ...this._nativeSandboxConfig, [list]: [] };
     }
-    const paths = this._nativeSandboxConfig.readWritePaths!;
+    const paths = this._nativeSandboxConfig[list]!;
 
     if (!paths.includes(isolationPath)) {
       paths.push(isolationPath);
     }
-    if (!this._initialReadWritePaths.has(isolationPath)) {
-      this._mountIsolationRefCount.set(isolationPath, (this._mountIsolationRefCount.get(isolationPath) ?? 0) + 1);
+    const initial = readOnly ? this._initialDenyWritePaths : this._initialReadWritePaths;
+    if (!initial.has(isolationPath)) {
+      const key = `${list}:${isolationPath}`;
+      this._mountIsolationRefCount.set(key, (this._mountIsolationRefCount.get(key) ?? 0) + 1);
     }
-    this._mountPathToIsolationPath.set(normMount, isolationPath);
-    // Both backends read config.readWritePaths on every wrapCommand() call, so no extra work needed
+    this._mountPathToIsolationPath.set(normMount, { path: isolationPath, list });
   }
 
   /**
-   * Reverse {@link addMountPathToIsolation}: drop refcounted paths from the allowlist on unmount
-   * while preserving user-provided `readWritePaths` from construction.
+   * Reverse {@link addMountPathToIsolation}: drop refcounted paths from the isolation
+   * config on unmount while preserving user-provided paths from construction.
    */
   private removeMountIsolationForPath(mountPath: string): void {
     if (this.isolation === 'none') return;
 
     const normMount = normalizeMountPath(mountPath);
-    const isolationPath = this._mountPathToIsolationPath.get(normMount);
-    if (isolationPath === undefined) {
+    const entry = this._mountPathToIsolationPath.get(normMount);
+    if (entry === undefined) {
       return;
     }
     this._mountPathToIsolationPath.delete(normMount);
+    const { path: isolationPath, list } = entry;
 
-    if (this._initialReadWritePaths.has(isolationPath)) {
+    const initial = list === 'denyWritePaths' ? this._initialDenyWritePaths : this._initialReadWritePaths;
+    if (initial.has(isolationPath)) {
       return;
     }
 
-    const prev = this._mountIsolationRefCount.get(isolationPath) ?? 0;
+    const key = `${list}:${isolationPath}`;
+    const prev = this._mountIsolationRefCount.get(key) ?? 0;
     const next = prev - 1;
     if (next <= 0) {
-      this._mountIsolationRefCount.delete(isolationPath);
-      const paths = this._nativeSandboxConfig.readWritePaths;
+      this._mountIsolationRefCount.delete(key);
+      const paths = this._nativeSandboxConfig[list];
       if (paths) {
         const idx = paths.indexOf(isolationPath);
         if (idx !== -1) {
@@ -1005,7 +1025,7 @@ export class LocalSandbox extends MastraSandbox<string> {
         }
       }
     } else {
-      this._mountIsolationRefCount.set(isolationPath, next);
+      this._mountIsolationRefCount.set(key, next);
     }
   }
 
