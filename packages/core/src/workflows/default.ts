@@ -818,6 +818,32 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
     let lastExecutionContext: ExecutionContext | undefined;
     let currentRequestContext = params.requestContext;
+
+    // A process can die after an entry's completed snapshot is persisted but before the
+    // next entry starts. That snapshot still points `activePaths` at the completed entry,
+    // so continue from the next entry instead of executing the completed one again.
+    const restartEntry = restart ? steps[startIdx] : undefined;
+    if (restart && restartEntry && this.isEntryCompletedAtRestartBoundary(restartEntry, stepResults, restart)) {
+      lastExecutionContext = {
+        workflowId,
+        runId,
+        executionPath: [startIdx],
+        stepExecutionPath,
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        retryConfig: { attempts, delay },
+        format: params.format,
+        state: lastState,
+        tracingIds: params.tracingIds,
+      };
+      lastOutput = {
+        result: { status: 'success', output: this.getStepOutput(stepResults, restartEntry) },
+        stepResults,
+      };
+      startIdx++;
+    }
+
     for (let i = startIdx; i < steps.length; i++) {
       if (params.abortController.signal.aborted) {
         await this.persistStepUpdate({
@@ -1134,6 +1160,41 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return { ...result, runId, state: lastState };
     }
     return { ...result, runId };
+  }
+
+  /**
+   * Whether a restart snapshot was persisted right after `entry` completed: no step is
+   * active and the entry's persisted results are all successful.
+   */
+  private isEntryCompletedAtRestartBoundary(
+    entry: StepFlowEntry,
+    stepResults: Record<string, any>,
+    restart: RestartExecutionParams,
+  ): boolean {
+    if (Object.keys(restart.activeStepsPath ?? {}).length > 0) {
+      return false;
+    }
+
+    if (entry.type === 'parallel') {
+      return entry.steps.every(step => stepResults[getSingleStepEntryId(step)]?.status === 'success');
+    }
+
+    if (entry.type === 'conditional') {
+      const armResults = entry.steps.map(step => stepResults[getSingleStepEntryId(step)]).filter(Boolean);
+      return (
+        armResults.length > 0 &&
+        armResults.some(result => result.status === 'success') &&
+        armResults.every(result => result.status === 'success' || result.status === 'skipped')
+      );
+    }
+
+    const stepId =
+      entry.type === 'loop' || entry.type === 'foreach'
+        ? getSingleStepEntryId(entry.step)
+        : entry.type === 'sleep' || entry.type === 'sleepUntil'
+          ? entry.id
+          : getSingleStepEntryId(entry);
+    return stepResults[stepId]?.status === 'success';
   }
 
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {
