@@ -183,6 +183,16 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: lowercase, words = runs of letters/digits.
+    const words = `' ' || lower(regexp_replace(${field.sql}, '[^\\p{L}\\p{N}]+', ' ', 'g')) || ' '`;
+    const found = `contains(${words}, ?)`;
+    return {
+      sql: `coalesce(${predicate.operator === 'matches' ? found : `NOT ${found}`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
+    };
+  }
+
   if (predicate.type === 'membership') {
     const list = predicate.values.map(() => parameterSql(field.parameterType)).join(', ');
     if (predicate.operator === 'in') {

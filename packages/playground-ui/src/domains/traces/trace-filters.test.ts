@@ -70,6 +70,8 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
       gte: 'at least',
       lt: 'less than',
       lte: 'at most',
+      matches: 'matches',
+      notMatches: 'does not match',
     });
   });
 });
@@ -198,7 +200,27 @@ describe('createTraceFilterBarFields', () => {
 
   it('offers only presence operators on presence fields', () => {
     expect(byId('spans.error')?.operators).toEqual(['exists', 'notExists']);
-    expect(byId('feedback.comment')?.operators).toEqual(['exists', 'notExists']);
+  });
+
+  it('offers word matching on human-text fields', () => {
+    const text = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'];
+    expect(byId('feedback.comment')?.operators).toEqual(text);
+    expect(byId('spans.name')?.operators).toEqual(text);
+    expect(byId('spans.model')?.operators).toEqual(['is', 'isNot', 'in', 'notIn', 'exists', 'notExists']);
+  });
+
+  it('keeps feedback comment free text because the values endpoint rejects it', () => {
+    const fields = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      metadataFields: [],
+      valueSuggestions: () => async () => [],
+      withQueryTrace: true,
+    });
+    const find = (id: string) => fields.find(field => field.id === id);
+    expect(find('feedback.comment')?.strict).toBeUndefined();
+    expect(find('feedback.comment')?.suggestions).toBeUndefined();
+    expect(find('spans.name')?.strict).toBe(true);
   });
 
   it('lists picker fields, then free-text, then span, score and feedback fields, alphabetically', () => {

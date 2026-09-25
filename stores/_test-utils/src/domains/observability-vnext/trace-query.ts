@@ -5,6 +5,7 @@ import {
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
   isTraceAggregateCanonicalDimension,
+  normalizeTraceQueryText,
   TraceQueryCursorError,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
@@ -20,6 +21,7 @@ import {
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
+  type TraceQueryScalarPredicate,
   type TraceQueryTrace,
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
@@ -920,7 +922,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: '2026-07-14T10:00:00.000Z',
       feedbackUserId: 'patient-1',
       sourceId: 'survey-result-1',
-      comment: 'Needs improvement',
+      comment: 'Needs improvement (obsolete draft)',
       entityVersionId: 'entity-v2',
       parentEntityVersionId: 'parent-v2',
       rootEntityVersionId: 'root-v1',
@@ -929,7 +931,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: '2026-07-15T10:00:00.000Z',
       feedbackUserId: 'patient-1',
       sourceId: 'survey-result-1',
-      comment: 'Needs improvement',
+      comment: 'Needs improvement: incorrectly formatted dosage table, see café notes',
       entityVersionId: 'entity-v2',
       parentEntityVersionId: 'parent-v2',
       rootEntityVersionId: 'root-v1',
@@ -945,7 +947,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
     feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
-      comment: 'Reviewed',
+      comment: 'Reviewed: incorrect dosage, 20 mg was correct.',
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
@@ -1395,6 +1397,12 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     expected: [{ threadId: 'thread-org-a' }, { threadId: 'thread-org-b' }],
   },
 ];
+
+const commentMatches = (literal: string, op: 'matches' | 'notMatches' = 'matches'): TraceQueryScalarPredicate => ({
+  op,
+  left: { path: 'comment' },
+  right: { literal },
+});
 
 export interface TraceQueryConformanceCase {
   name: string;
@@ -2395,6 +2403,96 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     },
     expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
+  {
+    name: 'matches finds a whole word in current feedback comments',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('incorrect') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches ignores case and punctuation',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('REVIEWED') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches requires a contiguous phrase',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('incorrect dosage') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches keeps phrase word order',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('dosage incorrect') } } },
+    expected: [],
+  },
+  {
+    name: 'matches treats Unicode letters as part of a word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('café') } } },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches ignores superseded feedback comments',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('obsolete') } } },
+    expected: [],
+  },
+  {
+    name: 'notMatches requires a comment without the word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('incorrect', 'notMatches') } } },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'negated matches also matches feedback without comments',
+    request: {
+      timeRange: fullRange,
+      where: { feedback: { some: { op: 'not', arg: commentMatches('incorrect') } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'composes matches with other predicates on the same feedback record',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+              commentMatches('incorrect'),
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'feedback.none excludes traces with a matching comment',
+    request: { timeRange: fullRange, where: { feedback: { none: commentMatches('incorrect') } } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches splits span names on punctuation',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'lookup' } } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches finds a phrase inside a span name',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'gpt 5' } } } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches ignores superseded span names',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'superseded' } } } },
+    },
+    expected: [],
+  },
 ];
 
 /** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
@@ -2724,6 +2822,12 @@ function evaluateScalarPredicate(
     if (!('value' in predicate)) return predicate.operator === 'empty' ? members.length === 0 : members.length > 0;
     const included = members.includes(predicate.value);
     return predicate.operator === 'includes' ? included : members.length > 0 && !included;
+  }
+  if (predicate.type === 'text') {
+    // A missing value satisfies neither operator: `notMatches` requires the field to exist.
+    if (typeof value !== 'string') return false;
+    const found = ` ${normalizeTraceQueryText(value)} `.includes(` ${predicate.value} `);
+    return predicate.operator === 'matches' ? found : !found;
   }
   const missing = value === null || value === undefined;
   if (predicate.type === 'presence') return predicate.operator === 'exists' ? !missing : missing;

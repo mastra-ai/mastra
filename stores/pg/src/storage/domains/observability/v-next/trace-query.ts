@@ -189,6 +189,18 @@ function compileScalarPredicate<TField extends string>(
     return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
   }
 
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: lowercase, words = runs of letters/digits.
+    // PostgreSQL regexes lack `\p{L}`; `[[:alnum:]]` follows the database locale, so a C-locale
+    // database treats non-ASCII letters as separators.
+    const words = `' ' || lower(regexp_replace(${field}, '[^[:alnum:]]+', ' ', 'g')) || ' '`;
+    const found = `strpos(${words}, $${parameterOffset}) > 0`;
+    return {
+      sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
+    };
+  }
+
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {

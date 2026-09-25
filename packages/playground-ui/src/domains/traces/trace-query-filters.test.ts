@@ -229,11 +229,34 @@ describe('buildTraceQueryRequest', () => {
     ['scores', 'scores.scorerId'],
     ['feedback', 'feedback.feedbackType'],
   ] as const)('when a %s token carries a negative operator', (scope, fieldId) => {
-    it.each(['isNot', 'notIn', 'notExists'] as const)('%s never emits a negative op inside some', operatorId => {
-      const { where } = buildTraceQueryRequest({ tokens: [{ fieldId, value: ['v'], operatorId }], now });
-      const [arg] = (where as { args: Record<string, unknown>[] }).args;
-      expect(arg).toHaveProperty([scope, 'none']);
-      expect(JSON.stringify(arg)).not.toMatch(/"op":"(ne|notIn|notExists)"/);
+    it.each(['isNot', 'notIn', 'notExists', 'notMatches'] as const)(
+      '%s never emits a negative op inside some',
+      operatorId => {
+        const { where } = buildTraceQueryRequest({ tokens: [{ fieldId, value: ['v'], operatorId }], now });
+        const [arg] = (where as { args: Record<string, unknown>[] }).args;
+        expect(arg).toHaveProperty([scope, 'none']);
+        expect(JSON.stringify(arg)).not.toMatch(/"op":"(ne|notIn|notExists|notMatches)"/);
+      },
+    );
+  });
+
+  describe('when a token carries a text operator', () => {
+    it('emits matches with the field on the left and the words on the right', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: 'incorrect dosage', operatorId: 'matches' }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            feedback: {
+              some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'incorrect dosage' } },
+            },
+          },
+        ],
+      });
     });
   });
 

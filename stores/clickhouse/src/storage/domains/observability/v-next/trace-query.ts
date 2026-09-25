@@ -186,6 +186,13 @@ function compileScalarPredicate<TField extends string>(
       : `notEmpty(${field.sql}) AND NOT has(${field.sql}, ${member})`;
   }
 
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: lowercase, words = runs of letters/digits.
+    const words = `concat(' ', lowerUTF8(replaceRegexpAll(${field.sql}, '[^\\\\p{L}\\\\p{N}]+', ' ')), ' ')`;
+    const found = `position(${words}, ${parameters.add(` ${predicate.value} `, 'String')}) > 0`;
+    return `ifNull(${predicate.operator === 'matches' ? found : `NOT (${found})`}, 0)`;
+  }
+
   if (predicate.type === 'membership') {
     const values = predicate.values.map(value => parameters.add(value, field.parameterType)).join(', ');
     const expression = `${field.sql} ${predicate.operator === 'in' ? 'IN' : 'NOT IN'} (${values})`;
