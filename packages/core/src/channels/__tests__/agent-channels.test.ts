@@ -7,6 +7,7 @@ import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { matchesDomain, extractUrls } from '../inline-media';
+import type { ChannelAdapterConfig } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -631,6 +632,281 @@ describe('AgentChannels', () => {
       const { requestContext } = dispatchApproval.mock.calls[0]![0];
       expect(requestContext.get('tenantId')).toBe('tenant-42');
       expect(requestContext.get('channel')).toBeDefined();
+    });
+
+    describe('function-form toolDisplay owns the resolved state', () => {
+      /**
+       * Drives a real Approve/Deny click through the Chat SDK action pipeline so
+       * the assertions cover the same code path a platform button press hits.
+       */
+      async function setupApprovalAction(
+        toolDisplay: ChannelAdapterConfig['toolDisplay'],
+        extraConfig: Omit<ChannelAdapterConfig, 'adapter' | 'toolDisplay'> = {},
+      ) {
+        const adapter = createMockAdapter('discord');
+        const seenEvents: any[] = [];
+        const seenContexts: any[] = [];
+        const wrapped =
+          typeof toolDisplay === 'function'
+            ? (event: any, ctx: any) => {
+                seenEvents.push(event);
+                seenContexts.push(ctx);
+                return (toolDisplay as any)(event, ctx);
+              }
+            : toolDisplay;
+
+        const channels = new AgentChannels({
+          adapters: { discord: { adapter, toolDisplay: wrapped, ...extraConfig } as any },
+        });
+        channels.__setAgent(mockAgent);
+        const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        channels.__setLogger(logger as any);
+        await channels.initialize(makeMastra());
+
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        (channels as any).pendingApprovalCards.set('tool-call-1', {
+          messageId: 'card-1',
+          runId: 'run-1',
+          toolName: 'deleteCustomer',
+          args: { id: 42 },
+          displayName: 'deleteCustomer',
+          argsSummary: 'id=42',
+          startedAt: Date.now(),
+        });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+
+        const click = (actionId: string, user?: Record<string, unknown>) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            ...(user ? { user } : {}),
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+
+        const edited = () => adapter.editMessage.mock.calls[0]![2];
+        const editedText = () => JSON.stringify(edited());
+
+        return {
+          adapter,
+          channels,
+          logger,
+          click,
+          edited,
+          editedText,
+          seenEvents,
+          seenContexts,
+          dispatchApproval,
+          dispatchDecline,
+        };
+      }
+
+      it('edits the denied card with the renderer’s own message', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'denied' ? { kind: 'post' as const, message: '✗ Rechazado por Clicker' } : undefined,
+        );
+        const { adapter, click, edited, editedText, seenEvents } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(edited()).toBe('✗ Rechazado por Clicker');
+        expect(editedText()).not.toContain('Denied');
+
+        const deniedEvent = seenEvents.find(e => e.kind === 'denied');
+        expect(deniedEvent).toMatchObject({
+          kind: 'denied',
+          toolCallId: 'tool-call-1',
+          toolName: 'deleteCustomer',
+          displayName: 'deleteCustomer',
+          // Recomputed from `args` via formatArgsSummary, not read off the stash.
+          argsSummary: '42',
+          args: { id: 42 },
+          byUser: 'Clicker',
+        });
+      });
+
+      it('edits the approved card with the renderer’s own message', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post' as const, message: '✓ Aprobado' } : undefined,
+        );
+        const { adapter, click, edited, seenEvents } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(edited()).toBe('✓ Aprobado');
+        expect(seenEvents.find(e => e.kind === 'approved')).toMatchObject({
+          toolCallId: 'tool-call-1',
+          displayName: 'deleteCustomer',
+          byUser: 'Clicker',
+        });
+      });
+
+      it('lets the renderer return a card object, not just a string', async () => {
+        const card = { markdown: '**Hecho** — deleteCustomer' };
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'denied' ? { kind: 'post' as const, message: card } : undefined,
+        );
+        const { click, edited } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(edited()).toBe(card);
+      });
+
+      it('falls back to the built-in card when the renderer returns undefined', async () => {
+        // The shape every existing renderer has today: it only knows the four
+        // original kinds, so the resolved kinds come back undefined.
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'running' ? { kind: 'post' as const, message: '…' } : undefined,
+        );
+        const { click, editedText, seenEvents } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(seenEvents.some(e => e.kind === 'denied')).toBe(true);
+        expect(editedText()).toContain('Denied');
+        expect(editedText()).toContain('by Clicker');
+        // The whole point of the edit: the card must stop being actionable.
+        expect(editedText()).not.toContain('tool_approve:tool-call-1');
+        expect(editedText()).not.toContain('tool_deny:tool-call-1');
+      });
+
+      it('falls back to the built-in card when the renderer returns a blank message', async () => {
+        const toolDisplay = vi.fn(() => ({ kind: 'post' as const, message: '   ' }));
+        const { click, editedText } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(editedText()).toContain('Approved');
+        expect(editedText()).not.toContain('tool_approve:tool-call-1');
+      });
+
+      it('falls back to the built-in card when the renderer returns a stream result', async () => {
+        // There is no streaming session outside the agent loop to push into.
+        const toolDisplay = vi.fn(() => ({
+          kind: 'stream' as const,
+          chunk: { type: 'markdown_text' as const, text: 'ignored' },
+        }));
+        const { click, editedText } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(editedText()).toContain('Denied');
+      });
+
+      it('falls back to the built-in card and still dispatches when the renderer throws on deny', async () => {
+        const toolDisplay = vi.fn((event: any) => {
+          if (event.kind === 'denied') throw new Error('renderer exploded');
+          return undefined;
+        });
+        const { adapter, click, editedText, logger, dispatchDecline } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        // A denied tool never runs, so nothing else would ever edit this card.
+        expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        expect(editedText()).toContain('Denied');
+        expect(editedText()).not.toContain('tool_deny:tool-call-1');
+        expect(dispatchDecline).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('toolDisplay threw'), expect.anything());
+      });
+
+      it('falls back to the built-in card and still dispatches when the renderer throws on approve', async () => {
+        const toolDisplay = vi.fn((event: any) => {
+          if (event.kind === 'approved') throw new Error('renderer exploded');
+          return undefined;
+        });
+        const { adapter, click, editedText, dispatchApproval } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        expect(editedText()).toContain('Approved');
+        expect(editedText()).not.toContain('tool_approve:tool-call-1');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('leaves byUser undefined when the platform provides no name, instead of inventing one', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click, editedText, seenEvents } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1', { userId: 'anon-1' });
+        await click('tool_approve:tool-call-1', { userId: 'anon-1' });
+
+        expect(seenEvents.find(e => e.kind === 'denied').byUser).toBeUndefined();
+        expect(editedText()).toContain('Denied');
+        expect(editedText()).not.toContain('by User');
+      });
+
+      it('omits byUser in a DM', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { adapter, click, seenEvents } = await setupApprovalAction(toolDisplay);
+        // The Chat SDK derives `isDM` from the adapter, not from the action event.
+        adapter.isDM = vi.fn(() => true);
+
+        await click('tool_deny:tool-call-1');
+
+        const deniedEvent = seenEvents.find(e => e.kind === 'denied');
+        expect(deniedEvent).toBeDefined();
+        expect(deniedEvent.byUser).toBeUndefined();
+      });
+
+      it('reports mode "streaming" when streaming is enabled and "static" when it is not', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+
+        const streaming = await setupApprovalAction(toolDisplay, { streaming: true });
+        await streaming.click('tool_deny:tool-call-1');
+        expect(streaming.seenContexts.find(c => c !== undefined)).toMatchObject({
+          mode: 'streaming',
+          platform: 'discord',
+        });
+
+        const staticCtx = await setupApprovalAction(toolDisplay, { streaming: false });
+        await staticCtx.click('tool_deny:tool-call-1');
+        expect(staticCtx.seenContexts.find(c => c !== undefined)).toMatchObject({
+          mode: 'static',
+          platform: 'discord',
+        });
+      });
+
+      it('keeps timeline mode on cards and stops warning that it needs streaming', async () => {
+        const { adapter, click, logger } = await setupApprovalAction('timeline', { streaming: true });
+
+        await click('tool_approve:tool-call-1');
+
+        expect(logger.warn).not.toHaveBeenCalledWith(
+          expect.stringContaining('requires streaming: true'),
+          expect.anything(),
+        );
+        // Approvals always render as cards, so the resolved edit stays a card too.
+        expect(typeof adapter.editMessage.mock.calls[0]![2]).toBe('object');
+      });
+
+      it('leaves string-mode rendering untouched when no function is configured', async () => {
+        const cards = await setupApprovalAction('cards');
+        await cards.click('tool_deny:tool-call-1');
+        expect(typeof cards.adapter.editMessage.mock.calls[0]![2]).toBe('object');
+        expect(cards.editedText()).toContain('Denied');
+
+        const text = await setupApprovalAction('text');
+        await text.click('tool_deny:tool-call-1');
+        expect(typeof text.adapter.editMessage.mock.calls[0]![2]).toBe('string');
+        expect(text.edited()).toContain('Denied by Clicker');
+      });
+
+      it('routes the resolved state through the renderer in streaming mode too', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post' as const, message: '✓ Aprobado' } : undefined,
+        );
+        const { click, edited } = await setupApprovalAction(toolDisplay, { streaming: true });
+
+        await click('tool_approve:tool-call-1');
+
+        expect(edited()).toBe('✓ Aprobado');
+      });
     });
 
     it('does not register action handling when disabled', async () => {
