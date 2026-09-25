@@ -428,6 +428,47 @@ describe('compact() (#21657)', () => {
     expect(result.pendingTokens).toBe(0);
     expect(await om.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
   });
+
+  it('compacts another thread of the resource when the failed thread has nothing pending', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { model: createObserverModel(), messageTokens: 100_000, bufferTokens: false },
+      reflection: { model: createObserverModel(), observationTokens: 50_000 },
+    });
+    const otherThreadId = 'compact-other-thread';
+    await storage.saveThread({
+      thread: {
+        id: otherThreadId,
+        resourceId,
+        title: 'other thread',
+        createdAt: new Date(baseTime),
+        updatedAt: new Date(baseTime),
+      },
+    });
+
+    // Observe the failed thread's history first, so only the other thread is pending.
+    await storage.saveMessages({ messages: conversation(2) });
+    await om.compact({ threadId, resourceId });
+
+    const other = conversation(4).map((message, index) => ({
+      ...message,
+      id: `other-${index}`,
+      threadId: otherThreadId,
+      createdAt: new Date(baseTime + 60_000 + index * 1000),
+    }));
+    await storage.saveMessages({ messages: other });
+    expect(await om.getOtherThreadsContext(resourceId, threadId)).toBeTruthy();
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add((await storage.listMessages({ threadId, perPage: false })).messages, 'memory');
+
+    const result = await om.compact({ threadId, resourceId, messageList });
+
+    expect(result.compacted).toBe(true);
+    expect(await om.getOtherThreadsContext(resourceId, threadId)).toBeUndefined();
+    expect(await om.loadUnobservedMessages({ threadId: otherThreadId, resourceId })).toEqual([]);
+  });
 });
 
 describe('compact() from processAPIError (#21657)', () => {
