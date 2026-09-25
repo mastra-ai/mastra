@@ -116,7 +116,8 @@ function hydrateSequential(entries: ProcessorGraphEntry[], ctx: HydrationContext
  *   { [stepId]: ProcessorStepOutput, ... }
  *
  * This map function picks the first branch result that has a valid ProcessorStepOutput
- * shape and returns it as a flat object for downstream steps / the processor runner.
+ * shape and returns all of its fields as a flat object for downstream steps /
+ * the processor runner. Step input may include model and tool settings.
  */
 async function mergeBranchOutputs({ inputData }: { inputData: Record<string, any> }) {
   // inputData is { [stepId]: { phase, messages, ... }, ... }
@@ -129,19 +130,7 @@ async function mergeBranchOutputs({ inputData }: { inputData: Record<string, any
   });
   for (const key of keys) {
     const val = inputData[key];
-    if (val && typeof val === 'object' && 'phase' in val) {
-      return {
-        phase: val.phase,
-        messages: val.messages,
-        messageList: val.messageList,
-        ...(val.systemMessages ? { systemMessages: val.systemMessages } : {}),
-        ...(val.part !== undefined ? { part: val.part } : {}),
-        ...(val.streamParts ? { streamParts: val.streamParts } : {}),
-        ...(val.state ? { state: val.state } : {}),
-        ...(val.text !== undefined ? { text: val.text } : {}),
-        ...(val.retryCount !== undefined ? { retryCount: val.retryCount } : {}),
-      };
-    }
+    if (val && typeof val === 'object' && 'phase' in val) return { ...val };
   }
   // Fallback: return inputData as-is (shouldn't happen with valid processor graphs)
   return inputData;
