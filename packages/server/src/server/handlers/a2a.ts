@@ -801,10 +801,12 @@ async function waitForClaimedResume({
   taskStore,
   agentId,
   taskId,
+  signal,
 }: {
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
+  signal?: AbortSignal;
 }): Promise<Task> {
   let snapshot = taskStore.loadWithVersion({ agentId, taskId });
   if (!snapshot) {
@@ -816,6 +818,7 @@ async function waitForClaimedResume({
       agentId,
       taskId,
       afterVersion: snapshot.version,
+      signal,
     });
   }
 
@@ -1629,7 +1632,7 @@ export async function* handleMessageStream({
   resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
 
   if (existingTask?.status.state === 'working' && getSuspendedRunId(existingTask)) {
-    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId, signal: abortSignal });
     yield createSuccessResponse(requestId, task);
     return;
   }
@@ -1641,7 +1644,7 @@ export async function* handleMessageStream({
   const wasInterrupted = isInterruptedTaskState(existingTask?.status.state);
   const resume = await claimInterruptedTaskResume({ taskStore, agentId, taskId });
   if (wasInterrupted && !resume) {
-    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId, signal: abortSignal });
     yield createSuccessResponse(requestId, task);
     return;
   }
