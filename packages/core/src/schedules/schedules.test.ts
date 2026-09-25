@@ -287,6 +287,9 @@ describe('mastra.schedules canonical service', () => {
     await expect(mastra.schedules.pause(hb.id)).rejects.toMatchObject({ details: { status: 409 } });
     await expect(mastra.schedules.resume(hb.id)).rejects.toMatchObject({ details: { status: 409 } });
 
+    const tzOnly = await mastra.schedules.update(hb.id, { timezone: 'UTC' });
+    expect(tzOnly.status).toBe('completed');
+
     const newRunAt = Date.now() + 120_000;
     const updated = await mastra.schedules.update(hb.id, { runAt: newRunAt });
     expect(updated.status).toBe('active');

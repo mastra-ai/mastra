@@ -578,15 +578,18 @@ export class Schedules {
     // so flipping status back to 'active' without recomputing would trigger
     // an immediate spurious fire instead of waiting for the next cron tick.
     // A completed schedule can only be reactivated by changing its timing.
-    const timingChanged =
-      patch.cron !== undefined ||
-      patch.timezone !== undefined ||
-      patch.runAt !== undefined ||
-      patch.endAt !== undefined;
+    const timingChanged = isOneOff
+      ? patch.runAt !== undefined
+      : patch.cron !== undefined || patch.timezone !== undefined || patch.endAt !== undefined;
     if (existing.status === 'completed' && patch.status !== undefined && !timingChanged) {
       throw scheduleCompleted(existing.id, patch.status === 'paused' ? 'pause' : 'resume');
     }
-    let nextStatus: ScheduleStatus = patch.status ?? (existing.status === 'completed' ? 'active' : existing.status);
+    let nextStatus: ScheduleStatus =
+      existing.status === 'completed'
+        ? timingChanged
+          ? (patch.status ?? 'active')
+          : 'completed'
+        : (patch.status ?? existing.status);
     const resuming = nextStatus === 'active' && existing.status !== 'active';
     let nextFireAt: number | undefined;
     if (timingChanged || resuming) {
@@ -596,8 +599,6 @@ export class Schedules {
         nextFireAt = computeNextFireAt(nextCron, { timezone: nextTimezone, after: Date.now() });
         if (nextStatus === 'active' && nextEndAt !== undefined && nextFireAt > nextEndAt) nextStatus = 'completed';
       }
-    } else if (existing.status === 'completed') {
-      nextStatus = 'completed';
     }
 
     const updated = await store.updateSchedule(existing.id, {
