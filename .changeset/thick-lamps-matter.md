@@ -12,8 +12,8 @@ The tool takes no arguments and is only registered in review-role sessions. A re
   "triggeredBy": "octocat",
   "reviewTarget": {
     "integrationId": "github",
-    "type": "github-pr",
-    "externalId": "42",
+    "type": "pull-request",
+    "externalId": "github-pr:42",
     "url": "https://github.com/acme/widgets/pull/42"
   },
   "linkedIssues": [{ "source": "linear", "url": "https://linear.app/acme/issue/ENG-42/..." }]
