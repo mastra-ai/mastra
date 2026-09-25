@@ -12,7 +12,9 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   class MockProcessTerminal {
-    columns = 120;
+    get columns() {
+      return process.stdout.columns || 80;
+    }
   }
 
   class MockTUI {
@@ -177,6 +179,41 @@ describe('createTUIState', () => {
       state.renderScheduler?.dispose();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('does not turn a transient narrow terminal width negative', async () => {
+    const { Text } = await vi.importActual<typeof import('@earendil-works/pi-tui')>('@earendil-works/pi-tui');
+    const originalColumns = process.stdout.columns;
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 2,
+      writable: true,
+      configurable: true,
+    });
+
+    let state: ReturnType<typeof createTUIState> | undefined;
+    try {
+      const session = createSession();
+      const createdState = createTUIState({
+        controller: createAgentController(session) as never,
+        session: session as never,
+        hookManager: {} as never,
+        analytics: {} as never,
+        authStorage: { getStoredApiKey: vi.fn(() => undefined) } as never,
+        mcpManager: {} as never,
+        workspace: {} as never,
+      });
+      state = createdState;
+
+      expect(() => new Text('status', 1, 1).render(createdState.terminal.columns)).not.toThrow();
+      expect(createdState.terminal.columns).toBe(2);
+    } finally {
+      state?.renderScheduler?.dispose();
+      Object.defineProperty(process.stdout, 'columns', {
+        value: originalColumns,
+        writable: true,
+        configurable: true,
+      });
     }
   });
 });
