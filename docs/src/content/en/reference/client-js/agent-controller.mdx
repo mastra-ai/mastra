@@ -294,7 +294,14 @@ type MessageUpdate = Extract<KnownAgentControllerEvent, { type: 'message_update'
 
 const activeMessages = new Map<string, MastraDBMessage>()
 
-function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBMessage {
+// Mirrors `applyUpdate` from `@mastra/core/agent-controller`, inlined so a
+// browser bundle doesn't pull in that entry point's `node:crypto` import.
+function applyUpdate(
+  message: MastraDBMessage | undefined,
+  update: MessageUpdate,
+): MastraDBMessage | undefined {
+  if (!message || typeof message.content === 'string') return undefined
+
   const parts = [...message.content.parts]
 
   if (update.type === 'text-delta') {
@@ -308,14 +315,13 @@ function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBM
     }
   } else if (update.type === 'reasoning-delta') {
     const part = parts[update.index]
-    const reasoning = part?.type === 'reasoning' ? part.reasoning + update.delta : update.delta
-    parts[update.index] = {
-      ...(part?.type === 'reasoning' ? part : { type: 'reasoning' as const }),
-      reasoning,
-      details: [{ type: 'text', text: reasoning }],
-    }
+    if (part?.type !== 'reasoning') return undefined
+    const reasoning = part.reasoning + update.delta
+    parts[update.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] }
   } else {
-    parts[update.index] = update.part
+    if (!Number.isInteger(update.index) || update.index < 0 || update.index > parts.length)
+      return undefined
+    parts[update.index] = structuredClone(update.part)
   }
 
   return { ...message, content: { ...message.content, parts } }
@@ -329,10 +335,9 @@ function handleEvent(event: AgentControllerEvent) {
       activeMessages.set(event.message.id, structuredClone(event.message))
       break
     case 'message_update': {
-      const message = activeMessages.get(event.id)
-      if (!message) break
+      const updated = applyUpdate(activeMessages.get(event.id), event.event)
+      if (!updated) break
 
-      const updated = applyUpdate(message, event.event)
       activeMessages.set(event.id, updated)
       render(updated)
       break
@@ -377,26 +382,7 @@ The state is coalesced for `message_update` and `tool_input_delta` over a short 
 
 ### Reuse the fold from the package
 
-The `applyUpdate` above is also exported from `@mastra/core/agent-controller`, so a server-side consumer can import it instead of inlining a copy:
-
-```typescript
-import { isKnownAgentControllerEvent, type AgentControllerEvent } from '@mastra/client-js'
-import { applyUpdate } from '@mastra/core/agent-controller'
-import type { MastraDBMessage } from '@mastra/core/agent-controller'
-
-const messages = new Map<string, MastraDBMessage>()
-
-function handleMessageEvent(event: AgentControllerEvent) {
-  if (!isKnownAgentControllerEvent(event)) return
-  if (event.type === 'message_start') messages.set(event.message.id, event.message)
-  if (event.type === 'message_update') {
-    const updated = applyUpdate(messages.get(event.id), event.event)
-    if (updated) messages.set(event.id, updated)
-  }
-}
-```
-
-A delta whose part the consumer hasn't seen doesn't apply, and `applyUpdate` returns `undefined` for it, so store the result only when it does. Importing it into a browser bundle also pulls in the `node:crypto`-bearing `AgentController` module, which is why the folded `display_state_changed` state stays the preferred path in a browser app. [Message lifecycle](/reference/agent-controller/message-lifecycle) documents the full contract.
+The fold above is inlined because `@mastra/core/agent-controller` imports `node:crypto` at its entry point, which a browser bundle shouldn't pull in. Server-side consumers can import that same `applyUpdate` instead of copying it; it has the contract shown here, so store the result only when it's defined. [Message lifecycle](/reference/agent-controller/message-lifecycle) documents it in full.
 
 ## Related
 

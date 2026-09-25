@@ -63,7 +63,7 @@ Returns: `MastraDBMessage | undefined`
 
 The function is pure. It returns a new message and never mutates the input, so store the result rather than relying on the argument changing.
 
-The return value is `undefined` when the delta doesn't apply: no message was passed, the message `content` is a string rather than parts, or a `reasoning-delta` doesn't address a reasoning part. The last case occurs when a consumer folds a partial stream and hasn't seen the `message_start` or `part` update that announced the reasoning part. Always check the result before storing it, or a delta that doesn't apply overwrites the stored message with `undefined`.
+The return value is `undefined` when the delta doesn't apply: no message was passed, the message `content` is a string rather than parts, a `reasoning-delta` doesn't address a reasoning part, or a `part` update's index is past the append boundary. The reasoning case occurs when a consumer folds a partial stream and hasn't seen the `message_start` or `part` update that announced the reasoning part; a `part` update at `parts.length` appends, which is how the emitter adds each new part. Always check the result before storing it, or a delta that doesn't apply overwrites the stored message with `undefined`.
 
 Address the message by id, and store the result of each applied update:
 
