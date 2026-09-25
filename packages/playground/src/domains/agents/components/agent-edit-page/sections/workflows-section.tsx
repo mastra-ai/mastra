@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -9,7 +10,7 @@ import { Controller, useWatch } from 'react-hook-form';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 interface WorkflowsSectionProps {
   control: Control<AgentFormValues>;
@@ -19,7 +20,7 @@ interface WorkflowsSectionProps {
 
 export function WorkflowsSection({ control, error, readOnly = false }: WorkflowsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { data: workflows, isLoading } = useWorkflows();
+  const { data: workflows, isLoading } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
   const count = Object.keys(selectedWorkflows || {}).length;
 

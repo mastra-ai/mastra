@@ -22,6 +22,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
+  feedback: false,
 };
 
 type MockStorage = {
@@ -522,6 +523,30 @@ describe('System Handlers', () => {
         async getTrace(): Promise<unknown> {
           throw new Error('not implemented');
         }
+        async listFeedback(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async createFeedback(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async deleteFeedback(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async updateFeedbackReviewStatus(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackAggregate(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackBreakdown(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackTimeSeries(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackPercentiles(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
       }
 
       const capabilitiesFor = async (observability: object) => {
@@ -653,6 +678,53 @@ describe('System Handlers', () => {
             metrics: true,
           },
           traceQuery: true,
+        });
+      });
+
+      it('does not report feedback for stores that implement it without declaring it', async () => {
+        // Feedback is declaration-only: Studio hides the feedback UI behind
+        // this flag, so store versions that predate the declaration don't
+        // advertise it until upgraded.
+        class UndeclaredFeedbackStore extends BaseObservabilityStore {
+          override async listFeedback() {
+            return { feedback: [] };
+          }
+          override async createFeedback() {
+            return undefined;
+          }
+          override async deleteFeedback() {
+            return undefined;
+          }
+          override async updateFeedbackReviewStatus() {
+            return {};
+          }
+          override async getFeedbackAggregate() {
+            return {};
+          }
+          override async getFeedbackBreakdown() {
+            return {};
+          }
+          override async getFeedbackTimeSeries() {
+            return {};
+          }
+          override async getFeedbackPercentiles() {
+            return {};
+          }
+        }
+
+        expect(await capabilitiesFor(new UndeclaredFeedbackStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports feedback for stores that declare it', async () => {
+        class DeclaredFeedbackStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['feedback'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new DeclaredFeedbackStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          feedback: true,
         });
       });
 

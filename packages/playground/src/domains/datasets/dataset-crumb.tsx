@@ -1,7 +1,7 @@
 import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
+import { useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { useParams } from 'react-router';
 import { DatasetCombobox } from './components/dataset-combobox';
-import { useDatasets } from './hooks/use-datasets';
 
 /**
  * Dataset breadcrumb label. The route `to` makes it a link on nested routes;

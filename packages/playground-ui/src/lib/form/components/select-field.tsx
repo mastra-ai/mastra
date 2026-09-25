@@ -1,0 +1,45 @@
+import type { AutoFormFieldProps } from '@autoform/react';
+import React from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+
+export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, error, id, value }) => {
+  const {
+    key: _key,
+    error: _error,
+    'aria-describedby': ariaDescribedBy,
+    'aria-invalid': ariaInvalid,
+    ...props
+  } = inputProps;
+
+  return (
+    <Select
+      {...props}
+      value={value}
+      onValueChange={value => {
+        const syntheticEvent = {
+          target: {
+            value,
+            name: inputProps.name,
+          },
+        } as React.ChangeEvent<HTMLInputElement>;
+        props.onChange(syntheticEvent);
+      }}
+    >
+      <SelectTrigger
+        id={id}
+        className={error ? 'border-accent2' : ''}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+      >
+        <SelectValue placeholder="Select an option" />
+      </SelectTrigger>
+      <SelectContent>
+        {(field.options || []).map(([key, label]) => (
+          <SelectItem key={key} value={key}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};

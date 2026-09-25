@@ -27,6 +27,7 @@ const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-roo
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
+const OBSERVABILITY_FEEDBACK_STORAGE_FEATURE = 'feedback';
 export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE = 'observability-trace-query-tenant-scope';
 export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE =
   'Trusted tenant scope requires a newer @mastra/core with trace-query tenant scope support. Please upgrade.';
@@ -207,6 +208,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
+  feedback: boolean;
 };
 
 export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabilities = {
@@ -226,6 +228,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
+  feedback: false,
 };
 
 /**
@@ -237,7 +240,9 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
  * store implements the underlying method, so those packages report accurately
  * without being upgraded. Delta polling and the trace/thread query APIs depend
  * on runtime behavior a method check can't see, so they are only reported for
- * stores that declare them.
+ * stores that declare them. Feedback is also declaration-only: Studio hides
+ * the feedback UI behind this flag, and store versions that implement feedback
+ * without declaring it simply don't advertise it until upgraded.
  */
 export function getObservabilityStorageCapabilities(
   observabilityStore: ObservabilityStorage,
@@ -297,6 +302,7 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
     threadQuery,
+    feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
 

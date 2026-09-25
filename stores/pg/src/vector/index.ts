@@ -22,6 +22,7 @@ import xxhash from 'xxhash-wasm';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { parseSchemaName } from '../shared/schema-name';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -371,8 +372,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
       // Issue #10061: Always qualify with schema where vector extension is installed
       // This ensures the type is found regardless of the session's search_path
-      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
-      return `${validatedSchema}.${vectorType}`;
+      // Plain identifiers stay unquoted; other names (e.g. `my-tenant`) must be quoted.
+      const extensionSchema = parseSchemaName(this.vectorExtensionSchema, 'vector extension schema');
+      const qualifier = /^[A-Za-z_][A-Za-z0-9_]*$/.test(extensionSchema) ? extensionSchema : `"${extensionSchema}"`;
+      return `${qualifier}.${vectorType}`;
     }
 
     // Fallback to unqualified (will use search_path)
@@ -475,7 +478,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   private getSchemaName() {
-    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    return this.schema ? `"${parseSchemaName(this.schema)}"` : undefined;
   }
 
   private async ensureNamespaceSchema(indexName: string, client: pg.PoolClient): Promise<void> {

@@ -798,7 +798,6 @@ export interface ObservationalMemoryReflectionConfig {
  *
  * // Custom configuration
  * observationalMemory: {
- *   scope: 'resource',
  *   model: 'google/gemini-2.5-flash',
  *   observation: {
  *     messageTokens: 20_000,
@@ -844,6 +843,11 @@ export interface ObservationalMemoryOptions {
    * - 'thread': Observations are per-thread (default)
    *
    * @default 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -1405,7 +1409,11 @@ export type SerializedObservationalMemoryConfig = {
   /** Model ID for both Observer and Reflector (e.g., "google/gemini-2.5-flash") */
   model?: string;
 
-  /** Memory scope: 'resource' or 'thread' */
+  /**
+   * Memory scope: 'resource' or 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release, leaving
+   * `'thread'` (already the default) as the only scope. Omit this option to use thread scope.
+   */
   scope?: 'resource' | 'thread';
 
   /** Inactivity TTL before forcing buffered observation activation */

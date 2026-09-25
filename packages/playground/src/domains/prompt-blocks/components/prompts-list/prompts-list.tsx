@@ -5,10 +5,10 @@ import {
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { CheckIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface PromptsListProps {
   promptBlocks: StoredPromptBlockResponse[];

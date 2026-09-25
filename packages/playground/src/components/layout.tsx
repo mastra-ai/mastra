@@ -5,6 +5,7 @@ import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
@@ -24,7 +25,6 @@ import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
-import { useLinkComponent } from '@/lib/framework';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 

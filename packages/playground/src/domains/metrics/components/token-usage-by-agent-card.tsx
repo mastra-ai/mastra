@@ -3,7 +3,7 @@ import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/compon
 import { TokenUsageByAgentCardView } from '@mastra/playground-ui/domains/metrics/components/token-usage-by-agent-card-view';
 import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
 import { useTokenUsageByAgentMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-token-usage-by-agent-metrics';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 
 export function TokenUsageByAgentCard() {
   const { data, isLoading, isError } = useTokenUsageByAgentMetrics();

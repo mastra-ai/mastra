@@ -9,6 +9,7 @@ import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
+import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
@@ -144,6 +145,8 @@ export function setupKeyboardShortcuts(
     for (const shell of state.allShellComponents) {
       shell.setExpanded(state.toolOutputExpanded);
     }
+    // Expanded quiet shell calls leave their shared box, so re-measure chat spacing.
+    reconcileChatBoundarySpacers(state.chatContainer);
     state.ui.requestRender();
   });
 

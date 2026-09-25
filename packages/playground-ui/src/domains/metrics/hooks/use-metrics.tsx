@@ -1,11 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
-import { format } from 'date-fns';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 import { buildMetricsDimensionalFilter } from '../metrics-filters';
 import type { MetricsDimensionalFilter } from '../metrics-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { formatShortDate } from '@/utils/date-format';
 
 const DATE_PRESETS = [
   { label: 'Last 24 hours', value: '24h' },
@@ -72,9 +72,9 @@ function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefine
   }
   if (customRange?.from) {
     if (customRange.to) {
-      return `${format(customRange.from, 'MMM d, yyyy')} – ${format(customRange.to, 'MMM d, yyyy')}`;
+      return `${formatShortDate(customRange.from)} – ${formatShortDate(customRange.to)}`;
     }
-    return format(customRange.from, 'MMM d, yyyy');
+    return formatShortDate(customRange.from) ?? '';
   }
   return 'Custom range';
 }

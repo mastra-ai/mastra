@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.30-alpha.0",
+  "version": "0.2.31-alpha.1",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@fastify/busboy": "^3.2.2",
-    "@mastra/server": "workspace:*"
+    "@mastra/server": "workspace:*",
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.115",

@@ -353,6 +353,14 @@ export interface RebuiltRunTools {
   workspace?: Workspace;
   memory?: MastraMemory;
   saveQueueManager?: SaveQueueManager;
+  /**
+   * The restored RequestContext the rebuilt tools were BUILT with (their
+   * closures capture this instance, not the step's own). Exposed so the
+   * tool-call step can read back by-reference signals a tool wrapper writes
+   * to its build-time context — e.g. the delegation bail flag — which would
+   * otherwise be invisible cross-process.
+   */
+  requestContext: RequestContext;
 }
 
 /**
@@ -435,7 +443,7 @@ export async function rebuildRunToolsFromMastra(options: {
       globalRunRegistry.set(runId, patch as RunRegistryEntry);
     }
 
-    return { tools, workspace, memory, saveQueueManager };
+    return { tools, workspace, memory, saveQueueManager, requestContext: resolveRequestContext };
   } catch (error) {
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;

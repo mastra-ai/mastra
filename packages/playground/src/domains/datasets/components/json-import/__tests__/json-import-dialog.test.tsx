@@ -12,11 +12,19 @@ type BatchInsertResponse = RouteResponse<'POST /datasets/:datasetId/items/batch'
 
 // CodeMirror doesn't render in jsdom; stub it so we can assert on the props it receives.
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
-  CodeEditor: ({ value, language }: CodeEditorProps) => (
-    <pre data-testid="code-editor" data-language={language}>
-      {value}
-    </pre>
-  ),
+  CodeEditor: ({ value, language, onChange, editable = true, 'aria-label': label }: CodeEditorProps) =>
+    onChange ? (
+      <textarea
+        aria-label={label}
+        value={value}
+        readOnly={!editable}
+        onChange={event => onChange(event.target.value)}
+      />
+    ) : (
+      <pre data-testid="code-editor" data-language={language}>
+        {value}
+      </pre>
+    ),
 }));
 
 const DATASET_ID = 'ds-1';
@@ -196,6 +204,31 @@ describe('JSONImportDialog', () => {
       items: [{ input: 'a', groundTruth: 'A' }, { input: 'b', groundTruth: 'B' }, { input: 'c' }],
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks the paste editor while the import is in flight', async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    server.use(
+      http.post(BATCH_URL, async () => {
+        await held;
+        const response: BatchInsertResponse = { items: [], count: 3 };
+        return HttpResponse.json(response);
+      }),
+    );
+
+    const { queryClient } = renderDialog();
+    pasteJSON(VALID_ITEMS);
+    const editor = screen.getByLabelText('JSON items') as HTMLTextAreaElement;
+    expect(editor.readOnly).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import 3 items' }));
+    await waitFor(() => expect(editor.readOnly).toBe(true));
+
+    release();
+    await waitForMutationsIdle(queryClient);
   });
 
   it('copies the example JSON and flips the button label', async () => {

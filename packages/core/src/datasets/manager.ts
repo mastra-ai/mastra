@@ -8,6 +8,7 @@ import type { DatasetTenancyFilters, ListDatasetsInput, TargetType } from '../st
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
+import { assertSupportedPatterns } from './validation/index.js';
 
 /**
  * Build a {@link DatasetTenancyFilters} from public manager args. Returns
@@ -137,6 +138,9 @@ export class DatasetsManager {
     if (groundTruthSchema !== undefined && isZodType(groundTruthSchema)) {
       groundTruthSchema = zodToJsonSchema(groundTruthSchema);
     }
+
+    assertSupportedPatterns(inputSchema);
+    assertSupportedPatterns(groundTruthSchema);
 
     const result = await store.createDataset({
       ...rest,
