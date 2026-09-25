@@ -158,7 +158,7 @@ describe('PlatformFilesystem', () => {
     // fs-routes): a GET only reaches the list handler when the URL path key is
     // empty or ends with `/`. Any other key is a GetObject and 404s unless
     // that exact object exists — folders exist only as key prefixes.
-    const objects: Record<string, string> = { 'foo/bar.md': 'abc' };
+    const objects: Record<string, string> = { 'foo/': '', 'foo/bar.md': 'abc' };
     const list = (prefix: string) => {
       const contents: Array<{ key: string; size: number }> = [];
       const commonPrefixes = new Set<string>();
