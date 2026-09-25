@@ -576,6 +576,26 @@ export interface InngestAgent<TOutput = undefined> {
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
    */
   resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>>;
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
+   * Runs through the durable {@link InngestAgent.stream} with `untilIdle`, so
+   * every turn executes on Inngest.
+   */
+  streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions?: InngestAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+  ): Promise<InngestAgentStreamResult<TOutput>>;
+  /**
+   * @deprecated Use `resumeStream(resumeData, { runId, untilIdle: true })` instead.
+   *
+   * Runs through the durable {@link InngestAgent.resumeStream} with `untilIdle`;
+   * requires `runId` in `streamOptions`.
+   */
+  resumeStreamUntilIdle(
+    resumeData: any,
+    streamOptions?: { runId?: string; maxIdleMs?: number } & Record<string, any>,
+  ): Promise<MastraModelOutput<TOutput>>;
   /** Approve a pending tool call on a suspended durable run (via {@link InngestAgent.resumeStream}). */
   approveToolCall(
     options: { runId: string; toolCallId?: string } & Record<string, any>,
@@ -823,6 +843,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'generate'
     | 'resumeGenerate'
     | 'resumeStream'
+    | 'streamUntilIdle'
+    | 'resumeStreamUntilIdle'
     | 'approveToolCall'
     | 'declineToolCall'
     | 'approveToolCallGenerate'
@@ -1479,6 +1501,24 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
       } as InngestAgentResumeOptions<TOutput>);
       return result.output;
+    },
+
+    // Without these, the Proxy forwards the deprecated shims to the wrapped
+    // Agent, which runs the idle loop in-process and never creates an Inngest run.
+    async streamUntilIdle(messages, streamOptions) {
+      const { maxIdleMs, ...options } = streamOptions ?? {};
+      return proxyRef!.stream(messages, {
+        ...options,
+        untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+      });
+    },
+
+    async resumeStreamUntilIdle(resumeData, streamOptions) {
+      const { maxIdleMs, ...options } = streamOptions ?? {};
+      return proxyRef!.resumeStream(resumeData, {
+        ...options,
+        untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+      });
     },
 
     async approveToolCall(options) {
