@@ -40,6 +40,31 @@ function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
   };
 }
 
+type SnapshotRecord = {
+  namespace: string;
+  workflow_name: string;
+  run_id: string;
+  resourceId?: string;
+  snapshot: WorkflowRunState;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+function escapeGlob(value: string): string {
+  return value.replace(/[*?[\]\\]/g, '\\$&');
+}
+
+function snapshotKey(namespace: string, workflowName: string, runId: string): string {
+  return getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId });
+}
+
+/**
+ * Earlier versions appended `:resourceId:<id>` to snapshot keys. Matches those keys for a run.
+ */
+function legacySnapshotKeyPattern(namespace: string, workflowName: string, runId: string): string {
+  return `${escapeGlob(snapshotKey(namespace, workflowName, runId))}:resourceId:*`;
+}
+
 export class WorkflowsRedis extends WorkflowsStorage {
   private client: RedisClient;
   private db: RedisDB;
@@ -48,6 +73,28 @@ export class WorkflowsRedis extends WorkflowsStorage {
     super();
     this.client = config.client;
     this.db = new RedisDB({ client: config.client });
+  }
+
+  /**
+   * Reads a run's snapshot record by its canonical key, falling back to legacy
+   * `:resourceId:`-suffixed keys only when the canonical key is missing.
+   */
+  private async getSnapshotRecord(
+    namespace: string,
+    workflowName: string,
+    runId: string,
+  ): Promise<SnapshotRecord | null> {
+    const data = await this.client.get(snapshotKey(namespace, workflowName, runId));
+    if (data) {
+      return JSON.parse(data) as SnapshotRecord;
+    }
+
+    const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern(namespace, workflowName, runId));
+    if (legacyKeys.length === 0) {
+      return null;
+    }
+    const legacyData = await this.client.get(legacyKeys[0]!);
+    return legacyData ? (JSON.parse(legacyData) as SnapshotRecord) : null;
   }
 
   public supportsConcurrentUpdates(): boolean {
@@ -72,21 +119,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
     requestContext: Record<string, unknown>;
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     try {
-      const existingRecord = await this.db.get<{
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-        createdAt: string | Date;
-        updatedAt: string | Date;
-      }>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
+      const existingRecord = await this.getSnapshotRecord('workflows', workflowName, runId);
 
       const existingSnapshot = existingRecord?.snapshot;
       let snapshot = existingSnapshot;
@@ -115,6 +148,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         namespace: 'workflows',
         workflowName,
         runId,
+        resourceId: existingRecord?.resourceId,
         snapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
@@ -146,21 +180,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     try {
-      const existingRecord = await this.db.get<{
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-        createdAt: string | Date;
-        updatedAt: string | Date;
-      }>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
+      const existingRecord = await this.getSnapshotRecord('workflows', workflowName, runId);
 
       const existingSnapshot = existingRecord?.snapshot;
 
@@ -181,6 +201,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         namespace: 'workflows',
         workflowName,
         runId,
+        resourceId: existingRecord.resourceId,
         snapshot: updatedSnapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
@@ -214,23 +235,16 @@ export class WorkflowsRedis extends WorkflowsStorage {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
       let finalCreatedAt = createdAt;
-      if (!finalCreatedAt) {
-        const existing = await this.db.get<{
-          namespace: string;
-          workflow_name: string;
-          run_id: string;
-          snapshot: WorkflowRunState;
-          createdAt: string | Date;
-          updatedAt: string | Date;
-        }>({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          keys: {
-            namespace,
-            workflow_name: workflowName,
-            run_id: runId,
-          },
-        });
-        finalCreatedAt = existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
+      let finalResourceId = resourceId;
+      if (!finalCreatedAt || !finalResourceId) {
+        // No SCAN here (it would run on every new run); a legacy key is only reachable when resourceId is known.
+        const canonicalKey = snapshotKey(namespace, workflowName, runId);
+        const existingData =
+          (await this.client.get(canonicalKey)) ??
+          (resourceId ? await this.client.get(`${canonicalKey}:resourceId:${resourceId}`) : null);
+        const existing = existingData ? (JSON.parse(existingData) as SnapshotRecord) : null;
+        finalCreatedAt ??= existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
+        finalResourceId ??= existing?.resourceId;
       }
 
       await this.db.insert({
@@ -239,7 +253,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
           namespace,
           workflow_name: workflowName,
           run_id: runId,
-          resourceId,
+          resourceId: finalResourceId,
           snapshot,
           createdAt: finalCreatedAt,
           updatedAt: updatedAt ?? new Date(),
@@ -268,23 +282,9 @@ export class WorkflowsRedis extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
-    });
     try {
-      const data = await this.client.get(key);
-      if (!data) {
-        return null;
-      }
-      const parsed = JSON.parse(data) as {
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-      };
-      return parsed.snapshot;
+      const record = await this.getSnapshotRecord(namespace, workflowName, runId);
+      return record?.snapshot ?? null;
     } catch (error) {
       throw new MastraError(
         {
@@ -310,9 +310,12 @@ export class WorkflowsRedis extends WorkflowsStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     try {
-      const key =
-        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.db.scanKeys(key);
+      const workflowNamePattern = workflowName ? escapeGlob(workflowName) : '*';
+      const canonicalPattern = `${escapeGlob(getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }))}:workflow_name:${workflowNamePattern}:run_id:${escapeGlob(runId)}`;
+      const keys = [
+        ...(await this.db.scanKeys(canonicalPattern)),
+        ...(await this.db.scanKeys(`${canonicalPattern}:resourceId:*`)),
+      ];
 
       if (keys.length === 0) {
         return null;
@@ -370,9 +373,9 @@ export class WorkflowsRedis extends WorkflowsStorage {
   }
 
   public async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
     try {
-      await this.client.del(key);
+      const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern('workflows', workflowName, runId));
+      await this.client.del([snapshotKey('workflows', workflowName, runId), ...legacyKeys]);
     } catch (error) {
       throw new MastraError(
         {
@@ -415,24 +418,9 @@ export class WorkflowsRedis extends WorkflowsStorage {
       const normalizedFrom = fromDate ? ensureDate(fromDate) : undefined;
       const normalizedTo = toDate ? ensureDate(toDate) : undefined;
 
-      let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
-      if (workflowName && resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: '*',
-          resourceId,
-        });
-      } else if (workflowName) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':*';
-      } else if (resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: '*',
-          run_id: '*',
-          resourceId,
-        });
-      }
+      const pattern = workflowName
+        ? `${escapeGlob(getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }))}:*`
+        : `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' })}:*`;
       const keys = await this.db.scanKeys(pattern);
 
       if (keys.length === 0) {
@@ -441,14 +429,30 @@ export class WorkflowsRedis extends WorkflowsStorage {
 
       const results = await this.client.mGet(keys);
 
-      let runs = results
-        .filter((data): data is string => data !== null)
-        .map(data => JSON.parse(data) as Record<string, unknown>)
-        .filter(
-          (record): record is Record<string, unknown> =>
-            record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
-        )
+      // A run can exist under both its canonical key and a legacy `:resourceId:` key; the canonical one wins.
+      const recordsByRun = new Map<string, { record: Record<string, unknown>; legacy: boolean }>();
+      results.forEach((data, index) => {
+        if (data === null) return;
+        const record = JSON.parse(data) as Record<string, unknown>;
+        if (record === null || typeof record !== 'object' || !('workflow_name' in record)) return;
+        const legacy =
+          keys[index] !==
+          snapshotKey(
+            (record.namespace as string | undefined) ?? 'workflows',
+            record.workflow_name as string,
+            record.run_id as string,
+          );
+        const runKey = `${record.workflow_name}\u0000${record.run_id}`;
+        const current = recordsByRun.get(runKey);
+        if (!current || (current.legacy && !legacy)) {
+          recordsByRun.set(runKey, { record, legacy });
+        }
+      });
+
+      let runs = [...recordsByRun.values()]
+        .map(({ record }) => record)
         .filter(record => !workflowName || record.workflow_name === workflowName)
+        .filter(record => !resourceId || record.resourceId === resourceId)
         .map(w => parseWorkflowRun(w))
         .filter(w => {
           if (normalizedFrom && w.createdAt < normalizedFrom) {

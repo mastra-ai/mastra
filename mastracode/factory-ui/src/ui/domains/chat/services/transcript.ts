@@ -421,10 +421,42 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.flatMap(message => [
-    toMessageEntry(message, { streaming: false }),
-    ...persistedSuspensionPrompts(message),
-  ]);
+  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+}
+
+function persistedPrompts(message: MastraDBMessage): Array<ApprovalPrompt | SuspensionPrompt> {
+  return [...persistedApprovalPrompts(message), ...persistedSuspensionPrompts(message)];
+}
+
+function persistedApprovalPrompts(message: MastraDBMessage): ApprovalPrompt[] {
+  const pendingToolApprovals = message.content.metadata?.pendingToolApprovals;
+  if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object' || Array.isArray(pendingToolApprovals)) {
+    return [];
+  }
+
+  return Object.values(pendingToolApprovals).flatMap(approval => {
+    if (
+      !approval ||
+      typeof approval !== 'object' ||
+      Array.isArray(approval) ||
+      !('toolCallId' in approval) ||
+      !('toolName' in approval) ||
+      typeof approval.toolCallId !== 'string' ||
+      typeof approval.toolName !== 'string'
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        kind: 'approval' as const,
+        id: `approval-${approval.toolCallId}`,
+        toolCallId: approval.toolCallId,
+        toolName: approval.toolName,
+        args: 'args' in approval ? approval.args : undefined,
+      },
+    ];
+  });
 }
 
 function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[] {

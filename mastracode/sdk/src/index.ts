@@ -912,6 +912,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const state = getInjectorSessionState(requestContext);
         return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
       },
+      // Resolve relative tool paths against the session checkout (not the host
+      // process cwd) and never surface instruction files from outside it.
+      getBasePath: ({ requestContext }) => getInjectorSessionState(requestContext)?.projectPath ?? project.rootPath,
       getReader: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;

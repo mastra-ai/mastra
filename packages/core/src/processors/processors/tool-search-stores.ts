@@ -35,7 +35,8 @@ export interface LoadedToolStore {
  * Reads the structured `result` of a `search_tools` / `load_tool` tool-invocation
  * part and returns the tool names it activated.
  *
- * - `search_tools` (autoLoad) results carry `results: [{ name }]`.
+ * - `search_tools` (autoLoad) results carry `loaded: string[]`. Plain search hits in
+ *   `results` are never treated as loaded — only autoLoad or `load_tool` activates tools.
  * - `load_tool` (toolNames array form) results carry `loaded: string[]`.
  * - `load_tool` (single toolName form) results carry `{ success: true, toolName }`.
  *   Failure shapes also carry `toolName`, so it only counts when `success` is true.
@@ -47,14 +48,6 @@ function extractActivatedNames(result: unknown): string[] {
   const maybeToolName = (result as { toolName?: unknown; success?: unknown }).toolName;
   if (typeof maybeToolName === 'string' && (result as { success?: unknown }).success === true) {
     names.push(maybeToolName);
-  }
-
-  const maybeResults = (result as { results?: unknown }).results;
-  if (Array.isArray(maybeResults)) {
-    for (const entry of maybeResults) {
-      const name = (entry as { name?: unknown })?.name;
-      if (typeof name === 'string') names.push(name);
-    }
   }
 
   const maybeLoaded = (result as { loaded?: unknown }).loaded;

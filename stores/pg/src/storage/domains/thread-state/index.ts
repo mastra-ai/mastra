@@ -8,6 +8,7 @@ import type {
   TABLE_NAMES,
 } from '@mastra/core/storage';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
@@ -77,7 +78,7 @@ export class ThreadStatePG extends ThreadStateStorage {
    * a failure here leaves pruning correct, just slower.
    */
   async #ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema && this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(ThreadStatePG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {

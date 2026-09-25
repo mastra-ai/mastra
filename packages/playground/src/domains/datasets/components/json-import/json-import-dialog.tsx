@@ -8,6 +8,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -127,13 +128,8 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
         <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
           <DialogDescription className="not-sr-only text-caption text-muted-foreground">
-            Add items to{' '}
-            {datasetName ? (
-              <code className="rounded bg-card px-1 font-mono text-meta text-foreground">{datasetName}</code>
-            ) : (
-              'this dataset'
-            )}{' '}
-            from a JSON file or paste them directly.
+            Add items to {datasetName ? <span className="text-foreground">{datasetName}</span> : 'this dataset'} from a
+            JSON file or paste them directly.
           </DialogDescription>
         </DialogHeader>
 
@@ -218,7 +214,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
             <>
               <b className="font-medium text-foreground">{validation.missingInputCount}</b> of {validation.total} item
               {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
-              <code className="font-mono">input</code>
+              <InlineCode>input</InlineCode>
             </>
           );
           break;

@@ -73,7 +73,7 @@ const badgeSizeStyles = {
     indicator: 'size-1',
   },
   md: {
-    badge: 'h-5 gap-1 text-column',
+    badge: 'h-5 gap-1 text-column tracking-normal',
     withoutLeadingVisual: 'px-2',
     withLeadingVisual: 'pl-1.5 pr-2',
     indicator: 'size-1.5',

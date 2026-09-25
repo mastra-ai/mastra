@@ -30,7 +30,7 @@ export function snapshotTickLabel(snapshot: ThemeSnapshot, totalCount: number) {
   return `Snapshot ${snapshot.ordinal} of ${totalCount}${cutoff ? `, ${cutoff}` : ''}`;
 }
 
-const DAY_LABEL_FORMAT = new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', timeZone: 'UTC' });
+const DAY_LABEL_FORMAT = new Intl.DateTimeFormat(undefined, { month: '2-digit', day: '2-digit', timeZone: 'UTC' });
 
 /**
  * Day label ("07/24") for each tick whose cutoff starts a new day compared to

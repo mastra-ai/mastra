@@ -594,8 +594,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 25
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "nano-gpt/anthropic/claude-sonnet-4",
@@ -2782,6 +2782,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.8
   },
   {
+    "model": "nano-gpt/kitani/clover-1-150b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 0.15,
+    "outputCost": 0.8
+  },
+  {
     "model": "nano-gpt/LatitudeGames/Wayfarer-Large-70B-Llama-3.3",
     "imageInput": false,
     "audioInput": false,
@@ -3658,18 +3670,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nano-gpt/nano/lumen-stealth",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 0.05,
-    "outputCost": null
-  },
-  {
     "model": "nano-gpt/nanogpt/coding-router",
     "imageInput": false,
     "audioInput": false,
@@ -4398,8 +4398,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 0.2,
-    "outputCost": 1.2
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "nano-gpt/openai/gpt-oss-120b",
@@ -6630,8 +6630,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 500000,
     "maxOutput": 450000,
-    "inputCost": 2,
-    "outputCost": 6
+    "inputCost": 1.6,
+    "outputCost": 4.8
   },
   {
     "model": "nano-gpt/xiaomi/mimo-v2.5",

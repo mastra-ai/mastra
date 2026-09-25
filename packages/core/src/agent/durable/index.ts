@@ -23,6 +23,8 @@
  * 2. **Pluggable Cache**: Use InMemoryServerCache (default) or custom backends (Redis, etc.)
  * 3. **Cache Inheritance**: Durable agents inherit cache from Mastra if not explicitly provided
  * 4. **Durable Execution**: Run agentic loops on workflow engines (Inngest, evented, etc.)
+ * 5. **Crash Recovery**: In-flight runs persist their state; a fresh process over the
+ *    same storage can resume them via `recover(runId)` / `recoverActiveRuns()`
  *
  * @example Basic usage with resumable streams
  * ```typescript
@@ -199,7 +201,6 @@ export {
 // Shared workflow utilities
 export {
   executeDurableAgentScorers,
-  executeDurableToolCalls,
   modelConfigSchema,
   modelListEntrySchema,
   accumulatedUsageSchema,
@@ -213,10 +214,13 @@ export {
 } from './workflows/shared';
 export type {
   ExecuteDurableAgentScorersParams,
-  ToolExecutionContext,
-  ToolExecutionError,
   BaseIterationState,
   AccumulatedUsage,
   IterationStateUpdateInput,
   StepRecord,
 } from './workflows/shared';
+
+// Deprecated pre-unification tool-execution helpers, kept so the public
+// surface stays additive at patch level. Removed in v2.
+export { executeDurableToolCalls } from './workflows/deprecated-tool-execution';
+export type { ToolExecutionContext, ToolExecutionError } from './workflows/deprecated-tool-execution';

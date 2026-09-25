@@ -38,7 +38,6 @@ import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/j
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { githubRules } from './github-rules.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -187,15 +186,8 @@ const github =
         // Extra reviewer bot logins this deployment trusts to trigger
         // review/comment notifications, on top of the built-in defaults.
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
-        rules: githubRules,
       })
     : undefined;
-
-// What the factory installs on its own is the only thing `platform.github`
-// reaches: Platform credentials present and no direct `GITHUB_APP_*`
-// integration holding the slot. Set otherwise, the key would be a
-// warn-and-ignore no-op on every boot.
-const platformGithub = !github && platformCredentialsConfigured ? { rules: githubRules } : undefined;
 
 // Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
 // and Group Access Tokens use the same API/Git authentication; the explicit
@@ -408,9 +400,6 @@ export const factory = new MastraFactory({
     // comparing against `undefined[bot]` on every Platform deployment, where
     // this is legitimately unset.
     githubAppSlug,
-    // Event-rule overrides for the GitHub integration the factory installs
-    // itself — defined only when it does install one (see `platformGithub`).
-    ...(platformGithub ? { github: platformGithub } : {}),
   },
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.

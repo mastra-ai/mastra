@@ -392,11 +392,37 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
+  /**
+   * Quiet shell output follows the same rule as every other tool's preview:
+   * `quietPreviewLineLimit` output lines (the tail, since that is where errors
+   * land), or none at all when the limit is 0. Expanding (ctrl+e) shows everything.
+   */
   private limitQuietShellLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || lines.length <= 15) {
-      return lines;
-    }
-    return lines.slice(-15);
+    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
+    const limit = this.quietPreviewLineLimit;
+    if (limit <= 0) return [];
+    if (this.fitsQuietLimit(lines.length, limit)) return lines;
+    return [this.quietHiddenLinesMarker(lines.length - limit), ...lines.slice(-limit)];
+  }
+
+  /**
+   * The command is the shell tool's header, so at least one line always shows;
+   * the rest of a long command (heredocs, inline scripts) is capped like output.
+   */
+  private limitQuietShellCommandLines(lines: string[]): string[] {
+    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
+    const limit = Math.max(1, this.quietPreviewLineLimit);
+    if (this.fitsQuietLimit(lines.length, limit)) return lines;
+    return [...lines.slice(0, limit), this.quietHiddenLinesMarker(lines.length - limit)];
+  }
+
+  /** A `⋯ (+1 line)` marker costs the same row as the line it hides, so just show the line. */
+  private fitsQuietLimit(count: number, limit: number): boolean {
+    return count <= limit + 1;
+  }
+
+  private quietHiddenLinesMarker(hidden: number): string {
+    return theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`);
   }
 
   /**
@@ -1488,11 +1514,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.contentBox.addChild(new Text(displayOutput, 0, 0));
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
-      const footerWrapWidth = Math.max(1, contentWidth - 4);
-      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
+      const footerPromptWidth = visibleWidth(footerPrompt);
+      const footerWrapWidth = Math.max(1, contentWidth - 2 - footerPromptWidth);
+      const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(command, footerWrapWidth));
       const footerSuffixWidth = visibleWidth(footerSuffix);
+      const continuationIndent = ' '.repeat(footerPromptWidth);
       footerLines.forEach((footerLine, index) => {
-        const prefix = index === 0 ? footerPrompt : '  ';
+        const prefix = index === 0 ? footerPrompt : continuationIndent;
         const isLast = index === footerLines.length - 1;
         const suffixFits = isLast && visibleWidth(footerLine) + footerSuffixWidth <= footerWrapWidth;
         const suffix = suffixFits ? footerSuffix : '';
@@ -1508,7 +1536,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (visibleWidth(lastFooterLine) + footerSuffixWidth > footerWrapWidth) {
         this.contentBox.addChild(
           new Text(
-            renderLine(`  ${footerSuffix}`, value => value),
+            renderLine(`${continuationIndent}${footerSuffix}`, value => value),
             0,
             0,
           ),
