@@ -23,6 +23,8 @@ export interface ChatRuntimeState {
   _decodeStartedAt: number;
   _decodeLastDeltaAt: number;
   _decodeHasReasoning: boolean;
+  /** Streaming assistant message id, so its close can bound the generation window. */
+  _streamingAssistantId?: string;
 }
 
 export const initialChatRuntime: ChatRuntimeState = {
@@ -52,9 +54,37 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
 
   switch (event.type) {
     case 'agent_start':
-      return { ...state, tokensPerSec: 0, _decodeStartedAt: 0, _decodeLastDeltaAt: 0, _decodeHasReasoning: false };
+      return {
+        ...state,
+        tokensPerSec: 0,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+        _streamingAssistantId: undefined,
+      };
     case 'agent_end':
-      return { ...state, _decodeStartedAt: 0, _decodeLastDeltaAt: 0, _decodeHasReasoning: false };
+      return {
+        ...state,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+        _streamingAssistantId: undefined,
+      };
+    case 'message_start':
+      return event.message.role === 'assistant' ? { ...state, _streamingAssistantId: event.message.id } : state;
+    case 'message_end': {
+      if (event.id !== state._streamingAssistantId) return state;
+      // The step's usage_update lands before this close, so clearing here only matters
+      // when a step reported no usage at all: without it the window would stay open
+      // across the next step's tool execution and dilute that reading.
+      return {
+        ...state,
+        _streamingAssistantId: undefined,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+      };
+    }
     case 'message_update':
       if (
         (event.event.type === 'text-delta' || event.event.type === 'reasoning-delta') &&

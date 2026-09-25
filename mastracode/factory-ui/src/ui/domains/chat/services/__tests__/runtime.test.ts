@@ -1,10 +1,15 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { omWork } from '../om';
 import { initialChatRuntime, runtimeReducer } from '../runtime';
 
 type MessageUpdateEvent = Extract<AgentControllerEvent, { type: 'message_update' }>;
+
+function dbMessage(id: string, role: MastraDBMessage['role']): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts: [] } };
+}
 
 describe('chat runtime status', () => {
   afterEach(() => vi.useRealTimers());
@@ -123,6 +128,70 @@ describe('chat runtime status', () => {
       },
     });
     expect(state.tokensPerSec).toBe(13077);
+  });
+
+  it('does not carry the generation window into the next step when a step reported no usage', () => {
+    // Step 1 streams at 1000 then closes without usage. Step 2 generates between
+    // 30_000 and 31_000: its 40 tokens must be timed over that 1s, not the 30s
+    // window left open by step 1.
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('step-1', 'assistant') },
+    });
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-1', event: { type: 'text-delta', delta: 'One' } },
+    });
+    state = runtimeReducer(state, { type: 'event', event: { type: 'message_end', id: 'step-1' } });
+    expect(state._decodeStartedAt).toBe(0);
+
+    vi.setSystemTime(30_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('step-2', 'assistant') },
+    });
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-2', event: { type: 'text-delta', delta: 'Two' } },
+    });
+    vi.setSystemTime(31_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-2', event: { type: 'text-delta', delta: ' continues' } },
+    });
+    vi.setSystemTime(60_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 100, totalTokens: 140 } },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('keeps an in-flight window when a signal message closes', () => {
+    // Signals arrive as their own start/end pairs. Closing one must not discard the
+    // window, or a mid-step signal would shorten it and inflate the rate.
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
+    });
+    state = runtimeReducer(state, { type: 'event', event: { type: 'message_end', id: 'signal-1' } });
+    expect(state._decodeStartedAt).toBe(1000);
+
+    vi.setSystemTime(3000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: ' done' } },
+    });
+    vi.setSystemTime(6000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 100, totalTokens: 140 } },
+    });
+    expect(state.tokensPerSec).toBe(20);
   });
 
   it('preserves the last reading when no generation deltas were received', () => {

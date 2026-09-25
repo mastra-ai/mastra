@@ -207,6 +207,12 @@ export async function dispatchEvent(
 
     case 'message_end':
       if (state.streamingMessage?.id === event.id && isMessageForCurrentThread(state.streamingMessage, state)) {
+        // The step's usage_update lands before this close, so clearing here only
+        // matters when a step reported no usage at all: without it the window would
+        // stay open across the next step's tool execution and dilute that reading.
+        state.decodeStartedAt = 0;
+        state.decodeLastDeltaAt = 0;
+        state.decodeHasReasoning = false;
         handleMessageEnd(ectx, state.streamingMessage);
       }
       break;
