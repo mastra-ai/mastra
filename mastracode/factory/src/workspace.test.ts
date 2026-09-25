@@ -482,6 +482,11 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('gh pr review <number> --approve --body-file');
     expect(review).toContain('gh pr review <number> --request-changes --body-file');
     expect(review).toContain('gh pr comment <number> --body-file');
+    // A push can land mid-review; publishing must re-check the head first.
+    for (const skill of [review, await read('factory-rereview')]) {
+      expect(skill).toContain('**The head must not have moved.**');
+      expect(skill).toContain('If the head moved, do not publish');
+    }
     // Existing review signal (bot and human) must be collected from every
     // source — submitted reviews, unresolved inline threads with their
     // metadata, and top-level comments — and dispositioned, and a confirmed
