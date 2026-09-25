@@ -1190,7 +1190,8 @@ export function createContextOverflowRecovery(om: ObservationalMemory): Processo
   return {
     id: 'context-overflow-recovery',
     async processAPIError({ error, retryCount, messageList, requestContext }) {
-      if (retryCount > 0 || !(error instanceof Error) || !CONTEXT_OVERFLOW.test(error.message)) return
+      if (retryCount > 0 || !(error instanceof Error) || !CONTEXT_OVERFLOW.test(error.message))
+        return
 
       const context = om.getThreadContext(requestContext, messageList)
       if (!context) return
@@ -1206,62 +1207,62 @@ Register it with `errorProcessors: [createContextOverflowRecovery(om)]` on the a
 
 <PropertiesTable
   content={[
-    {
-      name: 'threadId',
-      type: 'string',
-      description: 'Thread to compact.',
-      isOptional: false,
-    },
-    {
-      name: 'resourceId',
-      type: 'string',
-      description: 'Resource that owns the thread.',
-      isOptional: true,
-    },
-    {
-      name: 'messageList',
-      type: 'MessageList',
-      description:
-        'Live message list of the failed request. Pending messages are read from it, and compacted messages are removed from it.',
-      isOptional: true,
-    },
-    {
-      name: 'messages',
-      type: 'MastraDBMessage[]',
-      description:
-        'Messages to compact when no `messageList` is given. When neither is given, unobserved messages are loaded from storage.',
-      isOptional: true,
-    },
-    {
-      name: 'targetTokens',
-      type: 'number',
-      description: 'Stop once pending tokens are at or below this value.',
-      isOptional: true,
-      defaultValue: 'Half the observation threshold',
-    },
-    {
-      name: 'maxChunkTokens',
-      type: 'number',
-      description:
-        'Maximum tokens of messages sent to the Observer in one pass. A single message larger than this is still observed on its own.',
-      isOptional: true,
-      defaultValue: 'The observation threshold',
-    },
-    {
-      name: 'maxIterations',
-      type: 'number',
-      description: 'Maximum number of observation passes.',
-      isOptional: true,
-      defaultValue: '10',
-    },
-    {
-      name: 'hooks',
-      type: 'ObserveLifecycleHooks',
-      description:
-        "Per-call lifecycle hooks, as in `observe()`. Config-level hooks receive `trigger: 'compact'` for these cycles.",
-      isOptional: true,
-    },
-  ]}
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread to compact.',
+    isOptional: false,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Resource that owns the thread.',
+    isOptional: true,
+  },
+  {
+    name: 'messageList',
+    type: 'MessageList',
+    description:
+      'Live message list of the failed request. Pending messages are read from it, and compacted messages are removed from it.',
+    isOptional: true,
+  },
+  {
+    name: 'messages',
+    type: 'MastraDBMessage[]',
+    description:
+      'Messages to compact when no `messageList` is given. When neither is given, unobserved messages are loaded from storage.',
+    isOptional: true,
+  },
+  {
+    name: 'targetTokens',
+    type: 'number',
+    description: 'Stop once pending tokens are at or below this value.',
+    isOptional: true,
+    defaultValue: 'Half the observation threshold',
+  },
+  {
+    name: 'maxChunkTokens',
+    type: 'number',
+    description:
+      'Maximum tokens of messages sent to the Observer in one pass. A single message larger than this is still observed on its own.',
+    isOptional: true,
+    defaultValue: 'The observation threshold',
+  },
+  {
+    name: 'maxIterations',
+    type: 'number',
+    description: 'Maximum number of observation passes.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+  {
+    name: 'hooks',
+    type: 'ObserveLifecycleHooks',
+    description:
+      "Per-call lifecycle hooks, as in `observe()`. Config-level hooks receive `trigger: 'compact'` for these cycles.",
+    isOptional: true,
+  },
+]}
 />
 
 `compact()` returns `{ compacted, activated, iterations, tokensCompacted, pendingTokens, reachedTarget, record }`. `compacted` is `true` when buffered observations were activated or at least one pass observed messages.
