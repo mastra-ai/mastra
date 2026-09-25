@@ -472,7 +472,7 @@ describe('jsonSchemaToZod', () => {
           const schema = Function('z', `"use strict";return (${result});`)(z);
           // Keys that are not valid regular expressions fail as data when matched.
           try {
-            schema.safeParse({ [key]: 1, globalThis: 1 });
+            schema.safeParse({ [key]: 'value', globalThis: 'value' });
           } catch (error) {
             expect(error).toBeInstanceOf(SyntaxError);
           }

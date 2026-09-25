@@ -15,6 +15,7 @@ import {
   serializeError,
   serializeModelConfig,
   serializeModelList,
+  serializeModelSettings,
   serializeScorersConfig,
   serializeToolMetadata,
   serializeToolsMetadata,
@@ -346,6 +347,52 @@ describe('serializeDurableOptions', () => {
     expect(serialized).not.toContain('sk-secret');
     expect(serialized).not.toContain('sk-leaked');
     expect(serialized).not.toContain('custom-value');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeModelSettings — timeout budgets (#21724)
+// ---------------------------------------------------------------------------
+
+describe('serializeModelSettings timeout', () => {
+  it('retains timeout budgets so cold recovery re-arms the run-level deadline', () => {
+    const result = serializeModelSettings({
+      temperature: 0.5,
+      timeout: { totalMs: 30_000, stepMs: 5_000, firstChunkMs: 1_000 },
+    });
+    expect(result?.timeout).toEqual({ totalMs: 30_000, stepMs: 5_000, firstChunkMs: 1_000 });
+    expect(result?.temperature).toBe(0.5);
+  });
+
+  it('retains a totalMs-only timeout', () => {
+    const result = serializeModelSettings({ timeout: { totalMs: 30_000 } });
+    expect(result?.timeout).toEqual({ totalMs: 30_000 });
+  });
+
+  it('drops non-finite and non-positive timeout values', () => {
+    const result = serializeModelSettings({
+      temperature: 0.5,
+      timeout: { totalMs: Number.POSITIVE_INFINITY, stepMs: -1, firstChunkMs: 0 },
+    });
+    expect(result?.timeout).toBeUndefined();
+    expect(result?.temperature).toBe(0.5);
+  });
+
+  it('drops non-numeric timeout values while keeping valid siblings', () => {
+    const result = serializeModelSettings({
+      timeout: { totalMs: '30000', stepMs: 5_000 } as any,
+    });
+    expect(result?.timeout).toEqual({ stepMs: 5_000 });
+  });
+
+  it('drops a non-object timeout', () => {
+    const result = serializeModelSettings({ temperature: 0.5, timeout: 30_000 as any });
+    expect(result?.timeout).toBeUndefined();
+  });
+
+  it('omits the timeout key entirely when absent', () => {
+    const result = serializeModelSettings({ temperature: 0.5 });
+    expect(result).not.toHaveProperty('timeout');
   });
 });
 

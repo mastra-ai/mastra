@@ -774,18 +774,25 @@ export const sendAgentMessageBodySchema = z.union([
 
 export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
 
-export const subscribeAgentThreadBodySchema = z.object({
+const agentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
   threadId: z.string(),
 });
 
-export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema.extend({
+export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withInitialHistory: z
+    .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
+    .optional()
+    .describe('Emit one thread-history chunk with stored messages before live parts'),
+});
+
+export const abortAgentThreadBodySchema = agentThreadBodySchema.extend({
   threadId: z.string().min(1),
   clearPendingSignals: z.boolean().optional(),
   expectedRunId: z.string().optional(),
 });
 
-export const cancelPendingAgentSignalsBodySchema = subscribeAgentThreadBodySchema.extend({
+export const cancelPendingAgentSignalsBodySchema = agentThreadBodySchema.extend({
   threadId: z.string().min(1),
   signalIds: z.array(z.string().min(1)).min(1).max(1000),
 });

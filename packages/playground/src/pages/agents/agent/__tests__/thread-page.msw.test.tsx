@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -33,7 +34,6 @@ import { AgentLayout } from '@/domains/agents/agent-layout';
 import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
-import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
 

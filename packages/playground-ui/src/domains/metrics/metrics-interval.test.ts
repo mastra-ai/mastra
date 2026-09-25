@@ -23,11 +23,19 @@ describe('chooseMetricsInterval', () => {
 describe('formatMetricsBucketLabel', () => {
   const ts = new Date(2026, 8, 4, 7, 5);
 
-  it('formats hourly buckets as HH:mm', () => {
-    expect(formatMetricsBucketLabel(ts, '1h')).toBe('07:05');
+  it('formats hourly buckets with the shared time format', () => {
+    expect(formatMetricsBucketLabel(ts, '1h')).toBe(
+      new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(ts),
+    );
   });
 
   it('formats daily buckets as a short date', () => {
-    expect(formatMetricsBucketLabel(ts, '1d')).toBe('Sep 04');
+    expect(formatMetricsBucketLabel(ts, '1d')).toBe(
+      new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: new Date().getFullYear() === 2026 ? undefined : 'numeric',
+      }).format(ts),
+    );
   });
 });

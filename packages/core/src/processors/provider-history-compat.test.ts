@@ -2,6 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import {
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
@@ -1941,5 +1942,219 @@ describe('openaiOrphanItemId', () => {
       expect(namespace).not.toHaveProperty('itemId');
       expect(namespace).not.toHaveProperty('resultItemId');
     }
+  });
+});
+
+describe('anthropicOrphanedThinkingStep', () => {
+  /** The real Anthropic 400 from #22798. */
+  function createThinkingModifiedError() {
+    const message =
+      'messages.1.content.1: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.';
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+      isRetryable: false,
+    });
+  }
+
+  const reasoning = (signature: string) => ({
+    type: 'reasoning' as const,
+    reasoning: '',
+    details: [{ type: 'text' as const, text: `thinking ${signature}`, signature }],
+    providerMetadata: { anthropic: { signature } },
+  });
+  const toolInvocation = (toolCallId: string, toolName: string) => ({
+    type: 'tool-invocation' as const,
+    toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result: 'ok' },
+  });
+  const assistant = (id: string, parts: MastraDBMessage['content']['parts'], toolNames: string[] = []) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(),
+    content: {
+      format: 2 as const,
+      parts,
+      toolInvocations: toolNames.map((toolName, i) => toolInvocation(`call-${i}`, toolName).toolInvocation),
+    },
+  });
+
+  /** Stored by older @mastra/memory: the updateWorkingMemory call was stripped, its thinking kept. */
+  const corruptedAssistant = () =>
+    assistant(
+      'msg-corrupted',
+      [
+        { type: 'step-start' },
+        reasoning('SIG_A'),
+        { type: 'step-start' },
+        reasoning('SIG_B'),
+        { type: 'text', text: 'Done' },
+        toolInvocation('call-1', 'lookupWeather'),
+      ],
+      ['updateWorkingMemory', 'lookupWeather'],
+    );
+
+  function argsFor(build: (list: MessageList) => void, overrides: Partial<ProcessAPIErrorArgs> = {}) {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: createThinkingModifiedError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+      ...overrides,
+    } satisfies ProcessAPIErrorArgs;
+  }
+
+  const assistantPromptShapes = (list: MessageList) =>
+    list.get.all.aiV5
+      .prompt()
+      .flatMap(message =>
+        message.role === 'assistant' && Array.isArray(message.content)
+          ? [
+              message.content.map(part =>
+                part.type === 'reasoning'
+                  ? `reasoning:${(part.providerOptions?.anthropic as any)?.signature}`
+                  : part.type,
+              ),
+            ]
+          : [],
+      );
+
+  it('drops the orphaned thinking step and retries so the replay no longer merges it into the next step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([corruptedAssistant()], 'memory');
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text', 'tool-call'],
+    ]);
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text', 'tool-call']]);
+  });
+
+  it('treats whitespace-only text as empty when finding an orphaned thinking step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '\n\n' },
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text']]);
+  });
+
+  it('finds the orphaned thinking step after a tool part when its step-start marker is missing', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            reasoning('SIG_0'),
+            toolInvocation('call-0', 'lookupWeather'),
+            reasoning('SIG_A'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+  });
+
+  it('drops a trailing thinking-only step when the next stored message is also from the assistant', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([assistant('msg-a', [{ type: 'step-start' }, reasoning('SIG_A')])], 'memory');
+      list.add(
+        [assistant('msg-b', [{ type: 'step-start' }, reasoning('SIG_B'), { type: 'text', text: 'Done' }])],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(JSON.stringify(args.messageList.get.all.aiV5.prompt())).not.toContain('SIG_A');
+  });
+
+  it('leaves healthy thinking steps alone and does not retry', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-healthy', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            toolInvocation('call-0', 'lookupWeather'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('thanks')], 'input');
+    });
+    const before = JSON.stringify(args.messageList.get.all.db());
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(JSON.stringify(args.messageList.get.all.db())).toBe(before);
+  });
+
+  it('keeps a thinking-only step at the end of the conversation', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([assistant('msg-a', [{ type: 'step-start' }, reasoning('SIG_A')])], 'memory');
+      list.add([createUserMessage('still there?')], 'input');
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+  });
+
+  it('does not fire on other errors', async () => {
+    const args = argsFor(
+      list => {
+        list.add([createUserMessage('weather?')], 'input');
+        list.add([corruptedAssistant()], 'memory');
+      },
+      { error: createRateLimitError() },
+    );
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(JSON.stringify(args.messageList.get.all.db())).toContain('SIG_A');
   });
 });

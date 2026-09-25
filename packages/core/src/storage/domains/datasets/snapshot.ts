@@ -5,7 +5,7 @@ import type {
   DatasetSnapshotReferenceMapping,
   PreparedDatasetSnapshotImport,
 } from '../../../datasets/snapshot-transfer';
-import { findUnsafeSchemaPattern, SchemaValidator } from '../../../datasets/validation';
+import { assertSupportedPatterns, SchemaValidator } from '../../../datasets/validation';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { TABLE_SCHEMAS } from '../../constants';
 import type { TABLE_NAMES } from '../../constants';
@@ -96,19 +96,13 @@ function snapshotConfiguration(dataset: DatasetRecord): DatasetSnapshotContent['
 }
 
 /**
- * Reject artifact schemas whose regular expressions could stall the importer. Runs before
- * any schema is compiled, so an untrusted artifact never reaches the regex engine.
+ * Compile every captured schema pattern on the linear-time engine before any write, so an
+ * artifact with unsupported regex syntax fails even when it has no items to validate.
  */
-export function assertSafeDatasetSnapshotSchemas(content: DatasetSnapshotContent): void {
+export function assertSupportedDatasetSnapshotSchemas(content: DatasetSnapshotContent): void {
   const { configuration } = content;
   for (const key of ['inputSchema', 'groundTruthSchema', 'requestContextSchema'] as const) {
-    const unsafe = findUnsafeSchemaPattern(configuration[key]);
-    if (unsafe) {
-      throw datasetSnapshotStorageError(
-        'DATASET_SNAPSHOT_UNSAFE_SCHEMA',
-        `Snapshot ${key} at ${unsafe.path || '/'} cannot be imported: ${unsafe.reason}`,
-      );
-    }
+    assertSupportedPatterns(configuration[key]);
   }
 }
 

@@ -633,33 +633,45 @@ const memory = new Memory({
 
 Thread scope requires a valid `threadId` to be provided when calling the agent. If `threadId` is missing, Observational Memory throws an error. This prevents multiple threads from silently sharing a single observation record, which can cause database deadlocks.
 
-### Resource scope (experimental)
+### Resource scope (deprecated)
 
-Observations are shared across all threads for a resource (typically a user). Enables cross-conversation memory.
+:::warning[Deprecated]
+
+`scope: 'resource'` is deprecated and will be removed in a future release. Mastra logs a warning the first time Observational Memory is created with resource scope. Remove the `scope` option to use the default thread scope, and use the [alternatives below](#cross-thread-continuity-without-resource-scope) for cross-conversation continuity.
+
+:::
+
+In resource scope, observations are shared across all threads for a resource (typically a user). Resource scope works much worse than thread scope for prompt caching and for the agent's understanding of the conversation:
+
+- **Prompt caching:** Observations from every thread share one record. When any thread is observed, the observation context changes for all other threads, which invalidates their cached prompt prefix.
+- **Agent understanding:** Each thread sees a mix of observations from every thread for the resource. Every new thread starts with context from earlier threads, and the agent may continue work that another thread started but didn't finish.
+- **Performance:** Unobserved messages across _all_ threads are processed together, which is slow for users with many existing threads.
+
+A new knowledge and subconscious memory primitive for cross-thread memory is coming soon and will replace resource scope. Until then, use the alternatives below.
+
+#### Cross-thread continuity without resource scope
+
+Switching from resource scope to thread scope doesn't migrate resource-scoped observations. Each thread uses its existing thread-scoped record if it has one, or starts a new, empty one, and messages already observed under resource scope aren't observed again. Keep facts that must carry over in resource-scoped working memory.
+
+Use thread scope with one or both of these features instead:
+
+- [Retrieval mode](#retrieval-mode): The agent gets a `recall` tool that can list and browse other threads for the same resource, and optionally search them semantically. The agent looks up earlier conversations only when it needs them.
+- [Resource-scoped working memory](/docs/memory/working-memory#resource-scoped-memory-default): Stores small, durable facts about the user that every thread can read.
 
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
+      retrieval: true,
+    },
+    workingMemory: {
+      enabled: true,
       scope: 'resource',
     },
   },
 })
 ```
-
-Resource scope works, however it's marked as experimental for now until we prove task adherence/continuity across multiple ongoing simultaneous threads.
-As of today, you may need to tweak your system prompt to prevent one thread from continuing the work that another had already started (but hadn't finished).
-
-This is because in resource scope, each thread is a perspective on _all_ threads for the resource.
-
-For your use-case this may not be a problem, so your mileage may vary.
-
-:::warning
-
-In resource scope, unobserved messages across _all_ threads are processed together. For users with many existing threads, this can be slow. Use thread scope for existing apps.
-
-:::
 
 ## Token budgets
 
@@ -811,7 +823,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Resource scope automatically disables async buffering.
+Resource scope (deprecated) automatically disables async buffering.
 
 :::
 
@@ -916,7 +928,7 @@ hooks: {
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.
 
 - **Thread scope**: The first time a thread exceeds `observation.messageTokens`, the Observer processes the backlog.
-- **Resource scope**: All unobserved messages across all threads for a resource are processed together. For users with many existing threads, this could take substantial time.
+- **Resource scope (deprecated)**: All unobserved messages across all threads for a resource are processed together. For users with many existing threads, this could take substantial time.
 
 ## Comparing OM with other memory features
 

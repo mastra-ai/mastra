@@ -336,19 +336,28 @@ export function createDatasetSnapshotTransferTests(
     expect((await store.listDatasets({ pagination: { page: 0, perPage: false } })).datasets).toEqual([]);
   });
 
-  it('rejects artifact schemas with catastrophic regular expressions before compiling them', async () => {
+  it('evaluates artifact schema patterns in linear time and rejects unsupported syntax before writing', async () => {
     const store = getStorage();
     const { digest: _digest, ...content } = fixture();
     content.configuration.inputSchema = { type: 'string', pattern: '^(\\w+\\s?)+$' };
     for (const item of content.items) item.payload.input = `${'a'.repeat(40)}!`;
-    const artifact = JSON.stringify(createDatasetSnapshot(content));
     const startedAt = performance.now();
-    await expect(store.importSnapshot({ snapshot: artifact, idempotencyKey: 'redos' })).rejects.toMatchObject({
-      id: 'DATASET_SNAPSHOT_UNSAFE_SCHEMA',
-      message: expect.stringContaining('/pattern'),
-    });
+    await expect(
+      store.importSnapshot({ snapshot: JSON.stringify(createDatasetSnapshot(content)), idempotencyKey: 'redos' }),
+    ).rejects.toThrow('captured dataset schemas');
     expect(performance.now() - startedAt).toBeLessThan(1_000);
+
+    const { digest: _unsupportedDigest, ...unsupported } = fixture();
+    unsupported.configuration.requestContextSchema = { type: 'string', pattern: '^(a)\\1$' };
+    await expect(
+      store.importSnapshot({
+        snapshot: JSON.stringify(createDatasetSnapshot(unsupported)),
+        idempotencyKey: 'unsupported',
+      }),
+    ).rejects.toMatchObject({ id: 'DATASET_SCHEMA_PATTERN_UNSUPPORTED' });
+
     expect(await store.getSnapshotImport({ idempotencyKey: 'redos' })).toBeNull();
+    expect(await store.getSnapshotImport({ idempotencyKey: 'unsupported' })).toBeNull();
     expect((await store.listDatasets({ pagination: { page: 0, perPage: false } })).datasets).toEqual([]);
   });
 

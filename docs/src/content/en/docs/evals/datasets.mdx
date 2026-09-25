@@ -193,7 +193,7 @@ Portable identities are stored separately from authored metadata and remain stab
 
 Register referenced agents, workflows, and scorers in the destination before importing. If their identifiers differ, pass explicit `targetMappings` and `scorerMappings` arrays containing `{ from, to }` entries to both preflight and import. Scorer mappings apply to both dataset configuration and item overrides without changing the source artifact, but matching references doesn't establish equivalent behavior in the destination code.
 
-Artifacts arrive from outside the destination, so preflight also vets regular expressions in the captured `inputSchema`, `groundTruthSchema`, and `requestContextSchema` before compiling them. A schema `pattern` or `patternProperties` key is rejected with `DATASET_SNAPSHOT_UNSAFE_SCHEMA` when it uses a backreference, exceeds 512 characters, or can backtrack catastrophically, such as repetition nested inside repetition without a separating literal (`(\w+\s?)+`) or a repeated alternation whose branches overlap (`(a|ab)*`). Fenced shapes like `^(\d{1,3}\.){3}\d{1,3}$` and `^\w+(,\w+)*$` pass. Simplify the source schema and export again to import such a dataset.
+Preflight compiles every `pattern` and `patternProperties` key in the captured `inputSchema`, `groundTruthSchema`, and `requestContextSchema` on the same linear-time engine that dataset validation uses, so an artifact's regular expressions can't stall the importer. A pattern that uses syntax the engine doesn't support, such as a backreference or lookaround, is rejected with `DATASET_SCHEMA_PATTERN_UNSUPPORTED` before any write.
 
 Import repeats the reference checks before creating a dataset, though recovering an already completed request doesn't require those references to remain registered. Use `destination: { name, organizationId, projectId }` to override the destination name or tenancy. Source ownership and candidate bindings aren't copied. A `null` dataset setting or item override, such as `scorerIds: null`, imports as unset, matching how ordinary writes store a cleared value. Authored `input`, `groundTruth`, and `expectedTrajectory` values keep JSON `null`. In server code, derive tenancy from the authenticated caller and apply authorization before calling these APIs.
 
@@ -227,8 +227,6 @@ Snapshot transfer is implemented for in-memory, LibSQL, PostgreSQL, MySQL, Mongo
 Export locks the dataset row for the duration of the capture on PostgreSQL, MySQL, and MongoDB so that identities and items are read consistently. Concurrent writers to that dataset wait until the export commits.
 
 Receipts are retained indefinitely so that retries stay safe. There's no API for removing them, so delete rows from the `mastra_dataset_snapshot_imports` table directly if you need to reclaim space.
-
-Captured schemas from an artifact are compiled into validators before import, including any `pattern` regular expressions. Only import artifacts from sources you trust.
 
 Pass `maxBytes` to export, preflight, or import to change the default 4 MiB UTF-8 budget. The same format limits described below still apply. A successful preflight doesn't reserve database capacity, and storage limits or transaction timeouts can reject an import without creating a partial dataset.
 

@@ -6,6 +6,7 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const TRIM_PAGE_SIZE = 500;
 
 /**
  * Atomically nack a pending entry only if it is still owned by the given
@@ -746,6 +747,53 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       // warn, not debug: a failed delete means the memory leak clearTopic
       // exists to prevent is silently recurring for this topic.
       this.#logger?.warn?.('redis-streams: clearTopic failed', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  /**
+   * Deletes a run's entries with `XDEL`: pages through the stream with `XRANGE`
+   * and matches each entry's `runId`. With `producedBefore`, only unpinned
+   * entries produced at or before it are deleted. Entries of other runs,
+   * including those published by other processes, are untouched.
+   */
+  override async trimTopic(
+    topic: string,
+    { runId, producedBefore }: { runId: string; producedBefore?: number },
+  ): Promise<void> {
+    if (this.#closed) return;
+    try {
+      await this.#ensureWriterConnected();
+      const streamKey = this.#streamKey(topic);
+      let start = '-';
+      for (;;) {
+        const page = await this.#writeClient.xRange(streamKey, start, '+', { COUNT: TRIM_PAGE_SIZE });
+        const ids: string[] = [];
+        for (const entry of page) {
+          if (!entry) continue;
+          try {
+            const event = JSON.parse(entry.message.event ?? '{}') as {
+              runId?: string;
+              data?: { producedAt?: unknown; pinned?: unknown };
+            };
+            if (event.runId !== runId) continue;
+            if (producedBefore !== undefined) {
+              const producedAt = event.data?.producedAt;
+              if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;
+            }
+            ids.push(entry.id);
+          } catch {
+            // An unparseable entry can't belong to this run.
+          }
+        }
+        if (ids.length > 0) await this.#writeClient.xDel(streamKey, ids);
+        if (page.length < TRIM_PAGE_SIZE) break;
+        start = `(${page[page.length - 1]!.id}`;
+      }
+    } catch (err) {
+      this.#logger?.warn?.('redis-streams: trimTopic failed', {
         topic,
         err: err instanceof Error ? err.message : err,
       });

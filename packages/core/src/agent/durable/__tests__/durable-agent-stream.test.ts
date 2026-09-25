@@ -10,6 +10,9 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
+import { ChunkFrom } from '../../../stream/types';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -429,10 +432,24 @@ describe('DurableAgent streaming execution', () => {
           tools: { echo: echoTool },
         });
 
+        const wrapped =
+          name === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
+        if (name === 'evented') {
+          // The evented engine executes via mastra.pubsub + storage-backed
+          // workers, so unlike the default engine it cannot run without a
+          // Mastra host (see evented-split-transport.test.ts for the same
+          // harness shape).
+          void new Mastra({
+            agents: { [agentId]: wrapped as any },
+            logger: false,
+            storage: new InMemoryStore(),
+          });
+        }
+
         return {
           name,
           prompts,
-          agent: name === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub }),
+          agent: wrapped,
         };
       };
 
@@ -442,7 +459,7 @@ describe('DurableAgent streaming execution', () => {
       ];
 
       for (const testCase of cases) {
-        const { output, cleanup } = await testCase.agent.stream('Run echo with hello.', { maxSteps: 4 });
+        const { output, cleanup, runId } = await testCase.agent.stream('Run echo with hello.', { maxSteps: 4 });
         const chunks = await collectStreamChunks(output.fullStream);
 
         const chunkTypes = chunks.map(chunk => chunk.type);
@@ -454,10 +471,13 @@ describe('DurableAgent streaming execution', () => {
         expect(chunkTypes, testCase.name).toContain('tool-call');
         expect(chunkTypes, testCase.name).toContain('tool-result');
         expect(chunkTypes, testCase.name).toContain('text-delta');
+        expect(chunkTypes, testCase.name).not.toContain('response-metadata');
         expect(
           chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === finalText),
           testCase.name,
         ).toBe(true);
+        expect(finishChunk?.runId, testCase.name).toBe(runId);
+        expect(finishChunk?.from, testCase.name).toBe(ChunkFrom.AGENT);
         expect(finishChunk?.payload?.stepResult?.reason, testCase.name).toBe('stop');
         expect(finishChunk?.payload?.output?.text, testCase.name).toBe(finalText);
 

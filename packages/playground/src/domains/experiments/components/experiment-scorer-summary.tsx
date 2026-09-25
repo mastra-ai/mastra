@@ -3,10 +3,10 @@ import type { ExperimentStatus } from '@mastra/core/storage';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentScorerSummaryProps = {
   scoresByItemId?: Record<string, ClientScoreRowData[]>;

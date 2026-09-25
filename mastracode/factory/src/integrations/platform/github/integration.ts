@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
+import { Octokit } from '@octokit/rest';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -1277,7 +1278,39 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       },
       { actingUserId: input.actingUserId },
     );
-    return parsePullRequest(result);
+    const created = parsePullRequest(result);
+    if (input.actingUserId && input.connection.type === 'app-installation') {
+      try {
+        const user = await this.#fetchUserConnection(input.actingUserId);
+        const login = user.githubUsername;
+        if (user.connected && login) {
+          const { owner, repo } = splitRepository(input.sourceId);
+          const { token } = await this.#client.request<{ token: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
+            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+          );
+          const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
+          const { data } = await octokit.issues.addAssignees({
+            owner,
+            repo,
+            issue_number: result.number,
+            assignees: [login],
+          });
+          if (!data.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
+            logPlatformWarn('GitHub did not assign the PR opener', { url: created.url, login });
+          } else {
+            created.assignees = data.assignees.flatMap(assignee => (assignee.login ? [assignee.login] : []));
+          }
+        }
+      } catch (error) {
+        logPlatformWarn('Failed to assign the PR opener', {
+          url: created.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return created;
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {
