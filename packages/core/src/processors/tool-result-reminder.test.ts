@@ -1267,6 +1267,22 @@ describe('AgentsMDInjector getBasePath', () => {
     }
   });
 
+  it('does not follow a symlinked instruction file outside the base path', async () => {
+    const { host, target, cleanup } = setup();
+    try {
+      rmSync(join(target, 'AGENTS.md'));
+      symlinkSync(join(host, 'AGENTS.md'), join(target, 'AGENTS.md'));
+      const messageList = new TestMessageList();
+      messageList.push(createUserMessage('go'));
+      withToolCall(messageList, 'call-1', { path: 'src/index.ts' });
+      const processor = new AgentsMDInjector({ getBasePath: () => target });
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      expect(extractReminderMarkup(messageList)).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+
   it('keeps resolving relative paths against process.cwd() without a base path', async () => {
     const { host, cleanup } = setup();
     try {
