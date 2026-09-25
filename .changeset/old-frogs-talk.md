@@ -4,18 +4,12 @@
 
 Semantic recall now works with a vector store that generates embeddings itself, so a self-embedding store needs no client-side `embedder`.
 
-Added `isSelfEmbedding` to `MastraVector`. It defaults to false, so every existing store is unaffected. A store that embeds text itself reports true:
+Added `isSelfEmbedding` to `MastraVector`. It defaults to false, so every existing store is unaffected. A store that embeds text itself overrides it to return true, and semantic recall against that store needs no `embedder`:
 
 ```ts
-class MyVector extends MastraVector {
-  override get isSelfEmbedding() {
-    return true;
-  }
-}
-
 const memory = new Memory({
   storage,
-  vector: new MyVector(),
+  vector: new MongoDBVector({ id: 'vec', uri, dbName, autoEmbed: { model: 'voyage-4' } }),
   options: { semanticRecall: true },
 });
 ```
