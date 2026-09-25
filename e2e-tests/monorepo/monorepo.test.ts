@@ -1102,6 +1102,43 @@ export const mastra = new Mastra({
 
   describe.sequential('workspace subpath externals', () => {
     it(
+      'should package an external workspace dependency without an optimized workspace parent',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-external-only-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const transitivePackageDir = join(isolatedFixturePath, 'packages', 'transitive-c');
+          const transitivePackageJsonPath = join(transitivePackageDir, 'package.json');
+          const transitivePackageJson = JSON.parse(await readFile(transitivePackageJsonPath, 'utf-8'));
+          delete transitivePackageJson.dependencies['@inner/subpath-only'];
+          await writeFile(transitivePackageJsonPath, JSON.stringify(transitivePackageJson));
+          await writeFile(join(transitivePackageDir, 'src', 'index.js'), "export const valueC = 'c';\n");
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const buildResult = await execa(pkgManager, ['build'], { cwd: appDir, reject: false, env: process.env });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+          expect(outputPackageJson.dependencies['@inner/subpath-only']).toBe(
+            'file:./workspace-module/inner-subpath-only-1.0.0.tgz',
+          );
+          expect(await readFile(join(outputDir, 'workspace-module', 'inner-subpath-only-1.0.0.tgz'))).toBeTruthy();
+
+          const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
+            cwd: outputDir,
+            reject: false,
+          });
+          expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
       'should not analyze dependencies listed in bundler externals',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-analysis-external-${pkgManager}-`));
