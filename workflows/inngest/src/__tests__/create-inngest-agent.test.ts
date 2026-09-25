@@ -1178,6 +1178,34 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('rejects resume() on a finished run without re-running the suspended tool', async () => {
+      // #24796: finished runs used to keep their stale suspended snapshot, so a
+      // second resume re-executed the (previously declined) tool.
+      vi.useFakeTimers();
+      const durableAgent = makeAgentWithSnapshot('resume-finished', {
+        value: {},
+        context: {},
+        status: 'success',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-finished-run';
+
+      try {
+        const pending = durableAgent.resume(runId, { approved: true });
+        const assertion = expect(pending).rejects.toThrow(
+          `Cannot resume run ${runId}: it is not suspended (status: success).`,
+        );
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
       const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
         value: {},
