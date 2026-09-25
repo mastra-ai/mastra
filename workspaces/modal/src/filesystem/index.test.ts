@@ -278,4 +278,24 @@ describe.skipIf(!hasGnuTools)('ModalFilesystem (operations)', () => {
     expect((await fs.stat('dir')).type).toBe('directory');
     await expect(fs.stat('nope')).rejects.toThrow(FileNotFoundError);
   });
+
+  it('rejects symlinks that escape basePath', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'modal-fs-outside-'));
+    try {
+      execFileSync('sh', ['-c', 'echo secret > "$1/secret.txt"', 'sh', outside]);
+      execFileSync('ln', ['-s', outside, join(root, 'escape')]);
+      execFileSync('ln', ['-s', join(outside, 'new.txt'), join(root, 'dangling')]);
+
+      await expect(fs.readFile('escape/secret.txt')).rejects.toThrow(PermissionError);
+      await expect(fs.writeFile('escape/pwned.txt', 'x')).rejects.toThrow(PermissionError);
+      await expect(fs.writeFile('dangling', 'x')).rejects.toThrow(PermissionError);
+      await expect(fs.readdir('escape')).rejects.toThrow(PermissionError);
+      await expect(fs.stat('escape/secret.txt')).rejects.toThrow(PermissionError);
+      await expect(fs.copyFile('a-missing', 'escape/copy.txt')).rejects.toThrow(PermissionError);
+      expect(await fs.exists('escape/secret.txt')).toBe(false);
+      expect(execFileSync('ls', [outside], { encoding: 'utf8' }).trim()).toBe('secret.txt');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });

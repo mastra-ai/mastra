@@ -371,7 +371,11 @@ export class ModalSandbox extends MastraSandbox {
   private _assertWorkdirOutsideVolumes(): void {
     const workdir = this.workingDirectory;
     if (!this.volumes || !workdir) return;
-    const normalize = (p: string) => (p.length > 1 ? p.replace(/\/+$/, '') : p);
+    const normalize = (p: string) => {
+      let end = p.length;
+      while (end > 1 && p[end - 1] === '/') end--;
+      return p.slice(0, end);
+    };
     const dir = normalize(workdir);
     for (const mountPath of Object.keys(this.volumes)) {
       const mount = normalize(mountPath);

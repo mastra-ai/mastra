@@ -58,7 +58,16 @@ export interface ModalFilesystemOptions extends MastraFilesystemOptions {
 }
 
 /** Exit codes used by the in-sandbox scripts. */
-const EXIT = { NOT_FOUND: 2, EXISTS: 3, IS_DIR: 4, NOT_DIR: 5, NOT_EMPTY: 6, NO_PARENT: 7 } as const;
+const EXIT = { NOT_FOUND: 2, EXISTS: 3, IS_DIR: 4, NOT_DIR: 5, NOT_EMPTY: 6, NO_PARENT: 7, OUTSIDE: 8 } as const;
+
+/**
+ * Runs before every script. Receives `basePath` and the number of leading path
+ * arguments, then shifts them off. Each path is resolved through symlinks
+ * (resolving the deepest existing ancestor for paths that don't exist yet) and
+ * rejected when it lands outside `basePath`. Uses only POSIX sh + `readlink -f`,
+ * which GNU coreutils and BusyBox both provide.
+ */
+const CONFINE = `b=$(readlink -f -- "$1") || exit ${EXIT.OUTSIDE}; n=$2; shift 2; canon() { p=$1; rest=; while [ ! -e "$p" ] && [ ! -L "$p" ]; do rest=/$(basename -- "$p")$rest; p=$(dirname -- "$p"); done; r=$(readlink -f -- "$p") || return 1; printf '%s%s' "$r" "$rest"; }; i=0; for a; do [ "$i" -lt "$n" ] || break; r=$(canon "$a") || exit ${EXIT.OUTSIDE}; case "$r" in "$b"|"$b"/*) ;; *) exit ${EXIT.OUTSIDE};; esac; i=$((i+1)); done;`;
 
 // Scripts receive `$0` = script name and positional args; paths are always quoted.
 const PARENT_CHECK = `d=$(dirname -- "$1"); if [ ! -d "$d" ]; then if [ "$2" = 1 ]; then mkdir -p -- "$d" || exit 1; else exit ${EXIT.NO_PARENT}; fi; fi; [ -d "$1" ] && exit ${EXIT.IS_DIR};`;
@@ -73,7 +82,7 @@ const SCRIPTS = {
   mkdir: `if [ "$2" = 1 ]; then [ -e "$1" ] && [ ! -d "$1" ] && exit ${EXIT.EXISTS}; mkdir -p -- "$1"; else [ -e "$1" ] && exit ${EXIT.EXISTS}; [ -d "$(dirname -- "$1")" ] || exit ${EXIT.NO_PARENT}; mkdir -- "$1"; fi`,
   rmdir: `if [ ! -e "$1" ]; then [ "$3" = 1 ] && exit 0; exit ${EXIT.NOT_FOUND}; fi; [ -d "$1" ] || exit ${EXIT.NOT_DIR}; if [ "$2" = 1 ]; then rm -rf -- "$1"; else [ -z "$(ls -A -- "$1")" ] || exit ${EXIT.NOT_EMPTY}; rmdir -- "$1"; fi`,
   // Emits NUL-separated records: target type, own type, size, relative path, link target.
-  readdir: `[ -e "$1" ] || exit ${EXIT.NOT_FOUND}; [ -d "$1" ] || exit ${EXIT.NOT_DIR}; find "$1" -mindepth 1 -maxdepth "$2" -printf '%Y\\0%y\\0%s\\0%P\\0%l\\0'`,
+  readdir: `[ -e "$1" ] || exit ${EXIT.NOT_FOUND}; [ -d "$1" ] || exit ${EXIT.NOT_DIR}; find "$1" -mindepth 1 -maxdepth "$2" -exec sh -c 'b=$1; shift; for p; do if [ -d "$p" ]; then t=d; else t=f; fi; o=$t; l=; if [ -L "$p" ]; then o=l; l=$(readlink -- "$p"); fi; s=0; if [ "$o" = f ]; then s=$(($(wc -c < "$p"))); fi; printf "%s\\0%s\\0%s\\0%s\\0%s\\0" "$t" "$o" "$s" "\${p#"$b"/}" "$l"; done' sh "$1" {} +`,
   exists: `[ -e "$1" ]`,
   // Emits: type, size, birth time, modification time (epoch seconds).
   stat: `[ -e "$1" ] || exit ${EXIT.NOT_FOUND}; stat -L -c '%F|%s|%W|%Y' -- "$1"`,
@@ -344,6 +353,8 @@ export class ModalFilesystem extends MastraFilesystem {
         throw new NotDirectoryError(path);
       case EXIT.NOT_EMPTY:
         throw new DirectoryNotEmptyError(path);
+      case EXIT.OUTSIDE:
+        throw new PermissionError(path, 'access outside filesystem base path');
       default: {
         const message = result.stderr.trim();
         if (/permission denied|read-only file system/i.test(message)) {
@@ -362,7 +373,9 @@ export class ModalFilesystem extends MastraFilesystem {
     await this.ensureReady();
     const runOnce = () =>
       this.sandbox.retryOnDead(async () => {
-        const proc = await this.sandbox.modal.exec(['sh', '-c', SCRIPTS[script], script, ...args], {
+        const pathCount = script === 'transfer' ? '2' : '1';
+        const command = ['sh', '-c', `${CONFINE} ${SCRIPTS[script]}`, script, this.basePath, pathCount, ...args];
+        const proc = await this.sandbox.modal.exec(command, {
           mode: 'binary',
         });
         if (stdin) {
