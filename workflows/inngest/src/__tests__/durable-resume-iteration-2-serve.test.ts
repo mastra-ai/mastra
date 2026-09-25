@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createInngestAgent } from '../durable-agent';
+import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
 import {
   getSharedInngest,
   getSharedMastra,
@@ -259,5 +260,90 @@ describe('durable agent resume after a suspend in a later loop iteration (#24749
       { timeout: 30_000, interval: 250 },
     );
     expect(lookups).toEqual(['123', '456']);
+  });
+
+  it('replaces the suspended snapshot on finish and rejects resuming the finished run (#24796)', async () => {
+    const agentId = `resume-finished-${Date.now()}`;
+    const approvalId = `request-approval-${agentId}`;
+    const executions: boolean[] = [];
+
+    const script = [toolCallChunks('0', approvalId, { action: 'delete' })];
+    let call = 0;
+    const model: any = {
+      specificationVersion: 'v2',
+      provider: 'mock',
+      modelId: 'mock-model',
+      supportedUrls: {},
+      async doStream() {
+        const chunks = script[call++] ?? [
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-final', modelId: 'mock-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 't1' },
+          { type: 'text-delta', id: 't1', delta: 'Declined.' },
+          { type: 'text-end', id: 't1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+        ];
+        return {
+          stream: simulateReadableStream({ chunks: chunks as any }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+    const approval = createTool({
+      id: approvalId,
+      description: 'Ask a human to approve the action',
+      inputSchema: z.object({ action: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ action }, context: any) => {
+        if (!context?.agent?.resumeData) {
+          return context.agent.suspend({ action });
+        }
+        executions.push(context.agent.resumeData.approved);
+        return { approved: context.agent.resumeData.approved };
+      },
+    });
+
+    const storage = new DefaultStorage({ id: agentId, url: dbUrl });
+    const agent = new Agent({
+      id: agentId,
+      name: 'Resume Finished Agent',
+      instructions: 'Request approval, then answer.',
+      model,
+      tools: { [approvalId]: approval },
+      memory: new Memory({ storage }),
+    });
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const first = await inngestAgent.stream([{ role: 'user', content: 'Delete everything' }], {
+      memory: { thread: `thread-${agentId}`, resource: `resource-${agentId}` },
+    });
+    const firstResult = await drain(first.output.fullStream, 60_000);
+    first.cleanup();
+    expect(firstResult.types).toContain('tool-call-suspended');
+
+    const declined = await inngestAgent.resume(first.runId, { approved: false });
+    const declinedResult = await drain(declined.output.fullStream, 60_000, false);
+    declined.cleanup();
+    expect(declinedResult.errors).toEqual([]);
+    expect(declinedResult.types).toContain('finish');
+
+    // The loop's own terminal write must replace the suspended snapshot; nothing here seeds it.
+    const workflowsStore = await getSharedMastra().getStorage()!.getStore('workflows');
+    await vi.waitFor(
+      async () => {
+        const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId: first.runId,
+        });
+        expect(snapshot?.status).toBe('success');
+      },
+      { timeout: 30_000, interval: 250 },
+    );
+
+    await expect(inngestAgent.resume(first.runId, { approved: true })).rejects.toThrow(/not suspended/);
+    // Give a wrongly dispatched resume time to run the tool before asserting it did not.
+    await new Promise(r => setTimeout(r, 3000));
+    expect(executions).toEqual([false]);
   });
 });

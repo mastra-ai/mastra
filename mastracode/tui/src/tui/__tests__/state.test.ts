@@ -12,7 +12,9 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   class MockProcessTerminal {
-    columns = 120;
+    get columns() {
+      return process.stdout.columns || 80;
+    }
   }
 
   class MockTUI {
@@ -62,6 +64,7 @@ vi.mock('@mastra/code-sdk/utils/project', async importOriginal => {
 });
 
 import { createTUIState } from '../state.js';
+import { MIN_TERM_WIDTH } from '../theme.js';
 
 function createSession() {
   return {
@@ -177,6 +180,39 @@ describe('createTUIState', () => {
       state.renderScheduler?.dispose();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('floors a transient narrow terminal width to the minimum layout width', () => {
+    const originalColumns = process.stdout.columns;
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 2,
+      writable: true,
+      configurable: true,
+    });
+
+    let state: ReturnType<typeof createTUIState> | undefined;
+    try {
+      const session = createSession();
+      const createdState = createTUIState({
+        controller: createAgentController(session) as never,
+        session: session as never,
+        hookManager: {} as never,
+        analytics: {} as never,
+        authStorage: { getStoredApiKey: vi.fn(() => undefined) } as never,
+        mcpManager: {} as never,
+        workspace: {} as never,
+      });
+      state = createdState;
+
+      expect(createdState.terminal.columns).toBe(MIN_TERM_WIDTH);
+    } finally {
+      state?.renderScheduler?.dispose();
+      Object.defineProperty(process.stdout, 'columns', {
+        value: originalColumns,
+        writable: true,
+        configurable: true,
+      });
     }
   });
 });

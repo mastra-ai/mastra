@@ -110,11 +110,11 @@ describe('VCS Factory step', () => {
     );
 
     expect(await screen.findByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Connect GitLab/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Choose GitLab repository/ })).toBeInTheDocument();
     expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'vertical');
     expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Choose GitLab repository/ }));
 
     expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
     expect(await screen.findByText('group/project')).toBeInTheDocument();
@@ -155,7 +155,8 @@ describe('VCS Factory step', () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it('offers Mastra Platform connection setup when GitLab has no active account yet', async () => {
+  it('starts a Platform connect session when GitLab has no active account yet', async () => {
+    const connectSessions: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
@@ -169,6 +170,19 @@ describe('VCS Factory step', () => {
           reason: 'not_connected',
         }),
       ),
+      http.post(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connect-session`, () => {
+        connectSessions.push('gitlab');
+        return HttpResponse.json(
+          {
+            connectionId: 'conn-new',
+            integrationId: 'gitlab',
+            connectUrl: 'https://connect.nango.dev/session',
+            sessionToken: 'nango-session-token',
+            expiresAt: '2026-09-17T12:30:00.000Z',
+          },
+          { status: 201 },
+        );
+      }),
     );
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
 
@@ -186,11 +200,14 @@ describe('VCS Factory step', () => {
 
     expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
-    expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
+
+    // The button triggers a Nango connect session on the server, not a redirect to projects.mastra.ai.
+    await vi.waitFor(() => expect(connectSessions).toEqual(['gitlab']));
+    expect(open).not.toHaveBeenCalledWith('https://projects.mastra.ai', expect.anything(), expect.anything());
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
   });
 
-  it('falls back to Mastra Platform without exposing missing provider credentials', async () => {
+  it('disables both connect actions without exposing missing provider credentials', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({
@@ -213,7 +230,6 @@ describe('VCS Factory step', () => {
       ),
     );
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    open.mockClear();
 
     renderWithProviders(
       <VcsFactoryStep
@@ -229,14 +245,54 @@ describe('VCS Factory step', () => {
 
     const github = await screen.findByRole('button', { name: /Connect GitHub/ });
     const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
+    expect(github).toBeDisabled();
+    expect(gitlab).toBeDisabled();
     expect(screen.queryByText('GITHUB_APP_ID')).not.toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
 
-    await userEvent.click(github);
-    await userEvent.click(gitlab);
+    expect(open).not.toHaveBeenCalledWith('https://projects.mastra.ai', expect.anything(), expect.anything());
+  });
 
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
+  it('disables the GitLab tile when the account is personal (organization_required)', async () => {
+    const connectSessions: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      // GitLab returns enabled:true, but the connect-session would 403 with
+      // organization_required, so the tile must not offer a doomed Nango start.
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: false,
+          mode: 'platform',
+          connections: [],
+          accounts: [],
+          reauthRequired: false,
+          reason: 'organization_required',
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connect-session`, () => {
+        connectSessions.push('gitlab');
+        return HttpResponse.json({ error: 'organization_required' }, { status: 403 });
+      }),
+    );
+
+    renderWithProviders(
+      <VcsFactoryStep
+        connectingRepositoryId={null}
+        githubRedirecting={false}
+        mutationPending={false}
+        mutationError={null}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('Join an organization to connect GitLab repositories.')).toBeInTheDocument();
+    const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
+    expect(gitlab).toBeDisabled();
+    await userEvent.click(gitlab);
+    expect(connectSessions).toEqual([]);
   });
 
   it('does not show server environment variables when GitLab authorization must be renewed', async () => {
