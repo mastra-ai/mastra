@@ -174,6 +174,21 @@ describe('BuildBundler', () => {
       });
     });
 
+    it('preserves an explicit workspace external', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: ['@repro/database'],
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        externals: ['@repro/database'],
+      });
+    });
+
     it.each([true, false])('preserves explicit externals %s in a custom bundler config', async externals => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
