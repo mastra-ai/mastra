@@ -189,9 +189,8 @@ describe('OM observer with an undownloadable stored attachment', () => {
 
       expect(result.tripwire).toBeUndefined();
       expect(result.text).toBe('Done.');
-      // A malformed data URL is decoded (and fails) locally; a path without a scheme is never fetched.
-      if (storedData.startsWith('data:')) expect(assetFetches).toBeGreaterThan(0);
-      else expect(assetFetches).toBe(0);
+      // Invalid inline content and paths without a scheme are recognized without fetching them.
+      expect(assetFetches).toBe(0);
       expect(elapsedMs).toBeLessThan(10_000);
 
       expect(observerModel.calls).toBeGreaterThan(0);
