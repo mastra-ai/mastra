@@ -933,7 +933,7 @@
     "@ai-sdk/azure": "^2.0.120",
     "@ai-sdk/cerebras-v6": "npm:@ai-sdk/cerebras@2.0.68",
     "@ai-sdk/deepinfra-v6": "npm:@ai-sdk/deepinfra@2.0.66",
-    "@ai-sdk/deepseek-v6": "npm:@ai-sdk/deepseek@2.0.50",
+    "@ai-sdk/deepseek-v7": "npm:@ai-sdk/deepseek@3.0.52",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.85",
     "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.101",
     "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.25",
