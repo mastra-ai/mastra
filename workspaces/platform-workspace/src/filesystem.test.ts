@@ -116,11 +116,13 @@ describe('PlatformFilesystem', () => {
   });
 
   it('maps 404 to FileNotFoundError on readFile and stat', async () => {
-    const fetchMock = vi.fn().mockImplementation(async (url: string | URL) =>
-      String(url).includes('delimiter=')
-        ? response(JSON.stringify({ contents: [], commonPrefixes: [] }), { status: 200 })
-        : response('not found', { status: 404 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (url: string | URL) =>
+        String(url).includes('delimiter=')
+          ? response(JSON.stringify({ contents: [], commonPrefixes: [] }), { status: 200 })
+          : response('not found', { status: 404 }),
+      );
     const fs = new PlatformFilesystem({
       accessToken: 'sk_test',
       projectId: 'proj_123',
