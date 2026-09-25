@@ -1628,11 +1628,23 @@ export async function* handleMessageStream({
   }
   resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
 
+  if (existingTask?.status.state === 'working' && getSuspendedRunId(existingTask)) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    yield createSuccessResponse(requestId, task);
+    return;
+  }
+
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
   // The claim transitions the task to `working` synchronously so concurrent
   // follow-ups cannot double-resume the same run.
+  const wasInterrupted = isInterruptedTaskState(existingTask?.status.state);
   const resume = await claimInterruptedTaskResume({ taskStore, agentId, taskId });
+  if (wasInterrupted && !resume) {
+    const task = await waitForClaimedResume({ taskStore, agentId, taskId });
+    yield createSuccessResponse(requestId, task);
+    return;
+  }
 
   const {
     pushNotificationStore: resolvedPushNotificationStore,

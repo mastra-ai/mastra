@@ -2673,6 +2673,93 @@ describe('A2A Handler', () => {
       expect(saved?.metadata?.suspendedRunId).toBeUndefined();
     });
 
+    it('only resumes once for concurrent streaming follow-ups', async () => {
+      const taskId = 'task-hitl-stream-race';
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({ taskId, contextId: 'ctx-stream-race', suspendedRunId: taskId }),
+      });
+      const stream = vi.fn();
+      const resumeStream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Done'] }));
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+      const followUp = (messageId: string) =>
+        handleMessageStream({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId,
+              parts: [{ kind: 'text', text: 'yes' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        });
+      const consume = async (messageId: string) => {
+        const events = [];
+        for await (const event of followUp(messageId)) events.push(event);
+        return events;
+      };
+      const results = await Promise.all([consume('stream-race-1'), consume('stream-race-2')]);
+      expect(resumeStream).toHaveBeenCalledTimes(1);
+      expect(stream).not.toHaveBeenCalled();
+      expect(results.map(events => events.at(-1)?.result?.status.state)).toEqual(['completed', 'completed']);
+      const saved = await mockTaskStore.load({ agentId, taskId });
+      expect(saved?.history).toHaveLength(1);
+    });
+
+    it('waits for a claimed streaming resume rather than starting another run', async () => {
+      const taskId = 'task-hitl-stream-claimed';
+      await mockTaskStore.save({
+        agentId,
+        data: {
+          ...createSuspendedTask({ taskId, contextId: 'ctx-stream-claimed', suspendedRunId: taskId }),
+          status: { state: 'working', timestamp: new Date().toISOString() },
+        },
+      });
+      const stream = vi.fn();
+      const resumeStream = vi.fn();
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+      const eventsPromise = (async () => {
+        const events = [];
+        for await (const event of handleMessageStream({
+          requestId: 'stream-claimed',
+          params: {
+            message: {
+              messageId: 'stream-claimed-message',
+              kind: 'message',
+              role: 'user',
+              taskId,
+              parts: [{ kind: 'text', text: 'yes' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        }))
+          events.push(event);
+        return events;
+      })();
+      await mockTaskStore.save({
+        agentId,
+        data: {
+          ...createSuspendedTask({ taskId, contextId: 'ctx-stream-claimed', suspendedRunId: taskId }),
+          status: { state: 'completed', timestamp: new Date().toISOString() },
+        },
+      });
+      const events = await eventsPromise;
+      expect(stream).not.toHaveBeenCalled();
+      expect(resumeStream).not.toHaveBeenCalled();
+      expect(events.at(-1)?.result?.status.state).toBe('completed');
+      const saved = await mockTaskStore.load({ agentId, taskId });
+      expect(saved?.history).toHaveLength(0);
+    });
+
     it('should record toolCallId and approval flag when the suspension is a tool approval', async () => {
       const mockAgent = {
         // Approval suspensions carry no nested `suspendPayload` (ToolCallApprovalPayload).
