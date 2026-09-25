@@ -12,6 +12,8 @@ const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> 
   planning: false,
   execute: false,
   review: true,
+  'changes-requested': true,
+  approved: true,
   done: true,
   canceled: true,
 } satisfies Record<(typeof FACTORY_RULE_STAGES)[number], boolean>;

@@ -146,4 +146,26 @@ describe('reviewBoard', () => {
     expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
     expect(decision).not.toHaveProperty('resume');
   });
+
+  it.each(['changes-requested', 'approved'])('delivers the re-review skill when a push leaves %s', async fromStage => {
+    const github = await reviewBoard.rules.review?.pullRequest?.onEnter?.(
+      reviewContext('feat/review-board', fromStage),
+    );
+    expect(github).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
+    expect(github).not.toHaveProperty('resume');
+    const gitlab = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(
+      gitlabReviewContext('factory/gitlab-mr-head', fromStage),
+    );
+    expect(gitlab).toMatchObject({ type: 'invokeSkill', skillName: 'factory-gitlab-rereview' });
+  });
+
+  it('rests a verdict until the next push, merge, or close', () => {
+    for (const stage of ['changes-requested', 'approved'] as const) {
+      expect(reviewBoard.phaseKind(stage)).toBe('resting');
+      expect(reviewBoard.allowsTransition('review', stage)).toBe(true);
+      expect(reviewBoard.allowsTransition(stage, 'review')).toBe(true);
+      expect(reviewBoard.allowsTransition(stage, 'done')).toBe(true);
+      expect(reviewBoard.allowsTransition(stage, 'canceled')).toBe(true);
+    }
+  });
 });

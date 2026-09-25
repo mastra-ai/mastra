@@ -1298,6 +1298,40 @@ describe('FactoryTransitionService', () => {
     expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['notify-exit', 'message-enter']);
   });
 
+  it('keeps a review run from closing its card as Done, and lets it record the verdict instead', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const reviewAgent = {
+      actor: { type: 'agent' as const, bindingId: 'review-binding', role: 'review' },
+      ingress: { type: 'agent' as const, identity: 'review-verdict' },
+    };
+
+    const done = await service.transition({ ...request(item, { board: 'review', stage: 'done' }), ...reviewAgent });
+    expect(done).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(done.status === 'rejected' && done.reason).toContain('Done is reserved for merged pull requests');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+
+    const verdict = await service.transition({
+      ...request(item, { board: 'review', stage: 'changes-requested' }),
+      ...reviewAgent,
+      ingress: { type: 'agent', identity: 'review-verdict-retry' },
+    });
+    expect(verdict).toMatchObject({ status: 'accepted', stage: 'changes-requested' });
+  });
+
+  it('closes a verdict card as Done when the merge event arrives', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['changes-requested'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'done' }),
+      actor: { type: 'github', login: 'octocat', trusted: true, factoryAuthored: false },
+    });
+    expect(result).toMatchObject({ status: 'accepted', stage: 'done' });
+  });
+
   it('rejects Review board moves outside its declared lifecycle', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
@@ -1309,7 +1343,7 @@ describe('FactoryTransitionService', () => {
       status: 'rejected',
       code: 'invalid_transition',
       reason:
-        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
+        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, changes-requested, approved, done, canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
   });

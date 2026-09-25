@@ -8,6 +8,8 @@ const BOARD_STAGE_LABELS = {
   planning: 'Planning',
   execute: 'Building',
   review: 'Review',
+  'changes-requested': 'Changes requested',
+  approved: 'Approved',
   done: 'Done',
   canceled: 'Canceled',
 } satisfies Record<FactoryRuleStage, string>;
@@ -65,6 +67,8 @@ const STAGE_TONES = {
   planning: 'cyan',
   execute: 'blue',
   review: 'purple',
+  'changes-requested': 'orange',
+  approved: 'cyan',
   done: 'green',
   canceled: 'red',
 } satisfies Record<BoardStageId, BadgeVariant>;

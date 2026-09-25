@@ -87,7 +87,17 @@ export function externallyAuthoredWorkItem(item: {
   return externallyAuthored({ source: workItemSource(item.externalSource), metadata: item.metadata });
 }
 
-export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
+export const FACTORY_RULE_STAGES = [
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+  'changes-requested',
+  'approved',
+  'done',
+  'canceled',
+] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
 
 // Each role and the working stage its run holds the card in. Key order is the
@@ -139,7 +149,10 @@ export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
 
 /** Working lanes hold cards with a seat engaged; Intake, Done and Canceled rest them. */
 export function isWorkingFactoryRuleStage(stage: FactoryRuleStage): boolean {
-  return stage !== 'intake' && !isTerminalFactoryRuleStage([stage]);
+  // Review verdict lanes rest the card until the next push or merge.
+  return (
+    stage !== 'intake' && stage !== 'changes-requested' && stage !== 'approved' && !isTerminalFactoryRuleStage([stage])
+  );
 }
 
 // Consulted only for the Intake exit: roles don't own lanes, so a card already

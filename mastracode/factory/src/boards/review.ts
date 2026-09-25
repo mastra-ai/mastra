@@ -1,6 +1,7 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { workItemBranch, workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
+import type { BoardTransitionPolicy } from './transition-policy.js';
 
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
@@ -57,16 +58,36 @@ function isSafeBranchName(value: string): boolean {
   );
 }
 
+export const REVIEW_VERDICT_STAGES = ['changes-requested', 'approved'] as const;
+
+export function isVerdictStage(stage: string | undefined): boolean {
+  return (REVIEW_VERDICT_STAGES as readonly (string | undefined)[]).includes(stage);
+}
+
+// `done` means the PR merged. A review agent reports its verdict by moving to
+// `changes-requested` or `approved`; only the merge rule (or a person) may close
+// the card, so a blocking finding can never read as finished work.
+const reviewTransitionPolicy: BoardTransitionPolicy = ({ actor, toStage }) => {
+  if (toStage !== 'done' || actor.type !== 'agent') return undefined;
+  return {
+    type: 'reject',
+    code: 'invalid_transition',
+    reason:
+      'Done is reserved for merged pull requests. Report the review verdict by moving to ' +
+      '"changes-requested" or "approved" instead.',
+  };
+};
+
 function reviewPullRequest(context: FactoryStageRuleContext) {
   // Only a Review-to-Review re-entry can supersede an active pass. A card
   // returning from Done has no live review to cancel; aborting its bound session
   // would instead cancel the fresh re-review kickoff.
   const supersedes = context.fromStage === 'review';
-  // The re-review skill only applies when a prior review pass actually completed
-  // (the card is returning from `done`). A cancelled first-time review that
-  // re-enters Review from `review` itself still has no prior pass to reconcile —
-  // it gets the regular provider-specific review skill.
-  const priorReviewCompleted = context.fromStage === 'done';
+  // The re-review skill only applies when a prior review pass actually published
+  // a verdict (the card is returning from a verdict stage). A cancelled
+  // first-time review that re-enters Review from `review` itself still has no
+  // prior pass to reconcile — it gets the regular provider-specific review skill.
+  const priorReviewCompleted = isVerdictStage(context.fromStage) || context.fromStage === 'done';
   const isGitlab = context.item.source === 'gitlab-pr';
   const skillName = isGitlab
     ? priorReviewCompleted
@@ -91,6 +112,7 @@ export const reviewBoard = defineBoard({
   id: 'review',
   title: 'Review',
   initialPhase: 'intake',
+  transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
       title: 'Intake',
@@ -107,14 +129,27 @@ export const reviewBoard = defineBoard({
       role: 'review',
       outcomes: {
         parked: 'intake',
+        changesRequested: 'changes-requested',
+        approved: 'approved',
         merged: 'done',
         closed: 'canceled',
       },
       onEnter: { pullRequest: reviewPullRequest, gitlabPullRequest: reviewPullRequest },
     },
+    'changes-requested': {
+      title: 'Changes requested',
+      kind: 'resting',
+      outcomes: { updated: 'review', merged: 'done', closed: 'canceled' },
+    },
+    approved: {
+      title: 'Approved',
+      kind: 'resting',
+      outcomes: { updated: 'review', merged: 'done', closed: 'canceled' },
+    },
     done: {
       title: 'Done',
       kind: 'terminal',
+      // Cards closed as Done before verdict stages existed can still re-enter.
       outcomes: { updated: 'review' },
     },
     canceled: {

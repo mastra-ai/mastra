@@ -159,7 +159,7 @@ After publishing, reconcile the verdict label: approve adds `status:auto-approve
 
 Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.
 
-Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "done"` (review board) **for both verdicts** — the transition marks the review pass complete; what to do about requested changes is the human's call from the handoff.
+Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "changes-requested"` (review board) when the verdict is request changes and `stage: "approved"` when it is approve. Never request `done` — Done is reserved for merged pull requests and the board rejects it from a review run.
 
 `rationale` (max 1000 chars) — one or two sentences: review complete, verdict, and the headline reason.
 
