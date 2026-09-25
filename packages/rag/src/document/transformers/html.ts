@@ -11,6 +11,57 @@ interface ElementType {
   metadata: Record<string, string>;
 }
 
+const BLOCK_TAGS = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'br',
+  'dd',
+  'div',
+  'dl',
+  'dt',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'hr',
+  'li',
+  'main',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'section',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+]);
+
+// element.text already includes all descendant text, so build element text only from children.
+function extractText(node: any): string {
+  if (!node) return '';
+  if (!node.tagName) return node.text || '';
+
+  let content = '';
+  for (const child of node.childNodes ?? []) {
+    content += extractText(child);
+  }
+  return BLOCK_TAGS.has(node.tagName.toLowerCase()) ? ' ' + content + ' ' : content;
+}
+
 export class HTMLHeaderTransformer {
   private headersToSplitOn: [string, string][];
   private returnEachElement: boolean;
@@ -104,26 +155,7 @@ export class HTMLHeaderTransformer {
   }
 
   private getTextContent(element: any): string {
-    if (!element) return '';
-
-    // For text nodes, return their content
-    if (!element.tagName) {
-      return element.text || '';
-    }
-
-    // For element nodes, combine their text with children's text
-    let content = element.text || '';
-
-    if (element.childNodes) {
-      for (const child of element.childNodes) {
-        const childText = this.getTextContent(child);
-        if (childText) {
-          content += ' ' + childText;
-        }
-      }
-    }
-
-    return content.trim();
+    return extractText(element).replace(/\s+/g, ' ').trim();
   }
 
   private aggregateElementsToChunks(elements: ElementType[]): Document[] {
@@ -243,26 +275,7 @@ export class HTMLSectionTransformer {
   }
 
   private getTextContent(element: any): string {
-    if (!element) return '';
-
-    // For text nodes, return their content
-    if (!element.tagName) {
-      return element.text || '';
-    }
-
-    // For element nodes, combine their text with children's text
-    let content = element.text || '';
-
-    if (element.childNodes) {
-      for (const child of element.childNodes) {
-        const childText = this.getTextContent(child);
-        if (childText) {
-          content += ' ' + childText;
-        }
-      }
-    }
-
-    return content.trim();
+    return extractText(element).replace(/\s+/g, ' ').trim();
   }
 
   private splitHtmlByHeaders(htmlDoc: string): Array<{
