@@ -56,36 +56,51 @@ describe('chat runtime status', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
-  it.each(['single-batch', 'hidden-reasoning'] as const)(
-    'preserves the last rate for an unmeasurable %s response',
-    kind => {
-      vi.useFakeTimers();
-      let state = { ...initialChatRuntime, tokensPerSec: 40 };
-      const delta: AgentControllerEvent = {
-        type: 'message_update',
-        id: 'm',
-        event: { type: 'text-delta', delta: 'Answer' },
-      };
-      for (const at of [1000, kind === 'single-batch' ? 1000 : 2000]) {
-        vi.setSystemTime(at);
-        state = runtimeReducer(state, { type: 'event', event: delta });
-      }
-      vi.setSystemTime(3000);
+  it('preserves the last rate when no generation interval was observed', () => {
+    vi.useFakeTimers();
+    let state = { ...initialChatRuntime, tokensPerSec: 40 };
+    const delta: AgentControllerEvent = {
+      type: 'message_update',
+      id: 'm',
+      event: { type: 'text-delta', delta: 'Answer' },
+    };
+    for (const at of [1000, 1000]) {
+      vi.setSystemTime(at);
+      state = runtimeReducer(state, { type: 'event', event: delta });
+    }
+    vi.setSystemTime(3000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: {
+        type: 'usage_update',
+        usage: { promptTokens: 100, completionTokens: 2440, reasoningTokens: 0, totalTokens: 2540 },
+      },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('measures visible output when reasoning tokens never streamed', () => {
+    // 2440 output tokens of which 2400 are thinking that never streamed: only the
+    // 40 visible tokens can be timed. Prior 10 → EMA = 0.3*40 + 0.7*10 = 19.
+    vi.useFakeTimers();
+    let state = { ...initialChatRuntime, tokensPerSec: 10 };
+    for (const at of [1000, 2000]) {
+      vi.setSystemTime(at);
       state = runtimeReducer(state, {
         type: 'event',
-        event: {
-          type: 'usage_update',
-          usage: {
-            promptTokens: 100,
-            completionTokens: 2440,
-            reasoningTokens: kind === 'hidden-reasoning' ? 2400 : 0,
-            totalTokens: 2540,
-          },
-        },
+        event: { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
       });
-      expect(state.tokensPerSec).toBe(40);
-    },
-  );
+    }
+    vi.setSystemTime(3000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: {
+        type: 'usage_update',
+        usage: { promptTokens: 100, completionTokens: 2440, reasoningTokens: 2400, totalTokens: 2540 },
+      },
+    });
+    expect(state.tokensPerSec).toBe(19);
+  });
 
   it('allows the captured 13ms tool-argument burst without counting tool execution', () => {
     vi.useFakeTimers();

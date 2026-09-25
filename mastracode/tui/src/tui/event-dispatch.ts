@@ -409,10 +409,14 @@ export async function dispatchEvent(
       state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
       // Provider output already includes reasoning. Measure only streamed generation,
       // not initial waiting, tool execution, or usage delivery. Buffered bursts may spike.
-      const stepTokens = event.usage.completionTokens ?? 0;
+      const completionTokens = event.usage.completionTokens ?? 0;
+      const reportedReasoning = event.usage.reasoningTokens ?? 0;
+      // Thinking that never streamed has no observable duration, so measure the output
+      // we did see rather than dividing hidden tokens by a text-only window.
+      const stepTokens =
+        reportedReasoning > 0 && !state.decodeHasReasoning ? completionTokens - reportedReasoning : completionTokens;
       const decodeSec = (state.decodeLastDeltaAt - state.decodeStartedAt) / 1000;
-      const hasUnmeasuredReasoning = (event.usage.reasoningTokens ?? 0) > 0 && !state.decodeHasReasoning;
-      if (state.decodeStartedAt > 0 && decodeSec > 0 && stepTokens > 0 && !hasUnmeasuredReasoning) {
+      if (state.decodeStartedAt > 0 && decodeSec > 0 && stepTokens > 0) {
         const instantaneous = stepTokens / decodeSec;
         const alpha = 0.3;
         const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;

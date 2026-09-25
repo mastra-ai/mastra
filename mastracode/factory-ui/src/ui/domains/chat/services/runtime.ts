@@ -79,11 +79,16 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
       const usage = event.usage;
       // Provider output already includes reasoning. Buffered delivery can still spike,
       // but initial waiting and subsequent tool execution are not decode time.
-      const stepTokens = usage.completionTokens;
+      const reportedReasoning = usage.reasoningTokens ?? 0;
+      // Thinking that never streamed has no observable duration, so measure the output
+      // we did see rather than dividing hidden tokens by a text-only window.
+      const stepTokens =
+        reportedReasoning > 0 && !state._decodeHasReasoning
+          ? usage.completionTokens - reportedReasoning
+          : usage.completionTokens;
       const decodeSeconds = (state._decodeLastDeltaAt - state._decodeStartedAt) / 1000;
-      const hasUnmeasuredReasoning = (usage.reasoningTokens ?? 0) > 0 && !state._decodeHasReasoning;
       let tokensPerSec = state.tokensPerSec;
-      if (state._decodeStartedAt > 0 && decodeSeconds > 0 && stepTokens > 0 && !hasUnmeasuredReasoning) {
+      if (state._decodeStartedAt > 0 && decodeSeconds > 0 && stepTokens > 0) {
         const instantaneous = stepTokens / decodeSeconds;
         tokensPerSec =
           state.tokensPerSec > 0

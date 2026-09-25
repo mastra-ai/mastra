@@ -223,8 +223,10 @@ describe('tokens/sec over streamed generation time', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
-  it('does not divide hidden reasoning tokens by text-only time', async () => {
-    const state = createMinimalState({ tokensPerSec: 40, decodeStartedAt: 1000, decodeLastDeltaAt: 2000 });
+  it('measures the visible output when reasoning tokens never streamed', async () => {
+    // 2440 output tokens of which 2400 are thinking that never streamed: only the
+    // 40 visible tokens can be timed. Prior 10 → EMA = 0.3*40 + 0.7*10 = 19.
+    const state = createMinimalState({ tokensPerSec: 10, decodeStartedAt: 1000, decodeLastDeltaAt: 2000 });
     await dispatchEvent(
       {
         type: 'usage_update',
@@ -233,7 +235,7 @@ describe('tokens/sec over streamed generation time', () => {
       createEctx(),
       state,
     );
-    expect(state.tokensPerSec).toBe(40);
+    expect(state.tokensPerSec).toBe(19);
     expect(state.decodeStartedAt).toBe(0);
   });
 
