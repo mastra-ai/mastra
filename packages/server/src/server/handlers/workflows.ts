@@ -426,7 +426,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
 function toSummarySnapshot(
   snapshot: WorkflowRunState | string,
 ): Pick<WorkflowRunState, 'status' | 'timestamp'> | string {
-  let parsed: WorkflowRunState;
+  let parsed: unknown;
   if (typeof snapshot === 'string') {
     try {
       parsed = JSON.parse(snapshot);
@@ -437,7 +437,9 @@ function toSummarySnapshot(
   } else {
     parsed = snapshot;
   }
-  return { status: parsed.status, timestamp: parsed.timestamp };
+  if (!parsed || typeof parsed !== 'object') return '';
+  const { status, timestamp } = parsed as WorkflowRunState;
+  return { status, timestamp };
 }
 
 export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
