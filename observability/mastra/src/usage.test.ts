@@ -153,8 +153,9 @@ describe('extractUsageMetrics', () => {
       expect(result.inputDetails?.cacheWrite5m).toBe(0);
       expect(result.inputDetails?.cacheWrite1h).toBe(200);
 
-      const rawOnly = extractUsageMetrics(usage, { anthropic: { cacheCreationInputTokens: 200 } });
+      const rawOnly = extractUsageMetrics(usage, undefined);
       expect(rawOnly.inputDetails?.cacheWrite1h).toBe(200);
+      expect(rawOnly.inputDetails?.cacheWrite).toBe(200);
     });
 
     it('should prefer aggregated Anthropic cache creation TTL buckets', () => {
