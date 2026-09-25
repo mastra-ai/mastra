@@ -241,6 +241,15 @@ describe('buildTraceQueryRequest', () => {
   });
 
   describe('when a token carries a text operator', () => {
+    it('drops a literal with no letters or digits instead of sending a query the server rejects', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', value: '!!! ---', operatorId: 'matches' }],
+          now,
+        }).where,
+      ).toBeUndefined();
+    });
+
     it('emits matches with the field on the left and the words on the right', () => {
       expect(
         buildTraceQueryRequest({
