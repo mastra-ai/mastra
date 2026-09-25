@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 
 import { PageHeaderAction } from './page-header-action';
 import { PageHeaderDescription } from './page-header-description';
+import { PageHeaderEyebrow } from './page-header-eyebrow';
 import { PageHeaderIcon } from './page-header-icon';
 import { PageHeaderTitle } from './page-header-title';
 import { cn } from '@/lib/utils';
@@ -28,30 +29,34 @@ export function PageHeaderRoot({
   // Actions sit outside the title grid so their height never affects title/meta/description alignment.
   const items = Children.toArray(children);
   const actions = items.filter(child => isValidElement(child) && child.type === PageHeaderAction);
-  const content = items.filter(child => !actions.includes(child));
+  const eyebrows = items.filter(child => isValidElement(child) && child.type === PageHeaderEyebrow);
+  const content = items.filter(child => !actions.includes(child) && !eyebrows.includes(child));
 
   return (
-    <header className={cn('relative flex w-full items-start gap-3', className)} {...props}>
-      <div
-        data-slot="page-header-grid"
-        className={cn(
-          'grid min-w-0 flex-1 grid-cols-[[title]_auto_[meta]_minmax(0,1fr)_[end]] gap-x-3 gap-y-1',
-          'has-[>[data-slot=page-header-icon]]:grid-cols-[[icon]_auto_[title]_auto_[meta]_minmax(0,1fr)_[end]]',
-        )}
-      >
-        {useLegacyApi ? (
-          <>
-            {!isLoading && icon !== undefined && <PageHeaderIcon>{icon}</PageHeaderIcon>}
-            <PageHeaderTitle isLoading={isLoading}>{title}</PageHeaderTitle>
-            {description !== undefined && (
-              <PageHeaderDescription isLoading={isLoading}>{description}</PageHeaderDescription>
-            )}
-          </>
-        ) : (
-          content
-        )}
+    <header className={cn('relative flex w-full flex-col gap-2', className)} {...props}>
+      {eyebrows}
+      <div className="flex w-full items-start gap-3">
+        <div
+          data-slot="page-header-grid"
+          className={cn(
+            'grid min-w-0 flex-1 grid-cols-[[title]_auto_[meta]_minmax(0,1fr)_[end]] gap-x-3 gap-y-1',
+            'has-[>[data-slot=page-header-icon]]:grid-cols-[[icon]_auto_[title]_auto_[meta]_minmax(0,1fr)_[end]]',
+          )}
+        >
+          {useLegacyApi ? (
+            <>
+              {!isLoading && icon !== undefined && <PageHeaderIcon>{icon}</PageHeaderIcon>}
+              <PageHeaderTitle isLoading={isLoading}>{title}</PageHeaderTitle>
+              {description !== undefined && (
+                <PageHeaderDescription isLoading={isLoading}>{description}</PageHeaderDescription>
+              )}
+            </>
+          ) : (
+            content
+          )}
+        </div>
+        {actions}
       </div>
-      {actions}
     </header>
   );
 }
