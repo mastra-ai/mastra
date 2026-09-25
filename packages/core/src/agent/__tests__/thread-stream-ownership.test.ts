@@ -180,14 +180,21 @@ describe('thread ownership (#24878)', () => {
     await run.registered;
     await vi.waitFor(() => expect(subscription.activeRunId()).toBe('owner-run'));
 
-    const result = senderRuntime.sendSignal(
-      senderAgent,
-      { type: 'user-message', contents: 'hello' },
-      { resourceId, threadId },
-      pubsub,
-    );
+    for (const ifActive of [undefined, { behavior: 'persist' as const }, { behavior: 'discard' as const }]) {
+      const result = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hello' },
+        { resourceId, threadId, ifActive },
+        pubsub,
+      );
 
-    await expect(result.accepted).resolves.toEqual({ action: 'blocked', reason: 'thread-blocked', runId: 'owner-run' });
+      expect(result.persisted).toBeUndefined();
+      await expect(result.accepted).resolves.toEqual({
+        action: 'blocked',
+        reason: 'thread-blocked',
+        runId: 'owner-run',
+      });
+    }
     expect((senderAgent as any).stream).not.toHaveBeenCalled();
 
     subscription.unsubscribe();

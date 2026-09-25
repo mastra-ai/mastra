@@ -4709,6 +4709,13 @@ export class AgentThreadStreamRuntime {
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
 
+    if (remoteCrossAgent) {
+      return {
+        signal,
+        accepted: Promise.resolve({ action: 'blocked' as const, reason: 'thread-blocked' as const, runId: runId! }),
+      };
+    }
+
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
         if (!resourceId || !threadId) {
@@ -4775,13 +4782,6 @@ export class AgentThreadStreamRuntime {
             reason: 'thread-blocked' as const,
             runId: activeRecord.runId,
           }),
-        };
-      }
-
-      if (remoteCrossAgent) {
-        return {
-          signal,
-          accepted: Promise.resolve({ action: 'blocked' as const, reason: 'thread-blocked' as const, runId }),
         };
       }
 
