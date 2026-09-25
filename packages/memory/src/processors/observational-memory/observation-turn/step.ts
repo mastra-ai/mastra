@@ -302,7 +302,7 @@ export class ObservationStep {
           // by identity (the token-based retention floor resolves to 0 for sync-only,
           // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
           // relied on to keep them). Step > 0 semantics are unchanged.
-          const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+          const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
             statusSnapshot.threshold,
@@ -396,13 +396,15 @@ export class ObservationStep {
 
   /**
    * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
-   * buffered activation did not happen)
+   * waitForBuffering → re-check → activate buffered chunks → reflect → observe
+   * (sync fallback when pending tokens are still at or above the threshold)
    */
   private async runThresholdObservation(): Promise<{
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
+    /** Messages covered by this cycle (activated and/or sync-observed) to remove from context. */
+    cleanupMessageIds: string[];
     observerExchange?: StepContext['observerExchange'];
   }> {
     const { threadId, resourceId, messageList } = this.turn;
@@ -422,63 +424,86 @@ export class ObservationStep {
       : getObservableMessages(messageList);
 
     // Re-check status with fresh state
-    const freshStatus = await om.getStatus({
+    let status = await om.getStatus({
       threadId,
       resourceId,
       record: this.turn.record,
       messages: observableMessages,
     });
 
-    if (!freshStatus.shouldObserve) {
-      return { succeeded: false, record: freshStatus.record };
+    if (!status.shouldObserve) {
+      return { succeeded: false, record: status.record, cleanupMessageIds: [] };
     }
 
-    // Try activation first if buffered chunks exist
-    if (freshStatus.canActivate) {
+    // Activate buffered chunks first. Buffering stops once pending tokens reach the
+    // threshold, so the content that crossed it is never in a chunk and activation
+    // alone may not bring the context back under the threshold. Keep activating while
+    // chunks remain — every message a chunk owns must be activated before the sync
+    // observer runs, or it would observe them a second time.
+    let pendingMessages = observableMessages;
+    const activatedMessageIds: string[] = [];
+    let activated = false;
+    while (status.shouldObserve && status.canActivate) {
       const activation = await om.activate({
         threadId,
         resourceId,
         record: this.turn.record,
-        messages: observableMessages,
+        messages: pendingMessages,
+        pendingTokens: status.pendingTokens,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
       this.turn.setRecord(activation.record);
+      if (!activation.activated) break;
 
-      if (activation.activated) {
-        // Check reflection after activation — use maybeReflect so that a
-        // completed buffered reflection is activated instantly instead of
-        // running a redundant sync reflection from scratch.
-        const postActivationRecord = activation.record;
-        await om.reflector.maybeReflect({
-          record: postActivationRecord,
-          observationTokens: postActivationRecord.observationTokenCount ?? 0,
-          threadId,
-          writer: this.turn.writer,
-          messageList,
-          currentModel: this.turn.actorModelContext,
-          requestContext: this.turn.requestContext,
-          observabilityContext: this.turn.observabilityContext,
-          lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
-          reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
-          trigger: 'turn-sync',
-        });
+      activated = true;
+      const ids = new Set(activation.activatedMessageIds ?? []);
+      activatedMessageIds.push(...ids);
+      pendingMessages = pendingMessages.filter(msg => !ids.has(msg.id));
+      status = await om.getStatus({
+        threadId,
+        resourceId,
+        record: this.turn.record,
+        messages: pendingMessages,
+      });
+    }
 
+    if (activated) {
+      // Check reflection after activation — use maybeReflect so that a
+      // completed buffered reflection is activated instantly instead of
+      // running a redundant sync reflection from scratch.
+      const postActivationRecord = this.turn.record;
+      await om.reflector.maybeReflect({
+        record: postActivationRecord,
+        observationTokens: postActivationRecord.observationTokenCount ?? 0,
+        threadId,
+        writer: this.turn.writer,
+        messageList,
+        currentModel: this.turn.actorModelContext,
+        requestContext: this.turn.requestContext,
+        observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
+        reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
+        trigger: 'turn-sync',
+      });
+
+      if (!status.shouldObserve) {
         return {
           succeeded: true,
-          record: activation.record,
-          activatedMessageIds: activation.activatedMessageIds,
+          record: postActivationRecord,
+          activatedMessageIds,
+          cleanupMessageIds: activatedMessageIds,
         };
       }
     }
 
-    // Sync observation — we've waited for buffering and tried activation,
-    // if we're still above threshold we must observe synchronously.
+    // Sync observation — we've waited for buffering and activated what we could;
+    // we're still above threshold, so observe the remaining messages synchronously.
     const obsResult = await om.observe({
       threadId,
       resourceId,
-      messages: observableMessages,
+      messages: pendingMessages,
       messageList,
       trigger: 'turn-sync',
       agent: this.turn.agent,
@@ -538,8 +563,15 @@ export class ObservationStep {
     }
 
     return {
-      succeeded: obsResult.observed,
+      succeeded: activated || obsResult.observed,
       record: obsResult.record,
+      activatedMessageIds: activated ? activatedMessageIds : undefined,
+      cleanupMessageIds: [
+        ...new Set([
+          ...activatedMessageIds,
+          ...(obsResult.observed ? (obsResult.record.observedMessageIds ?? []) : []),
+        ]),
+      ],
       observerExchange: om.observer.lastExchange,
     };
   }

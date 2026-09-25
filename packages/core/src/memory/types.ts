@@ -591,7 +591,7 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
    * (blocking) observation runs when the `messageTokens` threshold is reached and
-   * buffered activation did not happen.
+   * activating buffered chunks does not bring pending tokens back under it.
    *
    * Accepts either:
    * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens`.
