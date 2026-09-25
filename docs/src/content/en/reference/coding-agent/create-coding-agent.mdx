@@ -130,6 +130,7 @@ A default is only filled in when you don't provide the corresponding field. `sig
 | `signals` | A [`TaskSignalProvider`](/reference/signals/task-signal-provider), added only when `memory` is configured. |
 | `errorProcessors` | Unknown stream-error retries with specialized ECONNRESET and bad-request policies, plus `PrefillErrorHandler`, `ProviderHistoryCompat`, and `CyberRefusalHandler`. |
 | `outputProcessors` | [`CyberRefusalHandler`](/reference/processors/cyber-refusal-handler). |
+| `maxProcessorRetries` | `DEFAULT_MAX_PROCESSOR_RETRIES` (3), so the output-lane cyber-refusal retry has a budget. |
 | `goal.prompt` | `DEFAULT_GOAL_JUDGE_PROMPT` (only when a `goal` is configured). |
 
 Nothing else is filled in. There's no default `model`, `instructions`, `tools`, `memory`, storage, or input processors.
@@ -142,6 +143,7 @@ Each default has an explicit opt-out:
 | Task tracking | Don't configure `memory` on the agent |
 | Error processors | `errorProcessors: []` |
 | Output processors | `outputProcessors: []` |
+| Processor retry budget | `maxProcessorRetries: 0` |
 | Goal judge prompt | Omit `goal`, or pass your own `goal.prompt` |
 
 ### Workspace

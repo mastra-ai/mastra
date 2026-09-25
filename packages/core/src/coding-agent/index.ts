@@ -8,6 +8,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '../processors';
+import { DEFAULT_MAX_PROCESSOR_RETRIES } from '../processors/retry-budget';
 import { TaskSignalProvider } from '../signals';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../workspace';
 
@@ -124,6 +125,10 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
  *   the provider-history, prefill, and cyber-refusal repair processors, followed by catch-all
  *   stream retries with specialized ECONNRESET/bad-request policies.
+ * - `maxProcessorRetries` defaults to {@link DEFAULT_MAX_PROCESSOR_RETRIES} so
+ *   the default output-lane cyber-refusal retry has a budget. Output-step
+ *   retries only read this option, so the implicit error-lane cap does not
+ *   cover them.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *
@@ -168,6 +173,10 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     // step instead of throwing.
     outputProcessors: outputProcessors ?? [new CyberRefusalHandler()],
     errorProcessors: errorProcessors ?? defaultErrorProcessors(),
+    // Output-step retries only read the raw option; the implicit error-lane cap
+    // from `resolveMaxProcessorRetries` never reaches them. Default it here so
+    // the default output-lane handler can retry instead of ending as a tripwire.
+    maxProcessorRetries: rest.maxProcessorRetries ?? DEFAULT_MAX_PROCESSOR_RETRIES,
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });
 }

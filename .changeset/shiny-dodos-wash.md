@@ -22,4 +22,4 @@ const agent = new Agent({
 });
 ```
 
-Coding agents created with `createCodingAgent` include it in both lanes by default.
+Coding agents created with `createCodingAgent` include it in both lanes by default, along with a `maxProcessorRetries` budget of 3 — output-step retries have no implicit default, so without a budget the Anthropic retry would be treated as an abort.

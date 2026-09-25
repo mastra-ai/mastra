@@ -100,8 +100,9 @@ function isCyberStopRefusal(finishReason: string | undefined, providerMetadata: 
  * Anthropic refusals. In `errorProcessors`, place it before
  * {@link StreamErrorRetryProcessor}, which would otherwise spend the retry
  * resending the unchanged request. Output-step retries count against
- * `maxProcessorRetries`, which must be set when the agent has no
- * `errorProcessors`.
+ * `maxProcessorRetries`, which is not given an implicit default the way the
+ * error lane is, so set it explicitly or the Anthropic retry is treated as an
+ * abort.
  *
  * @see https://developers.openai.com/api/docs/guides/safety-checks/cybersecurity
  */
