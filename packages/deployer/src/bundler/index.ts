@@ -473,11 +473,9 @@ export abstract class Bundler extends MastraBundler {
     toolsPaths: (string | string[])[],
     { enableSourcemap, enableMinify, enableEsmShim, externals, externalsPreset }: BundlerOptions,
     additionalEntries: Record<string, string>,
-    toolProjectRoot: string,
+    projectRoot: string,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
-    const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
-    const projectRoot = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
 
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
@@ -496,7 +494,7 @@ export abstract class Bundler extends MastraBundler {
         explicitExternals: Array.isArray(externals) ? externals : [],
       },
     );
-    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, toolProjectRoot);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, projectRoot);
     const entryInputs: Record<string, string> = {};
     const virtualEntries: Record<string, string> = {};
     const entries = { index: serverFile, ...additionalEntries };
@@ -619,7 +617,7 @@ export abstract class Bundler extends MastraBundler {
 
     let analyzedBundleInfo;
     try {
-      const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths, projectRoot);
+      const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths, entryProjectRoot);
       analyzedBundleInfo = await analyzeBundle(
         [serverFile, ...Object.values(additionalEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
@@ -709,7 +707,7 @@ export abstract class Bundler extends MastraBundler {
         toolsPaths,
         internalBundlerOptions,
         additionalEntries,
-        projectRoot,
+        entryProjectRoot,
       );
 
       const unresolvedWorkspaceImports: Array<{ source: string }> = [];
