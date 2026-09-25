@@ -685,7 +685,19 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
       // leaving the run loop hung and duplicating the resumed stream.
       // Pass toolCallId so a stale request cannot resolve a different pending gate.
-      session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline', requestContext });
+      const gated = session.approval.isArmed() && (!toolCallId || session.approval.getToolCallId() === toolCallId);
+      if (gated || !toolCallId) {
+        session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline', requestContext });
+      } else {
+        // Nothing parked for this call (e.g. a card restored from history after a
+        // restart): resume the stored suspended run that owns it.
+        ackBackgroundSessionWork({
+          work: session.respondToPersistedToolApproval({ toolCallId, approved, requestContext }),
+          session,
+          mastra,
+          operation: 'respondToPersistedToolApproval',
+        });
+      }
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to controller tool approval');

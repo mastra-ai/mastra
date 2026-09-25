@@ -1,6 +1,7 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
+import { noteThreadMessagesSaved } from '../../agent/thread-saves';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import {
@@ -285,7 +286,13 @@ export class MessageHistory implements Processor {
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
-    const messagesToSave = [...newInput, ...newOutput];
+    // Apply transcript redaction before persisting: this path bypasses
+    // drainUnsavedMessages(), and a background tool result may sit in the
+    // list as a raw payload whose transcript transform lives only in
+    // providerMetadata. Persisting it untransformed would leak the raw
+    // payload to storage whenever this save lands after the redacting
+    // save-queue flush (last-writer-wins on the message id).
+    const messagesToSave = messageList.transformMessagesForTranscript([...newInput, ...newOutput]);
 
     if (messagesToSave.length === 0) {
       return messageList;
@@ -332,6 +339,8 @@ export class MessageHistory implements Processor {
       return;
     }
 
+    const savedAt = Date.now();
+
     // Ensure thread exists (create if needed) before saving messages.
     // Nothing to write when it already exists: re-writing the row we just read
     // would clobber a title generated concurrently with this save.
@@ -352,5 +361,6 @@ export class MessageHistory implements Processor {
 
     // Persist messages after thread is guaranteed to exist
     await this.storage.saveMessages({ messages: filtered });
+    noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
 }
