@@ -61,6 +61,7 @@ const paths = {
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
   experimentItemLink: (experimentId: string, itemId: string) => `/experiments/${experimentId}/items/${itemId}`,
+  traceLink: (traceId: string, spanId?: string) => `/traces?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
 } satisfies LinkComponentProviderProps['paths'];
 
 function renderRunList(runId?: string) {

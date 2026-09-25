@@ -41,7 +41,7 @@ export interface ScoreDataPanelProps {
 }
 
 export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: ScoreDataPanelProps) {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
   const naText = isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured';
@@ -84,10 +84,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.traceId && (
                   <>
                     <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                    <DataKeysAndValues.ValueLink
-                      href={`/traces?traceId=${encodeURIComponent(score.traceId)}`}
-                      as={Link}
-                    >
+                    <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId)} as={Link}>
                       {score.traceId}
                     </DataKeysAndValues.ValueLink>
                   </>
@@ -95,10 +92,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.spanId && score.traceId && (
                   <>
                     <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
-                    <DataKeysAndValues.ValueLink
-                      href={`/traces?traceId=${encodeURIComponent(score.traceId)}&spanId=${encodeURIComponent(score.spanId)}`}
-                      as={Link}
-                    >
+                    <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId, score.spanId)} as={Link}>
                       {score.spanId}
                     </DataKeysAndValues.ValueLink>
                   </>
