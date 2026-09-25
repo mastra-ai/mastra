@@ -134,12 +134,17 @@ describe('AgentController cloneThread', () => {
       thread: { id: 'src', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
     });
     const session = await controller.createSession({ id: 's', ownerId: 'o' });
+    const agent = controller.getCurrentAgent(session);
+    const subscribe = vi.spyOn(agent, 'subscribeToThread');
 
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'user-1' });
     await session.thread.clone({ sourceThreadId: 'src', requestContext });
 
     expect(cloningUser).toEqual({ id: 'user-1' });
+    // The history subscription opened on the clone resolves memory for the same caller.
+    const cloneSubscription = subscribe.mock.calls.find(([opts]) => opts.threadId === 'c');
+    expect(cloneSubscription?.[0].requestContext?.get('user')).toEqual({ id: 'user-1' });
   });
 
   it('uses the raw memory storage clone when configured memory is absent', async () => {
