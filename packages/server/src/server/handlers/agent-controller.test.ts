@@ -262,7 +262,7 @@ describe('agent-controller routes', () => {
         const session = await getRouteSession(`user-bg-${name}`);
         const failure = new Error('signal failed before stream started');
         vi.spyOn(session, method as any).mockRejectedValue(failure);
-        vi.spyOn(session, 'canRespondToToolSuspension').mockReturnValue({ accepted: true });
+        vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
         const errorLog = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
 
         const events: any[] = [];
@@ -440,7 +440,7 @@ describe('agent-controller routes', () => {
 
     it('forwards requestContext to session.respondToToolSuspension', async () => {
       const session = await getRouteSession('user-rc');
-      vi.spyOn(session, 'canRespondToToolSuspension').mockReturnValue({ accepted: true });
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
       const spy = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -458,7 +458,7 @@ describe('agent-controller routes', () => {
 
     it('acks a tool suspension without waiting for the resumed run to finish', async () => {
       const session = await getRouteSession('user-suspension-ack');
-      vi.spyOn(session, 'canRespondToToolSuspension').mockReturnValue({ accepted: true });
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
       vi.spyOn(session, 'respondToToolSuspension').mockReturnValue(new Promise<void>(() => {}));
 
       const result = await Promise.race([
@@ -534,6 +534,46 @@ describe('agent-controller routes', () => {
 
       expect(res).toEqual({ ok: false, reason: 'no_pending_suspension' });
       expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('acks only one of two concurrent answers to the same suspension', async () => {
+      const session = await getRouteSession('user-ack-race');
+      vi.spyOn(session.suspensions, 'resolveToolCallId').mockReturnValue('q-1');
+      let finish!: () => void;
+      const spy = vi
+        .spyOn(session, 'respondToToolSuspension')
+        .mockReturnValue(new Promise<void>(resolve => (finish = resolve)));
+      const answer = () =>
+        AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-ack-race',
+          toolCallId: 'q-1',
+          resumeData: 'Yes',
+        } as any);
+
+      const results = await Promise.all([answer(), answer()]);
+      expect(results).toEqual([{ ok: true }, { ok: false, reason: 'not_pending' }]);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      finish();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(session.claimToolResponse('q-1')).toBe(true);
+    });
+
+    it('acks only one of two concurrent answers to the same persisted approval', async () => {
+      const session = await getRouteSession('user-ack-persisted-race');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
+      const persisted = vi
+        .spyOn(session, 'respondToPersistedToolApproval')
+        .mockReturnValue(new Promise<void>(() => {}));
+
+      const results = await Promise.all([
+        approve('user-ack-persisted-race', 'restored'),
+        approve('user-ack-persisted-race', 'restored'),
+      ]);
+      expect(results).toEqual([{ ok: true }, { ok: false, reason: 'not_pending' }]);
+      expect(persisted).toHaveBeenCalledTimes(1);
     });
   });
 

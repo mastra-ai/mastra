@@ -4208,6 +4208,40 @@ export class Session<TState = unknown> {
     });
   }
 
+  /** Tool call ids whose response has been claimed and is still being applied. */
+  #claimedToolResponses = new Set<string>();
+
+  /**
+   * Claim the right to answer `toolCallId` so concurrent requests cannot both be
+   * acknowledged for the same pending target. Synchronous, so a caller that
+   * claims and then starts the response without awaiting in between is atomic.
+   * Pair with {@link releaseToolResponse} once the response settles.
+   */
+  claimToolResponse(toolCallId: string): boolean {
+    if (this.#claimedToolResponses.has(toolCallId)) return false;
+    this.#claimedToolResponses.add(toolCallId);
+    return true;
+  }
+
+  /** Release a claim taken with {@link claimToolResponse}. */
+  releaseToolResponse(toolCallId: string): void {
+    this.#claimedToolResponses.delete(toolCallId);
+  }
+
+  /**
+   * Claim the parked suspension a {@link respondToToolSuspension} call would
+   * resume. Returns the resolved tool call id, or a rejection when nothing is
+   * pending or another response already claimed it.
+   */
+  claimToolSuspension(
+    toolCallId?: string,
+  ): { accepted: true; toolCallId: string } | Extract<SessionCommandResult, { accepted: false }> {
+    const resolved = this.suspensions.resolveToolCallId(toolCallId);
+    if (!resolved) return { accepted: false, reason: 'no_pending_suspension' };
+    if (!this.claimToolResponse(resolved)) return { accepted: false, reason: 'not_pending' };
+    return { accepted: true, toolCallId: resolved };
+  }
+
   /**
    * Respond to a pending tool suspension. Provides resume data so the suspended
    * tool can continue. `toolCallId` selects which suspended tool to resume —
@@ -4215,13 +4249,6 @@ export class Session<TState = unknown> {
    * resolves to the sole pending suspension. `submit_plan` resumes are routed
    * through the plan-approval path (approval switches to the default mode).
    */
-  /** Whether a {@link respondToToolSuspension} call for `toolCallId` would be claimed by a parked suspension. */
-  canRespondToToolSuspension(toolCallId?: string): SessionCommandResult {
-    return this.suspensions.resolveToolCallId(toolCallId)
-      ? { accepted: true }
-      : { accepted: false, reason: 'no_pending_suspension' };
-  }
-
   async respondToToolSuspension({
     resumeData,
     toolCallId,

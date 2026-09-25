@@ -696,9 +696,13 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       } else {
         if (!(await session.hasPersistedToolApproval(toolCallId))) return { ok: false, reason: 'not_pending' };
         // Nothing parked for this call (e.g. a card restored from history after a
-        // restart): resume the stored suspended run that owns it.
+        // restart): resume the stored suspended run that owns it. Claim synchronously
+        // after the lookup so a concurrent duplicate decision is rejected.
+        if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' };
         ackBackgroundSessionWork({
-          work: session.respondToPersistedToolApproval({ toolCallId, approved, requestContext }),
+          work: session
+            .respondToPersistedToolApproval({ toolCallId, approved, requestContext })
+            .finally(() => session.releaseToolResponse(toolCallId)),
           session,
           mastra,
           operation: 'respondToPersistedToolApproval',
@@ -732,10 +736,15 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // A resumed tool drives the run to its next terminal or suspension boundary.
       // Awaiting it holds this request open until the continuation finishes, which
       // can trip the request timeout and leave CORS mutating an already-sent response.
-      const claim = session.canRespondToToolSuspension(toolCallId);
+      // Claim the parked suspension before acking so a concurrent duplicate answer
+      // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
+      const claim = session.claimToolSuspension(toolCallId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
+      const claimedToolCallId = claim.toolCallId;
       ackBackgroundSessionWork({
-        work: session.respondToToolSuspension({ toolCallId, resumeData, requestContext }),
+        work: session
+          .respondToToolSuspension({ toolCallId, resumeData, requestContext })
+          .finally(() => session.releaseToolResponse(claimedToolCallId)),
         session,
         mastra,
         operation: 'respondToToolSuspension',
