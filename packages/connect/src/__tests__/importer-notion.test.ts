@@ -458,7 +458,7 @@ describe('notion importer', () => {
     expect(await state.get('notion:watermark')).toBe(JSON.stringify({ watermark: '2026-09-01T00:00:00Z' }));
   });
 
-  it('stops block pagination at the per-entity cap', async () => {
+  it('stops block fetching at the per-entity request budget', async () => {
     const harness = makeContext();
     const { ctx, importer, state } = harness;
     harness.queueSearch(searchResponse([{ id: 'p1', title: 'Alpha', lastEditedTime: '2026-09-01T00:00:00Z' }]));
@@ -467,20 +467,106 @@ describe('notion importer', () => {
       has_more: Boolean(next),
       next_cursor: next ?? null,
     });
-    // Endless pagination — the importer must stop after MAX_BLOCK_PAGES_PER_ENTITY fetches.
-    harness.queueBlocks(
-      'p1',
-      blockPage('one', 'c1'),
-      blockPage('two', 'c2'),
-      blockPage('three', 'c3'),
-      blockPage('four', 'c4'),
-    );
+    // Endless pagination — the importer must stop after MAX_BLOCK_REQUESTS_PER_ENTITY fetches.
+    const markers = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    harness.queueBlocks('p1', ...markers.map((marker, i) => blockPage(marker, `c${i + 1}`)));
     await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
 
-    expect(harness.blockCalls()).toHaveLength(3);
+    expect(harness.blockCalls()).toHaveLength(8);
     const record = [...importer.nodes.get('notion:page:p1')!.records.values()][0]!;
-    expect(record.text).toContain('three');
-    expect(record.text).not.toContain('four');
+    expect(record.text).toContain('eight');
+    expect(record.text).not.toContain('nine');
+  });
+
+  it('descends into nested blocks and keeps document order', async () => {
+    const harness = makeContext();
+    const { ctx, importer, state } = harness;
+    harness.queueSearch(searchResponse([{ id: 'p1', title: 'Alpha', lastEditedTime: '2026-09-01T00:00:00Z' }]));
+    harness.queueBlocks('p1', {
+      results: [
+        {
+          type: 'column_list',
+          id: 'cl1',
+          has_children: true,
+          column_list: {},
+        },
+        { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'after columns' }] } },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+    harness.queueBlocks('cl1', {
+      results: [{ type: 'column', id: 'col1', has_children: true, column: {} }],
+      has_more: false,
+      next_cursor: null,
+    });
+    harness.queueBlocks('col1', {
+      results: [{ type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'inside a column' }] } }],
+      has_more: false,
+      next_cursor: null,
+    });
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('notion:page:p1')!.records.values()][0]!;
+    expect(record.text.indexOf('inside a column')).toBeGreaterThan(-1);
+    expect(record.text.indexOf('inside a column')).toBeLessThan(record.text.indexOf('after columns'));
+  });
+
+  it('does not descend into child_page blocks', async () => {
+    const harness = makeContext();
+    const { ctx, importer, state } = harness;
+    harness.queueSearch(searchResponse([{ id: 'p1', title: 'Alpha', lastEditedTime: '2026-09-01T00:00:00Z' }]));
+    harness.queueBlocks('p1', {
+      results: [
+        { type: 'child_page', id: 'cp1', has_children: true, child_page: { title: 'Sub page' } },
+        { type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'own body' }] } },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+    harness.queueBlocks('cp1', {
+      results: [{ type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'sub page body' }] } }],
+      has_more: false,
+      next_cursor: null,
+    });
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('notion:page:p1')!.records.values()][0]!;
+    expect(record.text).toContain('own body');
+    expect(record.text).not.toContain('sub page body');
+    // Only the page itself was fetched — the child page's blocks were never requested.
+    expect(harness.blockCalls().map(call => call.path)).toEqual(['v1/blocks/p1/children']);
+  });
+
+  it('extracts text from code, to_do, and table_row blocks', async () => {
+    const harness = makeContext();
+    const { ctx, importer, state } = harness;
+    harness.queueSearch(searchResponse([{ id: 'p1', title: 'Alpha', lastEditedTime: '2026-09-01T00:00:00Z' }]));
+    harness.queueBlocks('p1', {
+      results: [
+        { type: 'code', code: { rich_text: [{ plain_text: 'const x = 1;' }], language: 'typescript' } },
+        { type: 'to_do', to_do: { rich_text: [{ plain_text: 'ship the fix' }], checked: false } },
+        { type: 'table', id: 't1', has_children: true, table: { table_width: 2 } },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+    harness.queueBlocks('t1', {
+      results: [
+        {
+          type: 'table_row',
+          table_row: { cells: [[{ plain_text: 'Owner' }], [{ plain_text: 'Charlie' }]] },
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('notion:page:p1')!.records.values()][0]!;
+    expect(record.text).toContain('const x = 1;');
+    expect(record.text).toContain('ship the fix');
+    expect(record.text).toContain('OwnerCharlie');
   });
 
   it('a link change alone produces a new content-hash record and removes the stale one', async () => {

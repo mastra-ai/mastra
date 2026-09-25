@@ -25,8 +25,11 @@ const NOTION_WATERMARK_KEY = 'notion:watermark';
 const NOTION_RESUME_CURSOR_KEY = 'notion:resume-cursor';
 const NOTION_HIGH_WATER_KEY = 'notion:high-water';
 
-/** Maximum block-children pages fetched per Notion page per run (≤300 blocks). */
-export const MAX_BLOCK_PAGES_PER_ENTITY = 3;
+/** Maximum block-children requests per Notion page per run (≤100 blocks each), shared across nesting levels. */
+export const MAX_BLOCK_REQUESTS_PER_ENTITY = 8;
+
+/** Maximum nesting depth followed into `has_children` blocks (columns, toggles, tables, …). */
+const MAX_BLOCK_DEPTH = 3;
 
 const richTextItemSchema = z.object({
   plain_text: z.string().default(''),
@@ -143,6 +146,8 @@ const blockRichTextItemSchema = z
 const blockSchema = z
   .object({
     type: z.string(),
+    id: z.string().nullish(),
+    has_children: z.boolean().nullish(),
     link_to_page: z
       .object({
         type: z.string().nullish(),
@@ -173,7 +178,13 @@ const TEXT_BLOCK_TYPES = new Set([
   'quote',
   'callout',
   'toggle',
+  'to_do',
+  'code',
+  'table_row',
 ]);
+
+/** Blocks whose children are separate entities (or opaque) — never descended into. */
+const NO_RECURSE_BLOCK_TYPES = new Set(['child_page', 'child_database', 'unsupported']);
 
 /** notion.so URL carrying a 32-hex-char page/database id (dashes optional). */
 const NOTION_URL_ID_PATTERN =
@@ -186,17 +197,26 @@ function normalizeNotionId(id: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function richTextItems(block: NotionBlock): z.infer<typeof blockRichTextItemSchema>[] {
-  const payload = (block as Record<string, unknown>)[block.type];
-  if (!payload || typeof payload !== 'object') return [];
-  const richText = (payload as Record<string, unknown>).rich_text;
-  if (!Array.isArray(richText)) return [];
+function parseRichTextArray(raw: unknown): z.infer<typeof blockRichTextItemSchema>[] {
+  if (!Array.isArray(raw)) return [];
   const items: z.infer<typeof blockRichTextItemSchema>[] = [];
-  for (const raw of richText) {
-    const parsed = blockRichTextItemSchema.safeParse(raw);
+  for (const item of raw) {
+    const parsed = blockRichTextItemSchema.safeParse(item);
     if (parsed.success) items.push(parsed.data);
   }
   return items;
+}
+
+function richTextItems(block: NotionBlock): z.infer<typeof blockRichTextItemSchema>[] {
+  const payload = (block as Record<string, unknown>)[block.type];
+  if (!payload || typeof payload !== 'object') return [];
+  if (block.type === 'table_row') {
+    // Table rows carry `cells: RichText[][]` instead of `rich_text`.
+    const cells = (payload as Record<string, unknown>).cells;
+    if (!Array.isArray(cells)) return [];
+    return cells.flatMap(cell => parseRichTextArray(cell));
+  }
+  return parseRichTextArray((payload as Record<string, unknown>).rich_text);
 }
 
 interface BlockExtraction {
@@ -242,10 +262,12 @@ function extractFromBlocks(blocks: readonly NotionBlock[]): BlockExtraction {
 }
 
 /**
- * Bounded block-children fetch for one page. Follows `next_cursor` up to
- * `MAX_BLOCK_PAGES_PER_ENTITY` pages (no recursion into nested blocks).
- * Returns `undefined` on any fetch/parse failure — the caller degrades
- * per-page instead of failing the run.
+ * Bounded block fetch for one page: a depth-first walk that descends into
+ * `has_children` blocks (columns, toggles, tables, …) so nested content is
+ * captured. Bounded by a shared request budget (`MAX_BLOCK_REQUESTS_PER_ENTITY`)
+ * and `MAX_BLOCK_DEPTH`; blocks are returned in document order. Returns
+ * `undefined` on any fetch/parse failure — the caller degrades per-page
+ * instead of failing the run.
  */
 async function fetchPageBlocks(
   ctx: ImporterProviderContext,
@@ -253,19 +275,28 @@ async function fetchPageBlocks(
   signal: AbortSignal,
 ): Promise<NotionBlock[] | undefined> {
   const blocks: NotionBlock[] = [];
-  let cursor: string | undefined;
-  try {
-    for (let fetchIndex = 0; fetchIndex < MAX_BLOCK_PAGES_PER_ENTITY; fetchIndex++) {
-      if (signal.aborted) break;
+  let requestsUsed = 0;
+  const fetchChildren = async (blockId: string, depth: number): Promise<void> => {
+    let cursor: string | undefined;
+    do {
+      if (signal.aborted || requestsUsed >= MAX_BLOCK_REQUESTS_PER_ENTITY) return;
+      requestsUsed++;
       const query: Record<string, string | number> = { page_size: 100 };
       if (cursor) query.start_cursor = cursor;
       const parsed = blockChildrenResponseSchema.parse(
-        await ctx.request({ method: 'GET', path: `v1/blocks/${pageId}/children`, query }),
+        await ctx.request({ method: 'GET', path: `v1/blocks/${blockId}/children`, query }),
       );
-      blocks.push(...parsed.results);
-      if (!parsed.has_more || !parsed.next_cursor) break;
-      cursor = parsed.next_cursor;
-    }
+      for (const block of parsed.results) {
+        blocks.push(block);
+        if (block.has_children && block.id && depth < MAX_BLOCK_DEPTH && !NO_RECURSE_BLOCK_TYPES.has(block.type)) {
+          await fetchChildren(block.id, depth + 1);
+        }
+      }
+      cursor = parsed.has_more && parsed.next_cursor ? parsed.next_cursor : undefined;
+    } while (cursor);
+  };
+  try {
+    await fetchChildren(pageId, 0);
     return blocks;
   } catch {
     return undefined;
