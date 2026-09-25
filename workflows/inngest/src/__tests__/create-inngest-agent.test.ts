@@ -383,6 +383,62 @@ describe('createInngestAgent observe-replay wiring', () => {
     );
   });
 
+  it('publishes the real message when the failed result carries a serialized error (#25161)', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-serialized-error'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    // Step failures reach the workflow result as plain SerializedError objects (formatResultError → toJSON()).
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: { name: 'Error', message: 'step output size is greater than the limit' },
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-serialized-error-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow('Workflow failed');
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
+    }
+
+    expect(customPublish).toHaveBeenCalledOnce();
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({
+        type: AgentStreamEventTypes.ERROR,
+        runId,
+        data: { error: expect.objectContaining({ message: 'step output size is greater than the limit' }) },
+      }),
+      undefined,
+    );
+  });
+
   it('should receive both cached and live events', async () => {
     const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-mixed'), inngest });
     swapInnerToInProcess(durableAgent);
