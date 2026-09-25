@@ -166,6 +166,11 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
     values = rawValues.map(Number).filter(value => !Number.isNaN(value));
     if (!values.length && !isPresence) return undefined;
   }
+  if (operatorId === 'matches' || operatorId === 'notMatches') {
+    // The query rejects a text literal with no letters or digits; drop it like non-numeric input.
+    values = values.filter(value => /[\p{L}\p{N}]/u.test(String(value)));
+    if (!values.length) return undefined;
+  }
 
   const { scope, path } = resolveTraceQueryPath(fieldId);
   const isMetadata = fieldId.startsWith('metadata.');
