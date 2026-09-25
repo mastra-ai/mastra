@@ -1047,6 +1047,47 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given a deployment API key serves incident.io without Platform connections', () => {
+    it('keeps the section usable for source selection and routing', async () => {
+      seedFactories();
+      useIntakeHandlers({
+        config: { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+      });
+      // The ambient platform-connections 404 stands in for a server without
+      // Platform credentials; only the direct status route answers.
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
+          HttpResponse.json({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' }),
+        ),
+        http.get(INTAKE_SOURCES_URL, () =>
+          HttpResponse.json({
+            sources: [
+              {
+                integrationId: 'incidentio',
+                id: 'incidentio-source:follow-ups',
+                name: 'Incident follow-ups (acme)',
+                type: 'follow-up',
+              },
+            ],
+            failures: [],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io follow-ups' });
+      expect(within(section).getByText('incident.io API key configured on this server')).toBeInTheDocument();
+      expect(within(section).queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
+      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
+      expect(toggle).toBeChecked();
+      expect(toggle).toBeEnabled();
+      expect(await within(section).findByRole('checkbox', { name: 'Incident follow-ups (acme)' })).toBeChecked();
+      // Routing stays reachable so the source can feed a Factory board.
+      expect(await screen.findByLabelText('Factory for Incident follow-ups (acme)')).toBeInTheDocument();
+    });
+  });
+
   describe('given the server omits unregistered integrations', () => {
     // The server returns a dynamic map keyed by integration id and drops keys
     // for integrations that aren't registered, so the config can arrive as `{}`.
