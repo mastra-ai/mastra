@@ -7,6 +7,7 @@ import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
+import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
 import { FactorySetupSection } from './FactorySetupSection';
@@ -57,12 +58,19 @@ export function RepositoriesSection() {
                   size="sm"
                 />
               ) : (
-                <ProviderConnectControl
-                  provider="gitlab"
-                  label={gitlabStatus.configured ? 'Connect another GitLab account' : 'Connect GitLab'}
-                  size="sm"
-                  variant={gitlabStatus.configured ? 'ghost' : 'default'}
-                />
+                <>
+                  {gitlabStatus.configured && (
+                    <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" size="sm">
+                      Manage GitLab connection
+                    </Button>
+                  )}
+                  <ProviderConnectControl
+                    provider="gitlab"
+                    label={gitlabStatus.configured ? 'Connect another GitLab account' : 'Connect GitLab'}
+                    size="sm"
+                    variant={gitlabStatus.configured ? 'ghost' : 'default'}
+                  />
+                </>
               ))}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
               <span className="text-meta text-muted-foreground">

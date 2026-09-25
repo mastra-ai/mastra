@@ -162,6 +162,10 @@ export function EmptyFactoryState() {
                   size="sm"
                   onClick={() => goBack(previousStep, step)}
                   aria-label="Go back to previous step"
+                  // A pending chooseRepository run ends with goTo('project-management');
+                  // letting Back fire mid-flight would move the user forward again
+                  // right after they chose to go back.
+                  disabled={createFactory.isPending || linkRepository.isPending}
                 >
                   <ArrowLeft aria-hidden="true" />
                   Back

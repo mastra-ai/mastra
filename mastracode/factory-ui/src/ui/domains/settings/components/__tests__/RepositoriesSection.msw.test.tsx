@@ -136,7 +136,8 @@ describe('Repositories settings', () => {
     const connectAnother = screen.getByRole('button', { name: 'Connect another GitLab account' });
     expect(connectAnother).toBeInTheDocument();
     expect(connectAnother.tagName).toBe('BUTTON');
-    expect(screen.queryByRole('link', { name: /GitLab/i })).not.toBeInTheDocument();
+    const manage = screen.getByRole('link', { name: 'Manage GitLab connection' });
+    expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
 });
