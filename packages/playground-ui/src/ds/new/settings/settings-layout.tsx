@@ -26,7 +26,7 @@ export function SettingsLayout({
       children
     ) : (
       <div data-slot="settings-layout-content" className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-5">
-        <div className="min-w-0 space-y-8">{children}</div>
+        <div className="flex min-w-0 flex-col gap-8">{children}</div>
       </div>
     );
   }
@@ -63,7 +63,7 @@ export function SettingsLayout({
           data-slot="settings-layout-content"
           className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-5"
         >
-          <div className="min-w-0 space-y-6">{children}</div>
+          <div className="flex min-w-0 flex-col gap-6">{children}</div>
         </div>
       )}
     </>
