@@ -238,7 +238,7 @@ describe('EnvironmentVariablesEditor', () => {
     };
 
     const own = render(<Bare />);
-    expect((own.container.firstElementChild as HTMLElement).classList.contains('gap-3')).toBe(true);
+    expect(own.container.firstElementChild?.classList.contains('gap-3')).toBe(true);
 
     cleanup();
 
@@ -248,7 +248,7 @@ describe('EnvironmentVariablesEditor', () => {
       </Bare>,
     );
 
-    expect((composed.container.firstElementChild as HTMLElement).classList.contains('gap-3')).toBe(false);
+    expect(composed.container.firstElementChild?.classList.contains('gap-3')).toBe(false);
   });
 
   it('gathers the caller’s actions into a row of their own', () => {
