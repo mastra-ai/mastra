@@ -24,6 +24,7 @@ import {
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
+import { takeUnreportedStepContent } from './shared/unreported-step-content';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
@@ -406,11 +407,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     const state: MainLoopIterationState<StepResult<Tools>> = {
       // Steps accumulated across iterations, passed to stopWhen
       accumulatedSteps: [],
-      // Keys of content parts already reported, per response message id. A step reports only
-      // parts whose keys are not in the set yet, and keys are never deleted. Memory processors
-      // (e.g. observational memory) can remove response messages between steps, bring them back,
-      // or a tool result can be replaced in place (A -> B -> A); keying by identity instead of
-      // position or count makes all of those report each distinct part exactly once.
+      // Content-part keys already reported, per response message id (see takeUnreportedStepContent).
       reportedPartKeys: new Map(),
       // When continue:false + feedback, allow one more LLM turn then stop
       pendingFeedbackStop: false,
@@ -473,25 +470,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       // Only include new content in this step (parts added since the previous iteration)
-      const contentByMessage = messageList.get.response.aiV5.modelContentByMessage();
-      const currentContent = contentByMessage.flatMap(({ id, content }) => {
-        let reported = state.reportedPartKeys.get(id);
-        if (!reported) {
-          reported = new Set();
-          state.reportedPartKeys.set(id, reported);
-        }
-        const seen = new Map<string, number>();
-        return content.filter(part => {
-          const identity = getStepPartIdentity(part);
-          // Ordinal keeps identical parts within one message distinct.
-          const ordinal = seen.get(identity) ?? 0;
-          seen.set(identity, ordinal + 1);
-          const key = `${identity}#${ordinal}`;
-          if (reported.has(key)) return false;
-          reported.add(key);
-          return true;
-        });
-      }) as StepResult<Tools>['content'];
+      const currentContent = takeUnreportedStepContent(
+        messageList,
+        state.reportedPartKeys,
+      ) as StepResult<Tools>['content'];
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
@@ -701,15 +683,4 @@ function unwrapToolResultOutput(output: unknown): unknown {
     default:
       return output;
   }
-}
-
-function getStepPartIdentity(part: object): string {
-  // Provider options carry bookkeeping (e.g. createdAt) that changes when a message is re-added,
-  // so they are not part of a part's identity.
-  const { providerOptions: _providerOptions, ...rest } = part as { providerOptions?: unknown; [key: string]: unknown };
-  if (typeof rest.toolCallId === 'string') {
-    const result = 'output' in rest ? rest.output : 'result' in rest ? rest.result : rest.input;
-    return JSON.stringify([rest.type, rest.toolCallId, result]);
-  }
-  return JSON.stringify(rest);
 }
