@@ -125,11 +125,24 @@ Do not hedge between the two — pick the verdict the evidence supports. When ge
 
 ## Phase 6: Handoff & Transition
 
-Before composing the handoff, call `factory_review_source` (no arguments) once. It returns the Factory session URL that produced this review, the GitHub author of the PR under review, and any Linear or Jira issue linked as the upstream source of this work. Every field is derived server-side from the bound work item — the session URL always points at this session — so the values are the ground-truth routing facts for this run. If the tool call fails or returns an unexpected shape, do **not** publish the review at all: the required Factory Session section can't be filled in with values that don't exist, and a review body without provenance can't be traced back to its run. Instead, stop after Phase 6, record the failure and the tool's raw response in the handoff under **Verification**, and hand off to a human — the transition step below is skipped in this failure mode.
+Before composing the handoff, call `factory_review_source` (no arguments) once. It returns three fields, every one derived server-side from the bound work item:
 
-Before drafting the handoff, sanity-check the tool's output against Phase 1. First compare `reviewTarget` with the PR you fetched via `gh pr view`: when `reviewTarget.url` is present it must match the PR's canonical URL, otherwise `reviewTarget.externalId` must identify the PR under review — the id is stored in a provider-scoped format, canonically `github-pr:<number>` (legacy items use `github:<repoId>:pull-request:<number>`), so compare the trailing pull-request number against the PR number from `gh pr view`, not the raw string against the bare number. Then compare `triggeredBy` with the `author` you read from `gh pr view` — but only when **both** values are known: a `null` or empty `triggeredBy` means the author was never recorded on the bound item, which is unknown, not a mismatch, so proceed and note `unknown` in the Factory Session section. If either comparison disagrees on two known values — for example, the tool reports one PR identity or author and the `gh pr view` output reports another — you are almost certainly reviewing a different PR than the one your session was bound to. Stop, record the mismatch as a blocking security finding with both values verbatim, and set the verdict to request changes; do not publish the review until the mismatch is either resolved by re-fetching Phase 1 or explicitly explained in the handoff.
+- `sessionUrl` — the Factory session URL that produced this review. This is the **only** field published on the PR (see the Factory Session block below); it is the value the audience uses to trace a suspicious review back to its run.
+- `triggeredBy` — the PR author recorded on the review card at intake. Do not publish this; it is an in-run cross-check input and a session-handoff entry only.
+- `reviewTarget` — the review card's own `{ integrationId, type, externalId, url }`. Do not publish this; it is an in-run cross-check input and a session-handoff entry only.
 
-First, compose the **review handoff** — don't send it to the conversation yet; it must be published on the PR and the transition requested before your final message. It **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
+If the tool call fails or returns an unexpected shape — **and identically if the tool is not offered on this session at all** (a review-role session with no configured browser-facing origin, no active binding, or no bound work item drops the tool from the toolset) — do **not** publish the review. The required Factory Session block can't be filled in with values that don't exist, and a review body without provenance can't be traced back to its run. Stop after Phase 6, record the tool's absence or failure and its raw response in the handoff under **Verification**, and hand off to a human — the transition step below is skipped in this failure mode.
+
+Before drafting the handoff, run the in-run cross-check against the tool's output:
+
+1. Compare `triggeredBy` with `.author.login` from your Phase 1 `gh pr view --json author` fetch. `gh pr view --json author` returns an object (`{login, name, id, is_bot}`), so the comparison must be against `.login`, matching what Phase 2 already does at `gh pr view --json reviews --jq '.reviews[] | {author: .author.login, …}'`. If the two disagree, you are almost certainly reviewing a different PR than the one your session was bound to.
+2. Compare `reviewTarget.url` with the `url` you resolve for the PR under review (typically `https://github.com/<owner>/<repo>/pull/<number>` from the Phase 1 PR). If `reviewTarget.url` is `null`, fall back to comparing `reviewTarget.externalId` — the GitHub PR externalId is the human-readable `github-pr:<number>` scoped by the bound repository, so a mismatch on it is proof of a wrong-target review.
+
+On any mismatch, stop, record it as a blocking security finding with both values verbatim, and set the verdict to request changes; do not publish the review until the mismatch is either resolved by re-fetching Phase 1 or explicitly explained in the handoff.
+
+Compose two artifacts, in order — the **published body** goes on the PR, the **session handoff** goes back into the run's conversation. Don't send either to the conversation yet; both are drafted here, the published body is sent to the PR, the transition is requested, and only then is the session handoff posted.
+
+The **published body** (what `gh pr review --body-file` receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
 
 - **Findings** — lead with the mechanism of the most consequential finding, then correctness, tests, scope, and pattern-consistency, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
 - **Approach** — the required outcome and the simplest sufficient design from your Phase 1 record, and whether the PR's approach and scope are justified against it. Agreement stated in one line; disagreement with the evidence that supports the alternative.
@@ -140,11 +153,13 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 - **Requested changes** — one entry per change (for a request-changes verdict), imperative and present tense: the file and line, the change, and the consequence or evidence in one or two sentences. Put the change that most affects correctness first; group changes that must land together or state their dependencies. No softened requests ("consider", "you might want to"), no optional or follow-up tiers, no pleasantries, nothing about the author. Preserve qualifications that express real limits of evidence — "the contract does not guarantee this field" must not become "servers never return this field".
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
-- **Factory Session** — the fields returned by `factory_review_source`, verbatim: the session URL as a link, the PR author reported by the tool, and any linked Linear or Jira issue URLs. This section is required for every verdict and every fallback (approve, request changes, comment fallback) so a suspicious review — one that lands on the wrong PR, or approves and requests changes at once — can always be traced back to the run that produced it.
+- **Factory Session** — `sessionUrl` from `factory_review_source`, verbatim, as a link. **Nothing else in this block.** `triggeredBy` and `reviewTarget` are cross-check inputs for the run and go in the session handoff below; they are never published on the PR. This section is required for every verdict and every fallback (approve, request changes, comment fallback) so a suspicious review — one that lands on the wrong PR, or approves and requests changes at once — can always be traced back to the run that produced it.
 
-End the handoff with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
+End the published body with `Review runtime: <model>, reasoning setting: <reasoning>.`, copying both values verbatim from the current `factory-phase` signal.
 
-Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-review/pr-<number>.md` and submit a PR review matching the verdict:
+The **session handoff** (posted as the final conversation message after the transition) mirrors the published body and additionally records the routing facts that must not appear on the PR: append a **Factory routing** block with `triggeredBy` verbatim, `reviewTarget` verbatim (`integrationId`, `type`, `externalId`, `url`), and the cross-check outcome — "matched" with the compared value from Phase 1, or "mismatch: <blocking-finding-ref>" if the check produced the blocking security finding above.
+
+Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the published body to `.artifacts/factory-review/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
@@ -166,7 +181,7 @@ Then make your terminal `factory_transition_work_item` call. Take the current st
 
 `rationale` (max 1000 chars) — one or two sentences: review complete, verdict, and the headline reason.
 
-The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, re-examine contested findings, re-review if the PR changed), and retry once corrected. Once the transition succeeds, post the handoff as your final conversation message — including how the verdict was published — and stop.
+The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, re-examine contested findings, re-review if the PR changed), and retry once corrected. Once the transition succeeds, post the **session handoff** (the published body plus the `Factory routing` block) as your final conversation message — including how the verdict was published — and stop.
 
 ## Behavior Rules
 

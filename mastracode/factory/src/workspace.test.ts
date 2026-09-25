@@ -511,7 +511,8 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('Never resolve the conflicts yourself');
     // Terminal ordering: publish the verdict and transition before the final
     // conversation message, so the pass can't stop early with an unpublished review.
-    expect(review).toContain('post the handoff as your final conversation message');
+    expect(review).toContain('post the **session handoff**');
+    expect(review).toContain('as your final conversation message');
     // Rigor: approval requires every gate affirmatively demonstrated, and the
     // reviewer waits for pending bot reviews before forming a verdict.
     expect(review).toContain('Approval gates');
@@ -569,11 +570,12 @@ describe('bundled Factory skill assets', () => {
     // publish the verdict on the PR, request the transition, and only then send
     // the final conversation message.
     inOrder(
-      "don't send it to the conversation yet",
+      "Don't send either to the conversation yet",
       'gh pr review <number> --approve --body-file',
       'gh pr review <number> --request-changes --body-file',
       'Then make your terminal `factory_transition_work_item` call',
-      'post the handoff as your final conversation message',
+      'post the **session handoff**',
+      'as your final conversation message',
     );
 
     // Every approval gate lives inside the gates block, while issue context and

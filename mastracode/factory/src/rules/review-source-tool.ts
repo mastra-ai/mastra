@@ -7,23 +7,27 @@ import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-item
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 
-/**
- * Public Linear/Jira issue URL shapes we detect when walking parent work items.
- * The shapes are conservative — matching only what our own integrations record
- * — so a URL parsed out of freeform PR text can never spoof a linked issue.
- */
-const LINEAR_ISSUE_URL_RE = /^https:\/\/linear\.app\/[^/]+\/issue\/[^/]+\/[^/?#]+/i;
-const JIRA_ISSUE_URL_RE = /^https:\/\/[^/]+\.atlassian\.net\/browse\/[A-Z][A-Z0-9_]+-\d+/i;
-
 export interface ReviewSourceOutput {
+  /**
+   * Browser-facing deep-link back to the Factory session that produced this
+   * review — the only field a review body publishes. Everything else on this
+   * shape is an input to in-run cross-checks and the session handoff, never a
+   * published field, so the GitHub/GitLab audience never sees the upstream
+   * Linear/Jira slug through the review comment.
+   */
   sessionUrl: string;
+  /**
+   * PR/MR author recorded on the review card at intake — for GitHub this is
+   * `pullRequest.user.login`, for GitLab it is the GitLab username. The skill
+   * cross-checks it against `gh pr view --json author` (`.author.login`) or
+   * the equivalent MR fetch; a mismatch means the session is bound to a
+   * different PR/MR than the one being reviewed.
+   */
   triggeredBy: string | null;
   /**
-   * The change request this review session is bound to, straight from the
-   * work item's `externalSource`. Review skills compare this identity (the
-   * canonical URL when present, otherwise provider + external id) against the
-   * PR/MR they fetched in Phase 1 so that two requests by the same author can
-   * never be conflated. `null` when the bound item records no external source.
+   * The externalSource recorded on the review card itself — the PR/MR the
+   * session was intake-bound to. The skill cross-checks the reviewed PR/MR
+   * against this shape so a review can never quietly land on the wrong target.
    */
   reviewTarget: {
     integrationId: string;
@@ -31,37 +35,49 @@ export interface ReviewSourceOutput {
     externalId: string;
     url: string | null;
   } | null;
-  linkedIssues: { source: 'linear' | 'jira'; url: string }[];
 }
 
 /**
  * `factory_review_source` — read the routing facts behind the current review
- * session (session deep-link, PR author, any linked upstream issue) so the
- * review agent can attribute its verdict to a concrete originating run.
+ * session (session deep-link, PR/MR author, the review target) so the review
+ * agent can attribute its verdict to a concrete originating run and detect a
+ * mis-targeted review before it publishes.
  *
- * The tool exists to make cross-PR misattribution detectable after the fact:
- * a review lands on GitHub with the Factory session URL that produced it, and
- * the human who investigates a suspicious review can jump straight to the run.
+ * The tool exists to make cross-PR misattribution detectable both in-run and
+ * after the fact: a review lands on GitHub/GitLab with the Factory session URL
+ * that produced it, and the human who investigates a suspicious review can
+ * jump straight to the run.
  *
  * All fields are derived server-side from the bound work item — nothing enters
  * from the agent's tool arguments — so the session URL always points at the
  * caller's own session, never one it was asked to name.
+ *
+ * The tool is intentionally omitted (returns `{}`) whenever it cannot produce
+ * a complete, correct provenance shape: no resolvable session address, no
+ * active binding, a non-review-role binding, no bound work item, or no
+ * configured browser-facing UI origin. Skills treat tool-absent identically to
+ * tool-failed: stop-don't-publish.
  */
 export async function createReviewSourceTool(options: {
   requestContext: RequestContext;
   storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'findActiveRunBinding' | 'get'>;
   sessions?: FactorySessionSourceLookup;
   /**
-   * Public origin the Factory web UI is served from, no trailing slash.
-   * In a separate-SPA deployment (API host distinct from UI host) this is the
-   * UI host — the browser-facing origin the emitted session link opens in.
-   * `MastraFactoryConfig.publicUrl` is the API origin and must not be used
-   * here; the caller resolves the UI origin (see `factory.ts`) via the
-   * `MASTRACODE_PUBLIC_URL` env var, falling back to the API origin only
-   * when a single origin serves both.
+   * Browser-facing UI origin, no trailing slash. In a separate-SPA deployment
+   * (API host distinct from UI host) this is the UI host — the origin the
+   * emitted session link opens in. `MastraFactoryConfig.publicUrl` is the API
+   * origin and must not be used here; the caller resolves the UI origin (see
+   * `factory.ts`) via the `MASTRACODE_PUBLIC_URL` env var.
+   *
+   * `null` means no browser-facing origin is configured. Match the Slack
+   * session-link surface (`integrations/slack/slack.ts:168-171`, `:809-812`),
+   * which omits the deep-link entirely rather than publishing an API/localhost
+   * URL into a public body: the tool is dropped from the toolset, and the
+   * skill's tool-not-available branch stops publication.
    */
-  uiOrigin: string;
+  uiOrigin: string | null;
 }): Promise<IntegrationTools> {
+  if (options.uiOrigin === null) return {};
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
     storage: options.storage,
@@ -85,25 +101,19 @@ export async function createReviewSourceTool(options: {
   });
   const triggeredBy = readPullRequestAuthor(item);
   const reviewTarget = readReviewTarget(item);
-
-  // The parent walk runs inside `execute` so a `storage.get` failure surfaces
-  // on the tool call the agent made, not on tool registration (which would
-  // silently drop the whole tool from this session and every other tool
-  // registered in the same batch). The pre-fetched `item` and `binding` are
-  // safe to close over — they were resolved above from data the request
-  // context guarantees is present for a review-role session.
-  const storage = options.storage;
+  // Every field is pre-resolved server-side and returned as a plain object.
+  // The tool takes no arguments and does no further I/O, so a review-role
+  // session either sees a complete provenance shape or the tool is absent —
+  // the skill treats those branches identically (stop-don't-publish).
+  const output: ReviewSourceOutput = { sessionUrl, triggeredBy, reviewTarget };
 
   return {
     factory_review_source: createTool({
       id: 'factory_review_source',
       description:
-        'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the author of the change request under review (when known), the bound change-request identity (provider, external id, canonical URL), and any Linear or Jira issue linked as the source of this work. Compare the bound identity against the PR/MR you are reviewing, and include the session URL in every review comment or verdict you publish so misattributed reviews can be traced back to their originating session.',
+        'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the PR/MR author recorded on the review card, and the review target (the PR/MR the session was intake-bound to). Publish the session URL in the required `Factory Session` block of every review body so a misattributed review can always be traced back to the run that produced it. Cross-check `triggeredBy` and `reviewTarget` against the PR/MR you fetched in Phase 1; do not publish the `triggeredBy` or `reviewTarget` fields.',
       inputSchema: z.object({}),
-      execute: async (): Promise<ReviewSourceOutput> => {
-        const linkedIssues = await collectLinkedIssues(item, storage);
-        return { sessionUrl, triggeredBy, reviewTarget, linkedIssues };
-      },
+      execute: async (): Promise<ReviewSourceOutput> => output,
     }),
   };
 }
@@ -135,52 +145,4 @@ function readPullRequestAuthor(item: WorkItemRow): string | null {
   const author = metadata.author;
   if (typeof author === 'string' && author.trim()) return author.trim();
   return null;
-}
-
-/**
- * Walk from the review card up its parent chain, collecting the URL of any
- * work item sourced from Linear or Jira. The chain is bounded (a review card
- * points at its authoring work item, which may point at a triage/parent) and
- * capped defensively so a malformed cycle can never spin the loop.
- *
- * A `storage.get` failure while resolving a parent is **not** swallowed:
- * returning an empty or partial `linkedIssues` list on a lookup error would
- * make the published review say "no linked issue" for a review that simply
- * couldn't be resolved. Instead, the error propagates to `execute` and the
- * tool call fails — the skill's failure branch stops publication rather than
- * publishing a review body missing provenance the tool could have surfaced.
- * Normal termination (no more parents, or a parent we've already seen) still
- * returns the results collected so far.
- */
-async function collectLinkedIssues(
-  reviewItem: WorkItemRow,
-  storage: Pick<WorkItemsStorage, 'get'>,
-): Promise<ReviewSourceOutput['linkedIssues']> {
-  const results: ReviewSourceOutput['linkedIssues'] = [];
-  const seen = new Set<string>([reviewItem.id]);
-  let cursor: WorkItemRow | null = reviewItem;
-  let hops = 0;
-  const MAX_HOPS = 4;
-
-  while (cursor && hops < MAX_HOPS) {
-    const source = cursor.externalSource;
-    if (source?.integrationId === 'linear' && typeof source.url === 'string' && LINEAR_ISSUE_URL_RE.test(source.url)) {
-      results.push({ source: 'linear', url: source.url });
-    } else if (
-      source?.integrationId === 'jira' &&
-      typeof source.url === 'string' &&
-      JIRA_ISSUE_URL_RE.test(source.url)
-    ) {
-      results.push({ source: 'jira', url: source.url });
-    }
-    const parentId = cursor.parentWorkItemId;
-    if (!parentId || seen.has(parentId)) break;
-    seen.add(parentId);
-    // No try/catch here: a storage error surfaces to the tool caller so the
-    // skill's failure branch can stop publication rather than silently
-    // dropping linked-issue provenance the review body should have carried.
-    cursor = await storage.get({ orgId: cursor.orgId, id: parentId });
-    hops += 1;
-  }
-  return results;
 }

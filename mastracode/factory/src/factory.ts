@@ -1045,13 +1045,17 @@ export class MastraFactory {
                   // that lands on the wrong PR) be traced back to its run.
                   //
                   // The session URL is browser-facing (a human opens it from a
-                  // GitHub review comment), so it needs the UI host. In a
+                  // GitHub/GitLab review comment), so it needs the UI host —
+                  // the same origin Slack session deep-links resolve against
+                  // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
                   // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
-                  // is the API host; the UI lives at `MASTRACODE_PUBLIC_URL`,
-                  // the same origin Slack session deep-links resolve against.
-                  // Fall back to `publicOrigin` only when the two coincide.
-                  const uiOriginEnv = process.env.MASTRACODE_PUBLIC_URL?.trim();
-                  const reviewSourceUiOrigin = (uiOriginEnv || publicOrigin).replace(/\/+$/, '');
+                  // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
+                  // mirror Slack's behavior: when it is unset, pass `null` so
+                  // the tool is omitted from the toolset rather than fall back
+                  // to the API/localhost origin and publish that URL into a
+                  // public review body. The skill's tool-not-available branch
+                  // handles the absence as stop-don't-publish.
+                  const reviewSourceUiOrigin = process.env.MASTRACODE_PUBLIC_URL?.replace(/\/+$/, '') ?? null;
                   mergeTools(
                     'factory-review-source',
                     await createReviewSourceTool({
