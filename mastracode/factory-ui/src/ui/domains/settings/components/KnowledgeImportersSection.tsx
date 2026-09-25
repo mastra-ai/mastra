@@ -109,7 +109,7 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
         <Txt as="span" variant="meta" className="text-muted-foreground">
           Couldn't load sync destinations.
         </Txt>
-        <Button size="xs" variant="ghost" onClick={() => void routingQuery.refetch()}>
+        <Button size="sm" variant="ghost" onClick={() => void routingQuery.refetch()}>
           Retry
         </Button>
       </span>
@@ -160,7 +160,7 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
 
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger size="xs" variant="ghost" aria-label={`Sync to: ${summary}`}>
+      <DropdownMenu.Trigger size="sm" variant="ghost" aria-label={`Sync to: ${summary}`}>
         <Txt as="span" variant="meta" className="text-muted-foreground">
           Sync to
         </Txt>
@@ -231,7 +231,7 @@ function ConnectionRow({
       </span>
       <span className="flex shrink-0 items-center gap-1">
         {needsReauth ? (
-          <ProviderConnectControl provider={provider} reconnectConnectionId={connection.id} label="Reconnect" size="xs" />
+          <ProviderConnectControl provider={provider} reconnectConnectionId={connection.id} label="Reconnect" size="sm" />
         ) : (
           <RoutingMenu provider={provider} connectionId={connection.id} />
         )}
@@ -285,7 +285,7 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           <ProviderConnectControl
             provider={provider}
             label={`Connect ${meta.displayName}`}
-            size="xs"
+            size="sm"
             onCompleted={startFirstSync}
           />
         )}
@@ -304,7 +304,7 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           <Txt as="span" variant="meta" className="text-muted-foreground">
             Couldn't load connections.
           </Txt>
-          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+          <Button size="sm" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
             Retry
           </Button>
         </div>

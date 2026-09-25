@@ -106,7 +106,7 @@ function ImportRunDetail({
             <Txt as="h3" variant="heading" className="text-foreground font-semibold">
               {run.importerId}
             </Txt>
-            <Badge size="xs">{run.status}</Badge>
+            <Badge size="sm">{run.status}</Badge>
           </div>
           <Txt as="p" variant="caption" className="text-muted-foreground mt-1">
             {run.source ?? 'Private source'} · {run.triggerKind} · {elapsed(run)}
@@ -167,7 +167,7 @@ function ImportRunDetail({
               {transcript.messages.map(message => (
                 <li key={message.id} className="border-border bg-fill rounded-md border p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <Badge size="xs">{message.role}</Badge>
+                    <Badge size="sm">{message.role}</Badge>
                     <time className="text-muted-foreground text-xs" dateTime={message.createdAt}>
                       {new Date(message.createdAt).toLocaleString()}
                     </time>
@@ -296,7 +296,7 @@ function ImportRuns({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-foreground font-medium">{run.source ?? run.binding}</span>
-                    <Badge size="xs">{run.status}</Badge>
+                    <Badge size="sm">{run.status}</Badge>
                   </div>
                   <span className="text-muted-foreground mt-1 block truncate text-xs">
                     {run.triggerKind} · {elapsed(run)}
@@ -338,7 +338,7 @@ function SyncNowButton({
   const runStatus = importer.lastRun?.status;
   const syncing = pending || runStatus === 'queued' || runStatus === 'running';
   return (
-    <Button variant="outline" size="sm" disabled={syncing} onClick={onSync}>
+    <Button variant="default" size="sm" disabled={syncing} onClick={onSync}>
       {syncing ? (
         <>
           <Loader2 size={14} aria-hidden className="motion-safe:animate-spin motion-reduce:animate-none" />
@@ -404,7 +404,7 @@ export function KnowledgeImports({
             ))}
           </SelectContent>
         </Select>
-        <Badge size="xs">{importer.importKind}</Badge>
+        <Badge size="sm">{importer.importKind}</Badge>
         {importer.triggers.includes('cron') ? (
           <SyncNowButton importer={importer} pending={trigger.isPending} onSync={() => trigger.mutate(importer.id)} />
         ) : null}

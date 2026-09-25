@@ -77,8 +77,8 @@ const userSession = {
   title: 'Fix login bug',
   branch: 'factory/issue-1',
   baseBranch: 'main',
-  sandboxId: null,
-  sandboxWorkdir: null,
+  sandboxId: 'sandbox-1',
+  sandboxWorkdir: '/repo',
   materializedAt: '2026-08-10T00:00:00.000Z',
   createdAt: '2026-08-10T00:00:00.000Z',
   updatedAt: '2026-08-10T00:00:00.000Z',
@@ -355,7 +355,7 @@ describe('Board card with a proposed run', () => {
   it('keeps initialization ahead of a parked run until the session materializes', async () => {
     stubBoardEndpoints({ withLiveSession: true });
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [{ ...userSession, materializedAt: null }] }),
       ),
     );

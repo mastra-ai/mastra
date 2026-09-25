@@ -169,12 +169,12 @@ function CurationItem({
             </ul>
           ) : null}
           {item.evidenceCursor && !loadingMoreEvidence ? (
-            <Button size="xs" variant="ghost" onClick={() => setLoadingMoreEvidence(true)}>
+            <Button size="sm" variant="ghost" onClick={() => setLoadingMoreEvidence(true)}>
               Load more evidence
             </Button>
           ) : evidence.hasNextPage ? (
             <Button
-              size="xs"
+              size="sm"
               variant="ghost"
               onClick={() => evidence.fetchNextPage()}
               disabled={evidence.isFetchingNextPage}
@@ -229,7 +229,7 @@ function CurationItem({
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
-          size="xs"
+          size="sm"
           onClick={() =>
             action.mutate({ action: 'refine', scopeId, nodeId: item.id, version: item.version, description })
           }
@@ -238,7 +238,7 @@ function CurationItem({
           Refine
         </Button>
         <Button
-          size="xs"
+          size="sm"
           onClick={() =>
             action.mutate(
               { action: 'promote', scopeId, nodeId: item.id, version: item.version, destinationScopeId },
@@ -251,8 +251,8 @@ function CurationItem({
         </Button>
         {item.actions.merge ? (
           <Button
-            size="xs"
-            variant="outline"
+            size="sm"
+            variant="default"
             onClick={() => {
               if (!mergeTarget) return;
               action.mutate({
@@ -270,8 +270,8 @@ function CurationItem({
           </Button>
         ) : null}
         <Button
-          size="xs"
-          variant="outline"
+          size="sm"
+          variant="default"
           onClick={() =>
             action.mutate({ action: 'retain', scopeId, nodeId: item.id }, { onSuccess: () => setRetained(true) })
           }
@@ -281,7 +281,7 @@ function CurationItem({
         </Button>
         {item.actions.discard ? (
           <Button
-            size="xs"
+            size="sm"
             variant="destructive"
             onClick={() => action.mutate({ action: 'discard', scopeId, nodeId: item.id, version: item.version })}
             disabled={action.isPending}
@@ -299,7 +299,7 @@ function CurationItem({
         <Notice
           variant="info"
           action={
-            <Button size="xs" variant="outline" onClick={() => onSelectProposal(proposalId)}>
+            <Button size="sm" variant="default" onClick={() => onSelectProposal(proposalId)}>
               Open proposal
             </Button>
           }
@@ -358,7 +358,7 @@ function CurationPanel({
       ))}
       {worklist.hasNextPage ? (
         <Button
-          variant="outline"
+          variant="default"
           size="sm"
           onClick={() => worklist.fetchNextPage()}
           disabled={worklist.isFetchingNextPage}
@@ -457,7 +457,7 @@ function ImportRunLink({
   onOpen: (importerId: string, runId: string) => void;
 }) {
   return (
-    <Button variant="ghost" size="xs" className="ml-1" onClick={() => onOpen(importerId, runId)}>
+    <Button variant="ghost" size="sm" className="ml-1" onClick={() => onOpen(importerId, runId)}>
       {importerId}
     </Button>
   );
@@ -902,11 +902,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               ),
             ).values(),
           ).map(scope => (
-            <Button key={scope.id} variant="ghost" size="xs" onClick={() => selectScope(scope.id)}>
+            <Button key={scope.id} variant="ghost" size="sm" onClick={() => selectScope(scope.id)}>
               Open {scope.name}
             </Button>
           ))}
-          <Button variant="outline" size="xs" onClick={() => setCanvasMode(mode => (mode === 'lens' ? 'map' : 'lens'))}>
+          <Button variant="default" size="sm" onClick={() => setCanvasMode(mode => (mode === 'lens' ? 'map' : 'lens'))}>
             {canvasMode === 'lens' ? 'Scope map' : 'Return to lens'}
           </Button>
         </div>
@@ -947,7 +947,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         {graphQuery.hasNextPage ? (
           <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               disabled={graphQuery.isFetchingNextPage}
               onClick={() => void graphQuery.fetchNextPage()}
