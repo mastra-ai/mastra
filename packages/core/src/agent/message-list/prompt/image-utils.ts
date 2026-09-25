@@ -1,3 +1,4 @@
+import { convertBase64ToUint8Array } from '@ai-sdk/provider-utils-v6';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat/media';
 import { convertDataContentToBase64String } from './data-content';
@@ -207,7 +208,10 @@ function isValidInlineContent(base64: string, mediaType: string | undefined): bo
   if (unpaddedLength % 4 === 1 || (unpaddedLength !== payload.length && payload.length % 4 !== 0)) return false;
 
   if (mediaType && SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
-    return detectMediaType({ data: payload, signatures: imageMediaTypeSignatures }) !== undefined;
+    // Compare decoded bytes: base64 prefixes depend on the bytes that follow the signature
+    // (e.g. a WebP's file size), so a real image can fail a text-prefix match.
+    const head = convertBase64ToUint8Array(payload.slice(0, 24));
+    return detectMediaType({ data: head, signatures: imageMediaTypeSignatures }) !== undefined;
   }
   if (mediaType === 'application/pdf') return payload.startsWith('JVBER'); // "%PDF"
   return true;
