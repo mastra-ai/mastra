@@ -388,35 +388,37 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
     if (!externalTeamId) {
       throw new ChannelSessionRejectedError('No Slack workspace id on the message — the sender cannot be identified');
     }
-    const link = await accountLinks.getAccountLink({
-      platform,
-      externalTeamId,
-      externalUserId: message.author.userId,
-    });
-    if (!link) {
-      throw new ChannelSessionRejectedError(`Slack sender ${message.author.userId} is not linked to a Factory account`);
-    }
-
-    // Same chain as `resolveFactoryForLink`, minus prompts/stamping: the
-    // dispatch gate has already run (and stamped a lone factory) by the
-    // time a new thread is created, so this is a read-only re-resolve.
-    const orgId = link.orgId ?? '';
-    let factoryProjectId: string | undefined;
-    if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
-      factoryProjectId = link.defaultFactoryProjectId;
-    } else if (orgId) {
-      const factories = await projects.list({ orgId });
-      if (factories.length === 1) factoryProjectId = factories[0]!.id;
-    }
-    if (!factoryProjectId) {
-      throw new ChannelSessionRejectedError(`Linked Slack sender ${message.author.userId} has no Factory project`);
-    }
-
-    // Linked and routed, so a repo-backed session is not a preference: with no
-    // repository to work in there is no thread to start, and starting one
-    // anyway would answer in a project the sender never picked, on the SDK's
-    // built-in defaults.
     try {
+      const link = await accountLinks.getAccountLink({
+        platform,
+        externalTeamId,
+        externalUserId: message.author.userId,
+      });
+      if (!link) {
+        throw new ChannelSessionRejectedError(
+          `Slack sender ${message.author.userId} is not linked to a Factory account`,
+        );
+      }
+
+      // Same chain as `resolveFactoryForLink`, minus prompts/stamping: the
+      // dispatch gate has already run (and stamped a lone factory) by the
+      // time a new thread is created, so this is a read-only re-resolve.
+      const orgId = link.orgId ?? '';
+      let factoryProjectId: string | undefined;
+      if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
+        factoryProjectId = link.defaultFactoryProjectId;
+      } else if (orgId) {
+        const factories = await projects.list({ orgId });
+        if (factories.length === 1) factoryProjectId = factories[0]!.id;
+      }
+      if (!factoryProjectId) {
+        throw new ChannelSessionRejectedError(`Linked Slack sender ${message.author.userId} has no Factory project`);
+      }
+
+      // Linked and routed, so a repo-backed session is not a preference: with no
+      // repository to work in there is no thread to start, and starting one
+      // anyway would answer in a project the sender never picked, on the SDK's
+      // built-in defaults.
       const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
       if (!sourceControl) {
         throw new SlackSessionStartError('Could not start a session: connect source control to this Factory project.');
@@ -451,9 +453,11 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       });
       return session.sessionId;
     } catch (error) {
-      if (error instanceof SlackSessionStartError) throw error;
+      if (error instanceof ChannelSessionRejectedError || error instanceof SlackSessionStartError) throw error;
       console.error('[slack] failed to start repo-backed session for thread', thread.id, error);
-      throw new SlackSessionStartError('Could not start a session right now. Please try again later.', { cause: error });
+      throw new SlackSessionStartError('Could not start a session right now. Please try again later.', {
+        cause: error,
+      });
     }
   };
 }

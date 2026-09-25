@@ -471,9 +471,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ visibility: 'private' }),
-    );
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }));
   });
 
   // Top-level DM and channel conversations use the empty-threadTs thread form
@@ -482,14 +480,17 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it.each([
     { id: 'slack:D-1:', branch: 'slack/D-1' },
     { id: 'slack:C-1:', branch: 'slack/C-1' },
-  ])('a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)', async ({ id, branch }) => {
-    const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+  ])(
+    'a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)',
+    async ({ id, branch }) => {
+      const deps = makeResolverDeps();
+      const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
+      await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
-  });
+      expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
+    },
+  );
 
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
     const sourceControl = makeSourceControl({ existingSession: { sessionId: 'us-existing' } });
@@ -559,6 +560,8 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
   it.each([
     { failure: 'missing repository', expected: /connect|link.*repository/i },
+    { failure: 'account-link reread', expected: /try again later/i },
+    { failure: 'project reread', expected: /try again later/i },
     { failure: 'source-control selection', expected: /try again later/i },
     { failure: 'repository resolution', expected: /try again later/i },
     { failure: 'session lookup', expected: /try again later/i },
@@ -568,14 +571,27 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const outage = new Error('db down: postgres://private');
     if (failure === 'source-control selection') sourceControl.connections.list.mockRejectedValue(outage);
     if (failure === 'repository resolution') {
-      sourceControl.connections.list.mockResolvedValueOnce([
-        { id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' },
-      ]).mockRejectedValueOnce(outage);
+      sourceControl.connections.list
+        .mockResolvedValueOnce([{ id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' }])
+        .mockRejectedValueOnce(outage);
     }
     if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
     if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
     const deps = makeResolverDeps({ sourceControl });
     deps.projects = makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: true }]);
+    if (failure === 'account-link reread') {
+      deps.accountLinks.getAccountLink
+        .mockResolvedValueOnce({
+          orgId: 'org-1',
+          userId: 'user-1',
+          defaultFactoryProjectId: 'fp-1',
+        })
+        .mockRejectedValueOnce(outage);
+    }
+    if (failure === 'project reread')
+      deps.projects.get
+        .mockResolvedValueOnce({ id: 'fp-1', slackWorkItemsEnabled: true })
+        .mockRejectedValueOnce(outage);
     const workItems = { upsert: vi.fn() };
     const store = { listThreads: vi.fn().mockResolvedValue({ threads: [] }), saveThread: vi.fn() };
     const mastra = { getStorage: () => ({ getStore: async () => store }) };
@@ -595,8 +611,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    await handlers.onDirectMessage!(thread, message, (t: any, m: any) =>
-      (channels as any).handleChatMessage(t, m, mastra, ctx.requestContext, {}), ctx);
+    await handlers.onDirectMessage!(
+      thread,
+      message,
+      (t: any, m: any) => (channels as any).handleChatMessage(t, m, mastra, ctx.requestContext, {}),
+      ctx,
+    );
 
     expect(thread.post).toHaveBeenCalledTimes(1);
     expect(thread.post.mock.calls[0]![0]).toMatch(expected);
@@ -1390,7 +1410,9 @@ describe('Slack aside ingest', () => {
     } as any;
   }
 
-  function makeAsideDeps({ link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null } = {}) {
+  function makeAsideDeps({
+    link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null,
+  } = {}) {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
     thread.post = vi.fn();
