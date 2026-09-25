@@ -3115,7 +3115,10 @@ ${formattedMessages}
     messageList?: MessageList;
     /** Messages to compact when no `messageList` is given. Defaults to unobserved messages in storage. */
     messages?: MastraDBMessage[];
-    /** Stop once pending tokens are at or below this value. Defaults to 0 (compact everything pending). */
+    /**
+     * Stop once pending tokens are at or below this value. Defaults to 0 (compact everything pending).
+     * Measured as the unobserved messages still to observe, counted once.
+     */
     targetTokens?: number;
     /**
      * Maximum tokens of messages sent to the Observer per pass. Defaults to the observation threshold.
@@ -3138,9 +3141,12 @@ ${formattedMessages}
     activated: boolean;
     /** Number of observation passes run. */
     iterations: number;
-    /** Estimated pending tokens removed by this call. */
+    /** Estimated unobserved tokens removed by this call. */
     tokensCompacted: number;
-    /** Estimated pending tokens remaining. */
+    /**
+     * Estimated unobserved tokens remaining. Counted once from the resource's unobserved messages,
+     * so unlike `getStatus().pendingTokens` it does not add the formatted other-thread block on top.
+     */
     pendingTokens: number;
     reachedTarget: boolean;
     record: ObservationalMemoryRecord;
@@ -3148,11 +3154,6 @@ ${formattedMessages}
     const { threadId, resourceId, messageList } = opts;
     const maxIterations = opts.maxIterations ?? 10;
     const currentMessages = () => (messageList ? getObservableMessages(messageList) : opts.messages);
-    // In resource scope the live list only carries the current thread, so measuring pending
-    // tokens from it under-reports the resource's other threads. Read the resource-wide status
-    // there instead; the in-flight messages were just persisted, so storage has them.
-    const statusArgs = (): { threadId: string; resourceId?: string; messages?: MastraDBMessage[] } =>
-      this.scope === 'resource' ? { threadId, resourceId } : { threadId, resourceId, messages: currentMessages() };
     const compactedIds = new Set<string>();
 
     // The failed request's in-flight messages (the user's prompt, any partial response) may be
@@ -3166,7 +3167,8 @@ ${formattedMessages}
 
     await BufferingCoordinator.awaitBuffering(threadId, resourceId ?? null, this.scope);
 
-    const initialStatus = await this.getStatus(statusArgs());
+    const initialStatus = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
+    let currentRecord = initialStatus.record;
     let activated = false;
     if (initialStatus.canActivate) {
       const activation = await this.activate({
@@ -3178,28 +3180,44 @@ ${formattedMessages}
       });
       activated = activation.activated;
       activation.activatedMessageIds?.forEach(id => compactedIds.add(id));
+      currentRecord = activation.record;
     }
 
-    let status = activated ? await this.getStatus(statusArgs()) : initialStatus;
+    // Pending material still to observe, counted once. In resource scope `getStatus()` adds the
+    // formatted other-thread block on top of those same threads' unobserved messages, so its
+    // `pendingTokens` counts them twice; report what is actually left to observe instead.
+    const pendingTokensNow = async (): Promise<number> => {
+      const lastObservedAt = currentRecord.lastObservedAt ? new Date(currentRecord.lastObservedAt) : undefined;
+      const unobserved =
+        this.scope === 'resource' || !currentMessages()
+          ? this.getUnobservedMessages(
+              await this.loadMessagesFromStorage(threadId, resourceId, lastObservedAt),
+              currentRecord,
+            )
+          : this.getUnobservedMessages(currentMessages()!, currentRecord);
+      return this.tokenCounter.countMessagesAsync(unobserved);
+    };
+
     // A context-overflow error means OM's estimate is already too low, so a threshold-relative
     // target could make the recovery a no-op. Compact everything pending by default.
     const targetTokens = opts.targetTokens ?? 0;
-    const maxChunkTokens = opts.maxChunkTokens ?? status.threshold;
-    let pendingTokens = status.pendingTokens;
+    const maxChunkTokens = opts.maxChunkTokens ?? initialStatus.threshold;
+    const initialPendingTokens = await pendingTokensNow();
+    let pendingTokens = initialPendingTokens;
     let iterations = 0;
     let observed = false;
 
     while (pendingTokens > targetTokens && iterations < maxIterations) {
       const messages = currentMessages();
       const unobserved = messages
-        ? this.getUnobservedMessages(messages, status.record)
+        ? this.getUnobservedMessages(messages, currentRecord)
         : this.getUnobservedMessages(
             await this.loadMessagesFromStorage(
               threadId,
               resourceId,
-              status.record.lastObservedAt ? new Date(status.record.lastObservedAt) : undefined,
+              currentRecord.lastObservedAt ? new Date(currentRecord.lastObservedAt) : undefined,
             ),
-            status.record,
+            currentRecord,
           );
 
       // Oldest-first prefix of at most maxChunkTokens, but always at least one message so a
@@ -3244,9 +3262,10 @@ ${formattedMessages}
       if (this.scope === 'resource') {
         result.record.observedMessageIds?.forEach(id => compactedIds.add(id));
       }
-      status = await this.getStatus(statusArgs());
-      const madeProgress = status.pendingTokens < pendingTokens;
-      pendingTokens = status.pendingTokens;
+      currentRecord = result.record;
+      const nextPendingTokens = await pendingTokensNow();
+      const madeProgress = nextPendingTokens < pendingTokens;
+      pendingTokens = nextPendingTokens;
       if (!madeProgress) break;
     }
 
@@ -3265,7 +3284,7 @@ ${formattedMessages}
       compacted: activated || observed,
       activated,
       iterations,
-      tokensCompacted: Math.max(0, initialStatus.pendingTokens - pendingTokens),
+      tokensCompacted: Math.max(0, initialPendingTokens - pendingTokens),
       pendingTokens,
       reachedTarget: pendingTokens <= targetTokens,
       record,

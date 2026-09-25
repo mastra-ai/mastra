@@ -429,6 +429,32 @@ describe('compact() (#21657)', () => {
     expect(await om.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
   });
 
+  it('removes every message a resource-scope pass observed, not just the sized chunk', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { model: createObserverModel(), messageTokens: 100_000, bufferTokens: false },
+      reflection: { model: createObserverModel(), observationTokens: 50_000 },
+    });
+    const messages = conversation(8);
+    await storage.saveMessages({ messages });
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(messages, 'memory');
+    // One pair fits a chunk, but a resource-scope pass observes all 8 pending messages.
+    const pairTokens = await pairTokenCount(om, messages);
+
+    const result = await om.compact({
+      threadId,
+      resourceId,
+      messageList,
+      maxChunkTokens: pairTokens,
+      maxIterations: 1,
+    });
+
+    expect(result.iterations).toBe(1);
+    expect(messageList.get.all.db()).toEqual([]);
+  });
+
   it('compacts another thread of the resource when the failed thread has nothing pending', async () => {
     const om = new ObservationalMemory({
       storage,
@@ -471,7 +497,7 @@ describe('compact() (#21657)', () => {
     expect(await om.loadUnobservedMessages({ threadId: otherThreadId, resourceId })).toEqual([]);
   });
 
-  it('reports pending tokens across the resource, not just the live thread', async () => {
+  it('counts the resource unobserved messages once, not their formatted block too', async () => {
     const om = new ObservationalMemory({
       storage,
       scope: 'resource',
@@ -500,15 +526,17 @@ describe('compact() (#21657)', () => {
 
     const messageList = new MessageList({ threadId, resourceId });
     messageList.add((await storage.listMessages({ threadId, perPage: false })).messages, 'memory');
-    const liveListPending = (await om.getStatus({ threadId, resourceId, messages: messageList.get.all.db() }))
-      .pendingTokens;
-    const resourcePending = (await om.getStatus({ threadId, resourceId })).pendingTokens;
-    expect(resourcePending).toBeGreaterThan(liveListPending);
+    const realPending = await om
+      .getTokenCounter()
+      .countMessagesAsync(await om.loadUnobservedMessages({ threadId, resourceId }));
+    // getStatus() adds the formatted other-thread block on top of those same messages.
+    const statusPending = (await om.getStatus({ threadId, resourceId })).pendingTokens;
+    expect(statusPending).toBeGreaterThan(realPending);
 
-    // No passes run, so the result reports the pending context the caller still has to deal with.
+    // No passes run, so the result reports the pending material the caller still has to deal with.
     const result = await om.compact({ threadId, resourceId, messageList, maxIterations: 0 });
 
-    expect(result.pendingTokens).toBe(resourcePending);
+    expect(result.pendingTokens).toBe(realPending);
   });
 });
 

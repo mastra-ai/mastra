@@ -1236,7 +1236,8 @@ Register it with `errorProcessors: [createContextOverflowRecovery(om)]` on the a
   {
     name: 'targetTokens',
     type: 'number',
-    description: 'Stop once pending tokens are at or below this value.',
+    description:
+      'Stop once pending tokens are at or below this value. Pending tokens are the unobserved messages still to observe, counted once.',
     isOptional: true,
     defaultValue: '0',
   },
@@ -1265,7 +1266,7 @@ Register it with `errorProcessors: [createContextOverflowRecovery(om)]` on the a
 ]}
 />
 
-`compact()` returns `{ compacted, activated, iterations, tokensCompacted, pendingTokens, reachedTarget, record }`. `compacted` is `true` when buffered observations were activated or at least one pass observed messages.
+`compact()` returns `{ compacted, activated, iterations, tokensCompacted, pendingTokens, reachedTarget, record }`. `compacted` is `true` when buffered observations were activated or at least one pass observed messages. `pendingTokens` counts the unobserved messages still to observe once; unlike `getStatus().pendingTokens`, it doesn't add the formatted other-thread block on top of those same messages.
 
 ## Recall tool
 
