@@ -631,6 +631,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     resourceId,
     threadId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -714,8 +715,13 @@ export class WorkflowsPG extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
+      // In summary mode only read status/timestamp out of the snapshot so large snapshots aren't transferred.
+      const selectList = summary
+        ? `workflow_name, run_id, "resourceId", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", jsonb_build_object('status', snapshot::jsonb -> 'status', 'timestamp', snapshot::jsonb -> 'timestamp') AS snapshot`
+        : '*';
+
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+          SELECT ${selectList} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}

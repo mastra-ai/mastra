@@ -6805,6 +6805,8 @@ export type GetWorkflowsWorkflowIdRuns_QueryParams = {
         | 'skipped'
       )
     | undefined;
+  /** When true, each run snapshot is reduced to { status, timestamp }. Defaults to false. */
+  summary?: boolean | undefined;
 };
 
 export type GetWorkflowsWorkflowIdRuns_Response = {
