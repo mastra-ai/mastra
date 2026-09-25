@@ -138,12 +138,12 @@ function RemoteLogo({
     setSource(source === 'thesvg-default' && logoUrl ? 'nango' : 'fallback');
   }
 
-  const wrapperClass = cn('grid size-9 shrink-0 place-items-center rounded-md bg-surface3 p-1.5', className);
+  const wrapperClass = cn('grid size-9 shrink-0 place-items-center rounded-md bg-fill p-1.5', className);
 
   if (!sourceUrl) {
     return (
       <span aria-label={displayName} className={wrapperClass}>
-        <Blocks aria-hidden="true" className="text-icon3 size-4" />
+        <Blocks aria-hidden="true" className="text-muted-foreground size-4" />
       </span>
     );
   }
