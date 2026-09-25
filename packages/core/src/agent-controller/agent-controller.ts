@@ -14,7 +14,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import { RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
@@ -618,7 +618,8 @@ export class AgentController<TState = {}> {
     // factory resolve against this session's scope (e.g. its `projectPath`), not
     // the controller-global default (which, on a multi-session server, may point at
     // a different repo).
-    const requestContext = overrides?.requestContext ?? new RequestContext();
+    const requestContext = new RequestContext(overrides?.requestContext?.entries());
+    await this.#authorizeSessionResource(effectiveResourceId, requestContext);
     let initialState = structuredClone(this.config.initialState);
     if (tags && Object.keys(tags).length > 0) {
       initialState = { ...initialState, ...tags } as TState;
@@ -2346,6 +2347,27 @@ export class AgentController<TState = {}> {
   }
 
   /**
+   * A mapped resource on the caller's context outranks the session's own
+   * resource wherever the controller-built context is read (memory, workspace,
+   * tool connections, caching, authorization). When the host authorizes the
+   * caller for this session, use the session's resource instead.
+   */
+  async #authorizeSessionResource(resourceId: string, requestContext: RequestContext): Promise<void> {
+    const mappedResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    if (
+      typeof mappedResourceId !== 'string' ||
+      !mappedResourceId ||
+      mappedResourceId === resourceId ||
+      !this.config.authorizeSessionResource
+    ) {
+      return;
+    }
+    if ((await this.config.authorizeSessionResource({ resourceId, mappedResourceId, requestContext })) === true) {
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    }
+  }
+
+  /**
    * Build request context for agent execution.
    * Tools can access controller state via requestContext.get('controller').
    */
@@ -2355,6 +2377,7 @@ export class AgentController<TState = {}> {
     scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
   ): Promise<RequestContext> {
     requestContext = new RequestContext(requestContext?.entries());
+    await this.#authorizeSessionResource(session.identity.getResourceId(), requestContext);
     const threadId = scope?.threadId ?? session.thread.getId();
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,

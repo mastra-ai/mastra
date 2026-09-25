@@ -10,6 +10,7 @@ import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
+import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
@@ -215,13 +216,7 @@ export type AgentControllerStateSchema<T> = T;
  * Identifiers for the built-in controller tools that can be selectively disabled.
  */
 export type BuiltinToolId =
-  | 'ask_user'
-  | 'submit_plan'
-  | 'task_write'
-  | 'task_update'
-  | 'task_complete'
-  | 'task_check'
-  | 'subagent';
+  'ask_user' | 'submit_plan' | 'task_write' | 'task_update' | 'task_complete' | 'task_check' | 'subagent';
 
 /** Process-local listener notified after AgentController materializes a live session. */
 export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
@@ -265,6 +260,36 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Memory configuration (shared across all modes) */
   memory?: DynamicArgument<MastraMemory>;
+
+  /**
+   * Decide whether a caller whose request context carries a different resource
+   * id (for example from `mapUserToResourceId`) may act as the session's own
+   * resource. Return exactly `true` and the controller sets `MASTRA_RESOURCE_ID_KEY`
+   * to the session's resource on its own copy of the context, so everything
+   * that reads that key sees the session's resource: memory and thread
+   * ownership, caller-supplied tool connections, response-cache and token-cost
+   * scoping, and any of your factories or tools that read it. The hook does not
+   * change the controller context's `resourceId` or the caller's `user`. Any
+   * other result, or omitting the hook, keeps the mapped resource, so memory
+   * that enforces thread ownership rejects the session's threads. A throw fails
+   * the operation. Called whenever the controller builds a context from one
+   * that still carries a different resource, so keep it cheap; once approved,
+   * contexts derived from the rewritten copy skip the hook. It chooses which
+   * resource a caller acts as; it does not gate creating or opening a session,
+   * which your route authorization must still do. Dynamic workspace and browser
+   * factories run once, at session creation; one that reads
+   * `MASTRA_RESOURCE_ID_KEY` sees the session's resource if the creating caller
+   * was approved and their mapped resource if not. Only approve callers your app
+   * has already authorized for the session.
+   */
+  authorizeSessionResource?: (args: {
+    /** The resource the session owns. */
+    resourceId: string;
+    /** The resource the caller's request context is mapped to. */
+    mappedResourceId: string;
+    /** The controller's own copy of the caller's context, which the run uses. Treat it as read-only. */
+    requestContext: RequestContext;
+  }) => boolean | Promise<boolean>;
 
   /** Available agent modes */
   modes: AgentControllerMode[];

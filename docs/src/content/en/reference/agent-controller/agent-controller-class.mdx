@@ -170,6 +170,13 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
+    name: 'authorizeSessionResource',
+    type: '(args: { resourceId: string; mappedResourceId: string; requestContext: RequestContext }) => boolean | Promise<boolean>',
+    description:
+      "Called when the caller's request context is mapped to a resource (for example by `mapUserToResourceId`) other than the one the session owns. Return exactly `true` and the controller sets `MASTRA_RESOURCE_ID_KEY` to the session's resource on its own copy of the request context, so everything that reads that key uses the session's resource: memory and thread ownership, caller-supplied tool connections, response-cache and token-cost scoping, and any of your factories or tools that read it. The hook does not change the controller context's `resourceId` or the caller's `user`. Any other result, or leaving this unset, keeps the mapped resource, so memory that enforces thread ownership rejects the session's threads. The hook runs whenever the controller builds a context that still carries a different resource, so keep it cheap; a throw fails the operation. It chooses which resource the caller acts as; it does not block creating or opening a session, so keep your route authorization in place. Dynamic workspace and browser factories run once, when the session is created; one that reads `MASTRA_RESOURCE_ID_KEY` sees the session's resource if the creating caller was approved and their mapped resource if not. Return `true` only for callers your app has authorized for the session.",
+    isOptional: true,
+  },
+  {
     name: 'defaultModeId',
     type: 'string',
     description: 'Default mode identifier. It takes precedence over mode metadata.',
