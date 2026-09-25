@@ -79,7 +79,7 @@ describe('PlatformFilesystem', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain('/fs/dev-bucket/a.txt?op=copy');
     expect(fetchMock.mock.calls[0]![1].body).toBe(JSON.stringify({ destination: 'b.txt' }));
     expect(String(fetchMock.mock.calls[1]![0])).toContain('/fs/dev-bucket/b.txt?op=rename');
-    expect(String(fetchMock.mock.calls[2]![0])).toContain('/fs/dev-bucket/dir?op=mkdir');
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/fs/dev-bucket/dir/?op=mkdir');
   });
 
   it('percent-encodes reserved URL characters in object key segments', async () => {
@@ -116,7 +116,11 @@ describe('PlatformFilesystem', () => {
   });
 
   it('maps 404 to FileNotFoundError on readFile and stat', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => response('not found', { status: 404 }));
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL) =>
+      String(url).includes('delimiter=')
+        ? response(JSON.stringify({ contents: [], commonPrefixes: [] }), { status: 200 })
+        : response('not found', { status: 404 }),
+    );
     const fs = new PlatformFilesystem({
       accessToken: 'sk_test',
       projectId: 'proj_123',
@@ -145,5 +149,44 @@ describe('PlatformFilesystem', () => {
     await expect(fs.moveFile('/a.txt', '/b.txt', { overwrite: false })).rejects.toThrow(/overwrite: false/);
     // No request should have gone to the proxy when we rejected up front.
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reports prefix-only paths as directories so nested folders can be opened', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      if (init?.method === 'HEAD') return response('not found', { status: 404 });
+      const u = new URL(String(url));
+      if (u.searchParams.get('prefix') === 'foo/') {
+        return response(JSON.stringify({ contents: [{ key: 'foo/bar.md', size: 3 }], commonPrefixes: [] }), {
+          status: 200,
+        });
+      }
+      return response(JSON.stringify({ contents: [], commonPrefixes: ['foo/'] }), { status: 200 });
+    });
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.stat('/foo')).resolves.toMatchObject({ name: 'foo', path: '/foo', type: 'directory' });
+    await expect(fs.exists('foo')).resolves.toBe(true);
+    await expect(fs.readdir('/foo')).resolves.toEqual([{ name: 'bar.md', type: 'file', size: 3 }]);
+    await expect(fs.readdir('/')).resolves.toEqual([{ name: 'foo', type: 'directory' }]);
+  });
+
+  it('does not list when HEAD finds a file', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(null, { status: 200, headers: { 'content-length': '4' } }));
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.stat('/a.txt')).resolves.toMatchObject({ type: 'file', size: 4 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
