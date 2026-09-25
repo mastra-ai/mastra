@@ -75,6 +75,7 @@ import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createReviewSourceTool } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -1035,6 +1036,28 @@ export class MastraFactory {
                       // Only offered while the source-control domain is ready — a
                       // throwing lookup would abort recovery's catch block and also
                       // skip the metadata baseRef fallback.
+                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+                    }),
+                  );
+                  // Review-role sessions get `factory_review_source` so the
+                  // published review can carry the session URL that produced it
+                  // — the affordance that lets a suspicious review (e.g. one
+                  // that lands on the wrong PR) be traced back to its run.
+                  //
+                  // The session URL is browser-facing (a human opens it from a
+                  // GitHub review comment), so it needs the UI host. In a
+                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+                  // is the API host; the UI lives at `MASTRACODE_PUBLIC_URL`,
+                  // the same origin Slack session deep-links resolve against.
+                  // Fall back to `publicOrigin` only when the two coincide.
+                  const uiOriginEnv = process.env.MASTRACODE_PUBLIC_URL?.trim();
+                  const reviewSourceUiOrigin = (uiOriginEnv || publicOrigin).replace(/\/+$/, '');
+                  mergeTools(
+                    'factory-review-source',
+                    await createReviewSourceTool({
+                      requestContext,
+                      storage: workItemsStorage,
+                      uiOrigin: reviewSourceUiOrigin,
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
