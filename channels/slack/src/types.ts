@@ -198,6 +198,19 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
   refreshToken?: string;
 
   /**
+   * Resolve a fresh App Configuration access token on demand.
+   *
+   * Use this when an external credential manager (e.g. the Mastra platform)
+   * owns the token refresh cycle. The provider then never calls
+   * `tooling.tokens.rotate` itself — before each manifest API call it asks
+   * the resolver for a currently-valid access token.
+   *
+   * When set, `refreshToken`, `configure()`, and stored config tokens are
+   * not used; the resolver is the single source of truth for credentials.
+   */
+  tokenResolver?: () => Promise<string>;
+
+  /**
    * Base URL for webhook callbacks.
    * Required when calling connect() to create apps.
    * Can also be set later via setBaseUrl() or auto-detected from server config.

@@ -114,6 +114,81 @@ describe('SlackManifestClient', () => {
       await client.rotateToken();
       expect(client.getTokens().token).toBe('t1');
     });
+
+    it('throws when constructed without a refresh token or resolver', async () => {
+      const bare = new SlackManifestClient({});
+
+      await expect(bare.rotateToken()).rejects.toThrow('no refresh token or token resolver');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tokenResolver (delegated mode)', () => {
+    it('resolves the token instead of calling tooling.tokens.rotate', async () => {
+      const tokenResolver = vi.fn().mockResolvedValue('resolved-token');
+      const delegated = new SlackManifestClient({ tokenResolver });
+
+      await delegated.rotateToken();
+
+      expect(tokenResolver).toHaveBeenCalledTimes(1);
+      // No Slack rotation call is ever made
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(delegated.getTokens().token).toBe('resolved-token');
+    });
+
+    it('uses the resolved token for manifest calls and never rotates', async () => {
+      const tokenResolver = vi.fn().mockResolvedValue('resolved-token');
+      const delegated = new SlackManifestClient({ tokenResolver });
+
+      mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+      await delegated.deleteApp('A123');
+
+      // Only the deleteApp call hit the network — no tooling.tokens.rotate
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toContain('apps.manifest.delete');
+      expect((init as RequestInit).headers).toMatchObject({
+        Authorization: 'Bearer resolved-token',
+      });
+    });
+
+    it('re-resolves before each manifest call so expired tokens are replaced', async () => {
+      const tokenResolver = vi.fn().mockResolvedValueOnce('token-1').mockResolvedValueOnce('token-2');
+      const delegated = new SlackManifestClient({ tokenResolver });
+
+      mockFetch.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+
+      await delegated.deleteApp('A1');
+      await delegated.deleteApp('A2');
+
+      expect(tokenResolver).toHaveBeenCalledTimes(2);
+      expect((mockFetch.mock.calls[0]![1] as RequestInit).headers).toMatchObject({
+        Authorization: 'Bearer token-1',
+      });
+      expect((mockFetch.mock.calls[1]![1] as RequestInit).headers).toMatchObject({
+        Authorization: 'Bearer token-2',
+      });
+    });
+
+    it('does not invoke onTokenRotation in delegated mode', async () => {
+      const tokenResolver = vi.fn().mockResolvedValue('resolved-token');
+      const rotationSpy = vi.fn();
+      const delegated = new SlackManifestClient({ tokenResolver, onTokenRotation: rotationSpy });
+
+      await delegated.rotateToken();
+
+      expect(rotationSpy).not.toHaveBeenCalled();
+    });
+
+    it('propagates resolver failures and allows retries', async () => {
+      const tokenResolver = vi.fn().mockRejectedValueOnce(new Error('platform down')).mockResolvedValueOnce('token-1');
+      const delegated = new SlackManifestClient({ tokenResolver });
+
+      await expect(delegated.rotateToken()).rejects.toThrow('platform down');
+      await delegated.rotateToken();
+      expect(delegated.getTokens().token).toBe('token-1');
+    });
   });
 
   describe('createApp', () => {

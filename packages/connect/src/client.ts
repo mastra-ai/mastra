@@ -211,12 +211,6 @@ export const credentialSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('oauth2'),
     accessToken: z.string(),
-    /**
-     * Provider refresh token, when the platform exposes it. Slack channel
-     * connections require it: `SlackProvider` consumes an App Configuration
-     * *refresh* token (`xoxe-1-...`), not the short-lived access token.
-     */
-    refreshToken: z.string().optional(),
     expiresAt: z.string().nullable(),
   }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
