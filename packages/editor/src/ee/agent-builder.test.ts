@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { StreamErrorRetryProcessor } from '@mastra/core/processors';
+import { ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
 import { createBuilderAgent, DEFAULT_BUILDER_ERROR_PROCESSORS } from './agent-builder-agent';
 import { EditorAgentBuilder } from './agent-builder';
 
@@ -355,6 +355,22 @@ describe('createBuilderAgent stability processors', () => {
     // because this processor's bad-request matcher claims any 400 and ahead of the repairs it
     // would resend a request they could have fixed.
     expect(resolved[2]).toBe(callerRetry);
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+    ]);
+  });
+
+  it('places a caller instance at its default slot instead of appending it', async () => {
+    const callerHistoryCompat = new ProviderHistoryCompat();
+    const agent = createBuilderAgent({ errorProcessors: [callerHistoryCompat] });
+
+    const resolved = await agent.listErrorProcessors();
+    // The repair must stay ahead of the retry processor: replacing a default by id
+    // takes that default's position, so the caller's ProviderHistoryCompat runs first
+    // instead of being appended after stream-error-retry-processor.
+    expect(resolved[0]).toBe(callerHistoryCompat);
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
