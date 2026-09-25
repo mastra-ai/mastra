@@ -432,7 +432,13 @@ export class WorkflowsRedis extends WorkflowsStorage {
         if (data === null) return;
         const record = JSON.parse(data) as Record<string, unknown>;
         if (record === null || typeof record !== 'object' || !('workflow_name' in record)) return;
-        const legacy = keys[index]!.includes(':resourceId:');
+        const legacy =
+          keys[index] !==
+          snapshotKey(
+            (record.namespace as string | undefined) ?? 'workflows',
+            record.workflow_name as string,
+            record.run_id as string,
+          );
         const runKey = `${record.workflow_name}\u0000${record.run_id}`;
         const current = recordsByRun.get(runKey);
         if (!current || (current.legacy && !legacy)) {
