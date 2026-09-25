@@ -3,6 +3,7 @@ title: "SvelteKit | Frameworks"
 description: "Build a tool-calling Mastra agent in SvelteKit, create server and chat routes, add AI SDK UI, and test the interactive streaming experience."
 packages:
   - '@mastra/core'
+  - '@mastra/sveltekit'
 ---
 
 # SvelteKit
@@ -225,6 +226,44 @@ It renders the response text using custom message and tool components.
 1. Run your SvelteKit app with `npm run dev`
 1. Open the chat at [http://localhost:5173](http://localhost:5173)
 1. Try asking about the weather. If your API key is set up correctly, you'll get a response
+
+## Expose the Mastra API
+
+The chat route above calls the agent directly to stream AI SDK UI responses from a custom `/api/chat` endpoint. To expose Mastra's full HTTP API for agents, tools, workflows, memory, MCP, and A2A through the same SvelteKit app, mount the `@mastra/sveltekit` [server adapter](/docs/server/server-adapters) on a rest parameter route.
+
+Install the adapter and its Hono peer dependency:
+
+```bash npm2yarn
+npm install @mastra/sveltekit@latest hono
+```
+
+Create the route and export its HTTP method handlers:
+
+```typescript title="src/routes/api/mastra/[...path]/+server.ts"
+import { createSvelteKitRouteHandler } from '@mastra/sveltekit'
+import { mastra } from '../../../../mastra'
+
+export const { GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD } = createSvelteKitRouteHandler({
+  mastra,
+  prefix: '/api/mastra',
+})
+```
+
+The `prefix` option defaults to `/api` and must match the path the route is served at. Mounting at `/api/mastra` keeps the adapter separate from the `/api/chat` route.
+
+Start the app:
+
+```bash npm2yarn
+npm run dev
+```
+
+In a separate terminal, verify the adapter by asking the weather agent a question:
+
+```bash
+curl -X POST http://localhost:5173/api/mastra/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+The endpoint returns a complete JSON response from the agent. Keep the AI SDK UI route for the streaming chat interface, and use the adapter route to expose the full Mastra API. The adapter is documented in full on the [SvelteKit adapter](/reference/server/sveltekit-adapter) reference page.
 
 ## Next steps
 

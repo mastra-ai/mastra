@@ -782,6 +782,7 @@ const sidebars = {
         { type: 'doc', id: 'server/next-adapter', label: 'Next.js Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+        { type: 'doc', id: 'server/sveltekit-adapter', label: 'SvelteKit Adapter' },
         { type: 'doc', id: 'server/tanstack-start-adapter', label: 'TanStack Start Adapter' },
       ],
     },
