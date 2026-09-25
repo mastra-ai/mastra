@@ -482,7 +482,8 @@ describe('goal step judge-failure semantics', () => {
     const { record, stepResult, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
 
     expect(record.status).toBe('paused');
-    expect(record.runsUsed).toBe(1);
+    // A failed evaluation produced no verdict, so it must not consume the run budget.
+    expect(record.runsUsed).toBe(0);
     // A failed judge must stop the loop, not silently iterate against it.
     expect(stepResult.isContinued).toBe(false);
     expect(chunk.payload.status).toBe('paused');
@@ -527,8 +528,8 @@ describe('goal step judge-failure semantics', () => {
     // Loop stops immediately (isContinued false) — no march toward 500.
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    // Only the single failed run was consumed (3 → 4), not the whole budget.
-    expect(record.runsUsed).toBe(4);
+    // The failed evaluation consumes no budget (stays 3), let alone the whole budget.
+    expect(record.runsUsed).toBe(3);
     expect(chunk.payload.judgeFailed).toBe(true);
     // The status drives the TUI label away from "continue" → it renders "paused".
     expect(chunk.payload.status).toBe('paused');
@@ -559,7 +560,7 @@ describe('goal step judge-failure semantics', () => {
     const { record, stepResult, chunk } = res!;
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    expect(record.runsUsed).toBe(4);
+    expect(record.runsUsed).toBe(3);
     expect(chunk.payload.judgeFailed).toBe(true);
     expect(chunk.payload.status).toBe('paused');
     expect(chunk.payload.reason).toContain('Bad Request');
