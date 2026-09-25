@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Observational memory no longer holds a turn for about 5 minutes retrying an attachment that can't be downloaded. The observer shows it as a placeholder, and skips attachments the agent has already recorded as unavailable. See #23705.
+Observational memory no longer sends the Observer attachments that the agent recorded as unavailable. The Observer still sees their `[Image #1: ...]` or `[File #1: ...]` line in the transcript. See #23705.
