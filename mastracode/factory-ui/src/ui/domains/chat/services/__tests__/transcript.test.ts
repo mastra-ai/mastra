@@ -146,6 +146,43 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('restores pending tool approvals from persisted assistant metadata', () => {
+    const args = { itemId: 'item-1', to: 'review' };
+    const message = dbMessage('assistant-approval', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'approve-1', toolName: 'factory_transition_work_item', args },
+      },
+    ]);
+    message.content.metadata = {
+      pendingToolApprovals: {
+        'approve-1': { toolCallId: 'approve-1', toolName: 'factory_transition_work_item', args, type: 'approval' },
+      },
+    };
+
+    let state = createInitialTranscript({ messages: [message] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_approval_required',
+        toolCallId: 'approve-1',
+        toolName: 'factory_transition_work_item',
+        args,
+      },
+    });
+
+    expect(state.entries).toEqual([
+      expect.objectContaining({ kind: 'message', id: 'assistant-approval' }),
+      {
+        kind: 'approval',
+        id: 'approval-approve-1',
+        toolCallId: 'approve-1',
+        toolName: 'factory_transition_work_item',
+        args,
+      },
+    ]);
+  });
+
   it('projects persisted and live user signals to user messages without changing canonical content', () => {
     const persisted = signalMessage({
       id: 'user-signal-1',

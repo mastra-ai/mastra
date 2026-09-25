@@ -10,6 +10,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
@@ -36,7 +37,19 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async controller => {
+    start: async streamController => {
+      // Stamp chunks when the loop produces them; consumers may read them much later.
+      const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
+        enqueue: chunk => {
+          if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+          streamController.enqueue(chunk);
+        },
+        close: () => streamController.close(),
+        error: reason => streamController.error(reason),
+        get desiredSize() {
+          return streamController.desiredSize;
+        },
+      };
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
 

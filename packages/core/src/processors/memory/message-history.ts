@@ -1,9 +1,14 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
+import { noteThreadMessagesSaved } from '../../agent/thread-saves';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
-import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
+import {
+  removeWorkingMemoryTags,
+  removeWorkingMemoryToolInvocationParts,
+  removeWorkingMemoryToolInvocations,
+} from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
@@ -221,14 +226,14 @@ export class MessageHistory implements Processor {
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
-          newMessage.content.parts = newMessage.content.parts
+          if (Array.isArray(newMessage.content.toolInvocations)) {
+            newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
+          }
+          // Filter out updateWorkingMemory tool invocations (hide args from message history)
+          newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts)
             .map(p => {
               // Filter out streaming tool calls (partial-call is an intermediate state during streaming)
               if (p.type === `tool-invocation` && p.toolInvocation.state === `partial-call`) {
-                return null;
-              }
-              // Filter out updateWorkingMemory tool invocations (hide args from message history)
-              if (p.type === `tool-invocation` && p.toolInvocation.toolName === `updateWorkingMemory`) {
                 return null;
               }
               // Strip working memory tags from text parts
@@ -328,6 +333,8 @@ export class MessageHistory implements Processor {
       return;
     }
 
+    const savedAt = Date.now();
+
     // Ensure thread exists (create if needed) before saving messages.
     // Nothing to write when it already exists: re-writing the row we just read
     // would clobber a title generated concurrently with this save.
@@ -348,5 +355,6 @@ export class MessageHistory implements Processor {
 
     // Persist messages after thread is guaranteed to exist
     await this.storage.saveMessages({ messages: filtered });
+    noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
 }
