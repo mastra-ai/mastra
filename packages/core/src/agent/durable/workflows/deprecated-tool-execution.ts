@@ -1,9 +1,25 @@
-import type { RequestContext } from '../../../../request-context';
-import type { Workspace } from '../../../../workspace';
-import type { DurableToolCallInput, DurableToolCallOutput } from '../../types';
+/**
+ * Deprecated durable tool-execution helpers.
+ *
+ * This is the frozen pre-unification implementation of the shared durable
+ * tool-call executor, preserved verbatim so the public
+ * `@mastra/core/agent/durable` entry point keeps its released surface at
+ * patch level. The durable engines no longer call it — tool execution now
+ * flows through the shared loop cores (`loop/shared/steps`), which handle
+ * background dispatch, processors, approval, and abort. New code should not
+ * import from this module.
+ *
+ * @deprecated Superseded by the shared loop cores; will be removed in v2.
+ */
+
+import type { RequestContext } from '../../../request-context';
+import type { Workspace } from '../../../workspace';
+import type { DurableToolCallInput, DurableToolCallOutput } from '../types';
 
 /**
  * Context for tool execution
+ *
+ * @deprecated Superseded by the shared loop cores; will be removed in v2.
  */
 export interface ToolExecutionContext {
   /** Tool calls from the LLM output */
@@ -38,6 +54,8 @@ export interface ToolExecutionContext {
 
 /**
  * Error structure for tool execution failures
+ *
+ * @deprecated Superseded by the shared loop cores; will be removed in v2.
  */
 export interface ToolExecutionError {
   name: string;
@@ -48,10 +66,8 @@ export interface ToolExecutionError {
 /**
  * Execute tool calls durably with optional hooks for observability and streaming.
  *
- * This is the shared implementation used by:
- * - Core DurableAgent workflow
- * - Inngest durable agent workflow (with observability hooks)
- * - Evented durable agent workflow
+ * @deprecated Superseded by the shared loop cores; will be removed in v2.
+ * The durable agent workflows no longer call this helper.
  *
  * @param ctx - Tool execution context with tool calls, resolved tools, and optional hooks
  * @returns Array of tool call outputs with results or errors
