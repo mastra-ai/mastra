@@ -8,6 +8,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
@@ -19,7 +20,6 @@ import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue

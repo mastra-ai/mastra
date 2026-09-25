@@ -2,23 +2,29 @@ import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { TracingSettingsProvider } from '@mastra/playground-ui/domains/observability/context/tracing-settings-context';
+import { WorkflowInformation } from '@mastra/playground-ui/domains/workflows/components/workflow-information';
+import { WorkflowLayout as WorkflowLayoutUI } from '@mastra/playground-ui/domains/workflows/components/workflow-layout';
+import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-selected-step-context';
+import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
+import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useMatch, useNavigate, useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
-import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
-import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
+import {
+  SchemaRequestContextProvider,
+  useMergedRequestContext,
+  useSchemaRequestContext,
+} from '@/domains/request-context/context/schema-request-context';
 import { WorkflowPageTabs, type WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
-import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
-import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
-import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
-import { useWorkflow } from '@/hooks/use-workflows';
+import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
@@ -49,7 +55,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   // Match the child segment rather than searching the pathname, so a workflow whose id is
   // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
   const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
-  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId);
+  const { isLoading: isWorkflowLoading } = useWorkflow(workflowId, usePlaygroundStore().requestContext);
   const { hasObservability } = useHasObservability();
 
   const activeTab: WorkflowPageTab | 'none' = isWorkflowPageTab(tabMatch?.params.tab) ? tabMatch.params.tab : 'none';
@@ -99,15 +105,17 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
           <WorkflowShortcuts workflowId={workflowId} />
           {activeTab === 'graph' ? (
             <WorkflowStepDetailProvider key={workflowId}>
-              <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
+              <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
                 <WorkflowSelectedStepProvider>
                   {page(
-                    <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
+                    <WorkflowLayoutUI
+                      leftSlot={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+                    >
                       {children}
                     </WorkflowLayoutUI>,
                   )}
                 </WorkflowSelectedStepProvider>
-              </WorkflowRunProvider>
+              </PlaygroundWorkflowRunProvider>
             </WorkflowStepDetailProvider>
           ) : (
             page(children)
@@ -115,5 +123,22 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
         </KeyboardScope>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>
+  );
+}
+
+function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowId: string; initialRunId?: string }) {
+  const requestContext = useMergedRequestContext();
+  const { setSchemaValues } = useSchemaRequestContext();
+  const { canExecute, canDelete } = usePermissions();
+
+  return (
+    <WorkflowInformation
+      workflowId={workflowId}
+      initialRunId={initialRunId}
+      requestContext={requestContext}
+      onRequestContextChange={setSchemaValues}
+      canExecute={canExecute('workflows')}
+      canDelete={canDelete('workflows')}
+    />
   );
 }

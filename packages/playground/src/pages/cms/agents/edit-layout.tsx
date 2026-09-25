@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -20,7 +21,6 @@ import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
-import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];

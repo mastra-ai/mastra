@@ -9,9 +9,11 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import { z as z3 } from 'zod/v3';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { durableOptionsSchema } from '../workflows/shared/schemas';
 
 // ============================================================================
 // Helper Functions
@@ -538,6 +540,79 @@ describe('DurableAgent structured output workflow integration', () => {
     const serialized = JSON.stringify(result.workflowInput);
     expect(serialized).toBeDefined();
     expect(JSON.parse(serialized)).toBeDefined();
+  });
+
+  // COR-1308: a Zod v4 schema has its own `type` property, so it used to be
+  // mistaken for JSON Schema and stored as a live instance. The evented engine
+  // then JSON round-trips workflow input between steps, leaving a schema with
+  // no `properties` that OpenAI rejects on the second model call.
+  const cases: Array<[string, () => unknown]> = [
+    ['Zod v4', () => z.object({ name: z.string(), age: z.number() })],
+    ['Zod v3', () => z3.object({ name: z3.string(), age: z3.number() })],
+    [
+      'plain JSON Schema',
+      () => ({
+        type: 'object',
+        properties: { name: { type: 'string' }, age: { type: 'number' } },
+        required: ['name', 'age'],
+        additionalProperties: false,
+      }),
+    ],
+  ];
+
+  it.each(cases)('%s schema keeps its properties across a JSON round trip', async (_label, makeSchema) => {
+    const baseAgent = new Agent({
+      id: 'round-trip-agent',
+      name: 'Round Trip Agent',
+      instructions: 'Test round trip',
+      model: createStructuredOutputModel({ name: 'a', age: 1 }) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Get person', {
+      structuredOutput: { schema: makeSchema() as any },
+    });
+
+    const roundTripped = JSON.parse(JSON.stringify(result.workflowInput));
+    const schema = roundTripped.options.structuredOutput.schema;
+    expect(schema).toEqual(result.workflowInput.options.structuredOutput?.schema);
+    expect(schema.type).toBe('object');
+    expect(Object.keys(schema.properties)).toEqual(['name', 'age']);
+    expect(schema.required).toEqual(['name', 'age']);
+    expect(durableOptionsSchema.safeParse(result.workflowInput.options).success).toBe(true);
+  });
+
+  it('rejects durable options that carry a live schema instance', () => {
+    const parsed = durableOptionsSchema.safeParse({
+      structuredOutput: { schema: z.object({ name: z.string() }) },
+    });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain('options.structuredOutput.schema');
+  });
+
+  it.each([
+    ['NaN', { modelSettings: { temperature: NaN } }, 'options.modelSettings.temperature'],
+    ['Infinity', { maxSteps: Infinity }, 'options.maxSteps'],
+    ['undefined array item', { activeTools: ['a', undefined] }, 'options.activeTools[1]'],
+  ])('rejects %s, which JSON turns into null', (_label, options, path) => {
+    const parsed = durableOptionsSchema.safeParse(options);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain(path);
+  });
+
+  it('accepts undefined properties and shared (non-cyclic) references', () => {
+    const shared = { type: 'string' };
+    expect(
+      durableOptionsSchema.safeParse({ maxSteps: undefined, providerOptions: { a: shared, b: shared } }).success,
+    ).toBe(true);
+  });
+
+  it('rejects cyclic options', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const parsed = durableOptionsSchema.safeParse({ providerOptions: cyclic });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain('options.providerOptions.self');
   });
 });
 

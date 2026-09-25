@@ -1,6 +1,7 @@
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -19,6 +20,7 @@ import {
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
 import { toStandardSchema } from '../../schema';
+import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { boundedStringify, deepMerge } from '../../utils';
@@ -307,6 +309,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
+
+  validateModelTimeoutSettings(execOptions.modelSettings?.timeout);
 
   if (execOptions.eagerToolExecution) {
     throw new Error('eagerToolExecution is not supported by durable agents');
@@ -609,6 +613,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
 
   const modelList = await typedAgent.getModelList(requestContext);
+  for (const modelConfig of modelList ?? []) {
+    validateModelTimeoutSettings(modelConfig.modelSettings?.timeout);
+  }
 
   // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;
@@ -637,9 +644,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  const structuredOutputSchema = execOptions?.structuredOutput?.schema
+    ? toStandardSchema(execOptions.structuredOutput.schema)
+    : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
-    if (so.schema) {
+    if (structuredOutputSchema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
         // `instructions` means two different things depending on `model`: structuring-agent
@@ -650,13 +660,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // only output guidance. Withhold it there and let the generated schema instruction stand.
         instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
+        // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
+        // live Zod/standard-schema instance does not survive that round trip.
+        schema: asJsonSchema(structuredOutputSchema),
       };
-      // Convert Zod schema to JSON Schema if possible
-      if (typeof so.schema === 'object' && 'type' in so.schema) {
-        serializedStructuredOutput.schema = so.schema;
-      } else if (typeof so.schema === 'object' && 'jsonSchema' in so.schema) {
-        serializedStructuredOutput.schema = so.schema.jsonSchema;
-      }
     }
   }
 
@@ -845,10 +852,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // text through `createObjectStreamTransformer`, producing `object-result`
     // chunks. Cross-process engines lose this slot and structured output
     // degrades to raw text.
-    structuredOutput: execOptions?.structuredOutput?.schema
+    structuredOutput: structuredOutputSchema
       ? {
-          ...execOptions.structuredOutput,
-          schema: toStandardSchema(execOptions.structuredOutput.schema),
+          ...execOptions!.structuredOutput,
+          schema: structuredOutputSchema,
         }
       : undefined,
     // Call-time returnScorerData flag. Also serialized into the workflow

@@ -223,7 +223,7 @@ minimumReleaseAgeExclude:
   - mysql2@3.24.4
   - '@fastify/busboy@3.2.2'
   - ws@8.21.3 || 7.5.13
-  - undici@8.10.2 || 7.29.1 || 6.28.1
+  - undici@8.11.2 || 7.29.1 || 6.28.1
   - qs@6.16.0
   - joi@17.13.8
   - nanoid@3.3.19
@@ -260,7 +260,7 @@ minimumReleaseAgeExclude:
   - 'fast-uri@3.1.8'
   - 'fast-uri@4.2.1'
   - 'compression@1.8.2'
-  - 'undici@8.11.0'
+  - 'undici@8.11.2'
   - '@ai-sdk/provider-utils@5.0.46'
   - '@ai-sdk/provider-utils@4.0.53'
   - '@ai-sdk/provider-utils@3.0.38'
@@ -355,8 +355,8 @@ overrides:
   undici@<6.0.0: 6.28.1
   undici@>=6.0.0 <6.28.1: 6.28.1
   undici@>=7.0.0 <7.29.1: 7.29.1
-  undici@>=8.0.0 <8.11.0: 8.11.0
-  e2b>undici8: npm:undici@8.11.0
+  undici@>=8.0.0 <8.11.2: 8.11.2
+  e2b>undici8: npm:undici@8.11.2
   multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0

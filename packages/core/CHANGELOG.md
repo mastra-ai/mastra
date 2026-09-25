@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.72.0-alpha.1
+
+### Minor Changes
+
+- Added a `requireDescription` option to the workspace `execute_command` tool. When enabled, the tool asks the model for a short plain-language `description` of each command, listed before `command` in the tool schema, so UIs can show it instead of the raw command. The option is off by default and the tool schema is unchanged when it is off. ([#25032](https://github.com/mastra-ai/mastra/pull/25032))
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox,
+    tools: {
+      [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireDescription: true },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed cost estimates for Anthropic 1-hour prompt-cache writes. The 5-minute and 1-hour cache-write token counts are now read from the provider's raw usage, so 1-hour writes are priced at their real rate instead of the cheaper 5-minute rate. ([#25011](https://github.com/mastra-ai/mastra/issues/25011)) ([#25089](https://github.com/mastra-ai/mastra/pull/25089))
+
+- Fixed `DurableAgent.recover()` failing with `Cannot read properties of undefined (reading 'messages')` or `(reading 'length')` when a default-engine run was killed while a tool was running or between steps. Running checkpoints now keep the conversation state a restart reads back, while still trimming older history to keep storage small. ([#25107](https://github.com/mastra-ai/mastra/pull/25107))
+
+- Fixed `restart()` and automatic recovery re-running a workflow step that had already finished. If the process stopped right after a step completed but before the next one started, restarting the run executed that step again, and for loops, foreach, parallel blocks, and branches that meant repeating every item, arm, or iteration. Restart now continues from the next step, and a run whose last step had already finished completes with that step's saved output instead of crashing. Agent-loop checkpoints now keep the just-finished step's conversation so the next step still receives it after a restart. Fixes [#24615](https://github.com/mastra-ai/mastra/issues/24615). ([#25114](https://github.com/mastra-ai/mastra/pull/25114))
+
+  `DurableAgent.recover()` no longer hangs when the run stopped after the agent had already sent its final answer. The recovered stream now finishes with that saved answer, and `onFinish` runs once.
+
+- Fixed structured output on durable agents using the evented engine. Schemas passed as `structuredOutput.schema` now stay available on later model calls and after a run is recovered. Workflow options that cannot be saved now fail with an error naming the field. ([#25075](https://github.com/mastra-ai/mastra/pull/25075))
+
+- Fixed tool search loading every `search_tools` hit when `autoLoad` is `false`. Only `load_tool` now activates tools, so the tool list stays stable and the prompt cache is preserved across steps. ([#25076](https://github.com/mastra-ai/mastra/pull/25076))
+
+- Fixed durable and evented agents to reject invalid model timeout settings before starting a run. ([#25079](https://github.com/mastra-ai/mastra/pull/25079))
+
+- Added a `getBasePath` option to `AgentsMDInjector`. When set, relative tool paths resolve against that directory instead of `process.cwd()`, and `AGENTS.md`/`CLAUDE.md` files outside it are never injected. ([#25071](https://github.com/mastra-ai/mastra/pull/25071))
+
+  ```ts
+  new AgentsMDInjector({
+    getBasePath: () => '/path/to/checkout',
+  });
+  ```
+
+- Fixed DurableAgent streams to hide response metadata chunks and attribute finish chunks to the agent. ([#25078](https://github.com/mastra-ai/mastra/pull/25078))
+
+- Updated dependencies [[`3913a33`](https://github.com/mastra-ai/mastra/commit/3913a33fd5b13dc226b1ed6253c9357cb392dd04), [`08a0aea`](https://github.com/mastra-ai/mastra/commit/08a0aea2f2af12276e333c62aaf368a9240ff68f)]:
+  - @mastra/schema-compat@1.3.12-alpha.0
+
 ## 1.72.0-alpha.0
 
 ### Minor Changes

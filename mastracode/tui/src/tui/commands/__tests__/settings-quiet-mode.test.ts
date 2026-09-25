@@ -1,3 +1,4 @@
+import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ vi.mock('../../overlay.js', () => ({ showModalOverlay: vi.fn() }));
 vi.mock('../../modal-question.js', () => ({ askModalQuestion: vi.fn() }));
 vi.mock('../api-keys.js', () => ({ handleApiKeysCommand: vi.fn() }));
 
+import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
 import { handleSettingsCommand } from '../settings.js';
@@ -129,5 +131,30 @@ describe('/settings quiet mode callbacks', () => {
     const rendered = stripAnsi(notification.render(80).join('\n'));
     expect(rendered).toContain('line three…');
     expect(rendered).not.toContain('line four');
+  });
+  it('moves Thinking placeholders out of rendered assistant messages', async () => {
+    const { ctx } = createCtx();
+    const thinking = (id: string) =>
+      new AssistantMessageComponent(
+        {
+          id,
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'hmm' }] },
+        } as never,
+        true,
+      );
+    const chatContainer = new Container();
+    chatContainer.addChild(thinking('a1'));
+    chatContainer.addChild(thinking('a2'));
+    ctx.state.chatContainer = chatContainer;
+    const countThinking = () => stripAnsi(chatContainer.render(80).join('\n')).split('Thinking...').length - 1;
+    void handleSettingsCommand(ctx);
+
+    expect(countThinking()).toBe(2);
+    mocks.callbacks.onQuietModeChange(true);
+    expect(countThinking()).toBe(0);
+    mocks.callbacks.onQuietModeChange(false);
+    expect(countThinking()).toBe(2);
   });
 });
