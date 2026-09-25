@@ -31,7 +31,8 @@ export function withUnavailableAttachmentUrls(
 
 function toUrlString(data: unknown): string | undefined {
   if (data instanceof URL) return data.toString();
-  if (typeof data !== 'string') return undefined;
+  // Data URLs are never recorded; skip parsing (and copying) their payloads.
+  if (typeof data !== 'string' || data.startsWith('data:')) return undefined;
   try {
     return new URL(data).toString();
   } catch {
@@ -39,7 +40,10 @@ function toUrlString(data: unknown): string | undefined {
   }
 }
 
-/** URLs of a stored message's file parts and attachments, normalized like the prompt's asset URLs. */
+/**
+ * Recordable (non-data) URLs of a stored message's file parts and attachments,
+ * normalized like the prompt's asset URLs.
+ */
 export function getMessageAttachmentUrls(message: MastraDBMessage): string[] {
   const urls: string[] = [];
   for (const part of message.content.parts ?? []) {
