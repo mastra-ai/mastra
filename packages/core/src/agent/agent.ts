@@ -5430,6 +5430,7 @@ export class Agent<
                     await memory.createThread({
                       resourceId: subAgentResourceId,
                       threadId: subAgentThreadId,
+                      ...(startResult.threadMetadata ? { metadata: startResult.threadMetadata } : {}),
                     });
 
                     await memory.saveMessages({
@@ -5497,6 +5498,9 @@ export class Agent<
               // Only the framework-resolved context marker can select a suspended sub-agent run.
               // Model-authored resumeData and suspendedToolRunId arguments are not provenance.
               const shouldResumeSubAgent = resumeData !== undefined && !!suspendedToolRunId;
+              const subAgentThreadMetadata = shouldResumeSubAgent
+                ? undefined
+                : (startResult as DelegationStartResult | undefined)?.threadMetadata;
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
@@ -5546,7 +5550,14 @@ export class Agent<
                     // alongside the snapshot-backfilled thread trips thread-ownership
                     // validation, since the thread belongs to the original run's resource.
                     memory: {
-                      ...(shouldResumeSubAgent ? {} : { resource: subAgentResourceId, thread: subAgentThreadId }),
+                      ...(shouldResumeSubAgent
+                        ? {}
+                        : {
+                            resource: subAgentResourceId,
+                            thread: subAgentThreadMetadata
+                              ? { id: subAgentThreadId, metadata: subAgentThreadMetadata }
+                              : subAgentThreadId,
+                          }),
                       options: {
                         lastMessages: false as const,
                         // Title generation is a top-level thread concern. Ephemeral subagent
@@ -5664,6 +5675,7 @@ export class Agent<
                     await memory.createThread({
                       resourceId: effectiveGenerateResourceId,
                       threadId: effectiveGenerateThreadId,
+                      ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
                     });
 
                     await memory.saveMessages({
@@ -5809,6 +5821,7 @@ export class Agent<
                     await streamMemory.createThread({
                       resourceId: effectiveStreamResourceId,
                       threadId: effectiveStreamThreadId,
+                      ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
                     });
 
                     await streamMemory.saveMessages({
