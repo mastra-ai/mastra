@@ -616,15 +616,33 @@ export class AgentChannels {
                         runId = toolData.parentRunId ?? toolData.runId;
                         toolName = toolData.toolName;
                         toolArgs = toolData.args;
-                        // The card's owner is the author of the closest earlier
-                        // user message (messages are newest-first).
-                        const requestMessage = messages.slice(index + 1).find(m => m.role === 'user');
-                        const author = (
-                          requestMessage?.content?.providerMetadata?.mastra as
-                            | { channels?: Record<string, { author?: { userId?: string } }> }
-                            | undefined
-                        )?.channels?.[platform]?.author;
-                        requesterId = author?.userId;
+                        // Recover the card's owner from the user turn that led to it
+                        // (messages are newest-first). If that turn has messages from
+                        // more than one author we can't tell who triggered the tool,
+                        // so no one may answer the card.
+                        const earlier = messages.slice(index + 1);
+                        const turnStart = earlier.findIndex(m => m.role === 'user');
+                        const turnEnd = earlier.findIndex((m, i) => i > turnStart && m.role !== 'user');
+                        const authors = new Set(
+                          (turnStart === -1 ? [] : earlier.slice(turnStart, turnEnd === -1 ? undefined : turnEnd))
+                            .map(
+                              m =>
+                                (
+                                  m.content?.providerMetadata?.mastra as
+                                    | { channels?: Record<string, { author?: { userId?: string } }> }
+                                    | undefined
+                                )?.channels?.[platform]?.author?.userId,
+                            )
+                            .filter((id): id is string => !!id),
+                        );
+                        if (authors.size > 1) {
+                          this.log(
+                            'info',
+                            `Ignoring tool approval action: requester for toolCallId=${toolCallId} is ambiguous`,
+                          );
+                          return;
+                        }
+                        requesterId = [...authors][0];
                         break;
                       }
                     }
