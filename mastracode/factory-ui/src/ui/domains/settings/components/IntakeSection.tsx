@@ -11,7 +11,11 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useIntakeBindingsQuery,
+  useIntakeConfigQuery,
+  useSaveIntakeConfigMutation,
+} from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
@@ -23,9 +27,9 @@ import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/service
 import type { GitLabProject, GitLabStatus } from '../../factory/services/gitlab';
 import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
-import type { IntakeConfig } from '../../factory/services/intake';
+import type { IntakeConfig, IntakeSourceBinding } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import type { GithubStatus } from '../../workspaces/services/github';
+import type { FactoryProject, GithubStatus } from '../../workspaces/services/github';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
@@ -208,7 +212,8 @@ function LinearIntakeSection({
   reauthRequired,
   showPickers,
   baseUrl,
-  repositorySlugs,
+  factories,
+  bindings,
 }: SourceSectionProps & {
   status: LinearStatus | undefined;
   connected: boolean;
@@ -218,8 +223,18 @@ function LinearIntakeSection({
 
   showPickers: boolean;
   baseUrl: string;
-  repositorySlugs: string[];
+  factories: FactoryProject[];
+  bindings: IntakeSourceBinding[];
 }) {
+  const routedProjects = projects.flatMap(project => {
+    if (!config.linear.sourceIds?.includes(project.id)) return [];
+    const binding = bindings.find(
+      candidate => candidate.integrationId === 'linear' && candidate.sourceId === project.id,
+    );
+    const factory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
+    const repositorySlugs = [...new Set(factory?.repositories.map(repository => repository.slug) ?? [])];
+    return repositorySlugs.length ? [{ project, repositorySlugs }] : [];
+  });
   const serverConfigured = status?.enabled !== false;
   const description = !serverConfigured
     ? 'Linear is not configured on this server.'
@@ -276,12 +291,12 @@ function LinearIntakeSection({
           />
         )}
 
-        {projects.length > 0 && repositorySlugs.length > 0 && (
+        {routedProjects.length > 0 && (
           <div className="flex flex-col">
             <Txt as="p" variant="caption" className="text-muted-foreground">
               Map Linear projects to repositories so their issues start in the intended repository.
             </Txt>
-            {projects.map(project => {
+            {routedProjects.map(({ project, repositorySlugs }) => {
               const mappedRepository = config.linear.repositoryByLinearProject?.[project.id];
               return (
                 <SettingsRow key={project.id} label={project.name}>
@@ -564,6 +579,7 @@ export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const bindingsQuery = useIntakeBindingsQuery();
   const githubStatusQuery = useGithubStatusQuery();
   const githubConnected = githubStatusQuery.data?.connected === true;
   const gitlabStatusQuery = useGitLabStatusQuery();
@@ -700,9 +716,8 @@ export function IntakeSection() {
         reauthRequired={reauthRequired}
         showPickers={linearReady}
         baseUrl={baseUrl}
-        repositorySlugs={[
-          ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(repository => repository.slug))),
-        ]}
+        factories={factoriesQuery.data ?? []}
+        bindings={bindingsQuery.data ?? []}
       />
       {linearReady && routedProjectIds.length > 0 && (
         <SettingsSubsection
