@@ -128,7 +128,7 @@ function CommandPaletteScope({
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta leading-none text-muted-foreground">
+      <span className="rounded-md border border-border bg-muted/70 px-1.5 py-0.5 text-meta text-muted-foreground">
         {count}
       </span>
     </button>
@@ -204,7 +204,7 @@ function CommandPaletteItem({
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-label text-foreground">{title}</span>
           {badge && (
-            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta leading-none text-muted-foreground uppercase">
+            <span className="shrink-0 rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-meta text-muted-foreground uppercase">
               {badge}
             </span>
           )}

@@ -63,11 +63,11 @@ export const menuPopupClass = cn(
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
-export const menuLabelClass = 'px-[.9em] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
+export const menuLabelClass = 'px-[.9em] pt-1.5 pb-1 text-meta text-muted-foreground uppercase';
 
 export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
 
-export const menuShortcutClass = 'ml-auto text-meta tracking-wider text-muted-foreground tabular-nums';
+export const menuShortcutClass = 'ml-auto text-meta text-muted-foreground tabular-nums';
 
 /** Non-interactive row (empty / loading) on the same size grid as an item. */
 export const menuEmptyClass =

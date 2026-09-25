@@ -43,12 +43,7 @@ export function DataDetailsPanelCodeSection({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center justify-between">
-        <div
-          className={cn(
-            'flex items-center gap-1.5 text-meta tracking-widest text-placeholder uppercase',
-            '[&>svg]:size-3.5',
-          )}
-        >
+        <div className={cn('flex items-center gap-1.5 text-column text-placeholder uppercase', '[&>svg]:size-3.5')}>
           {icon}
           {title}
         </div>
