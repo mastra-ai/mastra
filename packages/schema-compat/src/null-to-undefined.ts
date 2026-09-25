@@ -10,10 +10,12 @@ import type { StandardSchemaWithJSON } from './standard-schema/standard-schema.t
  * Only converts null→undefined for properties that are NOT in the schema's
  * `required` array, preserving null for explicitly .nullable() fields.
  */
-export function transformNullToUndefined(value: unknown, jsonSchema: Record<string, unknown>): unknown {
+export function transformNullToUndefined(value: unknown, schema: Record<string, unknown>): unknown {
   if (value === null || value === undefined) {
     return value;
   }
+
+  const jsonSchema = unwrapNullable(schema);
 
   if (typeof value !== 'object' || Array.isArray(value)) {
     if (Array.isArray(value) && jsonSchema.items && typeof jsonSchema.items === 'object') {
@@ -43,6 +45,17 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
   }
 
   return result;
+}
+
+// Nullable schemas are emitted as anyOf/oneOf with a { type: 'null' } branch
+function unwrapNullable(jsonSchema: Record<string, unknown>): Record<string, unknown> {
+  const variants = jsonSchema.anyOf ?? jsonSchema.oneOf;
+  if (!Array.isArray(variants)) {
+    return jsonSchema;
+  }
+
+  const nonNull = variants.filter(variant => variant?.type !== 'null');
+  return nonNull.length === 1 && typeof nonNull[0] === 'object' ? nonNull[0] : jsonSchema;
 }
 
 /**

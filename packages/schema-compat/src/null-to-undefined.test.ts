@@ -87,6 +87,43 @@ describe('transformNullToUndefined', () => {
     });
   });
 
+  it('handles nullable objects and arrays', () => {
+    const jsonSchema = {
+      type: 'object',
+      properties: {
+        address: {
+          anyOf: [
+            {
+              type: 'object',
+              properties: { street: { type: 'string' }, unit: { type: 'string' } },
+              required: ['street'],
+            },
+            { type: 'null' },
+          ],
+        },
+        tags: {
+          anyOf: [
+            {
+              type: 'array',
+              items: { type: 'object', properties: { label: { type: 'string' }, note: { type: 'string' } } },
+            },
+            { type: 'null' },
+          ],
+        },
+      },
+      required: ['address', 'tags'],
+    };
+
+    const result = transformNullToUndefined(
+      { address: { street: 'Main', unit: null }, tags: [{ label: 'a', note: null }] },
+      jsonSchema,
+    );
+    expect(result).toEqual({
+      address: { street: 'Main', unit: undefined },
+      tags: [{ label: 'a', note: undefined }],
+    });
+  });
+
   it('passes through non-object values', () => {
     const jsonSchema = { type: 'string' };
     expect(transformNullToUndefined('hello', jsonSchema)).toBe('hello');
@@ -133,6 +170,18 @@ describe('wrapSchemaWithNullTransform', () => {
     const result = await wrapped['~standard'].validate({ name: 'hi', note: null });
     expect(result.issues).toBeUndefined();
     expect((result as { value: unknown }).value).toEqual({ name: 'hi', note: null });
+  });
+
+  it('accepts null for optional fields inside nullable objects', async () => {
+    const schema = z.object({
+      address: z.object({ street: z.string(), unit: z.string().optional() }).nullable(),
+    });
+
+    const wrapped = wrapSchemaWithNullTransform(toStandardSchema(schema));
+
+    const result = await wrapped['~standard'].validate({ address: { street: 'Main', unit: null } });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main' } });
   });
 
   it('delegates jsonSchema to inner schema', () => {
