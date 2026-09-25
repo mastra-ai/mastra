@@ -39,7 +39,28 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
   'request timeout',
   'connection reset',
   'connection closed',
+  // Core raises this when a stream closes with finishReason 'other' before any output.
+  'finished with finishreason "other"',
 ];
+
+const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
+
+/**
+ * OM calls are single-step (`maxSteps: 1`). A step that ends with `other` or
+ * `unknown` means the stream closed before the model finished, so its text is
+ * partial. Throw a retryable error so `withRetry` re-runs the whole call
+ * instead of saving the partial reply.
+ *
+ * @internal
+ */
+export function assertCompleteModelResponse<T extends { finishReason?: string }>(output: T, label: string): T {
+  if (output.finishReason && INCOMPLETE_FINISH_REASONS.has(output.finishReason)) {
+    throw Object.assign(new Error(`${label} response ended early (finishReason: ${output.finishReason})`), {
+      isRetryable: true,
+    });
+  }
+  return output;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
