@@ -1,4 +1,5 @@
 import { DataListCell } from '../data-list-cells';
+import { Txt } from '@/ds/components/Txt';
 import { formatDate } from '@/utils/date-format';
 
 // ---------------------------------------------------------------------------
@@ -43,9 +44,16 @@ export function ScoresDataListInputCell({ input }: ScoresDataListInputCellProps)
   const display = input != null ? JSON.stringify(input) : '-';
   return (
     <DataListCell>
-      <span className="block max-w-full min-w-0 truncate font-mono text-body-sm text-muted-foreground" title={display}>
+      <Txt
+        as="span"
+        variant="body-sm"
+        tone="muted"
+        font="mono"
+        className="block max-w-full min-w-0 truncate"
+        title={display}
+      >
         {display}
-      </span>
+      </Txt>
     </DataListCell>
   );
 }
@@ -81,9 +89,16 @@ export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps)
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
     <DataListCell>
-      <span className="block max-w-full min-w-0 truncate font-mono text-body-sm text-muted-foreground" title={display}>
+      <Txt
+        as="span"
+        variant="body-sm"
+        tone="muted"
+        font="mono"
+        className="block max-w-full min-w-0 truncate"
+        title={display}
+      >
         {display}
-      </span>
+      </Txt>
     </DataListCell>
   );
 }

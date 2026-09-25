@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react'
 import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
 import { Kbd } from '@/ds/components/Kbd';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -213,9 +214,15 @@ function CommandPaletteItem({
           <span className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground">
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                font="mono"
+                className="max-w-52 truncate rounded-md border border-border bg-muted/70 px-1.5 py-0.5"
+              >
                 {path}
-              </span>
+              </Txt>
             )}
           </span>
         )}

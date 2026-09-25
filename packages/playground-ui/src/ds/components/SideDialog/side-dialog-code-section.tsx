@@ -127,7 +127,7 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           className={`${raisedSurfaceStyle} max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 text-body break-all text-muted-foreground`}
         >
           {simplified ? (
-            <div className="px-2 font-mono break-all text-muted-foreground">
+            <div className="px-2 break-all text-muted-foreground">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (

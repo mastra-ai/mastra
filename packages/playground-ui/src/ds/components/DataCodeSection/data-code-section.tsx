@@ -181,7 +181,7 @@ export function DataCodeSection({
         )}
       >
         {usePlainTextView ? (
-          <div className="font-mono break-all text-muted-foreground">
+          <div className="break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -241,7 +241,7 @@ export function DataCodeSection({
                   'overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
                 )}
               >
-                <div className="font-mono break-all text-muted-foreground">
+                <div className="break-all text-muted-foreground">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>
