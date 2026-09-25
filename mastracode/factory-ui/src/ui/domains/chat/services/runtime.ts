@@ -37,7 +37,8 @@ export const initialChatRuntime: ChatRuntimeState = {
 };
 
 type RuntimeAction =
-  { type: 'event'; event: AgentControllerEvent } | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
+  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
 
 export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
   if (action.type === 'reset') {
