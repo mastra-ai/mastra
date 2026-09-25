@@ -18,6 +18,14 @@ export const BOARD_FILTER_FIELD = {
   label: 'label',
 } as const;
 
+/** Query parameters each board narrowing is stored in. */
+export const BOARD_FILTER_QUERY = {
+  search: 'q',
+  teammate: 'teammate',
+  relevance: 'relevance',
+  label: 'label',
+} as const;
+
 /** Every board narrowing in one value: what the URL carries, and what the cards are matched against. */
 export interface BoardFilterState {
   search: string;
@@ -29,10 +37,10 @@ export interface BoardFilterState {
 
 export function boardFiltersFromParams(params: URLSearchParams, kind: BoardKind): BoardFilterState {
   return {
-    search: params.get('q') ?? '',
-    participantId: params.get('teammate') || undefined,
-    relevanceTypes: boardRelevanceFromQuery(params.get('relevance'), kind),
-    labels: boardLabelsFromQuery(params.getAll('label')),
+    search: params.get(BOARD_FILTER_QUERY.search) ?? '',
+    participantId: params.get(BOARD_FILTER_QUERY.teammate) || undefined,
+    relevanceTypes: boardRelevanceFromQuery(params.get(BOARD_FILTER_QUERY.relevance), kind),
+    labels: boardLabelsFromQuery(params.getAll(BOARD_FILTER_QUERY.label)),
   };
 }
 
@@ -42,11 +50,11 @@ export function boardFilterParams(params: URLSearchParams, state: BoardFilterSta
   const relevance = state.participantId ? boardRelevanceQueryValue(state.relevanceTypes, kind) : undefined;
   const set = (key: string, value: string | undefined) => (value ? next.set(key, value) : next.delete(key));
 
-  set('q', state.search.trim() || undefined);
-  set('teammate', state.participantId);
-  set('relevance', relevance);
-  next.delete('label');
-  for (const label of boardLabelsQueryValues(state.labels)) next.append('label', label);
+  set(BOARD_FILTER_QUERY.search, state.search.trim() || undefined);
+  set(BOARD_FILTER_QUERY.teammate, state.participantId);
+  set(BOARD_FILTER_QUERY.relevance, relevance);
+  next.delete(BOARD_FILTER_QUERY.label);
+  for (const label of boardLabelsQueryValues(state.labels)) next.append(BOARD_FILTER_QUERY.label, label);
   return next;
 }
 

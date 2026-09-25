@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
+import { useLayoutEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
@@ -46,6 +47,7 @@ import {
 } from '../domains/factory/boardRelevance';
 import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '../domains/factory/boardFilters';
 import type { BoardFilterState } from '../domains/factory/boardFilters';
+import { restoreBoardView, saveBoardView } from '../domains/factory/services/boardViews';
 import { candidatePayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
 import { orderWorkItemsForStage } from '../domains/factory/boardOrder';
@@ -163,7 +165,16 @@ function BoardContent({
   const review = kind === 'review';
   const builtin = kind === 'work' || review;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [urlParams, setSearchParams] = useSearchParams();
+  // Opening a board without filters or sort in the URL (e.g. from the sidebar) brings back the ones
+  // last used here. They apply on this render so the board never flashes unfiltered; the effect
+  // then writes them into the URL.
+  const restoredParams = restoreBoardView(factoryProjectId, kind, urlParams);
+  const searchParams = restoredParams ?? urlParams;
+  const restoredSearch = restoredParams?.toString();
+  useLayoutEffect(() => {
+    if (restoredSearch !== undefined) setSearchParams(new URLSearchParams(restoredSearch), { replace: true });
+  }, [restoredSearch, setSearchParams]);
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const filters = boardFiltersFromParams(searchParams, kind);
@@ -209,10 +220,13 @@ function BoardContent({
   const setFilters = (next: BoardFilterState) => {
     const params = boardFilterParams(searchParams, next, kind);
     clearOpenCard(params);
+    saveBoardView(factoryProjectId, kind, params);
     setSearchParams(params, { replace: true });
   };
   const setSort = (next: BoardSort) => {
-    setSearchParams(boardSortParams(searchParams, next), { replace: true });
+    const params = boardSortParams(searchParams, next);
+    saveBoardView(factoryProjectId, kind, params);
+    setSearchParams(params, { replace: true });
   };
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
