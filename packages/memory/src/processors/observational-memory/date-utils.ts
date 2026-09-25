@@ -219,7 +219,7 @@ export function parseDateSpan(text: string): DateSpan | null {
 }
 
 const QUALIFIED_YEAR = new RegExp(
-  String.raw`\b(?:(?:the\s+)?(?:early|mid|late|end\s+of|start\s+of|beginning\s+of)\s+)?${YEAR}`,
+  String.raw`\b(?:by|in|until|before|after|(?:the\s+)?(?:early|mid|late|end\s+of|start\s+of|beginning\s+of))\s+${YEAR}`,
   'gi',
 );
 

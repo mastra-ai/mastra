@@ -424,8 +424,11 @@ describe('expandInlineEstimatedDates', () => {
     expect(expandInlineEstimatedDates(`User noted it ${note}`, now)).toBe(`User noted it ${expected}`);
   });
 
-  it('leaves notes without a year unchanged', () => {
-    const input = 'User listed costs (estimated 50,000+ TRY, like kitchen updates)';
+  it.each([
+    'User listed costs (estimated 50,000+ TRY, like kitchen updates)',
+    'User scoped the refactor (estimated 2000 lines of change)',
+    'User asked for more (meaning raise to $2100 per month)',
+  ])('leaves notes without a year unchanged: %s', input => {
     expect(expandInlineEstimatedDates(input, now)).toBe(input);
   });
 
