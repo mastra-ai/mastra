@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -86,6 +87,59 @@ describe('AgentController cloneThread', () => {
     expect(storageCloneThread).not.toHaveBeenCalled();
     expect(cloned.id).toBe('cloned-thread-id');
     expect(cloned.resourceId).toBe('target-resource');
+  });
+
+  it("resolves dynamic memory with the caller's request context when cloning", async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const storage = new InMemoryStore();
+    // History subscriptions also resolve memory, so record the user seen by
+    // the instance that actually performs the clone.
+    let cloningUser: unknown;
+    const memoryFactory = vi.fn().mockImplementation(({ requestContext }) => {
+      const user = requestContext.get('user');
+      return Object.assign(new MockMemory(), {
+        cloneThread: vi.fn().mockImplementation(async () => {
+          cloningUser = user;
+          return {
+            thread: { id: 'c', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+            clonedMessages: [],
+            messageIdMap: {},
+          };
+        }),
+      });
+    });
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      resourceId: 'controller-resource',
+      storage,
+      memory: memoryFactory as any,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4o' } as any,
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const memoryStore = await storage.getStore('memory');
+    await memoryStore!.saveThread({
+      thread: { id: 'src', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+    });
+    const session = await controller.createSession({ id: 's', ownerId: 'o' });
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    await session.thread.clone({ sourceThreadId: 'src', requestContext });
+
+    expect(cloningUser).toEqual({ id: 'user-1' });
   });
 
   it('uses the raw memory storage clone when configured memory is absent', async () => {

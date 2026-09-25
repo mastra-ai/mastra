@@ -86,10 +86,23 @@ describe('AgentController fork clone metadata wiring', () => {
 
     expect(capturedOpts).toHaveLength(1);
     const captured = capturedOpts[0]!;
-    const cloneCb = captured.cloneThreadForFork as (a: { sourceThreadId: string; title?: string }) => Promise<unknown>;
+    const cloneCb = captured.cloneThreadForFork as (a: {
+      sourceThreadId: string;
+      title?: string;
+      requestContext?: RequestContext;
+    }) => Promise<unknown>;
     expect(cloneCb).toBeTypeOf('function');
 
-    await cloneCb({ sourceThreadId: 'parent-thread-xyz', title: 'Fork: Explore subagent' });
+    const parentContext = new RequestContext();
+    parentContext.set('user', { id: 'user-1' });
+    await cloneCb({
+      sourceThreadId: 'parent-thread-xyz',
+      title: 'Fork: Explore subagent',
+      requestContext: parentContext,
+    });
+
+    // A dynamic memory factory resolves for the parent run's signed-in user.
+    expect(memoryFactory.mock.calls.at(-1)![0].requestContext.get('user')).toEqual({ id: 'user-1' });
 
     // The fork path must never hydrate message payloads.
     expect(cloneThread).not.toHaveBeenCalled();
