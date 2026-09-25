@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/p
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
+import { glob } from 'tinyglobby';
 
 const timeout = 5 * 60 * 1000;
 
@@ -231,7 +232,11 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ value: 'a -> b -> c', root: 'root', app: 'App value is BEFORE.' });
+      expect(body).toEqual({
+        value: 'a -> b -> c',
+        root: 'external-workspace-root-implementation-marker',
+        app: 'App value is BEFORE.',
+      });
     });
 
     it('should preserve dynamic subpath imports when the package has a nested module package.json', async () => {
@@ -506,7 +511,11 @@ export const environmentRoute = registerApiRoute('/environment', {
           const baseline = await waitForReload(
             body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
           );
-          expect(baseline).toEqual({ value: 'a -> b -> c', root: 'root', app: 'App value is BEFORE.' });
+          expect(baseline).toEqual({
+            value: 'a -> b -> c',
+            root: 'external-workspace-root-implementation-marker',
+            app: 'App value is BEFORE.',
+          });
           const initialInstance = await readServerInstance();
           expect(await readServerInstance()).toBe(initialInstance);
 
@@ -515,7 +524,11 @@ export const environmentRoute = registerApiRoute('/environment', {
           const afterPackage = await waitForReload(
             body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
           );
-          expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', root: 'root', app: 'App value is BEFORE.' });
+          expect(afterPackage).toEqual({
+            value: 'a -> b -> c-AFTER',
+            root: 'external-workspace-root-implementation-marker',
+            app: 'App value is BEFORE.',
+          });
           // A browser reconnecting after this broadcast must still detect the restart.
           await fetch(`http://localhost:${port}/__refresh`, { method: 'POST' });
           const packageInstance = await readServerInstance();
@@ -527,7 +540,11 @@ export const environmentRoute = registerApiRoute('/environment', {
           const afterApp = await waitForReload(
             body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is AFTER.',
           );
-          expect(afterApp).toEqual({ value: 'a -> b -> c-AFTER', root: 'root', app: 'App value is AFTER.' });
+          expect(afterApp).toEqual({
+            value: 'a -> b -> c-AFTER',
+            root: 'external-workspace-root-implementation-marker',
+            app: 'App value is AFTER.',
+          });
         } finally {
           // Restore fixture so subsequent build/start suites see the original sources.
           await writeFile(packageSource, originalPackageSource);
@@ -657,15 +674,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(packageJson.dependencies?.nodemailer).toBe('^9.0.1');
     });
 
-    it('should preserve default externals alongside a configured externals array', async () => {
+    it('should keep configured workspace externals out of bundles without inlining default externals', async () => {
       const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
       const outputFiles = await readdir(outputDir);
-      const output = (
-        await Promise.all(
-          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
-        )
-      ).join('\n');
+      const bundleFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
 
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
@@ -685,6 +699,9 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
       expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
       expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
+      expect(output).not.toContain('external-workspace-root-implementation-marker');
+      expect(output).toContain('My Agent');
+      expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
     });
 
     it('should exclude imports from dead NODE_ENV branches', async () => {
@@ -1199,7 +1216,11 @@ export const mastra = new Mastra({
           const res = await fetch(`http://localhost:${port}/transitive-workspace`);
           const body = await res.json();
           expect(res.status).toBe(200);
-          expect(body).toEqual({ value: 'a -> b -> c', root: 'root', app: 'App value is BEFORE.' });
+          expect(body).toEqual({
+            value: 'a -> b -> c',
+            root: 'external-workspace-root-implementation-marker',
+            app: 'App value is BEFORE.',
+          });
         } finally {
           if (proc) {
             try {
