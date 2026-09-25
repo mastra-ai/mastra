@@ -1447,6 +1447,74 @@ describe('DockerSandbox', () => {
       expect(result.timedOut).toBe(false);
     });
 
+    it('should share one kill confirmation between two concurrent kill() calls', async () => {
+      // A second kill() must reuse the in-flight confirmation. If it started its
+      // own helper, that helper would replace `_terminationPromise` and clear it
+      // when it settled — so an 'end' arriving while the first helper was still
+      // running would find nothing to await and settle as a natural exit, and the
+      // first helper's later success could no longer correct the result.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      // First helper: gated so its confirmation stays in flight while the second
+      // kill() and the stream 'end' are delivered.
+      let releaseFirstKill!: () => void;
+      const firstKillGate = new Promise<void>(resolve => {
+        releaseFirstKill = resolve;
+      });
+      mockContainer.exec.mockImplementationOnce(async () => {
+        await firstKillGate;
+        return {
+          id: 'kill-exec-1',
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+        };
+      });
+      // Second helper: fails immediately. Were it run instead of reusing the first
+      // confirmation, it would clear `_terminationPromise` straight away.
+      mockContainer.exec.mockImplementationOnce(async () => ({
+        id: 'kill-exec-2',
+        start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+      }));
+
+      const firstKill = handle.kill();
+      const secondKill = handle.kill();
+
+      // 'end' arrives while the shared confirmation is still pending.
+      const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+      const endPromise = endHandler();
+
+      let settled = false;
+      waitPromise.then(() => {
+        settled = true;
+      });
+
+      // Let every pending settlement step run without releasing the gated helper.
+      // A second helper (started instead of reusing the first confirmation) fails
+      // here and clears `_terminationPromise`, so 'end' finds nothing to await and
+      // settles this as a natural exit while the confirmation is still in flight.
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(settled).toBe(false);
+
+      releaseFirstKill();
+      await endPromise;
+
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+      expect(await firstKill).toBe(true);
+      // Both calls report the one confirmation, rather than the fast-failing
+      // second helper's false.
+      expect(await secondKill).toBe(true);
+    });
+
     it('should preserve timedOut metadata when the stream ends during a timeout kill', async () => {
       vi.useFakeTimers();
       try {

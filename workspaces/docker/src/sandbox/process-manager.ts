@@ -257,6 +257,14 @@ class DockerProcessHandle extends ProcessHandle {
   async kill(): Promise<boolean> {
     if (this._exitCode !== undefined) return false;
 
+    // A kill already in flight owns the confirmation for this process, so share
+    // it instead of starting a second helper. Otherwise the second helper
+    // replaces `_terminationPromise` and clears it once it settles, leaving an
+    // early stream 'end' nothing to await while the first helper is still
+    // running — it would settle as a natural exit, and the first helper's later
+    // success could no longer correct a result that already reported one.
+    if (this._terminationPromise) return this._terminationPromise;
+
     // Publish the in-flight confirmation before awaiting it. Killing the target
     // tears its own exec stream down, so an early stream 'end' may arrive while
     // this is still running — it waits on this promise instead of settling as if
