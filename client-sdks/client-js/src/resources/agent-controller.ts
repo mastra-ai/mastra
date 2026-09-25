@@ -4,6 +4,12 @@ import type {
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
+/** Acknowledgement for approval/suspension commands; `ok` is true only when a pending target claimed it. */
+export interface AgentControllerCommandAck {
+  ok: boolean;
+  reason?: string;
+}
+
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StorageListMessagesOutput } from '@mastra/core/storage';
@@ -614,10 +620,17 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/abort`), { method: 'POST' });
   }
 
-  /** Approve or decline a pending tool call (`tool_approval_required`). */
-  async approveTool(toolCallId: string, approved: boolean, options?: AgentControllerRequestOptions): Promise<void> {
+  /**
+   * Approve or decline a pending tool call (`tool_approval_required`). Resolves
+   * `{ ok: false, reason }` when no pending approval claimed the decision.
+   */
+  async approveTool(
+    toolCallId: string,
+    approved: boolean,
+    options?: AgentControllerRequestOptions,
+  ): Promise<AgentControllerCommandAck> {
     const requestContext = parseClientRequestContext(options?.requestContext);
-    await this.request(this.url(`${this.base()}/tool-approval`), {
+    return this.request<AgentControllerCommandAck>(this.url(`${this.base()}/tool-approval`), {
       method: 'POST',
       body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
     });
@@ -632,9 +645,9 @@ export class AgentControllerSession extends BaseResource {
     toolCallId: string,
     resumeData: string | string[] | PlanResume,
     options?: AgentControllerRequestOptions,
-  ): Promise<void> {
+  ): Promise<AgentControllerCommandAck> {
     const requestContext = parseClientRequestContext(options?.requestContext);
-    await this.request(this.url(`${this.base()}/tool-suspension`), {
+    return this.request<AgentControllerCommandAck>(this.url(`${this.base()}/tool-suspension`), {
       method: 'POST',
       body: { toolCallId, resumeData, ...(requestContext ? { requestContext } : {}) },
     });

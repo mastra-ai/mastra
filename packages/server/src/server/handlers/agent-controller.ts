@@ -285,7 +285,7 @@ const createSessionResponseSchema = z.object({
   resourceId: z.string(),
   threadId: z.string().optional(),
 });
-const ackResponseSchema = z.object({ ok: z.boolean() });
+const ackResponseSchema = z.object({ ok: z.boolean(), reason: z.string().optional() });
 /**
  * Status-line relevant slice of the session's observational-memory progress.
  * Mirrors the TUI status line: `msg pending/threshold ↓removal` (the active
@@ -687,8 +687,14 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       // Pass toolCallId so a stale request cannot resolve a different pending gate.
       const gated = session.approval.isArmed() && (!toolCallId || session.approval.getToolCallId() === toolCallId);
       if (gated || !toolCallId) {
-        session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline', requestContext });
+        const result = session.respondToToolApproval({
+          toolCallId,
+          decision: approved ? 'approve' : 'decline',
+          requestContext,
+        });
+        if (!result.accepted) return { ok: false, reason: result.reason };
       } else {
+        if (!(await session.hasPersistedToolApproval(toolCallId))) return { ok: false, reason: 'not_pending' };
         // Nothing parked for this call (e.g. a card restored from history after a
         // restart): resume the stored suspended run that owns it.
         ackBackgroundSessionWork({
@@ -726,6 +732,8 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // A resumed tool drives the run to its next terminal or suspension boundary.
       // Awaiting it holds this request open until the continuation finishes, which
       // can trip the request timeout and leave CORS mutating an already-sent response.
+      const claim = session.canRespondToToolSuspension(toolCallId);
+      if (!claim.accepted) return { ok: false, reason: claim.reason };
       ackBackgroundSessionWork({
         work: session.respondToToolSuspension({ toolCallId, resumeData, requestContext }),
         session,

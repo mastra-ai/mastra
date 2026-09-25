@@ -262,6 +262,7 @@ describe('agent-controller routes', () => {
         const session = await getRouteSession(`user-bg-${name}`);
         const failure = new Error('signal failed before stream started');
         vi.spyOn(session, method as any).mockRejectedValue(failure);
+        vi.spyOn(session, 'canRespondToToolSuspension').mockReturnValue({ accepted: true });
         const errorLog = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
 
         const events: any[] = [];
@@ -402,7 +403,7 @@ describe('agent-controller routes', () => {
       const session = await getRouteSession('user-rc');
       vi.spyOn(session.approval, 'isArmed').mockReturnValue(true);
       vi.spyOn(session.approval, 'getToolCallId').mockReturnValue('call-1');
-      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue(undefined);
+      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue({ accepted: true });
       const requestContext = makeRequestContext();
 
       await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
@@ -420,6 +421,7 @@ describe('agent-controller routes', () => {
     it('answers an approval with no parked gate through the stored suspended run', async () => {
       const session = await getRouteSession('user-rc');
       const gate = vi.spyOn(session, 'respondToToolApproval');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
       const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -438,6 +440,7 @@ describe('agent-controller routes', () => {
 
     it('forwards requestContext to session.respondToToolSuspension', async () => {
       const session = await getRouteSession('user-rc');
+      vi.spyOn(session, 'canRespondToToolSuspension').mockReturnValue({ accepted: true });
       const spy = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -455,6 +458,7 @@ describe('agent-controller routes', () => {
 
     it('acks a tool suspension without waiting for the resumed run to finish', async () => {
       const session = await getRouteSession('user-suspension-ack');
+      vi.spyOn(session, 'canRespondToToolSuspension').mockReturnValue({ accepted: true });
       vi.spyOn(session, 'respondToToolSuspension').mockReturnValue(new Promise<void>(() => {}));
 
       const result = await Promise.race([
@@ -469,6 +473,67 @@ describe('agent-controller routes', () => {
       ]);
 
       expect(result).toEqual({ ok: true });
+    });
+  });
+
+  // mastra-ai/mastra#24779: the ack must reflect whether a pending target claimed the command.
+  describe('approval and suspension acks', () => {
+    async function getRouteSession(resourceId: string) {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+    }
+
+    const approve = (resourceId: string, toolCallId?: string) =>
+      AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId,
+        toolCallId,
+        approved: true,
+      } as any);
+
+    it('accepts the armed call once, then rejects a duplicate decision', async () => {
+      const session = await getRouteSession('user-ack-dup');
+      const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
+
+      expect(await approve('user-ack-dup', 'current')).toEqual({ ok: true });
+      await expect(decision).resolves.toMatchObject({ decision: 'approve' });
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
+      expect(await approve('user-ack-dup', 'current')).toEqual({ ok: false, reason: 'not_pending' });
+    });
+
+    it('rejects a stale tool call id and leaves the armed gate in place', async () => {
+      const session = await getRouteSession('user-ack-stale');
+      session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
+
+      expect(await approve('user-ack-stale', 'stale')).toEqual({ ok: false, reason: 'not_pending' });
+      expect(persisted).not.toHaveBeenCalled();
+      expect(session.approval.isArmed()).toBe(true);
+      expect(session.approval.getToolCallId()).toBe('current');
+    });
+
+    it('rejects an approval without a tool call id when nothing is armed', async () => {
+      await getRouteSession('user-ack-none');
+      expect(await approve('user-ack-none')).toEqual({ ok: false, reason: 'not_pending' });
+    });
+
+    it('rejects a suspension answer when no question is pending', async () => {
+      const session = await getRouteSession('user-ack-suspend');
+      const spy = vi.spyOn(session, 'respondToToolSuspension');
+
+      const res = await AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ack-suspend',
+        toolCallId: 'missing',
+        resumeData: 'Yes',
+      } as any);
+
+      expect(res).toEqual({ ok: false, reason: 'no_pending_suspension' });
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 
