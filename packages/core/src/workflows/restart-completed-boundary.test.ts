@@ -269,6 +269,34 @@ describe('restart after a checkpoint that shows the entry finished (issue #24615
     expect(onFinish.mock.calls[0]![0]).toMatchObject({ status: 'success', result: { b: 20 } });
   });
 
+  it('returns only the branches that ran when the last entry is a finished branch', async () => {
+    const build = (): Built => {
+      const start = step('start', async ({ inputData }) => ({ n: inputData.n }));
+      const taken = step('taken', async ({ inputData }) => ({ taken: inputData.n * 2 }));
+      const skipped = step('skipped', async () => ({ skipped: true }));
+      const workflow = createWorkflow({
+        id: 'restart-all-done-branch',
+        inputSchema: anySchema,
+        outputSchema: anySchema,
+      })
+        .then(start.step)
+        .branch([
+          [async () => true, taken.step],
+          [async () => false, skipped.step],
+        ])
+        .commit();
+      return { workflow, fns: { start: start.fn, taken: taken.fn, skipped: skipped.fn } };
+    };
+
+    const { original, restarted, fns } = await restartFrom(build, { n: 3 }, cps => finishedCheckpoint(cps, 1));
+
+    expect(fns.taken).not.toHaveBeenCalled();
+    expect(fns.skipped).not.toHaveBeenCalled();
+    expect(original.result).toStrictEqual({ taken: { taken: 6 } });
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toStrictEqual(original.result);
+  });
+
   describe('keeps re-running the entry when the checkpoint does not show it finished', () => {
     it('re-runs a step that was mid-run', async () => {
       const { restarted, fns } = await restartFrom(sequential, { n: 1 }, cps => {

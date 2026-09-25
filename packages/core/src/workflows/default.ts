@@ -1086,12 +1086,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (lastOutput === undefined) {
       // Restarted from a checkpoint written after the final entry finished, so
-      // nothing was left to run. Complete the run with that entry's saved output.
+      // nothing was left to run. Complete the run with that entry's saved output,
+      // shaped the way the entry returns it: parallel and conditional keep only the
+      // branches that succeeded, like executeParallel and executeConditional.
       const lastIdx = steps.length - 1;
-      lastOutput = {
-        result: { status: 'success', output: this.getStepOutput(stepResults, steps[lastIdx]) },
-        stepResults,
-      };
+      const lastEntry = steps[lastIdx]!;
+      const output =
+        lastEntry.type === 'parallel' || lastEntry.type === 'conditional'
+          ? Object.fromEntries(
+              lastEntry.steps
+                .map(getSingleStepEntryId)
+                .filter(id => stepResults[id]?.status === 'success')
+                .map(id => [id, stepResults[id].output]),
+            )
+          : this.getStepOutput(stepResults, lastEntry);
+      lastOutput = { result: { status: 'success', output }, stepResults };
       lastExecutionContext = {
         workflowId,
         runId,
