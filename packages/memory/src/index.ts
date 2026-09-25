@@ -1059,11 +1059,14 @@ export class Memory extends MastraMemory {
   }
 
   /**
-   * Prefix shared by every message index. The index for the default embedding
-   * dimension is named with the bare prefix; other dimensions add a suffix.
+   * Prefix shared by every message index. The index for the default embedding dimension is named
+   * with the bare prefix; other dimensions add a dimension suffix, and a store that embeds the
+   * text itself adds its own. Built here rather than read from `getEmbeddingIndexName()`, which
+   * answers for one configuration and so would not match indexes written under another.
    */
   private get messageIndexPrefix(): string {
-    return this.getEmbeddingIndexName();
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}messages`;
   }
 
   /**

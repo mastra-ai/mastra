@@ -195,6 +195,36 @@ describe('message updates on a self-embedding store', () => {
   });
 });
 
+describe('vector cleanup on a self-embedding store', () => {
+  it('finds message indexes written under any embedding configuration', async () => {
+    const vector = makeVector(1024);
+    (vector as any).isSelfEmbedding = true;
+    // A store that was used with a client-side embedder before switching still holds those
+    // indexes, and deleting a thread has to clear vectors from all of them.
+    vi.mocked(vector.listIndexes).mockResolvedValue([
+      'memory_messages',
+      'memory_messages_384',
+      'memory_messages_selfembed',
+      'memory_observations_384',
+      'unrelated_index',
+    ]);
+
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      vector,
+      options: { semanticRecall: { topK: 2, messageRange: 0 }, generateTitle: false },
+    });
+
+    await (memory as any).deleteThreadVectors('thread-1');
+
+    const cleared = vi.mocked(vector.deleteVectors).mock.calls.map(([args]: any[]) => args.indexName);
+    expect(cleared).toContain('memory_messages_selfembed');
+    expect(cleared).toContain('memory_messages');
+    expect(cleared).toContain('memory_messages_384');
+    expect(cleared).not.toContain('unrelated_index');
+  });
+});
+
 describe('semantic recall index naming at the default dimension', () => {
   /**
    * The 384-dimension case is covered in index.test.ts. This covers 1536, which takes the other
