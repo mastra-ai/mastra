@@ -309,6 +309,25 @@ describe('channels()', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
+  it('yields a real DiscordProvider that reports isConfigured from the bot token alone (end to end)', async () => {
+    // Deliberately NOT mocking @mastra/discord: this pins the UI-visible
+    // symptom — Studio showed Discord as "Not Configured" because the
+    // provider required applicationId + publicKey alongside the bot token,
+    // and the platform connection only delivers the token.
+    vi.stubEnv('DISCORD_BOT_TOKEN', undefined as unknown as string);
+    vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
+    vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      // No metadata — the token is the only credential material available.
+    });
+    const { channels: channelsFn } = await import('../channels.js');
+    const providers = await channelsFn(options(fetchMock));
+    const discord = providers.discord as { getInfo(): { isConfigured: boolean } };
+    expect(discord.getInfo().isConfigured).toBe(true);
+  });
+
   it('resolves slack + telegram + discord together into a single ChannelProvider map', async () => {
     vi.doMock('@mastra/slack', () => ({ SlackProvider: fakeSlack() }));
     vi.doMock('@mastra/telegram', () => ({ TelegramProvider: fakeTelegram() }));
