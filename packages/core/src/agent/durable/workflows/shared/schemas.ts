@@ -11,31 +11,41 @@ import { z } from 'zod';
 
 /**
  * Returns the path of the first value that would not survive a JSON round trip
- * (functions, symbols, bigints, class instances), or undefined if the value is
- * JSON-safe. Dates are allowed: the workflow snapshot codec round-trips them.
+ * (functions, symbols, bigints, non-finite numbers, class instances, cycles, and
+ * `undefined` array items), or undefined if the value is JSON-safe. Undefined
+ * object properties are allowed (JSON drops them), and so are Dates: the workflow
+ * snapshot codec round-trips them.
  */
-function findNonJsonSafePath(value: unknown, path: string, seen: Set<object>): string | undefined {
+function findNonJsonSafePath(value: unknown, path: string, ancestors: Set<object>): string | undefined {
   if (value === null || value === undefined) return undefined;
   const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean') return undefined;
+  if (type === 'string' || type === 'boolean') return undefined;
+  if (type === 'number') return Number.isFinite(value) ? undefined : path || '<root>';
   if (type !== 'object') return path || '<root>';
   if (value instanceof Date) return undefined;
-  if (seen.has(value as object)) return path || '<root>';
-  seen.add(value as object);
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      const bad = findNonJsonSafePath(value[i], `${path}[${i}]`, seen);
+  // Only objects on the current path form a cycle; shared references are fine.
+  if (ancestors.has(value as object)) return path || '<root>';
+  ancestors.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const itemPath = `${path}[${i}]`;
+        if (value[i] === undefined) return itemPath;
+        const bad = findNonJsonSafePath(value[i], itemPath, ancestors);
+        if (bad) return bad;
+      }
+      return undefined;
+    }
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return path || '<root>';
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const bad = findNonJsonSafePath(child, path ? `${path}.${key}` : key, ancestors);
       if (bad) return bad;
     }
     return undefined;
+  } finally {
+    ancestors.delete(value as object);
   }
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return path || '<root>';
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const bad = findNonJsonSafePath(child, path ? `${path}.${key}` : key, seen);
-    if (bad) return bad;
-  }
-  return undefined;
 }
 
 /**

@@ -11,6 +11,7 @@ import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
+import { toStandardSchema } from '../../schema';
 import type { WorkflowsStorage } from '../../storage';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
@@ -963,6 +964,7 @@ export class DurableAgent<
         // Keep recovered runs observable if they suspend again so a later
         // resume or recovery can pick them up.
         messageList,
+        structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
         returnScorerData: workflowInput.options?.returnScorerData,
       });
@@ -1229,6 +1231,14 @@ export class DurableAgent<
       // Restore the run-level execution budget from the persisted snapshot so
       // a recovered session is bounded like the original one (#21724).
       timeoutTotalMs: workflowInput.options?.modelSettings?.timeout?.totalMs,
+      // Rebuild the live structured output config from the persisted JSON Schema
+      // so the recovered stream still emits `object-result` chunks.
+      structuredOutput: workflowInput.options?.structuredOutput?.schema
+        ? {
+            ...workflowInput.options.structuredOutput,
+            schema: toStandardSchema(workflowInput.options.structuredOutput.schema),
+          }
+        : undefined,
       backgroundTaskManager,
       backgroundTasksConfig,
       inputProcessors,

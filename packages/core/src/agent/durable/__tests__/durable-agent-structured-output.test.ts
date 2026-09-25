@@ -589,6 +589,31 @@ describe('DurableAgent structured output workflow integration', () => {
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues[0]?.message).toContain('options.structuredOutput.schema');
   });
+
+  it.each([
+    ['NaN', { modelSettings: { temperature: NaN } }, 'options.modelSettings.temperature'],
+    ['Infinity', { maxSteps: Infinity }, 'options.maxSteps'],
+    ['undefined array item', { activeTools: ['a', undefined] }, 'options.activeTools[1]'],
+  ])('rejects %s, which JSON turns into null', (_label, options, path) => {
+    const parsed = durableOptionsSchema.safeParse(options);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain(path);
+  });
+
+  it('accepts undefined properties and shared (non-cyclic) references', () => {
+    const shared = { type: 'string' };
+    expect(
+      durableOptionsSchema.safeParse({ maxSteps: undefined, providerOptions: { a: shared, b: shared } }).success,
+    ).toBe(true);
+  });
+
+  it('rejects cyclic options', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const parsed = durableOptionsSchema.safeParse({ providerOptions: cyclic });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain('options.providerOptions.self');
+  });
 });
 
 // ============================================================================
