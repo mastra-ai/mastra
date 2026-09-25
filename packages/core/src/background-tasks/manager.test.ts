@@ -1720,6 +1720,95 @@ describe('BackgroundTaskManager', () => {
         await local.cleanup();
       }
     });
+
+    it('aborts a superseded run once its lease renewal is rejected', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let executorSignal: AbortSignal | undefined;
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'superseded-abort', args: {}, agentId: 'a1', runId: 'r-superseded-abort' },
+          ctx(async (_args: unknown, opts: { abortSignal?: AbortSignal }) => {
+            executorSignal = opts.abortSignal;
+            await gate;
+            return 'late result';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+        await vi.waitFor(() => expect(executorSignal).toBeDefined());
+        expect(executorSignal!.aborted).toBe(false);
+
+        // Another worker takes the task over, as it would once this owner's
+        // lease lapsed, and becomes the recorded owner.
+        const bgStore = await testStorage.getStore('backgroundTasks');
+        await bgStore!.updateTask(task.id, {
+          ownerId: 'other-worker',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+
+        // The heartbeat (1s with a 3s lease) is now fenced out by the owner, so
+        // the local run is aborted instead of executing alongside the new owner.
+        await vi.waitFor(() => expect(executorSignal!.aborted).toBe(true), { timeout: 5_000, interval: 50 });
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
+
+    it('does not abort when a rejected renewal finds the task no longer running', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let executorSignal: AbortSignal | undefined;
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'settled-renewal', args: {}, agentId: 'a1', runId: 'r-settled-renewal' },
+          ctx(async (_args: unknown, opts: { abortSignal?: AbortSignal }) => {
+            executorSignal = opts.abortSignal;
+            await gate;
+            return 'ok';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+        await vi.waitFor(() => expect(executorSignal).toBeDefined());
+
+        // The task leaves `running` under another owner — it suspended rather
+        // than being taken over — so renewal is rejected but nothing is aborted.
+        const bgStore = await testStorage.getStore('backgroundTasks');
+        await bgStore!.updateTask(task.id, {
+          status: 'suspended',
+          ownerId: 'other-worker',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+
+        // Wait past the 1s heartbeat so the rejected renewal has definitely run.
+        await tick(2_200);
+
+        expect(executorSignal!.aborted).toBe(false);
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
   });
 
   describe('stream', () => {

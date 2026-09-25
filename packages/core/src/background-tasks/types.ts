@@ -230,8 +230,9 @@ export interface BackgroundTaskManagerConfig {
    * Duration of the execution lease each worker acquires before running a task,
    * in ms. While the lease is valid no other worker may recover the task; once
    * it expires an unresponsive owner is treated as dead and the task becomes
-   * reclaimable. The owner renews the lease at `leaseDurationMs / 3`. Default:
-   * 30_000 (30 seconds).
+   * reclaimable. The owner renews the lease at `leaseDurationMs / 3`. Must be at
+   * least 3000ms so the lease can be renewed before it lapses — the manager
+   * throws at construction for anything lower. Default: 30_000 (30 seconds).
    */
   leaseDurationMs?: number;
   /**
