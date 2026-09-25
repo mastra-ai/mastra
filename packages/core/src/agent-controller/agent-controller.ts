@@ -551,9 +551,9 @@ export class AgentController<TState = {}> {
             if (existingThread.resourceId !== effectiveResourceId) {
               throw new Error(`Thread not found: ${threadId}`);
             }
-            await session.thread.switch({ threadId });
+            await session.thread.switch({ threadId, requestContext });
           } else {
-            await session.thread.create({ id: threadId });
+            await session.thread.create({ id: threadId, requestContext });
           }
         }
         // A deletion may have started during the thread-rebinding awaits.
@@ -705,9 +705,9 @@ export class AgentController<TState = {}> {
         await this.config.threadLock?.acquire(existingThread.id);
         session.thread.set({ threadId: existingThread.id });
         await session.thread.loadMetadata();
-        await session.thread.ensureCurrentSubscription();
+        await session.thread.ensureCurrentSubscription(requestContext);
       } else {
-        await session.thread.create({ id: overrides.threadId });
+        await session.thread.create({ id: overrides.threadId, requestContext });
       }
     } else {
       // Same scope `thread.create()` stamps, matched strictly: a thread outside
@@ -722,13 +722,13 @@ export class AgentController<TState = {}> {
       });
 
       if (candidates.length === 0) {
-        await session.thread.create();
+        await session.thread.create({ requestContext });
       } else {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
         await session.thread.loadMetadata();
-        await session.thread.ensureCurrentSubscription();
+        await session.thread.ensureCurrentSubscription(requestContext);
       }
     }
 
