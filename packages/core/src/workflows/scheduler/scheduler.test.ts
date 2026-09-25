@@ -3,7 +3,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemorySchedulesStorage } from '../../storage/domains/schedules/inmemory';
-import { Scheduler } from './scheduler';
+import { Scheduler, TOPIC_AGENT_SCHEDULES } from './scheduler';
 
 function makeStore(): { store: InMemorySchedulesStorage; db: InMemoryDB } {
   const db = new InMemoryDB();
@@ -114,6 +114,39 @@ describe('Scheduler', () => {
     const row = await store.getSchedule('sched-once');
     expect(row!.status).toBe('completed');
     expect(row!.lastRunId).toBe(events[0]!.runId);
+  });
+
+  it('flags agent-schedule.fire events from one-off schedules with oneOff', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const events: Event[] = [];
+    void pubsub.subscribe(TOPIC_AGENT_SCHEDULES, async event => {
+      events.push(event);
+    });
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+
+    const past = Date.now() - 5_000;
+    for (const [id, oneOff] of [
+      ['agent-once', true],
+      ['agent-cron', false],
+    ] as const) {
+      await store.createSchedule({
+        id,
+        target: { type: 'agent', agentId: 'a1', prompt: 'hi' } as any,
+        cron: oneOff ? '' : '0 0 1 1 *',
+        ...(oneOff ? { runAt: past } : {}),
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+    }
+
+    await scheduler.tick();
+
+    const byId = Object.fromEntries(events.map(e => [(e.data as any).scheduleId, e.data as any]));
+    expect(byId['agent-once'].oneOff).toBe(true);
+    expect(byId['agent-cron'].oneOff).toBeUndefined();
   });
 
   it('completes a bounded cron schedule when the next occurrence is past endAt', async () => {

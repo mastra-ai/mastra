@@ -34,6 +34,8 @@ export interface AgentScheduleFireEventData {
   target: Extract<ScheduleTarget, { type: 'agent' }>;
   /** Defaults to `'schedule-fire'`. `'manual'` for fire-now invocations. */
   triggerKind?: 'schedule-fire' | 'manual';
+  /** True when the fired schedule is a one-off (`runAt`) schedule. */
+  oneOff?: boolean;
 }
 
 /**
@@ -150,6 +152,7 @@ export class AgentScheduleWorker extends MastraWorker {
 
     const result = await executeAgentSchedule(mastra, scheduleId, target, {
       triggerKind: data.triggerKind ?? 'schedule-fire',
+      oneOff: data.oneOff,
       firedAt: new Date(actualFireAt),
       logger: this.deps?.logger,
     });
@@ -230,6 +233,7 @@ type LooseLogger = {
 /** Optional context the `AgentScheduleWorker` passes to `executeAgentSchedule`. */
 export interface ExecuteAgentScheduleContext {
   triggerKind?: 'schedule-fire' | 'manual';
+  oneOff?: boolean;
   firedAt?: Date;
   logger?: LooseLogger;
 }
@@ -253,7 +257,7 @@ export async function executeAgentSchedule(
 ): Promise<{ status: ScheduleRunStatus; outcome: ScheduleTriggerOutcome; reason?: string; runId?: string }> {
   const { agentId } = target;
   const trigger: ScheduleTriggerInfo = {
-    kind: ctx.triggerKind === 'manual' ? 'manual' : 'cron',
+    kind: ctx.triggerKind === 'manual' ? 'manual' : ctx.oneOff ? 'once' : 'cron',
     firedAt: ctx.firedAt ?? new Date(),
   };
   const log = ctx.logger ?? mastra.getLogger?.();

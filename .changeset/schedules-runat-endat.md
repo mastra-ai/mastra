@@ -10,7 +10,7 @@
 '@mastra/convex': minor
 ---
 
-Added one-off and bounded schedules for agents and workflows. Pass `runAt` instead of `cron` to fire a schedule once, or pass `endAt` with `cron` to stop a recurring schedule after a given time. Finished schedules move to the new `completed` status.
+Added one-off and bounded schedules for agents and workflows. Pass `runAt` instead of `cron` to fire a schedule once, or pass `endAt` with `cron` to stop a recurring schedule after a given time. Finished schedules move to the new `completed` status. Declarative workflow schedules (`createWorkflow({ schedule })`) accept `runAt` and `endAt` too, and schedule hooks receive `trigger.kind: 'once'` for a scheduled fire of a one-off agent schedule.
 
 ```typescript
 await mastra.schedules.create({ workflowId: 'send-report', runAt: new Date('2026-12-01T09:00:00Z') });

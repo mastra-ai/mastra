@@ -82,7 +82,7 @@ import type {
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { ClassifierStepOutput } from '../entry-executors';
-import { validateCron } from '../scheduler/cron';
+import { validateScheduleTiming } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -1732,7 +1732,9 @@ export function createWorkflow<
       }
     }
     for (const entry of schedules) {
-      validateCron(entry.cron, entry.timezone);
+      // Declarative schedules are re-validated on every boot, so a `runAt`
+      // or `endAt` that has already passed must not break construction.
+      validateScheduleTiming(entry, { requireFutureEndAt: false });
     }
   }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });

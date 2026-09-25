@@ -317,6 +317,55 @@ describe('Mastra — workflow scheduler integration', () => {
       await second.shutdown();
     });
 
+    it('registers a declarative one-off runAt and never resurrects it once completed', async () => {
+      const storage = new MockStore();
+      const runAt = Date.now() + 60 * 60_000;
+
+      const first = await boot(storage, buildScheduledWorkflow({ runAt } as any));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const created = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(created).toMatchObject({ cron: '', runAt, nextFireAt: runAt, status: 'active' });
+      await schedulesStore.updateSchedule('wf_rolling-wf', { status: 'completed' });
+      await first.shutdown();
+
+      const second = await boot(storage, buildScheduledWorkflow({ runAt } as any));
+      expect((await schedulesStore.getSchedule('wf_rolling-wf'))?.status).toBe('completed');
+      await second.shutdown();
+
+      const newRunAt = runAt + 60_000;
+      const third = await boot(storage, buildScheduledWorkflow({ runAt: new Date(newRunAt) } as any));
+      expect(await schedulesStore.getSchedule('wf_rolling-wf')).toMatchObject({
+        runAt: newRunAt,
+        nextFireAt: newRunAt,
+        status: 'active',
+      });
+      await third.shutdown();
+    });
+
+    it('records a declarative one-off whose runAt already passed as completed without firing', async () => {
+      const storage = new MockStore();
+      const mastra = await boot(storage, buildScheduledWorkflow({ runAt: Date.now() - 60_000 } as any));
+      const row = await (await storage.getStore('schedules'))!.getSchedule('wf_rolling-wf');
+      expect(row?.status).toBe('completed');
+      await mastra.shutdown();
+    });
+
+    it('stores a declarative endAt and switches cron to one-off by clearing cron', async () => {
+      const storage = new MockStore();
+      const endAt = Date.now() + 7 * 24 * 60 * 60_000;
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *', endAt } as any));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      expect(await schedulesStore.getSchedule('wf_rolling-wf')).toMatchObject({ endAt, status: 'active' });
+      await first.shutdown();
+
+      const runAt = Date.now() + 60 * 60_000;
+      const second = await boot(storage, buildScheduledWorkflow({ runAt } as any));
+      const row = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(row).toMatchObject({ cron: '', runAt, nextFireAt: runAt, status: 'active' });
+      expect(row?.endAt).toBeUndefined();
+      await second.shutdown();
+    });
+
     it('stamps the step-graph definition hash on create and rewrites it when the graph changes (#19169)', async () => {
       const storage = new MockStore();
 
