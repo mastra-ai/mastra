@@ -321,7 +321,7 @@ function SyncNowButton({
   const runStatus = importer.lastRun?.status;
   const syncing = pending || runStatus === 'queued' || runStatus === 'running';
   return (
-    <Button variant="outline" size="sm" disabled={syncing} onClick={onSync}>
+    <Button variant="default" size="sm" disabled={syncing} onClick={onSync}>
       {syncing ? (
         <>
           <Loader2 size={14} aria-hidden className="motion-safe:animate-spin motion-reduce:animate-none" />
