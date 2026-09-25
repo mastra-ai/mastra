@@ -14,6 +14,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -160,20 +161,8 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
     title && !isDefaultThreadName(title)
       ? title
       : createdAt
-        ? formatDay(createdAt)
+        ? formatDate(createdAt, 'date-time-seconds')
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
   return <span className="block truncate text-body-sm">{titleText}</span>;
 }
-
-const formatDay = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: true,
-  };
-  return new Date(date).toLocaleString('en-us', options).replace(',', ' at');
-};

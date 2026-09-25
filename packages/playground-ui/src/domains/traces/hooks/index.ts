@@ -17,6 +17,7 @@ export {
   type UseTraceQueryReturn,
   type TraceQueryArgs,
 } from './use-trace-query';
+export { useTracesListSource, type UseTracesListSourceArgs } from './use-traces-list-source';
 export { useTags } from './use-tags';
 export {
   useTraceMetadataFilterFields,

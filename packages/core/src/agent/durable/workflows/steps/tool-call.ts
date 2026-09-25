@@ -699,7 +699,7 @@ export function createDurableToolCallStep() {
             type: 'tool-call-approval',
             runId,
             from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, resumeSchema },
+            payload: { toolCallId, toolName, args, resumeSchema, updatedAt: Date.now() },
           });
         }
 
@@ -991,6 +991,7 @@ export function createDurableToolCallStep() {
                   toolName: approvalToolName,
                   args: approvalArgs,
                   resumeSchema: approvalResumeSchema,
+                  updatedAt: Date.now(),
                 },
               });
             }

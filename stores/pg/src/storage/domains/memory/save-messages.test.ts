@@ -310,6 +310,25 @@ describe('MemoryPG.saveThread', () => {
       updatedAt.toISOString(),
     ]);
   });
+
+  it('returns the same repaired metadata that it writes', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const now = new Date();
+    const saved = await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test thread',
+        metadata: { text: 'a\0b', path: String.raw`literal\u0000` },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    expect(saved.metadata).toEqual({ text: 'ab', path: String.raw`literal\u0000` });
+    expect(JSON.parse(client.queries[0]!.values![3] as string)).toEqual(saved.metadata);
+  });
 });
 
 describe('MemoryPG.saveResource', () => {

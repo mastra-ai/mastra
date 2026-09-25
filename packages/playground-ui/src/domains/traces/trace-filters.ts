@@ -303,6 +303,8 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
 const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
+// The legacy list endpoint only matches by equality.
+const TRACE_LEGACY_OPERATORS: TraceFilterOperatorId[] = ['is'];
 
 const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   rootEntityType: 'Primitive Type',
@@ -425,6 +427,7 @@ export function createTraceFilterBarFields({
   hiddenFieldIds = [],
   metadataFields = [],
   valueSuggestions,
+  withQueryTrace = true,
 }: {
   availableRootEntityNames: string[];
   availableEnvironments: string[];
@@ -433,6 +436,11 @@ export function createTraceFilterBarFields({
   metadataFields?: readonly TraceMetadataFilterField[];
   /** Builds a lazy value resolver for a related-scope field (`spans.model`, …). Absent → free text. */
   valueSuggestions?: (scope: TraceQueryRelatedScope, path: string) => FilterBarSuggestionsResolver;
+  /**
+   * When false, only fields the legacy list endpoint (`buildTraceListFilters`) can express are offered, each with
+   * the `is` operator only: no related-scope (`spans.*`, `scores.*`, `feedback.*`) or metadata fields.
+   */
+  withQueryTrace?: boolean;
 }): FilterBarField[] {
   const pick = (
     id: string,
@@ -507,6 +515,13 @@ export function createTraceFilterBarFields({
     }));
 
   const hidden = new Set(hiddenFieldIds);
+  if (!withQueryTrace) {
+    return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
+      ...field,
+      operators: TRACE_LEGACY_OPERATORS,
+      ...(hidden.has(field.id) ? { hidden: true } : {}),
+    }));
+  }
   return [
     ...pickFields.sort(byLabel),
     ...textFields.sort(byLabel),

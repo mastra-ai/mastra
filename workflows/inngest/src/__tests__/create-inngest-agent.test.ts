@@ -1570,9 +1570,7 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
   }
 
   function closeOnSuspendSet(options: object) {
-    return Object.getOwnPropertySymbols(options).some(
-      sym => sym.description === 'mastra.durable.inngest.closeOnSuspend' && (options as any)[sym] === true,
-    );
+    return (options as any).closeOnSuspend === true;
   }
 
   it('resumeStream routes through resume() with close-on-suspend', async () => {

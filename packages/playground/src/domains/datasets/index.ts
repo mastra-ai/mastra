@@ -27,7 +27,6 @@ export * from './utils/json-export';
 export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export { DATASET_EXPERIMENT_OPTIONS, getDatasetTagOptions } from './components/datasets-list/helpers';
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
-export { DatasetHealthCard } from './components/dataset-health-card';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
 export { CreateDatasetForm } from './components/create-dataset-form';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';

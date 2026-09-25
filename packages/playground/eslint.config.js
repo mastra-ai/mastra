@@ -28,6 +28,14 @@ const restrictedTxtToneSelectors = [
   { selector: txtToneSelector('TemplateElement', 'value.raw'), message: TXT_TONE_MESSAGE },
 ];
 
+const MONO_MESSAGE =
+  'Mono comes from the design system: <Txt font="mono"> for identifiers, timestamps, and durations, <InlineCode> or <CodeBlock> for code, tabular-nums for numbers.';
+const MONO_PATTERN = '(^|\\s|:|!)font-mono(?=!|\\s|$)';
+const restrictedMonoSelectors = [
+  { selector: `Literal[value=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
+  { selector: `TemplateElement[value.raw=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
+];
+
 const PLAYGROUND_UI_BROAD_IMPORT_MESSAGE =
   'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.';
 
@@ -249,6 +257,7 @@ export default [
         ...restrictedPlaygroundUiBroadImportSelectors,
         ...restrictedTypographySelectors,
         ...restrictedTxtToneSelectors,
+        ...restrictedMonoSelectors,
       ],
     },
   },

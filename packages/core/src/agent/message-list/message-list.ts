@@ -44,12 +44,12 @@ import type {
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
-import type { MastraToolInvocation } from './state/types';
+import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
-import { stampPart } from './utils/stamp-part';
-import { advancesToolInvocationState } from './utils/tool-invocation-state';
+import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
+import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -130,6 +130,44 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
     return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
   });
   return changed ? { ...live, content: { ...live.content, parts } } : live;
+}
+
+/**
+ * Returns only the tool parts of a client-sent assistant message that move a stored call
+ * forward with a state a client produces (an approval answer or an outcome). The client's text,
+ * reasoning, and metadata are its own rendering of the stored message, which can differ from
+ * what was saved (an output processor may rewrite text before it is persisted), so none of it is
+ * layered onto the stored copy. Only the new state and its outcome fields are taken; the call's
+ * arguments and metadata stay as stored. A provider-executed call can only take an approval
+ * answer, since the provider, not the client, produces its outcome.
+ */
+function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
+  const storedCalls = new Map<string, MastraToolInvocationPart>();
+  for (const part of stored.content.parts) {
+    if (part.type === 'tool-invocation') storedCalls.set(part.toolInvocation.toolCallId, part);
+  }
+  const parts = live.content.parts.flatMap(part => {
+    if (part.type !== 'tool-invocation') return [];
+    const { state, toolCallId, result, errorText, approval } = part.toolInvocation;
+    const storedCall = storedCalls.get(toolCallId);
+    if (
+      !storedCall ||
+      !isClientToolInvocationUpdate(state) ||
+      !advancesToolInvocationState(storedCall.toolInvocation.state, state) ||
+      (storedCall.providerExecuted && state !== 'approval-responded')
+    ) {
+      return [];
+    }
+    const toolInvocation = {
+      ...storedCall.toolInvocation,
+      state,
+      result,
+      errorText,
+      approval: approval ?? storedCall.toolInvocation.approval,
+    };
+    return [{ type: 'tool-invocation' as const, toolInvocation }];
+  });
+  return { ...live, content: { format: 2, parts } };
 }
 
 type MessageListAddOptions = {
@@ -1685,7 +1723,7 @@ export class MessageList {
           })()
         : undefined;
 
-    msg.content.parts![i] = {
+    const mergedPart: Extract<MastraMessagePart, { type: 'tool-invocation' }> = {
       ...inputPart,
       toolInvocation: {
         ...inputPart.toolInvocation,
@@ -1698,6 +1736,9 @@ export class MessageList {
       ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
+    if (part.updatedAt !== undefined && mergedPart.updatedAt === undefined) mergedPart.updatedAt = part.updatedAt;
+    stampToolPartUpdate(mergedPart, part.toolInvocation, inputPart.updatedAt);
+    msg.content.parts![i] = mergedPart;
 
     // `backgroundTasks` is a per-toolCallId record — merge instead of
     // overwrite so multiple concurrent background dispatches on the
@@ -2104,7 +2145,8 @@ export class MessageList {
     // When a stored row shares an id with a live message (client input, or a response part
     // such as a tool result), the stored copy must not replace it wholesale - that would drop
     // the client-supplied content from the prompt. Fold the stored copy into the live one and
-    // keep the live message's source so it stays visible to output processing.
+    // keep the live message's source so it stays visible to output processing. A client-sent
+    // assistant message contributes only tool outcomes for calls the stored copy has pending.
     const replacementTargetSource: MessageSource | undefined = !replacementTarget
       ? undefined
       : this.stateManager.isUserMessage(replacementTarget)
@@ -2122,7 +2164,9 @@ export class MessageList {
       !MessageMerger.isSealed(messageV2)
     ) {
       const replacementIndex = this.messages.indexOf(replacementTarget);
-      if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+      if (replacementTargetSource === 'input') {
+        MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
+      } else if (messageV2.role === 'user' && replacementTarget.role === 'user') {
         messageV2.content = {
           ...messageV2.content,
           ...replacementTarget.content,

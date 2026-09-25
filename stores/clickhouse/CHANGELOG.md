@@ -1,5 +1,169 @@
 # @mastra/clickhouse
 
+## 1.21.1
+
+### Patch Changes
+
+- Fixed slow feedback review-status updates on ClickHouse. Since 1.21.0, each update ran a ClickHouse mutation that scanned every part of the feedback table, taking several seconds on tables with months of daily partitions and timing out on larger ones. Review updates now write a new row again, which takes milliseconds regardless of table size. ([#25000](https://github.com/mastra-ai/mastra/pull/25000))
+
+  **Upgrade note:** the runtime database user no longer needs `ALTER UPDATE(reviewStatus)` on `mastra_feedback_events` or `INSERT` on `mastra_feedback_events_delta` for review updates. Grants you added for 1.21.0 are harmless. Keep `ALTER UPDATE` if you run ClickHouse 26.6 or earlier, because lightweight deletes still need it there.
+
+  Deleted feedback still can't reappear through a review update: an update that lands during a delete of the same feedback retries the delete and reports the feedback as not found. A failed delete no longer blocks review updates: the next update saves the new status, then retries the delete and reports its error if it fails again. If a network error or a lagging replica lets a review row outlive a successful delete, the next review update of that feedback removes it.
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
+## 1.21.1-alpha.0
+
+### Patch Changes
+
+- Fixed slow feedback review-status updates on ClickHouse. Since 1.21.0, each update ran a ClickHouse mutation that scanned every part of the feedback table, taking several seconds on tables with months of daily partitions and timing out on larger ones. Review updates now write a new row again, which takes milliseconds regardless of table size. ([#25000](https://github.com/mastra-ai/mastra/pull/25000))
+
+  **Upgrade note:** the runtime database user no longer needs `ALTER UPDATE(reviewStatus)` on `mastra_feedback_events` or `INSERT` on `mastra_feedback_events_delta` for review updates. Grants you added for 1.21.0 are harmless. Keep `ALTER UPDATE` if you run ClickHouse 26.6 or earlier, because lightweight deletes still need it there.
+
+  Deleted feedback still can't reappear through a review update: an update that lands during a delete of the same feedback retries the delete and reports the feedback as not found. A failed delete no longer blocks review updates: the next update saves the new status, then retries the delete and reports its error if it fails again. If a network error or a lagging replica lets a review row outlive a successful delete, the next review update of that feedback removes it.
+
+- Declared feedback support in the observability store so servers report the `feedback` capability as available to clients. ([#25020](https://github.com/mastra-ai/mastra/pull/25020))
+
+  ```ts
+  // With one of these stores configured as the observability storage:
+  const { capabilities } = await client.getObservabilityCapabilities();
+
+  console.log(capabilities.feedback); // true
+  ```
+
+- The observability stores used by `PostgresStoreVNext`, `ClickhouseStoreVNext` and `DuckDBStore` now declare their filter discovery support, so Studio can show discovery-backed filters based on what the store reports. ([#25008](https://github.com/mastra-ai/mastra/pull/25008))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.discovery; // { entityTypes: true, entityNames: true, serviceNames: true, environments: true, tags: true, metrics: true }
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1)]:
+  - @mastra/core@1.71.0-alpha.1
+
+## 1.21.0
+
+### Minor Changes
+
+- Added trace-query tag predicates for ClickHouse. Trace queries can use `includes`, `notIncludes`, `exists`, and `notExists` on `tags`, and value discovery returns each observed tag with the number of traces that carry it. Missing and empty tag lists behave the same. ([#24554](https://github.com/mastra-ai/mastra/pull/24554))
+
+  **Example**
+
+  ```ts
+  const result = await clickhouseObservability.queryTraces(
+    planTraceQuery(
+      parseTraceQueryRequest({
+        timeRange: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-21T00:00:00.000Z' },
+        where: { op: 'notIncludes', path: 'tags', value: 'archived' },
+      }),
+    ),
+  );
+  ```
+
+- Fixed ClickHouse deletion requests blocking review updates on feedback that was never deleted. A request is now marked applied only after its delete succeeds, and review updates ignore unapplied requests. If a delete fails, the feedback stays editable; call `deleteFeedback()` again to retry. ([#24033](https://github.com/mastra-ai/mastra/pull/24033))
+
+  Review-status updates now change the feedback row in place instead of inserting a copy, so a concurrent update can no longer bring deleted feedback back. If a newer version of the same feedback event is ingested during an update, the update is re-applied to that version and throws a conflict error after repeated conflicts.
+
+  **Upgrade note:** `updateFeedbackReviewStatus()` now runs `ALTER TABLE … UPDATE` on `mastra_feedback_events`, so the runtime database user needs `ALTER UPDATE(reviewStatus)` on that table, and `INSERT` on `mastra_feedback_events_delta` if it does not already have it. A user limited to `SELECT` and `INSERT`, which was enough for review updates before this release, now fails with `Not enough privileges`:
+
+  ```sql
+  GRANT ALTER UPDATE(reviewStatus) ON <database>.mastra_feedback_events TO <runtime_user>;
+  GRANT INSERT ON <database>.mastra_feedback_events_delta TO <runtime_user>;
+  ```
+
+  Add the grants before you deploy this version. No schema migration is required. If you set `disableInit: true` and run `init()` with separate migration credentials, grant these to the runtime user, not only to the migration user.
+
+- Added ClickHouse support for filtering completed root traces by elapsed duration. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering required a span relation, which can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Use the top-level field to evaluate only the selected completed root:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+- Applied the trusted tenant scope of advanced trace queries to root spans, related spans, scores, feedback, and discovery scans. The store advertises the `trace-query-tenant-scope` feature so the server can reject scoped requests against older stores. ([#24566](https://github.com/mastra-ai/mastra/pull/24566))
+
+### Patch Changes
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+
+## 1.21.0-alpha.3
+
+### Minor Changes
+
+- Fixed ClickHouse deletion requests blocking review updates on feedback that was never deleted. A request is now marked applied only after its delete succeeds, and review updates ignore unapplied requests. If a delete fails, the feedback stays editable; call `deleteFeedback()` again to retry. ([#24033](https://github.com/mastra-ai/mastra/pull/24033))
+
+  Review-status updates now change the feedback row in place instead of inserting a copy, so a concurrent update can no longer bring deleted feedback back. If a newer version of the same feedback event is ingested during an update, the update is re-applied to that version and throws a conflict error after repeated conflicts.
+
+  **Upgrade note:** `updateFeedbackReviewStatus()` now runs `ALTER TABLE … UPDATE` on `mastra_feedback_events`, so the runtime database user needs `ALTER UPDATE(reviewStatus)` on that table, and `INSERT` on `mastra_feedback_events_delta` if it does not already have it. A user limited to `SELECT` and `INSERT`, which was enough for review updates before this release, now fails with `Not enough privileges`:
+
+  ```sql
+  GRANT ALTER UPDATE(reviewStatus) ON <database>.mastra_feedback_events TO <runtime_user>;
+  GRANT INSERT ON <database>.mastra_feedback_events_delta TO <runtime_user>;
+  ```
+
+  Add the grants before you deploy this version. No schema migration is required. If you set `disableInit: true` and run `init()` with separate migration credentials, grant these to the runtime user, not only to the migration user.
+
+### Patch Changes
+
+- Updated dependencies [[`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec)]:
+  - @mastra/core@1.70.0-alpha.4
+
+## 1.21.0-alpha.2
+
+### Minor Changes
+
+- Added ClickHouse support for filtering completed root traces by elapsed duration. ([#24635](https://github.com/mastra-ai/mastra/pull/24635))
+
+  Previously, duration filtering required a span relation, which can match a child span:
+
+  ```typescript
+  where: {
+    spans: {
+      some: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+    }
+  }
+  ```
+
+  Use the top-level field to evaluate only the selected completed root:
+
+  ```typescript
+  where: { op: "gt", left: { path: "durationMs" }, right: { literal: 5000 } }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
 ## 1.21.0-alpha.1
 
 ### Minor Changes

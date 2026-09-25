@@ -159,6 +159,7 @@ export class SkillsLibSQL extends SkillsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: skill.authorId,
+        visibility,
         createdAt: now,
         updatedAt: now,
       };

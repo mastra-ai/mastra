@@ -27,7 +27,7 @@ function ProgressBar({
 
   return (
     <div className={cn('min-w-0 flex-1', toneClass[tone])}>
-      <div className="mb-1 flex items-center justify-between gap-2 font-mono text-meta text-muted-foreground">
+      <div className="mb-1 flex items-center justify-between gap-2 text-meta text-muted-foreground">
         <span className="tracking-wide text-foreground uppercase">{label}</span>
         <span className="text-muted-foreground tabular-nums">
           {formatCompactTokens(value)}/{formatCompactTokens(max)}k

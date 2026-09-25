@@ -48,10 +48,13 @@ export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
 export async function captureSessionFilesystem(
   session: FilesystemCaptureSession,
   { filesystem, sourceControl }: FilesystemCaptureDependencies,
+  ids?: { resourceId: string; threadId: string },
 ): Promise<void> {
   try {
-    const resourceId = session.identity.getResourceId();
-    const threadId = session.thread.requireId();
+    // Scheduled captures pass ids read at schedule time: a session deleted
+    // before the queued capture runs has already cleared its thread.
+    const resourceId = ids?.resourceId ?? session.identity.getResourceId();
+    const threadId = ids?.threadId ?? session.thread.requireId();
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
     // Chat-only sessions run without a workspace; there is nothing to capture.
     const sandbox = session.getWorkspace()?.sandbox;
@@ -128,16 +131,24 @@ const pendingCaptures = new Map<string, Promise<void>>();
  * capture body is fully try/catch contained.
  */
 export async function waitForPendingFilesystemCapture(resourceId: string, timeoutMs = 10_000): Promise<void> {
-  const pending = pendingCaptures.get(resourceId);
+  let pending = pendingCaptures.get(resourceId);
   if (!pending) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const deadline = new Promise<void>(resolve => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve();
+    }, timeoutMs);
+  });
   try {
-    await Promise.race([
-      pending,
-      new Promise<void>(resolve => {
-        timer = setTimeout(resolve, timeoutMs);
-      }),
-    ]);
+    // A turn that ends while we wait chains a successor capture; keep waiting
+    // until the latest chain settles so the final snapshot is not lost.
+    while (pending && !timedOut) {
+      await Promise.race([pending, deadline]);
+      const next = pendingCaptures.get(resourceId);
+      pending = next === pending ? undefined : next;
+    }
   } finally {
     clearTimeout(timer);
   }
@@ -216,8 +227,15 @@ export function observeSessionFilesystem(
     // Extend the resource-level chain rather than a per-session one: sessions
     // are deduplicated by (resourceId, scope), so multiple scoped sessions can
     // observe the same resource, and their captures must not interleave.
+    let threadId: string;
+    try {
+      threadId = session.thread.requireId();
+    } catch {
+      return;
+    }
+    const ids = { resourceId, threadId };
     const chain = (pendingCaptures.get(resourceId) ?? Promise.resolve()).then(() =>
-      captureSessionFilesystem(session, dependencies),
+      captureSessionFilesystem(session, dependencies, ids),
     );
     pendingCaptures.set(resourceId, chain);
     void chain.finally(() => {

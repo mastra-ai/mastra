@@ -8,6 +8,7 @@ import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import { ChunkFrom } from '../../stream/types';
 import type {
   ChunkType,
@@ -111,9 +112,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   logger?: IMastraLogger;
   /**
    * If true, close the underlying ReadableStream when a SUSPENDED event is
-   * received. Used by `generate()` / `resumeGenerate()` so that
-   * `getFullOutput()` resolves on suspend instead of hanging. Streaming
-   * callers leave this `false` so the stream stays open for a later resume.
+   * received so `getFullOutput()`/`fullStream` resolve on suspend instead of
+   * hanging. The durable agent derives this from the public `closeOnSuspend`
+   * stream option (default `false`, keeping the stream open for a later
+   * same-reader resume).
    */
   closeOnSuspend?: boolean;
   /**
@@ -348,6 +350,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
+          if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
           // Track error chunks for onError callback
           if ((chunk as any).type === 'error') {
             const errPayload = (chunk as any).payload;
@@ -676,6 +679,8 @@ export async function emitChunkEvent<OUTPUT = undefined>(
     type: AgentStreamEventTypes.CHUNK,
     runId,
     data: chunk,
+    // The chunk crosses the pubsub as JSON; keep when it was produced.
+    producedAt: getChunkProducedAt(chunk) ?? Date.now(),
   });
 }
 
