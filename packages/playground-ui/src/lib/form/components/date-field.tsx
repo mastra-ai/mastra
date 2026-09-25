@@ -1,0 +1,71 @@
+import type { AutoFormFieldProps } from '@autoform/react';
+import { format, isValid } from 'date-fns';
+import { CalendarIcon, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/ds/components/Button';
+import { DatePicker } from '@/ds/components/DateTimePicker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { cn } from '@/utils/cn';
+
+export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
+  const { key, ...props } = inputProps;
+  const [value, setValue] = useState<Date | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (field.default) {
+      const date = new Date(field.default);
+      if (isValid(date)) {
+        setValue(date);
+      }
+    }
+  }, [field]);
+
+  const handleSelect = (date: Date | undefined) => {
+    setValue(date);
+    if (date) {
+      props.onChange({
+        target: { value: date.toISOString(), name: inputProps.name },
+      });
+    }
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    setValue(undefined);
+    props.onChange({
+      target: { value: '', name: inputProps.name },
+    });
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          variant="default"
+          size="lg"
+          className={cn('w-full', error ? 'border-accent2' : '')}
+          icon={<CalendarIcon />}
+        >
+          {value ? (
+            <span className="text-white">{format(value, 'PPP')}</span>
+          ) : (
+            <span className="text-gray">Pick a date</span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto bg-muted p-0" align="start">
+        <DatePicker mode="single" selected={value} onSelect={handleSelect} month={value} onMonthChange={setValue} />
+        {value && (
+          <div className="p-3 pt-0">
+            <Button icon={<X />} variant="default" size="lg" className="w-full" onClick={handleClear}>
+              Clear
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+};

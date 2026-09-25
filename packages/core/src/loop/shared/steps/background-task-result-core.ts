@@ -1,0 +1,224 @@
+import type { MessageList } from '../../../agent/message-list';
+import type { IMastraLogger } from '../../../logger';
+import type { ProviderMetadata } from '../../../stream/types';
+import { normalizeModelOutput } from '../normalize-model-output';
+
+/** Completion payload delivered by the background-task manager's onResult hook. */
+export interface BackgroundToolResultParams {
+  status: string;
+  result?: unknown;
+  error?: { message?: string };
+  toolCallId: string;
+  toolName: string;
+  runId: string;
+  startedAt?: Date;
+  completedAt?: Date;
+  taskId?: string;
+}
+
+/**
+ * Shared background-task result injector: when a background
+ * tool finishes, replace the "Background task started..." placeholder in the
+ * transcript with the real result (or failure), recompute the model-facing
+ * output, and flush to memory. Engines call this from their per-task onResult
+ * hook; transport-specific chunk emission stays engine-side (onChunk).
+ *
+ * Unified behaviors:
+ * - `toModelOutput` recompute + `mastra.modelOutput` overwrite: previously
+ *   main-only. The dispatch turn stored `mastra.modelOutput` derived from the
+ *   placeholder (or, on durable, no mapping at all), and `llmPrompt()` prefers
+ *   that field over `toolInvocation.result` when building the tool message.
+ *   Every path below overwrites `mastra.modelOutput`, including the ones that
+ *   produce nothing: a tool with no `toModelOutput`, a mapping that returns
+ *   nullish, and a mapping that throws. A null `modelOutput` is the
+ *   established "no mapping, use the raw result" signal `MessageList` keys
+ *   off by value. Deliberately not shared with tool-result-commit-core's
+ *   `computeModelOutputProviderMetadata`, which omits the key on nullish
+ *   (presence-keyed) and runs under a MAPPING span — the policies differ on
+ *   purpose.
+ * - Transcript payload transforms remain an engine-supplied hook. Main
+ *   supplies `transformForTranscript` from its run scope (dispatch-time
+ *   capture, valid for its request-bound lifetime); durable supplies it too,
+ *   resolving the policy and tool-level transform
+ *   at completion time from the live run registry because the entry may be
+ *   rebuilt after a process restart. The run-level policy carries a closure
+ *   and does not survive a restart on durable — only tool-level transforms
+ *   do, via registry re-resolution.
+ * - Idempotency/conflict scan: keyed by (toolCallId, taskId), not toolCallId
+ *   alone. The scan set is the full db message list, which includes
+ *   memory-loaded history on both engines, and providers reuse tool-call ids
+ *   across turns — so a same-toolCallId part with a different taskId is an
+ *   earlier dispatch's record and is skipped. Status conflicts only throw for
+ *   the part this dispatch owns (matching taskId).
+ */
+export async function applyBackgroundToolResult(deps: {
+  params: BackgroundToolResultParams;
+  /** The run currently executing the tool-call step (not params.runId, which
+   * is the run that originally dispatched the task). */
+  currentRunId: string;
+  /** Whether this leg of the run is itself a resume; gates the fallback
+   * tool-call append so a same-run replay re-records the invocation. */
+  hasResumeData: boolean;
+  /** Tool args with `_background` removed. */
+  args: unknown;
+  messageList: MessageList;
+  /** Approval decision for an approved approval-gated tool, preserved so it
+   * round-trips on recall, matching the sync path. */
+  approvalGrant?: Record<string, unknown>;
+  baseProviderMetadata: ProviderMetadata | undefined;
+  /** Optional transcript payload transforms (supplied by both engines; see docblock). */
+  transformForTranscript?: (result: unknown) => Promise<{
+    transcriptArgs: unknown;
+    transcriptResult: unknown;
+    providerMetadata: ProviderMetadata | undefined;
+  }>;
+  toModelOutput?: (output: unknown) => unknown;
+  generateId?: () => string;
+  logger?: IMastraLogger;
+  /** Engine-specific memory flush (save-queue wiring differs per engine). */
+  flush: () => Promise<void>;
+}): Promise<void> {
+  const { params, messageList } = deps;
+  const failed = params.status === 'failed';
+  const terminalStatus = failed ? 'failed' : 'completed';
+
+  for (const message of messageList.get.all.db()) {
+    if (message.role !== 'assistant' || !message.content?.parts) continue;
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.toolCallId !== params.toolCallId) continue;
+      const backgroundTask = (part.providerMetadata as any)?.mastra?.backgroundTask as
+        | { taskId?: string; status?: string }
+        | undefined;
+      if (!backgroundTask) continue;
+      // A part whose taskId differs belongs to a DIFFERENT dispatch — typically
+      // an earlier turn's invocation loaded from memory, because providers
+      // reuse tool-call ids (e.g. `call_0`) across turns and this scan covers
+      // the whole thread history on both engines. Skip it; it is not a
+      // conflict. Treating it as one made `onResult` throw before the result
+      // landed, hanging `streamUntilIdle` on the second turn of any
+      // memory-backed run whose provider reuses ids. Our own dispatch's part
+      // carries our taskId and is still found (and status-checked) below;
+      // `updateToolInvocation` walks newest-first, so the write below also
+      // targets the current turn's placeholder, never a historical part.
+      if (backgroundTask.taskId !== params.taskId) continue;
+      if (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') {
+        if (backgroundTask.status !== terminalStatus) {
+          throw new Error(
+            `Background task status conflict for task "${params.taskId}": expected "${terminalStatus}", found "${backgroundTask.status}"`,
+          );
+        }
+        return;
+      }
+    }
+  }
+
+  const result = failed ? `Background task failed: ${params.error?.message ?? 'Unknown error'}` : params.result;
+
+  const transformed = deps.transformForTranscript
+    ? await deps.transformForTranscript(result)
+    : { transcriptArgs: deps.args, transcriptResult: result, providerMetadata: deps.baseProviderMetadata };
+
+  // Recompute the model-facing output from the *real* result. Mirrors the
+  // synchronous path's toModelOutput mapping.
+  let modelOutput: unknown = null;
+  if (!failed && deps.toModelOutput && result != null) {
+    try {
+      modelOutput = normalizeModelOutput(await deps.toModelOutput(result)) ?? null;
+    } catch (mappingError) {
+      // Non-fatal: the real result is still written to `toolInvocation.result`
+      // below and the model reads that instead. Surface it loudly because the
+      // tool asked for a mapping and did not get one.
+      deps.logger?.warn?.(
+        `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
+        { toolCallId: params.toolCallId, error: mappingError },
+      );
+      modelOutput = null;
+    }
+  }
+  const providerMetadata = {
+    ...transformed.providerMetadata,
+    mastra: {
+      ...(transformed.providerMetadata as any)?.mastra,
+      modelOutput,
+      backgroundTask: { taskId: params.taskId, status: failed ? 'failed' : 'completed' },
+    },
+  } as ProviderMetadata;
+
+  const updated = messageList.updateToolInvocation(
+    {
+      type: 'tool-invocation',
+      toolInvocation: {
+        // A failed background task is recorded as `output-error` with the
+        // message in `errorText`; a successful one keeps `state: 'result'`.
+        ...(failed
+          ? { state: 'output-error' as const, errorText: result as string }
+          : { state: 'result' as const, result }),
+        toolCallId: params.toolCallId,
+        toolName: params.toolName,
+        args: deps.args,
+        ...(deps.approvalGrant ?? {}),
+      },
+      providerMetadata,
+    },
+    {
+      mode: 'stream',
+      backgroundTasks: {
+        [params.toolCallId]: {
+          startedAt: params.startedAt,
+          completedAt: params.completedAt,
+          taskId: params.taskId,
+        },
+      },
+    },
+  );
+
+  // Fallback: no matching tool-invocation was found in the current message
+  // list (can happen if the initial run's message list was cleared, e.g.
+  // because the task completed after the process restarted and hooks were
+  // reattached without the original call). Append a standalone tool message
+  // so memory still records the result, even if it means a duplicate entry
+  // for that toolCallId.
+  if (!updated) {
+    if (params.runId !== deps.currentRunId || deps.hasResumeData) {
+      messageList.add(
+        [
+          {
+            role: 'tool' as const,
+            type: 'tool-call',
+            id: deps.generateId?.() ?? globalThis.crypto.randomUUID(),
+            createdAt: new Date(),
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: params.toolCallId,
+                toolName: params.toolName,
+                args: transformed.transcriptArgs,
+              },
+            ],
+          },
+        ],
+        'response',
+      );
+    }
+    messageList.add(
+      [
+        {
+          role: 'tool' as const,
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId: params.toolCallId,
+              toolName: params.toolName,
+              result: transformed.transcriptResult,
+              isError: failed,
+              providerOptions: providerMetadata,
+            },
+          ],
+        },
+      ],
+      'response',
+    );
+  }
+
+  await deps.flush();
+}

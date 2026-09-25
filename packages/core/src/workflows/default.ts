@@ -52,7 +52,7 @@ import type {
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
-import { abortableSleep, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
+import { abortableSleep, getRestartStartIndex, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -798,12 +798,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     let startIdx = 0;
+    let entryRestart = restart;
     if (timeTravel) {
       startIdx = timeTravel.executionPath[0]!;
       timeTravel.executionPath.shift();
     } else if (restart) {
-      startIdx = restart.activePaths[0]!;
-      restart.activePaths.shift();
+      startIdx = getRestartStartIndex(steps, restart);
+      if (startIdx === restart.activePaths[0]) {
+        restart.activePaths.shift();
+      } else {
+        // The checkpoint's entry had already finished and nothing is in flight,
+        // so the remaining entries run as a normal run rather than a recovery.
+        entryRestart = undefined;
+      }
     } else if (resume?.resumePath) {
       startIdx = resume.resumePath[0]!;
       resume.resumePath.shift();
@@ -909,7 +916,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         resume,
         timeTravel,
-        restart,
+        restart: entryRestart,
         ...createObservabilityContext({ currentSpan: workflowSpan }),
         abortController: params.abortController,
         pubsub: params.pubsub,
@@ -1075,6 +1082,38 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ...(params.outputOptions?.includeState ? { state: lastState } : {}),
         };
       }
+    }
+
+    if (lastOutput === undefined) {
+      // Restarted from a checkpoint written after the final entry finished, so
+      // nothing was left to run. Complete the run with that entry's saved output,
+      // shaped the way the entry returns it: parallel and conditional keep only the
+      // branches that succeeded, like executeParallel and executeConditional.
+      const lastIdx = steps.length - 1;
+      const lastEntry = steps[lastIdx]!;
+      const output =
+        lastEntry.type === 'parallel' || lastEntry.type === 'conditional'
+          ? Object.fromEntries(
+              lastEntry.steps
+                .map(getSingleStepEntryId)
+                .filter(id => stepResults[id]?.status === 'success')
+                .map(id => [id, stepResults[id].output]),
+            )
+          : this.getStepOutput(stepResults, lastEntry);
+      lastOutput = { result: { status: 'success', output }, stepResults };
+      lastExecutionContext = {
+        workflowId,
+        runId,
+        executionPath: [lastIdx],
+        stepExecutionPath,
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        retryConfig: { attempts, delay },
+        format: params.format,
+        state: lastState,
+        tracingIds: params.tracingIds,
+      };
     }
 
     // after all steps are successful, return result

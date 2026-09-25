@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -8,6 +7,7 @@ import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SkillBuilderStarter } from '../skill-builder-starter';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 const navigateMock = vi.fn();

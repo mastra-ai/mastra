@@ -98,8 +98,8 @@ overrides:
   undici@<6.0.0: 6.28.1
   undici@>=6.0.0 <6.28.1: 6.28.1
   undici@>=7.0.0 <7.29.1: 7.29.1
-  undici@>=8.0.0 <8.11.0: 8.11.0
-  e2b>undici8: npm:undici@8.11.0
+  undici@>=8.0.0 <8.11.2: 8.11.2
+  e2b>undici8: npm:undici@8.11.2
   multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
@@ -4738,6 +4738,9 @@ importers:
       posthog-node:
         specifier: ^5.46.1
         version: 5.48.0(rxjs@7.8.2)
+      re2js:
+        specifier: ^2.8.6
+        version: 2.8.6
       ws:
         specifier: ^8.21.3
         version: 8.21.3(bufferutil@4.1.0)
@@ -5904,6 +5907,12 @@ importers:
 
   packages/playground-ui:
     dependencies:
+      '@autoform/core':
+        specifier: ^3.0.0
+        version: 3.0.0
+      '@autoform/react':
+        specifier: ^4.0.0
+        version: 4.0.0(@hookform/resolvers@3.10.0(react-hook-form@7.87.0(react@19.2.7)))(react-hook-form@7.87.0(react@19.2.7))(react@19.2.7)
       '@base-ui/react':
         specifier: ^1.7.0
         version: 1.7.0(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -5937,12 +5946,18 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.6
         version: 6.43.6
+      '@dagrejs/dagre':
+        specifier: ^1.1.8
+        version: 1.1.8
       '@hello-pangea/dnd':
         specifier: ^18.0.1
         version: 18.0.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
+      '@lukeed/uuid':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@radix-ui/react-visually-hidden':
         specifier: ^1.2.4
         version: 1.2.4(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -5970,6 +5985,9 @@ importers:
       mdast-util-to-markdown:
         specifier: ^2.1.2
         version: 2.1.2
+      nanoid:
+        specifier: ^5.1.16
+        version: 5.1.16
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
@@ -5979,6 +5997,9 @@ importers:
       react-day-picker:
         specifier: ^8.10.1
         version: 8.10.1(date-fns@4.4.0)(react@19.2.7)
+      react-hook-form:
+        specifier: ^7.81.0
+        version: 7.87.0(react@19.2.7)
       react-markdown:
         specifier: ^9.1.0
         version: 9.1.0(@types/react@19.2.17)(react@19.2.7)(supports-color@10.2.2)
@@ -6000,15 +6021,15 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      superjson:
+        specifier: ^2.2.6
+        version: 2.2.6
       use-debounce:
         specifier: ^10.1.0
         version: 10.1.1(react@19.2.7)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
-      zustand:
-        specifier: ^5.0.12
-        version: 5.0.13(@types/react@19.2.17)(immer@11.1.9)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6025,6 +6046,9 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@storybook/addon-a11y':
         specifier: ^10.6.0
         version: 10.6.0(storybook@10.6.0(@types/react@19.2.17)(bufferutil@4.1.0)(prettier@3.9.5)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
@@ -6112,6 +6136,9 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.7(react@19.2.7)
+      react-router:
+        specifier: ^8.0.0
+        version: 8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       rollup-plugin-node-externals:
         specifier: ^8.1.2
         version: 8.1.2(rollup@4.62.2)
@@ -10285,8 +10312,8 @@ importers:
   workspaces/modal:
     dependencies:
       modal:
-        specifier: ^0.7.3
-        version: 0.7.4
+        specifier: ^0.10.1
+        version: 0.10.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -23506,6 +23533,7 @@ packages:
 
   cbor-extract@2.2.2:
     resolution: {integrity: sha512-hlSxxI9XO2yQfe9g6msd3g4xCfDqK5T5P0fRMLuaLHhxn4ViPrm+a+MUfhrvH2W962RGxcBwEGzLQyjbDG1gng==}
+    hasBin: true
 
   cbor-x@1.6.4:
     resolution: {integrity: sha512-UGKHjp6RHC6QuZ2yy5LCKm7MojM4716DwoSaqwQpaH4DvZvbBTGcoDNTiG9Y2lByXZYFEs9WRkS5tLl96IrF1Q==}
@@ -28161,8 +28189,8 @@ packages:
   mnemonist@0.38.3:
     resolution: {integrity: sha512-2K9QYubXx/NAjv4VLq1d1Ly8pWNC5L3BrixtdkyTegXWJIqY+zLNDhhX/A+ZwWt70tB1S8H4BE8FLYEFyNoOBw==}
 
-  modal@0.7.4:
-    resolution: {integrity: sha512-md/+L67tM1RazAt2xvLO+gUqRz6zllyYoNNiM8h+Eb1wLy7JzliH7vnx9f9Sq4zE3qQHENpX0Tjy/LSkIyrANA==}
+  modal@0.10.1:
+    resolution: {integrity: sha512-nnsWoVZ4XNLHtCV5/wuu2avQsFkGK6e/KazGPil3VwXI1aKh8jJkpP++lMPKwKQhMpe4N6WJtSRR6NwiolCEkw==}
 
   modern-tar@0.7.6:
     resolution: {integrity: sha512-sweCIVXzx1aIGTCdzcMlSZt1h8k5Tmk08VNAuRk3IU28XamGiOH5ypi11g6De2CH7PhYqSSnGy2A/EFhbWnVKg==}
@@ -28435,9 +28463,11 @@ packages:
 
   node-gyp-build-optional-packages@5.1.1:
     resolution: {integrity: sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw==}
+    hasBin: true
 
   node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
+    hasBin: true
 
   node-gyp-build@3.9.0:
     resolution: {integrity: sha512-zLcTg6P4AbcHPq465ZMFNXx7XpKKJh+7kkN699NiQWisR2uWYOWNWqRHAmbnmKiL4e9aLSlmy5U7rEMUXV59+A==}
@@ -30042,6 +30072,10 @@ packages:
   re2js@1.3.3:
     resolution: {integrity: sha512-s/I5zEAo79SUK0Qw4dpZKpiMwbQ6Gz0KU2NRr7eaO4x/p2g7Vvmn3hdeXDg8VsaUjfj/ora+e9oi27LX/C9+mw==}
 
+  re2js@2.8.6:
+    resolution: {integrity: sha512-xLgQil4kIUCrAzVk9fRSkxkFNwmygLFjVxXrLc65aE1F0+Zsb8rxumFBy4XKyvgMCTL6kilDq3EZ0piE2dP/Dg==}
+    engines: {node: '>=18.0.0'}
+
   react-day-picker@8.10.1:
     resolution: {integrity: sha512-TMx7fNbhLk15eqcMt+7Z7S2KF7mfTId/XJDjKE8f+IUcFn0l08/kI4FiYTL/0yuOLmEcbR4Fwe3GJf/NiiMnPA==}
     peerDependencies:
@@ -30846,7 +30880,7 @@ packages:
 
   serialize-error-cjs@0.1.4:
     resolution: {integrity: sha512-6a6dNqipzbCPlTFgztfNP2oG+IGcflMe/01zSzGrQcxGMKbIjOemBBD85pH92klWaJavAUWxAh9Z0aU28zxW6A==}
-    deprecated: Rolling release, please update to 0.3.0
+    deprecated: Rolling release, please update to 0.2.0
 
   serialize-error@12.0.0:
     resolution: {integrity: sha512-ZYkZLAvKTKQXWuh5XpBw7CdbSzagarX39WyZ2H07CDLC5/KfsRGlIXV8d4+tfqX1M7916mRqR1QfNHSij+c9Pw==}
@@ -32008,8 +32042,8 @@ packages:
     resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.11.0:
-    resolution: {integrity: sha512-AdzuGcAkzhbha3GgCSoUBx2P0quwym6qdFNCQz/fDGZc8w9XJ741wHUbt2kTmfPz+ZIOMkySFkiY7RXmiDDC8w==}
+  undici@8.11.2:
+    resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -32242,6 +32276,7 @@ packages:
 
   uuid@11.1.1:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
+    hasBin: true
 
   uuid@13.0.1:
     resolution: {integrity: sha512-9ezox2roIft6ExBVTVqibSd5dc5/47Sw/uY6b4SjQUT2TzQ0tltNquWA46y4xPQmdZYqvnio22SgWd41M86+jw==}
@@ -50676,7 +50711,7 @@ snapshots:
       tar: 7.5.21
       undici: 7.29.1
     optionalDependencies:
-      undici8: undici@8.11.0
+      undici8: undici@8.11.2
 
   eastasianwidth@0.2.0: {}
 
@@ -54814,7 +54849,7 @@ snapshots:
     dependencies:
       obliterator: 1.6.1
 
-  modal@0.7.4:
+  modal@0.10.1:
     dependencies:
       cbor-x: 1.6.4
       long: 5.3.2
@@ -55077,7 +55112,7 @@ snapshots:
     dependencies:
       '@grpc/grpc-js': 1.14.5
       abort-controller-x: 0.5.0
-      nice-grpc-common: 2.0.3
+      nice-grpc-common: 2.0.4
 
   njwt@2.0.1:
     dependencies:
@@ -57044,6 +57079,8 @@ snapshots:
       strip-json-comments: 2.0.1
 
   re2js@1.3.3: {}
+
+  re2js@2.8.6: {}
 
   react-day-picker@8.10.1(date-fns@4.4.0)(react@19.2.7):
     dependencies:
@@ -59637,7 +59674,7 @@ snapshots:
 
   undici@7.29.1: {}
 
-  undici@8.11.0:
+  undici@8.11.2:
     optional: true
 
   unenv@2.0.0-rc.24:

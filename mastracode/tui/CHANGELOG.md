@@ -1,5 +1,131 @@
 # mastracode
 
+## 0.42.3-alpha.1
+
+### Patch Changes
+
+- Fixed shell command cards showing the wrong status and time: ([#25032](https://github.com/mastra-ai/mastra/pull/25032))
+
+  - Commands that exit with a nonzero code, or that fail because the sandbox itself errored, now show as failed. Previously they showed a checkmark unless their output happened to contain an error-like word.
+  - Successful commands whose output mentions `error:` (for example grep results) no longer show as failed.
+  - Tool calls rejected by input validation now show as failed while streaming, matching how they appear when the thread is reloaded.
+  - Run times now survive reloading a thread instead of resetting to `0ms`, and times over a minute read as `2m4s`.
+  - Shell box headers now show directories relative to the project root commands run in, so they stay correct when Mastra Code is launched from a subdirectory.
+
+- Fixed a raw `cd <path>` prefix still showing at the start of shell command output. The prefix is now stripped when the path is quoted, separated by `;` or a newline, or preceded by whitespace, and the working directory is shown in the command footer instead. ([#25032](https://github.com/mastra-ai/mastra/pull/25032))
+
+- Fixed GitHub plugin installs failing when `package.json` declares pnpm with a Corepack integrity hash, such as `"packageManager": "pnpm@12.6.0+sha512.<hash>"` (the format written by `corepack use`). The hash is now accepted and passed to Corepack, which verifies the downloaded pnpm against it. ([#25121](https://github.com/mastra-ai/mastra/pull/25121))
+
+- Quiet mode now shows a short description of each shell command, like `Drilling into the failed CI job`, instead of the raw command, so you can follow what the agent is doing without reading long commands and scripts. The agent is asked to write the description first and to phrase descriptions as a running narrative across commands. The description streams in as the agent writes it, and the raw command never flashes first. ([#25032](https://github.com/mastra-ai/mastra/pull/25032))
+
+  Consecutive shell calls in the same directory share one compact box. When the quiet mode tool preview lines setting is 1 or more, the latest output streams into a shared preview at the top of the box:
+
+  ```
+  ╭──────────────────────────────────────────────────────────╮
+  │  Test Files  3 passed (3)                                │
+  │       Tests  42 passed (42)                              │
+  ├──────────────────────────────────────────────────────────┤
+  │ $ ~/code/my-project                                      │
+  ├──────────────────────────────────────────────────────────┤
+  │ ✓ Listing later commits touching the sandbox code  101ms │
+  │ ✗ Checking the release tag                          1.5s │
+  │   └▸ fatal: ambiguous argument 'v1.68.0..HEAD'           │
+  │ ⠋ Running the sandbox test suite                      4s │
+  ╰──────────────────────────────────────────────────────────╯
+  ```
+
+  Each directory gets its own box (subdirectories of the project show as `./path`), running commands show a spinner and a live timer, failed commands show their error line, and background commands are marked as started. With preview lines set to None, the box has no preview. Ctrl+E still reveals the full command and output.
+
+- Improve intake source routing by letting users search lists with more than five sources and scroll through the results. ([#25119](https://github.com/mastra-ai/mastra/pull/25119))
+
+- Enable pnpm@12 for mastracode plugins ([#25097](https://github.com/mastra-ai/mastra/pull/25097))
+
+- Improved quiet mode's thinking indicator. `Thinking...` now appears in the status line above the input, in place of the idle time, instead of adding a line to the chat for every reasoning step. It comes and goes without shifting the chat. ([#25032](https://github.com/mastra-ai/mastra/pull/25032))
+
+- Updated dependencies [[`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`d995f31`](https://github.com/mastra-ai/mastra/commit/d995f318949a3f4e5067d8918c43c071db059211), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`3913a33`](https://github.com/mastra-ai/mastra/commit/3913a33fd5b13dc226b1ed6253c9357cb392dd04), [`08a0aea`](https://github.com/mastra-ai/mastra/commit/08a0aea2f2af12276e333c62aaf368a9240ff68f), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7)]:
+  - @mastra/core@1.72.0-alpha.1
+  - @mastra/observability@1.18.2-alpha.0
+  - @mastra/code-sdk@1.8.4-alpha.1
+  - @mastra/schema-compat@1.3.12-alpha.0
+  - @mastra/mcp@2.1.0
+  - @mastra/memory@1.32.2-alpha.1
+
+## 0.42.3-alpha.0
+
+### Patch Changes
+
+- Fixed cross-agent thread ownership so peers advertise the mastracode instance that currently owns the thread instead of an instance that only visited it earlier. ([#24898](https://github.com/mastra-ai/mastra/pull/24898))
+
+  Sessions still keep every loaded thread advertised so saved peers remain reachable after `/new`. When another instance requests a thread that is no longer current, the SDK now transfers its lease during that claim attempt and forgets the yielded advertisement. A thread that is still current is retained, and retries succeed as soon as its current owner moves away. This prevents stale titles, missing peers, timeout races during event-loop stalls, and release-before-reclaim gaps.
+
+- Updated dependencies [[`e1c3193`](https://github.com/mastra-ai/mastra/commit/e1c3193b18ca68e5cca27f7dce9b0381a6e7b95d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`0c23429`](https://github.com/mastra-ai/mastra/commit/0c23429515b5c307e8a5759f5be1ce20d09d2347), [`6946c4d`](https://github.com/mastra-ai/mastra/commit/6946c4db91071cb43fb36514a42a1e4ce05c37ba), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0c23429`](https://github.com/mastra-ai/mastra/commit/0c23429515b5c307e8a5759f5be1ce20d09d2347), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4b5b212`](https://github.com/mastra-ai/mastra/commit/4b5b212f1c5caa40a2d02308806bbe610f194503), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`d3a7dba`](https://github.com/mastra-ai/mastra/commit/d3a7dbaeb0d027e1e47e4e4ddb2ede271a007e17), [`64916c6`](https://github.com/mastra-ai/mastra/commit/64916c66e8d9dec107da2f81e7c1301471bf7bc3), [`be9d1aa`](https://github.com/mastra-ai/mastra/commit/be9d1aa2c35acb6888d5fa69126f0f8e9a09bb47), [`64916c6`](https://github.com/mastra-ai/mastra/commit/64916c66e8d9dec107da2f81e7c1301471bf7bc3), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`6946c4d`](https://github.com/mastra-ai/mastra/commit/6946c4db91071cb43fb36514a42a1e4ce05c37ba), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4b5b212`](https://github.com/mastra-ai/mastra/commit/4b5b212f1c5caa40a2d02308806bbe610f194503), [`5036e61`](https://github.com/mastra-ai/mastra/commit/5036e6179bee4105ad8f1fc57d315f78024565f4), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`d9790fd`](https://github.com/mastra-ai/mastra/commit/d9790fd00d95063de288560f6a0d2bac8f57cc4d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11)]:
+  - @mastra/core@1.72.0-alpha.0
+  - @mastra/code-sdk@1.8.4-alpha.0
+  - @mastra/memory@1.32.2-alpha.0
+  - @mastra/pg@1.27.2-alpha.0
+
+## 0.42.2
+
+### Patch Changes
+
+- Quiet mode now trims `execute_command` entries and notifications, which previously ignored it. `execute_command` kept up to 15 lines of output in its terminal box while other tools collapsed to a single line; it now keeps the same box and follows the quiet preview line limit like every other tool: the command is always shown (long commands are capped at the limit) and only the last N lines of output appear under it, with hidden lines noted by a `⋯ (+N lines)` marker (when only one line would be hidden it is shown instead, since the marker costs the same row). Setting the limit to None shows the command alone. Expanding tool output (ctrl+e) reveals the full command and output. Notifications keep their bordered style but drop the priority/kind/status row and cap the message at the quiet preview line limit, and notification summaries drop the usage hint. Toggling quiet mode updates existing notifications live. ([#24214](https://github.com/mastra-ai/mastra/pull/24214))
+
+- Split Factory onboarding into shared organization provider setup and optional personal provider setup. ([#24959](https://github.com/mastra-ai/mastra/pull/24959))
+
+- **Fixed Stagehand browser automation for OpenAI Codex users and made the browser model visible.** ([#25028](https://github.com/mastra-ai/mastra/pull/25028))
+
+  - Stagehand actions (observe, act, extract) no longer fail with "Bad Request" when signed in with a ChatGPT/Codex account and no browser model is configured.
+  - A model chosen with `/browser set model openai/...` now runs through your Codex login instead of requiring a separate `OPENAI_API_KEY`.
+  - With no browser model configured, Stagehand reuses the chat model active at launch when it can route it, then falls back to the Codex default, then to Stagehand's default.
+  - The `/browser` setup summary and `/browser status` show which model is in use and why (configured, current chat model, Codex login default, or Stagehand default), reporting the model the running browser actually launched with.
+  - Fixed `/browser status` wrongly reporting "Pending changes (not yet applied)" whenever a profile, executable path, or Stagehand model was configured.
+  - The Browserbase API key is no longer stored in session state.
+
+  ```
+  /browser info    # alias for /browser status
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`3cc745e`](https://github.com/mastra-ai/mastra/commit/3cc745e436b0ae9005f4730296ce51d338dae68c), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`527e1d8`](https://github.com/mastra-ai/mastra/commit/527e1d8e705de7002f9fa2222b08baf3bbaf4267), [`b410849`](https://github.com/mastra-ai/mastra/commit/b4108495c7a60343b83b82ae80d6ca9b75305fbf), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`0a1f74a`](https://github.com/mastra-ai/mastra/commit/0a1f74a94e3d7944640978c9334b7a6e6f97b886), [`867df31`](https://github.com/mastra-ai/mastra/commit/867df31d35fdf9dcf1a02b3563af7c6f76b6b166), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5), [`fec55ac`](https://github.com/mastra-ai/mastra/commit/fec55acdb25540a3b7c2434451db0234063f8a1e), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503)]:
+  - @mastra/core@1.71.0
+  - @mastra/code-sdk@1.8.3
+  - @mastra/duckdb@1.11.1
+  - @mastra/observability@1.18.1
+  - @mastra/fastembed@1.3.2
+  - @mastra/libsql@1.23.3
+  - @mastra/pg@1.27.1
+  - @mastra/memory@1.32.1
+  - @mastra/mcp@2.1.0
+
+## 0.42.2-alpha.1
+
+### Patch Changes
+
+- Quiet mode now trims `execute_command` entries and notifications, which previously ignored it. `execute_command` kept up to 15 lines of output in its terminal box while other tools collapsed to a single line; it now keeps the same box and follows the quiet preview line limit like every other tool: the command is always shown (long commands are capped at the limit) and only the last N lines of output appear under it, with hidden lines noted by a `⋯ (+N lines)` marker (when only one line would be hidden it is shown instead, since the marker costs the same row). Setting the limit to None shows the command alone. Expanding tool output (ctrl+e) reveals the full command and output. Notifications keep their bordered style but drop the priority/kind/status row and cap the message at the quiet preview line limit, and notification summaries drop the usage hint. Toggling quiet mode updates existing notifications live. ([#24214](https://github.com/mastra-ai/mastra/pull/24214))
+
+- **Fixed Stagehand browser automation for OpenAI Codex users and made the browser model visible.** ([#25028](https://github.com/mastra-ai/mastra/pull/25028))
+
+  - Stagehand actions (observe, act, extract) no longer fail with "Bad Request" when signed in with a ChatGPT/Codex account and no browser model is configured.
+  - A model chosen with `/browser set model openai/...` now runs through your Codex login instead of requiring a separate `OPENAI_API_KEY`.
+  - With no browser model configured, Stagehand reuses the chat model active at launch when it can route it, then falls back to the Codex default, then to Stagehand's default.
+  - The `/browser` setup summary and `/browser status` show which model is in use and why (configured, current chat model, Codex login default, or Stagehand default), reporting the model the running browser actually launched with.
+  - Fixed `/browser status` wrongly reporting "Pending changes (not yet applied)" whenever a profile, executable path, or Stagehand model was configured.
+  - The Browserbase API key is no longer stored in session state.
+
+  ```
+  /browser info    # alias for /browser status
+  ```
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`3cc745e`](https://github.com/mastra-ai/mastra/commit/3cc745e436b0ae9005f4730296ce51d338dae68c), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b7f9616`](https://github.com/mastra-ai/mastra/commit/b7f9616e443113c72de697900c7f9dc357e1d11c), [`527e1d8`](https://github.com/mastra-ai/mastra/commit/527e1d8e705de7002f9fa2222b08baf3bbaf4267), [`b410849`](https://github.com/mastra-ai/mastra/commit/b4108495c7a60343b83b82ae80d6ca9b75305fbf), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`867df31`](https://github.com/mastra-ai/mastra/commit/867df31d35fdf9dcf1a02b3563af7c6f76b6b166), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503)]:
+  - @mastra/core@1.71.0-alpha.1
+  - @mastra/code-sdk@1.8.3-alpha.1
+  - @mastra/duckdb@1.11.1-alpha.1
+  - @mastra/observability@1.18.1-alpha.0
+  - @mastra/fastembed@1.3.2-alpha.0
+  - @mastra/libsql@1.23.3-alpha.0
+  - @mastra/pg@1.27.1-alpha.0
+  - @mastra/memory@1.32.1-alpha.0
+  - @mastra/mcp@2.1.0
+
 ## 0.42.2-alpha.0
 
 ### Patch Changes

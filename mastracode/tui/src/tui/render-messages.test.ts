@@ -505,6 +505,115 @@ describe('renderExistingMessages startup history loading', () => {
     expect(rendered[rendered.length - 1]).toContain('Interrupted');
   });
 
+  it('takes a reloaded shell call status and run time from its sandbox exit record, even in a later message', async () => {
+    const shellCall = (toolCallId: string, description: string, result: string) => ({
+      type: 'tool-invocation',
+      toolInvocation: {
+        toolCallId,
+        toolName: 'execute_command',
+        args: { description, command: 'ls' },
+        state: 'result',
+        result,
+      },
+    });
+    const exitPart = (toolCallId: string, data: Record<string, unknown>) => ({
+      type: 'data-sandbox-exit',
+      data: { toolCallId, ...data },
+      createdAt: 1,
+    });
+    const assistant = (id: string, parts: unknown[]) =>
+      ({ id, role: 'assistant', createdAt: new Date(), content: { format: 2, parts } }) as unknown as MastraDBMessage;
+    const messages = [
+      assistant('assistant-1', [
+        shellCall('call-1', 'Building the package', 'done'),
+        exitPart('call-1', { exitCode: 0, success: true, executionTimeMs: 8_746 }),
+        shellCall('call-2', 'Starting the sandbox', 'Error: Sandbox failed to start'),
+      ]),
+      // The sandbox's exit record for call-2 was saved with the next message.
+      assistant('assistant-2', [exitPart('call-2', { exitCode: -1, success: false, executionTimeMs: 1_605 })]),
+    ];
+    const state = createState();
+    state.quietMode = true;
+    const listActiveMessages = vi.fn().mockResolvedValue(messages);
+    state.session = {
+      ...(state.session as any),
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+      state: createSessionState(),
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: {
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      },
+      setState: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    // eslint-disable-next-line no-control-regex
+    const rendered = state.chatContainer
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g, '');
+    expect(rendered).toMatch(/✓ Building the package +8\.7s/);
+    expect(rendered).toMatch(/✗ Starting the sandbox +1\.6s/);
+    expect(rendered).toContain('└▸ Error: Sandbox failed to start');
+  });
+
+  it('shows a reloaded shell call that never got a result as stopped, not running', async () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'execute_command',
+                args: { description: 'Running the long build', command: 'pnpm build' },
+                state: 'call',
+              },
+            },
+          ],
+        },
+      } as unknown as MastraDBMessage,
+    ];
+    const state = createState();
+    state.quietMode = true;
+    const listActiveMessages = vi.fn().mockResolvedValue(messages);
+    state.session = {
+      ...(state.session as any),
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+      state: createSessionState(),
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: {
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      },
+      setState: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TUIState['controller'];
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+
+    try {
+      await renderExistingMessages(state);
+
+      // eslint-disable-next-line no-control-regex
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g, '');
+      expect(rendered).toMatch(/■ Running the long build/);
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+    } finally {
+      setIntervalSpy.mockRestore();
+    }
+  });
+
   it('tracks the latest rendered message timestamp for startup idle state', async () => {
     const latest = new Date('2026-05-15T13:30:00.000Z');
     const messages = [

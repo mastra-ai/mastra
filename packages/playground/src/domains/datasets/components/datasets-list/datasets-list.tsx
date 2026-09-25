@@ -7,12 +7,12 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];

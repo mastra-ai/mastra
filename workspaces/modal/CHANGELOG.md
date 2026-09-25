@@ -1,5 +1,28 @@
 # @mastra/modal
 
+## 0.7.0-alpha.0
+
+### Minor Changes
+
+- Added Modal Volume mounts and a volume-backed workspace filesystem. ([#25072](https://github.com/mastra-ai/mastra/pull/25072))
+
+  - New `volumes` option on `ModalSandbox` mounts Modal Volumes at the given paths.
+  - New `sandbox.reloadVolumes()` picks up writes made to a Volume by other sandboxes.
+  - New `ModalFilesystem` exposes a path inside the sandbox (such as a Volume mount) to workspace file tools, so agent files persist across sandbox restarts.
+
+  ```typescript
+  const sandbox = new ModalSandbox({ workingDirectory: '/workspace', volumes: { '/mnt/agent': volume } });
+  const workspace = new Workspace({
+    sandbox,
+    filesystem: new ModalFilesystem({ sandbox, basePath: '/mnt/agent' }),
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7)]:
+  - @mastra/core@1.72.0-alpha.1
+
 ## 0.6.0
 
 ### Minor Changes

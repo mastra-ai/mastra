@@ -497,6 +497,20 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('forwards withInitialHistory when requested', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response(new ReadableStream()));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await agent.subscribeToThread({ threadId: 'thread-123', withInitialHistory: { perPage: 20 } });
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: { resourceId: undefined, threadId: 'thread-123', withInitialHistory: { perPage: 20 } },
+      stream: true,
+    });
+  });
+
   it('only forwards thread coordinates in the subscribe request body', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const response = new Response(new ReadableStream());

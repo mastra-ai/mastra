@@ -318,6 +318,51 @@ describe('DurableAgent.recover(runId)', () => {
     subscription.unsubscribe();
   });
 
+  // COR-1308: the persisted structured output schema is plain JSON Schema, so
+  // recovery has to rebuild the live option or the object result is dropped.
+  it('restores structured output so a recovered run still returns its object', async () => {
+    const runId = 'run-recovered-structured-output';
+    await seed(store, runId, 'running', 'agent-A');
+    const workflows = (await store.getStore('workflows'))!;
+    for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+      const snapshot = makeSnapshot(runId, 'running', 'agent-A');
+      (snapshot.context.input as any).options = {
+        structuredOutput: {
+          schema: {
+            type: 'object',
+            properties: { name: { type: 'string' }, age: { type: 'number' } },
+            required: ['name', 'age'],
+            additionalProperties: false,
+          },
+        },
+      };
+      await workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId: 'r', snapshot });
+    }
+
+    const restart = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { id: 'text-1', text: '{"name":"Ada","age":36}' },
+      } as any);
+      await emitFinishEvent(agent.pubsub, runId, {
+        output: { text: '{"name":"Ada","age":36}', steps: [] },
+        stepResult: { reason: 'stop' },
+      } as any);
+      return { status: 'success' as const };
+    });
+    const createRun = vi.fn(async () => ({ restart, runId }));
+    const deleteWorkflowRunById = vi.fn(async () => {});
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({ createRun, restart, deleteWorkflowRunById } as any);
+
+    const recovered = await agent.recover(runId);
+
+    await expect(recovered.output.object).resolves.toEqual({ name: 'Ada', age: 36 });
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    recovered.cleanup();
+  });
+
   it('keeps the recovered broadcast when the run suspends and resumes again', async () => {
     const runId = 'recovered-continuation';
     await seed(store, runId, 'running', 'agent-A');

@@ -115,6 +115,7 @@ function createState(isRunning: boolean) {
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
       allShellComponents: [],
+      chatContainer: { children: [] },
       ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
       goalManager: {
         isActive: vi.fn(() => false),

@@ -1,8 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export type TargetType = 'agent' | 'workflow' | 'scorer';
 
@@ -22,7 +23,9 @@ const targetTypeOptions = [
 
 export function TargetSelector({ targetType, setTargetType, targetId, setTargetId, container }: TargetSelectorProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
+    requestContext: usePlaygroundStore().requestContext,
+  });
   const { data: scorers, isLoading: scorersLoading } = useScorers();
 
   // Get list of targets based on selected type

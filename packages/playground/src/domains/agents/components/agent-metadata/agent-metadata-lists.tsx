@@ -3,11 +3,11 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
-import { useLinkComponent } from '@/lib/framework';
 
 const metadataLinkClassName =
   'pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center';

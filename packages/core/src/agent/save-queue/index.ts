@@ -2,6 +2,7 @@ import type { IMastraLogger } from '../../logger';
 import type { MemoryConfigInternal } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
 import type { MessageList } from '../message-list';
+import { noteThreadMessagesSaved } from '../thread-saves';
 
 export class SaveQueueManager {
   private logger?: IMastraLogger;
@@ -60,7 +61,7 @@ export class SaveQueueManager {
   private enqueueSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
     const next = prev
-      .then(() => this.persistUnsavedMessages(messageList, memoryConfig))
+      .then(() => this.persistUnsavedMessages(threadId, messageList, memoryConfig))
       .catch(err => {
         this.logger?.error?.('Error in enqueueSave', { err, threadId });
       })
@@ -92,13 +93,19 @@ export class SaveQueueManager {
    * @param messageList - The MessageList instance for the current thread.
    * @param memoryConfig - The memory configuration for saving.
    */
-  private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
+  private async persistUnsavedMessages(
+    threadId: string,
+    messageList: MessageList,
+    memoryConfig?: MemoryConfigInternal,
+  ) {
     const newMessages = messageList.drainUnsavedMessages();
     if (newMessages.length > 0 && this.memory) {
+      const savedAt = Date.now();
       await this.memory.saveMessages({
         messages: newMessages,
         memoryConfig,
       });
+      noteThreadMessagesSaved({ threadId, resourceId: newMessages.find(m => m.resourceId)?.resourceId, savedAt });
     }
   }
 

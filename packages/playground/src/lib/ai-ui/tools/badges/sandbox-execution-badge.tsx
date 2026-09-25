@@ -8,12 +8,12 @@ import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/worksp
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration, formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
 interface WorkspaceMetadata {

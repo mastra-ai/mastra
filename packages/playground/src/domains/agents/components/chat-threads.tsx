@@ -11,6 +11,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -18,7 +19,6 @@ import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];

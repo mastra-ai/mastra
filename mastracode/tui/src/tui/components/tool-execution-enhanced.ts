@@ -4,6 +4,12 @@
  */
 
 import * as os from 'node:os';
+import {
+  isAbsolute as isAbsolutePath,
+  join as joinPath,
+  relative as relativePath,
+  resolve as resolvePath,
+} from 'node:path';
 import { Box, Spacer, Text, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
@@ -12,11 +18,14 @@ import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
+import { formatStatusDuration } from '../status-duration.js';
 import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type {
+  CommandExitRecord,
   CompactToolLabelColor,
   IToolExecutionComponent,
   QuietToolDisplayMode,
@@ -27,6 +36,9 @@ import { WidthAwareContainer } from './width-aware-container.js';
 
 export type { ToolResult };
 
+/** CSI, OSC, and DCS/SOS/PM/APC sequences (terminated or not), and other two-byte ESC sequences. */
+const TERMINAL_SEQUENCE_RE =
+  /\x1b\[[\x20-\x3f]*[\x40-\x7e]?|\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?|\x9b[\x20-\x3f]*[\x40-\x7e]?|\x1b[\x20-\x7e]?/g;
 const CODE_HIGHLIGHT_THEME: HighlightTheme = {
   default: text => theme.fg('toolArgs', text),
   keyword: chalk.hex('#c084fc'),
@@ -102,10 +114,36 @@ export interface ToolExecutionOptions {
   quietDisplayMode?: QuietToolDisplayMode;
   quietPreviewLineLimit?: number;
   compactToolModeColor?: string;
+  /** Where shell commands run (the git root, not necessarily where the TUI was launched). */
+  projectRoot?: string;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
  */
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+/** Grouped quiet shell boxes start this narrow and widen, up to the full width, for longer rows. */
+const QUIET_SHELL_MIN_CONTENT_WIDTH = 76;
+
+/** First line of `message` when a failed result is a JSON error object, e.g. a rejected tool input. */
+function parseErrorMessage(output: string): string | undefined {
+  const trimmed = output.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+  try {
+    const message = (JSON.parse(trimmed) as { message?: unknown }).message;
+    return typeof message === 'string'
+      ? message
+          .split('\n')
+          .find(line => line.trim())
+          ?.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Room kept for the right-aligned time so a ticking counter never changes the box width. */
+const QUIET_SHELL_TIME_WIDTH = 'started'.length;
+
 function shortenPath(path: string): string {
   const home = os.homedir();
   if (path.startsWith(home)) {
@@ -205,6 +243,19 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
+  private argsStreaming = false;
+  private endTime?: number;
+  /** Set for history entries whose run time could not be recovered, so no fake `0ms` is shown. */
+  private durationUnknown = false;
+  /** The sandbox's exit record for a shell call; more reliable than parsing the result text. */
+  private commandExit?: CommandExitRecord;
+  private liveUpdatesStopped = false;
+  private quietShellTicker?: ReturnType<typeof setInterval>;
+  private quietShellGroupWidth?: number;
+  private quietShellGroupPreview?: string[];
+  private quietShellHeld = false;
+  /** Rows the shell box preview has used so far; it never shrinks, so rows below don't jump. */
+  private quietShellPreviewRowFloor = 0;
   private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
   private quietPreviewRowFloor = 0;
@@ -242,6 +293,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (rebuild) this.rebuild();
   }
 
+  setArgsStreaming(streaming: boolean): void {
+    if (this.argsStreaming === streaming) return;
+    this.argsStreaming = streaming;
+    this.rebuild();
+  }
+
   refresh(): void {
     this.rebuild();
   }
@@ -249,7 +306,25 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   updateResult(result: ToolResult, isPartial = false): void {
     this.result = result;
     this.isPartial = isPartial;
+    if (!isPartial) this.endTime ??= Date.now();
     // Keep streaming output for colored display in final result
+    this.rebuild();
+  }
+
+  /** Restores the run time of a tool call rendered from history. */
+  setRecordedTiming(startedAt: number | undefined, endedAt: number | undefined): void {
+    if (startedAt === undefined || endedAt === undefined) {
+      this.durationUnknown = true;
+    } else {
+      this.durationUnknown = false;
+      this.startTime = startedAt;
+      this.endTime = endedAt;
+    }
+    this.rebuild();
+  }
+
+  setCommandExit(exit: CommandExitRecord): void {
+    this.commandExit = exit;
     this.rebuild();
   }
 
@@ -299,6 +374,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
     this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
     this.quietPreviewRowFloor = Math.min(this.quietPreviewRowFloor, this.quietPreviewLineLimit);
+    this.quietShellPreviewRowFloor = Math.min(this.quietShellPreviewRowFloor, this.quietPreviewLineLimit);
     this.rebuild();
   }
 
@@ -309,21 +385,150 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (this.quietDisplayMode === 'quiet') this.rebuild();
   }
 
-  getChatSpacingKind(): ChatSpacingKind {
+  getChatSpacingKind(): ChatSpacingKind | undefined {
     if (this.quietDisplayMode === 'quiet') {
-      return this.toolName === MC_TOOLS.EXECUTE_COMMAND ? 'quiet-shell-tool' : 'quiet-compact-tool';
+      if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'quiet-compact-tool';
+      if (this.isQuietCompactShell()) return this.quietShellHeld ? undefined : 'quiet-compact-tool';
+      return 'quiet-shell-tool';
     }
     return 'normal-tool';
   }
 
   getCompactToolGroupKey(): string | undefined {
+    // Shell calls only share a box when they run in the same directory, so each box has one header.
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND && this.isQuietCompactShell()) {
+      return this.isShellDirectoryPending() ? PENDING_SHELL_GROUP_KEY : `$ ${this.getShellHeaderPath()}`;
+    }
     if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
     return this.getCompactToolLabel();
   }
 
   getCompactToolGroupSummary(): string | undefined {
     if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) return undefined;
     return this.getCompactToolSummary();
+  }
+
+  /**
+   * Split a leading "cd <path>" off the command, since the path is shown separately. Callers bake
+   * this prefix into the command instead of passing `cwd`, and separate it with "&&", ";", or a
+   * bare newline — with quoted paths and leading whitespace also showing up.
+   */
+  private parseShellCommand(): { command: string; cdPath: string } {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const command = argsObj?.command ? String(argsObj.command) : '...';
+    const cdMatch = command.match(/^\s*cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;]+))\s*(?:&&|;|\n)\s*(?=\S)/);
+    if (!cdMatch) return { command, cdPath: '' };
+    return { command: command.slice(cdMatch[0].length), cdPath: cdMatch[1] ?? cdMatch[2] ?? cdMatch[3] ?? '' };
+  }
+
+  /**
+   * The directory the command runs in, as written: the shell starts in `cwd`, then a leading `cd`
+   * moves it, relative to `cwd` unless the `cd` path is absolute or starts at home.
+   */
+  private getShellDirectory(): string {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const cwd = argsObj?.cwd ? String(argsObj.cwd) : '';
+    const { cdPath } = this.parseShellCommand();
+    if (!cwd || !cdPath) return cwd || cdPath;
+    if (cdPath.startsWith('/') || cdPath === '~' || cdPath.startsWith('~/')) return cdPath;
+    // Expand home first: joining `~` with `..` would otherwise cancel out to `.`.
+    const expandedCwd = cwd === '~' || cwd.startsWith('~/') ? os.homedir() + cwd.slice(1) : cwd;
+    return joinPath(expandedCwd, cdPath);
+  }
+
+  /** The directory a quiet shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
+  private getShellHeaderPath(): string {
+    const raw = this.getShellDirectory();
+    const expanded = raw === '~' || raw.startsWith('~/') ? os.homedir() + raw.slice(1) : raw;
+    const projectRoot = this.options.projectRoot ?? process.cwd();
+    const resolved = resolvePath(projectRoot, expanded || '.');
+    // The project root shows in full so tabs stay distinguishable; paths inside it stay short.
+    const relative = relativePath(projectRoot, resolved);
+    if (relative && !relative.startsWith('..') && !isAbsolutePath(relative)) return `./${relative}`;
+    return shortenPath(resolved);
+  }
+
+  /**
+   * While args stream, the directory is unknown until a complete `cd <dir> &&` prefix arrives. A
+   * streaming `cwd` may still be partial, and without either the call may yet get one.
+   */
+  private isShellDirectoryPending(): boolean {
+    if (!this.argsStreaming || this.result) return false;
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    // A string `cwd` may still be partial; a streamed `null` is complete and means "no cwd".
+    if (typeof argsObj?.cwd === 'string') return true;
+    if (typeof argsObj?.command !== 'string') return true;
+    if (this.parseShellCommand().cdPath) return false;
+    // Still undecided while the command could be the start of a `cd <dir> &&` prefix.
+    return /^\s*(?:c|cd|cd\s[\s\S]*)?$/.test(argsObj.command);
+  }
+
+  /**
+   * Held while its directory is unknown and a shell box sits right above it: drawing the row in
+   * that box, then moving it to its own directory's box, would make the chat jump. Rendered once
+   * the directory is known, the row only ever adds lines.
+   */
+  setQuietShellHeld(held: boolean): void {
+    if (this.quietShellHeld === held) return;
+    this.quietShellHeld = held;
+    if (this.isQuietCompactShell()) this.rebuild();
+  }
+
+  private getShellDescription(): string {
+    const description = (this.args as Record<string, unknown> | undefined)?.description;
+    return typeof description === 'string' ? description.replace(/\s+/g, ' ').trim() : '';
+  }
+
+  /**
+   * In quiet mode, consecutive shell calls in one directory share a box: an optional preview of the
+   * latest output, a `$ <path>` header, then one status row per call. Expanding shows the full box.
+   */
+  private isQuietCompactShell(): boolean {
+    return this.quietDisplayMode === 'quiet' && this.toolName === MC_TOOLS.EXECUTE_COMMAND && !this.expanded;
+  }
+
+  /**
+   * The last `quietPreviewLineLimit` lines this call printed, for its box's shared preview; `[]` when
+   * it printed nothing and `undefined` when previews are off.
+   */
+  getQuietShellPreviewLines(): string[] | undefined {
+    if (!this.isQuietCompactShell() || this.quietShellHeld || this.quietPreviewLineLimit <= 0) return undefined;
+    const output = this.streamingOutput.trim() ? this.streamingOutput : this.getFormattedOutput();
+    const lines = output.split('\n').filter(line => !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line.trim()));
+    while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
+    while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
+    return lines.slice(-this.quietPreviewLineLimit);
+  }
+
+  /** Set on the first call of a shell box, which draws the box's preview above its header. */
+  setQuietShellGroupPreview(lines: string[] | undefined): void {
+    const current = this.quietShellGroupPreview;
+    if (current === lines || (current && lines && current.join('\n') === lines.join('\n'))) return;
+    this.quietShellGroupPreview = lines;
+    if (this.isQuietCompactShell()) this.rebuild();
+  }
+
+  /**
+   * Text for a grouped quiet shell row: the description; while it may still stream in, `...` or how
+   * much of the command has arrived (some models write a long command first); or the command's
+   * first line when the call has none (e.g. it was rejected for a missing description).
+   * Muted text is not the description, and truncates rather than widening the box.
+   */
+  private getQuietShellRowText(): { text: string; muted: boolean } {
+    const description = this.getShellDescription();
+    if (description) return { text: description, muted: false };
+    const command = (this.args as Record<string, unknown> | undefined)?.command;
+    if (this.argsStreaming && !this.result) {
+      if (typeof command !== 'string' || !command) return { text: '...', muted: false };
+      const size = command.length < 1000 ? `${command.length}` : `${(command.length / 1000).toFixed(1)}k`;
+      return { text: `writing command (${size} chars)`, muted: true };
+    }
+    const firstLine =
+      this.parseShellCommand()
+        .command.split('\n')
+        .find(line => line.trim()) ?? '...';
+    return { text: firstLine.trim(), muted: true };
   }
 
   hasQuietStreamingPreview(): boolean {
@@ -393,39 +598,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * Quiet shell output follows the same rule as every other tool's preview:
-   * `quietPreviewLineLimit` output lines (the tail, since that is where errors
-   * land), or none at all when the limit is 0. Expanding (ctrl+e) shows everything.
-   */
-  private limitQuietShellLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
-    const limit = this.quietPreviewLineLimit;
-    if (limit <= 0) return [];
-    if (this.fitsQuietLimit(lines.length, limit)) return lines;
-    return [this.quietHiddenLinesMarker(lines.length - limit), ...lines.slice(-limit)];
-  }
-
-  /**
-   * The command is the shell tool's header, so at least one line always shows;
-   * the rest of a long command (heredocs, inline scripts) is capped like output.
-   */
-  private limitQuietShellCommandLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
-    const limit = Math.max(1, this.quietPreviewLineLimit);
-    if (this.fitsQuietLimit(lines.length, limit)) return lines;
-    return [...lines.slice(0, limit), this.quietHiddenLinesMarker(lines.length - limit)];
-  }
-
-  /** A `⋯ (+1 line)` marker costs the same row as the line it hides, so just show the line. */
-  private fitsQuietLimit(count: number, limit: number): boolean {
-    return count <= limit + 1;
-  }
-
-  private quietHiddenLinesMarker(hidden: number): string {
-    return theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`);
-  }
-
-  /**
    * Full clear-and-rebuild. Called when:
    * - args change (updateArgs)
    * - result arrives or changes (updateResult)
@@ -435,6 +607,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   protected rebuildForWidth(_width: number): void {
     this.updateBgColor();
     this.contentBox.clear();
+    if (!this.isQuietCompactShell()) this.syncQuietShellTicker(false);
 
     if (this.quietDisplayMode === 'quiet' && this.toolName !== MC_TOOLS.EXECUTE_COMMAND) {
       this.renderCompactTool();
@@ -1474,13 +1647,17 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private renderBashToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
-    let command = argsObj?.command ? String(argsObj.command) : '...';
+    const { command } = this.parseShellCommand();
     const timeout = argsObj?.timeout as number | undefined;
-    const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : '';
 
-    // Strip "cd $CWD && " from the start since we show cwd in the footer
-    const cdPattern = /^cd\s+[^\s]+\s+&&\s+/;
-    command = command.replace(cdPattern, '');
+    if (this.isQuietCompactShell()) {
+      if (this.quietShellHeld) this.syncQuietShellTicker(false);
+      else this.renderQuietShellGroupRow();
+      return;
+    }
+
+    const directory = this.getShellDirectory();
+    const cwd = directory ? shortenPath(directory) : '';
 
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;
@@ -1516,7 +1693,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       }
       const footerPromptWidth = visibleWidth(footerPrompt);
       const footerWrapWidth = Math.max(1, contentWidth - 2 - footerPromptWidth);
-      const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(command, footerWrapWidth));
+      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
       const footerSuffixWidth = visibleWidth(footerSuffix);
       const continuationIndent = ' '.repeat(footerPromptWidth);
       footerLines.forEach((footerLine, index) => {
@@ -1560,7 +1737,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (maxStreamLines && lines.length > maxStreamLines) {
         lines = lines.slice(-maxStreamLines);
       }
-      renderBorderedShell(status, this.limitQuietShellLines(lines));
+      renderBorderedShell(status, lines);
       return;
     }
 
@@ -1581,32 +1758,168 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return lines;
     };
 
-    // For errors, use bordered box with error status
-    if (this.result.isError) {
-      const status = this.getStatusIndicator(true);
-      const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
-      return;
-    }
-
-    // Also check if output contains common error patterns
-    const outputText = this.getFormattedOutput();
-    const looksLikeError = outputText.match(
-      /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:/i,
-    );
-    if (looksLikeError) {
-      const status = this.getStatusIndicator(true);
-      const output = this.streamingOutput.trim() || this.getFormattedOutput();
-      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
-      return;
-    }
-
-    // Success - use bordered box with checkmark
-    const status = this.getStatusIndicator(false);
+    const failed = this.getShellFailureLine() !== undefined;
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    {
-      renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
+    renderBorderedShell(this.getStatusIndicator(failed), prepareOutputLines(output));
+  }
+
+  /**
+   * One call's slice of a shared quiet shell box. The first call in a run opens the box with a
+   * `$ <path>` header, a call in a new directory adds another header, and the last call closes it.
+   */
+  private renderQuietShellGroupRow(): void {
+    const border = (char: string) => this.formatToolBorder(char);
+    const fullWidth = Math.max(20, this.renderWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
+    const naturalWidth = this.quietShellGroupWidth ?? this.getQuietShellNaturalWidth() ?? 0;
+    const contentWidth = Math.min(fullWidth, Math.max(QUIET_SHELL_MIN_CONTENT_WIDTH, naturalWidth));
+    const rule = (left: string, right: string) =>
+      `${border(left)}${border('─'.repeat(contentWidth + 2))}${border(right)}`;
+    // Every row must stay on one terminal line: a row that wraps adds a line that disappears again
+    // on the next update, jumping everything below it. Tabs and other control characters would make
+    // the measured width disagree with what the terminal draws, so they become plain spaces.
+    // Descriptions come from the model and output from the command, so neither may reach the
+    // terminal as escape sequences (colors, cursor moves, hyperlinks, clipboard writes).
+    const singleLine = (text: string) =>
+      text
+        .replace(TERMINAL_SEQUENCE_RE, '')
+        .replace(/[\t\n\r\v\f]/g, ' ')
+        .replace(/[\x00-\x08\x0e-\x1f\x7f-\x9f]/g, '');
+    const row = (left: string, right = '') => {
+      const rightWidth = visibleWidth(right);
+      const leftText = truncateAnsi(left, Math.max(1, contentWidth - (rightWidth ? rightWidth + 1 : 0)));
+      const padding = ' '.repeat(Math.max(rightWidth ? 1 : 0, contentWidth - visibleWidth(leftText) - rightWidth));
+      return `${border('│')} ${leftText}${padding}${right} ${border('│')}`;
+    };
+
+    const headerPath = singleLine(this.getShellHeaderPath());
+    const header = row(`${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('muted', headerPath)}`);
+    const lines: string[] = [];
+    if (!this.compactToolContinuation) {
+      lines.push(rule('╭', '╮'));
+      const preview = this.quietShellGroupPreview ?? [];
+      this.quietShellPreviewRowFloor = Math.min(
+        this.quietPreviewLineLimit,
+        Math.max(this.quietShellPreviewRowFloor, preview.length),
+      );
+      if (this.quietShellPreviewRowFloor > 0) {
+        for (let i = 0; i < this.quietShellPreviewRowFloor; i++) {
+          lines.push(row(theme.fg('toolOutput', singleLine(preview[i] ?? ''))));
+        }
+        lines.push(rule('├', '┤'));
+      }
+      lines.push(header, rule('├', '┤'));
     }
+
+    const rowText = this.getQuietShellRowText();
+    const description = rowText.muted ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);
+    const isBackground =
+      !!this.backgroundTaskId || (this.args as Record<string, unknown> | undefined)?.background === true;
+    const running = !this.result || this.isPartial;
+    let mark: string;
+    let time: string;
+    let errorLine: string | undefined;
+    if (isBackground && (this.backgroundTaskId || !running)) {
+      // Background results arrive later as their own chat entry, so this row never updates again.
+      mark = theme.fg('accent', '◷');
+      time = 'started';
+    } else if (running && this.liveUpdatesStopped) {
+      mark = theme.fg('muted', '■');
+      time = 'stopped';
+    } else if (running) {
+      mark = theme.fg('warning', SPINNER_FRAMES[Math.floor(Date.now() / 100) % SPINNER_FRAMES.length]!);
+      const elapsed = Date.now() - this.startTime;
+      time =
+        elapsed < 60_000 ? `${Math.floor(elapsed / 1000)}s` : formatStatusDuration(elapsed, { includeSeconds: true });
+    } else {
+      errorLine = this.getShellFailureLine();
+      mark = errorLine !== undefined ? theme.fg('error', '✗') : theme.fg('success', '✓');
+      time = this.formatDuration();
+    }
+    lines.push(row(`${mark} ${description}`, theme.fg('muted', time)));
+    if (errorLine) lines.push(row(theme.fg('error', `  └▸ ${singleLine(errorLine)}`)));
+    if (!this.compactToolHasFollowingContinuation) lines.push(rule('╰', '╯'));
+
+    // Last guard for terminals too narrow for the minimum box: clip rather than wrap.
+    const maxLineWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2);
+    this.contentBox.addChild(new Text(lines.map(line => truncateAnsi(line, maxLineWidth)).join('\n'), 0, 0));
+    this.syncQuietShellTicker(running && !isBackground && !this.liveUpdatesStopped);
+  }
+
+  /**
+   * Returns the line explaining a failed shell call, or `undefined` when it succeeded. Failure comes
+   * from the sandbox's exit record, an error result, or ordinary output ending in a nonzero
+   * "Exit code: N" — never from the output text, which routinely contains words like "error:" on success.
+   */
+  private getShellFailureLine(): string | undefined {
+    const resultLines = this.getFormattedOutput().split('\n');
+    const exitCode =
+      resultLines
+        .findLast(line => line.trim() !== '')
+        ?.trim()
+        .match(/^Exit code: (-?\d+)$/)?.[1] ??
+      (this.commandExit && this.commandExit.exitCode >= 0 ? String(this.commandExit.exitCode) : undefined);
+    const failed =
+      this.result?.isError || this.commandExit?.success === false || (exitCode !== undefined && exitCode !== '0');
+    if (!failed) return undefined;
+    const message = parseErrorMessage(resultLines.join('\n'));
+    if (message) return message;
+    const contentLines = (text: string) =>
+      text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line));
+    const errorPattern =
+      /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:|No such file or directory|Permission denied/i;
+    // Prefer what the command wrote to stderr. Without an error-looking line, the last line of
+    // output is often unrelated (a divider, the last match of a search), so show the exit code
+    // rather than guess.
+    const stderrLines = contentLines(resultLines.join('\n').match(/^stderr:\n([\s\S]*)$/m)?.[1] ?? '');
+    const lines = contentLines(this.streamingOutput.trim() || resultLines.join('\n'));
+    return (
+      stderrLines.find(line => errorPattern.test(line)) ??
+      stderrLines.at(-1) ??
+      lines.find(line => errorPattern.test(line)) ??
+      (exitCode !== undefined ? `exit code ${exitCode}` : (lines.at(-1) ?? ''))
+    );
+  }
+
+  /** Keeps a running grouped row's spinner and seconds counter moving between output events. */
+  private syncQuietShellTicker(active: boolean): void {
+    if (!active) {
+      if (this.quietShellTicker) clearInterval(this.quietShellTicker);
+      this.quietShellTicker = undefined;
+      return;
+    }
+    if (this.quietShellTicker) return;
+    this.quietShellTicker = setInterval(() => {
+      this.rebuild();
+      this.ui.requestRender();
+    }, 100);
+    this.quietShellTicker.unref?.();
+  }
+
+  /** Content width this call's rows need; reconciliation gives the whole group the widest one. */
+  getQuietShellNaturalWidth(): number | undefined {
+    if (!this.isQuietCompactShell() || this.quietShellHeld) return undefined;
+    const header = 2 + visibleWidth(this.getShellHeaderPath());
+    const rowText = this.getQuietShellRowText();
+    const textWidth = rowText.muted ? 0 : visibleWidth(rowText.text);
+    const row = 2 + textWidth + 1 + QUIET_SHELL_TIME_WIDTH;
+    return Math.max(header, row);
+  }
+
+  setQuietShellGroupWidth(width: number | undefined): void {
+    if (this.quietShellGroupWidth === width) return;
+    this.quietShellGroupWidth = width;
+    if (this.isQuietCompactShell()) this.rebuild();
+  }
+
+  /** Called when the agent run ends without this tool finishing, so nothing keeps animating. */
+  stopLiveUpdates(): void {
+    if (this.liveUpdatesStopped) return;
+    this.liveUpdatesStopped = true;
+    this.syncQuietShellTicker(false);
+    this.rebuild();
   }
 
   private renderProcessToolEnhanced(): void {
@@ -2721,10 +3034,17 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getDurationSuffix(): string {
-    if (this.isPartial) return '';
-    const ms = Date.now() - this.startTime;
-    if (ms < 1000) return theme.fg('muted', ` ${ms}ms`);
-    return theme.fg('muted', ` ${(ms / 1000).toFixed(1)}s`);
+    const duration = this.formatDuration();
+    if (this.isPartial || !duration) return '';
+    return theme.fg('muted', ` ${duration}`);
+  }
+
+  private formatDuration(): string {
+    if (this.durationUnknown) return '';
+    const ms = (this.endTime ?? Date.now()) - this.startTime;
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return formatStatusDuration(ms, { includeSeconds: true });
   }
 
   private getFormattedOutput(): string {

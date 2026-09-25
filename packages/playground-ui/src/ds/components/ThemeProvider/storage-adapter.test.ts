@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createLocalStorageAdapter } from './storage-adapter';
 
+const LEGACY_KEY = ['mastra', 'playground', 'store'].join('-');
+
 const DEFAULT_KEY = 'mastra-theme';
 
 describe('createLocalStorageAdapter', () => {
@@ -28,21 +30,18 @@ describe('createLocalStorageAdapter', () => {
 
   it('migrates the legacy zustand-persist envelope on first read', () => {
     window.localStorage.setItem(
-      'mastra-playground-store',
+      LEGACY_KEY,
       JSON.stringify({ state: { theme: 'light', requestContext: { foo: 'bar' } }, version: 0 }),
     );
     const adapter = createLocalStorageAdapter();
     expect(adapter.get()).toBe('light');
     expect(window.localStorage.getItem(DEFAULT_KEY)).toBe('light');
     // Legacy entry must remain so the rest of the zustand state survives.
-    expect(window.localStorage.getItem('mastra-playground-store')).not.toBeNull();
+    expect(window.localStorage.getItem(LEGACY_KEY)).not.toBeNull();
   });
 
   it('ignores legacy values that are not a valid theme', () => {
-    window.localStorage.setItem(
-      'mastra-playground-store',
-      JSON.stringify({ state: { theme: 'neon-pink' }, version: 0 }),
-    );
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify({ state: { theme: 'neon-pink' }, version: 0 }));
     const adapter = createLocalStorageAdapter();
     expect(adapter.get()).toBeNull();
     expect(window.localStorage.getItem(DEFAULT_KEY)).toBeNull();
@@ -67,7 +66,7 @@ describe('createLocalStorageAdapter', () => {
   });
 
   it.each(['dark', 'system'] as const)('migrates the legacy %s theme', theme => {
-    window.localStorage.setItem('mastra-playground-store', JSON.stringify({ state: { theme }, version: 0 }));
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify({ state: { theme }, version: 0 }));
 
     expect(createLocalStorageAdapter().get()).toBe(theme);
     expect(window.localStorage.getItem(DEFAULT_KEY)).toBe(theme);

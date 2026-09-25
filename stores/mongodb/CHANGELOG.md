@@ -1,5 +1,35 @@
 # @mastra/mongodb
 
+## 1.19.1-alpha.0
+
+### Patch Changes
+
+- Fixed MongoDB skills listing ignoring the `status` and `entityIds` filters. `list({ status: 'published' })` no longer returns draft skills, `list({ entityIds: [] })` now returns no skills, and pagination totals reflect the filtered results. ([#25133](https://github.com/mastra-ai/mastra/pull/25133))
+
+- Updated dependencies [[`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7)]:
+  - @mastra/core@1.72.0-alpha.1
+
+## 1.19.0
+
+### Minor Changes
+
+- Added Automated Embedding support to `MongoDBVector`. Create an index with `autoEmbed` and a Voyage AI model such as `voyage-4`, then write plain text through `documents` and search with `queryText`. MongoDB generates the embeddings server-side, so your application needs no embedding provider, no model wiring, and no dimension bookkeeping. ([#24383](https://github.com/mastra-ai/mastra/pull/24383))
+
+  ```ts
+  await store.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } });
+  await store.upsert({ indexName: 'movies', documents: ['A lonely astronaut adrift near Saturn.'] });
+  const results = await store.query({ indexName: 'movies', queryText: 'space opera', topK: 5 });
+  ```
+
+  `hybridQuery` accepts `queryText` for its vector branch, and both query methods take an optional `model` to override the index's model for a single search. Indexes that supply their own vectors keep working exactly as before.
+
+  Automated Embedding is a MongoDB Preview feature. It requires an Atlas cluster with Automated Embedding enabled, or the `mongodb/mongodb-atlas-local:preview` image locally.
+
+### Patch Changes
+
+- Updated dependencies [[`fc7d2c1`](https://github.com/mastra-ai/mastra/commit/fc7d2c102e911f43f70f425e67c970231ea19363), [`4607046`](https://github.com/mastra-ai/mastra/commit/460704663e2869183e7dfff7efec49a4f2f47503), [`1e435dc`](https://github.com/mastra-ai/mastra/commit/1e435dc84a9c1b35aa58d0ab9b14ff39fe13aab0), [`9ba23a2`](https://github.com/mastra-ai/mastra/commit/9ba23a23893622b72c76189199d02432590606c1), [`b757896`](https://github.com/mastra-ai/mastra/commit/b757896872edd74f71ec104be92273c5406265da), [`7f64865`](https://github.com/mastra-ai/mastra/commit/7f648656d2b24b214a899e8835b8286333c80a19), [`f751e65`](https://github.com/mastra-ai/mastra/commit/f751e659f496e5e53ed38632c59c296fec2ccbe5)]:
+  - @mastra/core@1.71.0
+
 ## 1.19.0-alpha.0
 
 ### Minor Changes

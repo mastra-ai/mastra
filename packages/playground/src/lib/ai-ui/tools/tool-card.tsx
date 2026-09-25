@@ -22,7 +22,7 @@ import { SubmitPlanTool } from './submit-plan-tool';
 import { ToolResultMedia } from './tool-result-media';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
-import { WorkflowRunProvider } from '@/domains/workflows';
+import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/playground-workflow-run-provider';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
 export interface DataMessagePart {
@@ -54,9 +54,9 @@ const stripPrefix = (toolName: string, prefix: string): string =>
 /** Its own workflow run scope, so a streaming workflow result can drive a live graph inside the card. */
 export const ToolCard = (props: ToolCardProps) => {
   return (
-    <WorkflowRunProvider workflowId={''} withoutTimeTravel>
+    <PlaygroundWorkflowRunProvider workflowId={''} withoutTimeTravel>
       <ToolCardInner {...props} />
-    </WorkflowRunProvider>
+    </PlaygroundWorkflowRunProvider>
   );
 };
 

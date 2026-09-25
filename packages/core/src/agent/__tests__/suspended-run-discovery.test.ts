@@ -1069,6 +1069,58 @@ describe('suspended-run discovery', () => {
       );
     }, 30000);
 
+    it('resumes the run named by an explicit runId after a simulated restart', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const { agent: restartedAgent, mastra } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      const result = await restartedAgent.sendToolApproval({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        runId,
+        toolCallId,
+        approved: true,
+      });
+      expect(result).toEqual({ accepted: true, runId, toolCallId });
+
+      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+      await vi.waitFor(
+        async () => {
+          expect(mockFindUser).toHaveBeenCalledWith(expect.objectContaining({ name: 'Dero Israel' }));
+          expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
+        },
+        { timeout: 10000 },
+      );
+    }, 30000);
+
+    it('does not resume a different suspended run when the explicit runId has ended', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const ended = await suspendRun(agent, 'thread-1', 'resource-1');
+      const approved = await agent.approveToolCall({ runId: ended.runId, toolCallId: ended.toolCallId });
+      for await (const _chunk of approved.fullStream) {
+        // drain so the run ends
+      }
+      const { agent: secondAgent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(secondAgent, 'thread-1', 'resource-1');
+      mockFindUser.mockClear();
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      await expect(
+        restartedAgent.sendToolApproval({
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          runId: ended.runId,
+          approved: true,
+        }),
+      ).rejects.toThrow();
+
+      expect(mockFindUser).not.toHaveBeenCalled();
+      const { runs } = await restartedAgent.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
+      expect(runs.map(run => run.runId)).toEqual([runId]);
+    }, 30000);
+
     it('matches a suspend()-parked run by toolCallId after a simulated restart', async () => {
       const resumedTool = vi.fn();
       const storage = new InMemoryStore();

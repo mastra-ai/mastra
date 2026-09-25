@@ -12,7 +12,15 @@ export interface IterationStateUpdateInput {
 }
 
 /**
- * Step record for tracking iteration history
+ * Step record for tracking iteration history.
+ *
+ * Deliberate shape divergence from the main loop: main accumulates full
+ * `DefaultStepResult` objects (with `content`, `response`, etc.); durable
+ * serializes this reduced record across step boundaries instead. Processor
+ * hooks receive these records via the `(inputData as any).accumulatedSteps`
+ * casts in llm-execution.ts, so a processor reading `steps[i].content` gets
+ * `undefined` on durable. Converging the shapes would require reworking
+ * durable's serialized iteration state, so the divergence is kept for now.
  */
 export interface StepRecord {
   text?: string;

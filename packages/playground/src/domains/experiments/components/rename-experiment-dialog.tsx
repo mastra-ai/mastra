@@ -3,10 +3,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Check, X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 export interface RenameExperimentDialogProps {
   experiment: DatasetExperiment;

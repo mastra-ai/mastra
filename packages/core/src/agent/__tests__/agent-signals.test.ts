@@ -2330,21 +2330,13 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('acknowledges queued remote wakes before the first claimed-owner lease acquisition settles', async () => {
+  it('forwards concurrent remote wakes when the claimed owner loses the execution lease', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
     const firstSenderRuntime = new AgentThreadStreamRuntime();
     const secondSenderRuntime = new AgentThreadStreamRuntime();
     let releaseAcquire!: () => void;
     let markAcquireStarted!: () => void;
-    pubsub.acquireLeaseWait = new Promise<void>(resolve => {
-      releaseAcquire = resolve;
-    });
-    const acquireStarted = new Promise<void>(resolve => {
-      markAcquireStarted = resolve;
-    });
-    pubsub.onAcquireLease = markAcquireStarted;
-    pubsub.denyLeaseAcquisition = true;
     const ownerAgent = {
       id: 'initial-lease-loss-owner',
       stream: vi.fn(),
@@ -2368,6 +2360,14 @@ describe('Agent signals', () => {
       { resourceId: 'initial-lease-loss-user', threadId: 'initial-lease-loss-thread' },
       pubsub,
     );
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+      releaseAcquire = resolve;
+    });
+    const acquireStarted = new Promise<void>(resolve => {
+      markAcquireStarted = resolve;
+    });
+    pubsub.onAcquireLease = markAcquireStarted;
+    pubsub.denyLeaseAcquisition = true;
 
     const firstSignal = firstSenderRuntime.sendSignal(
       firstSenderAgent,
@@ -2403,7 +2403,7 @@ describe('Agent signals', () => {
     releaseAcquire();
 
     const [firstResult, secondResult] = await Promise.all([firstOutcome, secondOutcome]);
-    expect(firstResult).toMatchObject({ error: { message: expect.stringContaining('could not acquire') } });
+    expect(firstResult).toMatchObject({ value: { action: 'deliver', runId: 'competing-run' } });
     expect(secondResult).toMatchObject({ value: { action: 'deliver' } });
     expect(ownerAgent.stream).not.toHaveBeenCalled();
 
@@ -2418,13 +2418,6 @@ describe('Agent signals', () => {
       const senderRuntime = new AgentThreadStreamRuntime();
       let releaseAcquire!: () => void;
       let markAcquireStarted!: () => void;
-      pubsub.acquireLeaseWait = new Promise<void>(resolve => {
-        releaseAcquire = resolve;
-      });
-      const acquireStarted = new Promise<void>(resolve => {
-        markAcquireStarted = resolve;
-      });
-      pubsub.onAcquireLease = markAcquireStarted;
       const ownerAgent = {
         id: 'expired-admission-owner',
         stream: vi.fn(),
@@ -2441,6 +2434,13 @@ describe('Agent signals', () => {
         { resourceId: 'expired-admission-user', threadId: 'expired-admission-thread' },
         pubsub,
       );
+      pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+        releaseAcquire = resolve;
+      });
+      const acquireStarted = new Promise<void>(resolve => {
+        markAcquireStarted = resolve;
+      });
+      pubsub.onAcquireLease = markAcquireStarted;
 
       const signal = senderRuntime.sendSignal(
         senderAgent,
@@ -2458,7 +2458,7 @@ describe('Agent signals', () => {
 
       await expect(signal.accepted).rejects.toThrow('acceptance expired');
       expect(ownerAgent.stream).not.toHaveBeenCalled();
-      expect(pubsub.owners.size).toBe(0);
+      expect(pubsub.owners.get('expired-admission-user\u0000expired-admission-thread')).toBeUndefined();
 
       claim.unsubscribe();
     } finally {
@@ -2526,8 +2526,6 @@ describe('Agent signals', () => {
       { resourceId: 'simultaneous-user', threadId: 'simultaneous-thread' },
       pubsub,
     );
-    const nextRun = readNextRunWithParts(firstSubscription.stream[Symbol.asyncIterator]());
-
     const [firstClaim, secondClaim] = await Promise.all([
       firstRuntime.claimThreadOwnership(
         firstAgent,
@@ -2540,8 +2538,9 @@ describe('Agent signals', () => {
         pubsub,
       ),
     ]);
-    expect(firstClaim.claimed).toBe(true);
-    expect(secondClaim.claimed).toBe(true);
+    expect([firstClaim.claimed, secondClaim.claimed].filter(Boolean)).toHaveLength(1);
+    const ownerSubscription = firstClaim.claimed ? firstSubscription : secondSubscription;
+    const nextRun = readNextRunWithParts(ownerSubscription.stream[Symbol.asyncIterator]());
 
     const signalResult = senderRuntime.sendSignal(
       senderAgent,
@@ -9523,6 +9522,87 @@ describe('Agent signals', () => {
   });
 
   it.runIf(process.platform !== 'win32')(
+    'queues a signal on the real UnixSocketPubSub execution-lease owner',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-execution-lease-'));
+      const socketPath = join(tempDir, 'signals.sock');
+      const ownerPubSub = new UnixSocketPubSub(socketPath);
+      const senderPubSub = new UnixSocketPubSub(socketPath);
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const senderRuntime = new AgentThreadStreamRuntime();
+      const owner = new Agent({
+        id: 'unix-execution-lease-agent',
+        name: 'Unix Execution Lease Owner',
+        instructions: 'Test',
+        model: createTextStreamModel('owner response'),
+      });
+      const sender = new Agent({
+        id: 'unix-execution-lease-agent',
+        name: 'Unix Execution Lease Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+      });
+      const scope = { resourceId: 'unix-execution-resource', threadId: 'unix-execution-thread' };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const runId = 'unix-execution-run';
+      let finishRun!: () => void;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+      } as any;
+
+      try {
+        const ownerSubscription = await ownerRuntime.subscribeToThread(owner, scope, ownerPubSub);
+        const senderSubscription = await senderRuntime.subscribeToThread(sender, scope, senderPubSub);
+        const ownerClaim = await ownerRuntime.claimThreadOwnership(
+          owner,
+          { ...scope, yieldOwnership: () => true },
+          ownerPubSub,
+        );
+        expect(ownerClaim.claimed).toBe(true);
+        expect(await ownerPubSub.acquireLease(key, runId, 15_000)).toMatchObject({ acquired: true });
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId, memory: { resource: scope.resourceId, thread: scope.threadId } } as any,
+          ownerPubSub,
+        );
+        await waitForCondition(() => senderSubscription.activeRunId() === runId);
+
+        const senderClaim = await senderRuntime.claimThreadOwnership(sender, scope, senderPubSub);
+        expect(senderClaim.claimed).toBe(true);
+
+        const send = async (contents: string) => {
+          const result = senderRuntime.sendSignal(sender, { type: 'user-message', contents }, scope, senderPubSub);
+          await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+          let deliveredSignals: ReturnType<typeof ownerRuntime.drainPendingSignals> = [];
+          await waitForCondition(() => {
+            deliveredSignals = ownerRuntime.drainPendingSignals(runId, ownerPubSub);
+            return deliveredSignals.length === 1;
+          });
+          expect(deliveredSignals[0]?.contents).toBe(contents);
+        };
+
+        await send('queued while remote run is active');
+        await send('queued after claim ownership yielded');
+
+        finishRun();
+        senderClaim.unsubscribe();
+        ownerClaim.unsubscribe();
+        await ownerPubSub.releaseLease(key, runId);
+        ownerSubscription.unsubscribe();
+        senderSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), senderPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
     'broadcasts subscribed thread stream parts across UnixSocketPubSub runtime instances',
     async () => {
       const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-signals-'));
@@ -9597,11 +9677,14 @@ describe('Agent signals', () => {
       const owner = { id: 'late-subscriber-agent' } as Agent<any, any, any, any>;
       const follower = { id: 'late-subscriber-agent' } as Agent<any, any, any, any>;
       const runId = 'late-subscriber-run';
+      const threadKey = 'late-subscriber-resource\u0000late-subscriber-thread';
       let firstPartBroadcasted!: () => void;
       let continueRun!: () => void;
+      let finishLateRun!: () => void;
       let finishRun!: () => void;
       const firstPart = new Promise<void>(resolve => (firstPartBroadcasted = resolve));
       const continuePromise = new Promise<void>(resolve => (continueRun = resolve));
+      const finishLateRunPromise = new Promise<void>(resolve => (finishLateRun = resolve));
       const finished = new Promise<void>(resolve => (finishRun = resolve));
       const output = {
         runId,
@@ -9611,6 +9694,7 @@ describe('Agent signals', () => {
           firstPartBroadcasted();
           await continuePromise;
           yield { type: 'text-delta', runId, payload: { text: 'after subscriber' } };
+          await finishLateRunPromise;
           yield { type: 'finish', runId, payload: {} };
           finishRun();
         })(),
@@ -9618,6 +9702,7 @@ describe('Agent signals', () => {
       } as any;
 
       try {
+        await expect(ownerPubSub.acquireLease(threadKey, runId, 15_000)).resolves.toMatchObject({ acquired: true });
         ownerRuntime.registerRun(
           owner,
           output,
@@ -9625,22 +9710,26 @@ describe('Agent signals', () => {
           ownerPubSub,
         );
         await withTimeout(firstPart, 'Timed out waiting for owner run to start');
+        await expect(followerPubSub.getLeaseOwner(threadKey)).resolves.toBe(runId);
 
         const followerSubscription = await followerRuntime.subscribeToThread(
           follower,
           { resourceId: 'late-subscriber-resource', threadId: 'late-subscriber-thread' },
           followerPubSub,
         );
-        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+        const followerPart = followerSubscription.stream[Symbol.asyncIterator]().next();
 
         continueRun();
-
-        await expect(withTimeout(followerRun, 'Timed out waiting for late subscriber')).resolves.toMatchObject({
-          value: { runId, text: 'after subscriber' },
+        await expect(withTimeout(followerPart, 'Timed out waiting for late subscriber', 2_000)).resolves.toMatchObject({
+          value: { runId, type: 'text-delta', payload: { text: 'after subscriber' } },
           done: false,
         });
+        expect(followerSubscription.activeRunId()).toBe(runId);
+        finishLateRun();
         followerSubscription.unsubscribe();
+        await ownerPubSub.releaseLease(threadKey, runId);
       } finally {
+        finishLateRun();
         await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
         await rm(tempDir, { recursive: true, force: true });
       }
