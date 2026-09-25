@@ -134,9 +134,11 @@ describe('extractUsageMetrics', () => {
     });
 
     it('should read Anthropic cache creation TTL buckets from the raw API usage', () => {
+      // V3 provider usage: inputTokens already includes cache tokens, so nothing is re-added.
       const usage: LanguageModelUsage = {
-        inputTokens: 100,
+        inputTokens: 300,
         outputTokens: 50,
+        cacheCreationInputTokens: 200,
         raw: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 200 } },
       };
 
@@ -154,6 +156,8 @@ describe('extractUsageMetrics', () => {
       expect(result.inputDetails?.cacheWrite1h).toBe(200);
 
       const rawOnly = extractUsageMetrics(usage, undefined);
+      expect(rawOnly.inputTokens).toBe(300);
+      expect(rawOnly.inputDetails?.text).toBe(100);
       expect(rawOnly.inputDetails?.cacheWrite1h).toBe(200);
       expect(rawOnly.inputDetails?.cacheWrite).toBe(200);
     });
