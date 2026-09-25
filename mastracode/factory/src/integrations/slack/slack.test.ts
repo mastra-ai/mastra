@@ -565,10 +565,14 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     { failure: 'project reread', expected: /try again later/i },
     { failure: 'source-control selection', expected: /try again later/i },
     { failure: 'repository resolution', expected: /try again later/i },
+    { failure: 'project repository read', expected: /try again later/i },
+    { failure: 'repository read', expected: /try again later/i },
     { failure: 'session lookup', expected: /try again later/i },
     { failure: 'session creation', expected: /try again later/i },
   ])('posts one safe explanation for $failure without creating a thread or card', async ({ failure, expected }) => {
-    const sourceControl = makeSourceControl({ hasRepo: !['missing connection', 'missing repository'].includes(failure) });
+    const sourceControl = makeSourceControl({
+      hasRepo: !['missing connection', 'missing repository'].includes(failure),
+    });
     if (failure === 'missing connection') sourceControl.connections.list.mockResolvedValue([]);
     const outage = new Error('db down: postgres://private');
     if (failure === 'source-control selection') sourceControl.connections.list.mockRejectedValue(outage);
@@ -577,6 +581,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
         .mockResolvedValueOnce([{ id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' }])
         .mockRejectedValueOnce(outage);
     }
+    if (failure === 'project repository read') {
+      sourceControl.projectRepositories.list
+        .mockResolvedValueOnce([{ id: 'pr-1', repositoryId: 'repo-1', branch: null }])
+        .mockRejectedValueOnce(outage);
+    }
+    if (failure === 'repository read') sourceControl.repositories.get.mockRejectedValue(outage);
     if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
     if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
     const deps = makeResolverDeps({ sourceControl });
@@ -610,7 +620,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     });
     const handlers = createHandlers({ ...deps, workItems } as any);
     const ctx = handlerCtx(mastra);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await handlers.onDirectMessage!(
@@ -624,6 +634,15 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(thread.post.mock.calls[0]![0]).toMatch(expected);
     expect(thread.post.mock.calls[0]![0]).not.toContain('db down');
     expect(thread.post.mock.calls[0]![0]).not.toContain('postgres://');
+    if (['missing connection', 'missing repository'].includes(failure)) {
+      expect(errorLog).not.toHaveBeenCalled();
+    } else {
+      expect(errorLog).toHaveBeenCalledWith(
+        '[slack] failed to start repo-backed session for thread',
+        'slack:C-1:1700.42',
+        outage,
+      );
+    }
     expect(thread.postEphemeral).not.toHaveBeenCalled();
     expect(store.saveThread).not.toHaveBeenCalled();
     expect(workItems.upsert).not.toHaveBeenCalled();

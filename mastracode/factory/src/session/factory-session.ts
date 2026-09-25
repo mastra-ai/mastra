@@ -221,8 +221,9 @@ export async function resolveFactorySourceRepository(args: {
       resolved = resolvedRepositories.find(
         candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
       );
-    } catch {
-      // The connection no longer resolves (e.g. its installation was deleted).
+    } catch (error) {
+      // A deleted installation invalidates a stale connection; storage failures must propagate.
+      if (!(error instanceof SourceControlConnectionNotFoundError)) throw error;
       continue;
     }
     if (!resolved?.repository) continue;
