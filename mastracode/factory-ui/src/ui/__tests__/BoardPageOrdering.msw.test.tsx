@@ -95,6 +95,18 @@ function stubWorkBoard() {
 }
 
 describe('Factory board ordering', () => {
+  it('groups filtering and sorting separately from board automation', async () => {
+    stubWorkBoard();
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const viewControls = await screen.findByRole('group', { name: 'Board view controls' });
+    expect(within(viewControls).getByRole('group', { name: 'Board filters' })).toBeInTheDocument();
+    expect(within(viewControls).getByRole('combobox', { name: 'Sort filed cards' })).toBeInTheDocument();
+    expect(within(viewControls).queryByRole('switch', { name: 'Auto-start runs' })).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
+  });
+
   it('renders the card most recently moved into a column before a newer-created card', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });

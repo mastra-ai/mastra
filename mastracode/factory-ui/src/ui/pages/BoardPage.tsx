@@ -313,21 +313,29 @@ function BoardContent({
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-4">
-              <BoardFilters
-                kind={kind}
-                participants={participants}
-                availableLabels={availableLabels}
-                currentUserId={auth.data?.user?.userId}
-                filters={filters}
-                onFiltersChange={setFilters}
-              />
-              <BoardSortControl value={sort} currentUserId={auth.data?.user?.userId} onChange={setSort} />
-              {builtin && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  autoApprovePlans={factory.autoApprovePlans ?? false}
+              <div
+                role="group"
+                aria-label="Board view controls"
+                className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-x-2 gap-y-3 lg:basis-auto"
+              >
+                <BoardFilters
+                  kind={kind}
+                  participants={participants}
+                  availableLabels={availableLabels}
+                  currentUserId={auth.data?.user?.userId}
+                  filters={filters}
+                  onFiltersChange={setFilters}
                 />
+                <BoardSortControl value={sort} currentUserId={auth.data?.user?.userId} onChange={setSort} />
+              </div>
+              {builtin && (
+                <div className="ml-auto shrink-0">
+                  <BoardAutomationSettings
+                    factoryProjectId={factoryProjectId}
+                    autoRunEnabled={factory.autoRunEnabled ?? false}
+                    autoApprovePlans={factory.autoApprovePlans ?? false}
+                  />
+                </div>
               )}
             </div>
             <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-4 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
