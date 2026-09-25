@@ -325,11 +325,19 @@ describe('createCodingAgent', () => {
     expect(agent).toBeInstanceOf(Agent);
   });
 
-  it('defaults error processors to the shared stability stack, ProviderHistoryCompat first', async () => {
+  it('supplies no error processors when errorProcessorDefaults is false', async () => {
+    const agent = createCodingAgent(baseConfig({ errorProcessorDefaults: false }));
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
+  });
+
+  it('defaults error processors to the shared stability stack with CyberRefusalHandler first', async () => {
     const agent = createCodingAgent(baseConfig());
     const ids = (await agent.listErrorProcessors()).map(p => p.id);
 
-    expect(ids).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
+    // CyberRefusalHandler runs first so the retryable OpenAI refusal gets the `continue`
+    // nudge instead of the blind retry claiming it.
+    expect(ids).toEqual(['cyber-refusal-handler', ...STABILITY_ERROR_PROCESSOR_IDS]);
   });
 
   it('keeps a caller-provided error processor list and adds only missing defaults', async () => {

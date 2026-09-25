@@ -37,7 +37,7 @@ function createAgent(model: MockLanguageModelV2, maxRetries?: number) {
     model,
     // This suite covers the model call's own Retry-After handling, so it opts out of the
     // default error processors — their retry layer would otherwise add calls on top.
-    errorProcessors: [],
+    errorProcessorDefaults: false,
     ...(maxRetries === undefined ? {} : { maxRetries }),
   });
 }
@@ -110,7 +110,7 @@ describe('agent model-call retry honors Retry-After', () => {
       instructions: 'You are a test agent',
       model: [{ model: provider.model, maxRetries: 0 }],
       // Model-call retry semantics under test; no processor-level retry layer.
-      errorProcessors: [],
+      errorProcessorDefaults: false,
     });
 
     await agent.generate('hi', { modelSettings: { maxRetries: 2 } }).catch(() => {});

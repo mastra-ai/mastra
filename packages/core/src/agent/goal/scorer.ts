@@ -129,6 +129,7 @@ export function createGoalScorer({
   requestContext,
   inputProcessors,
   errorProcessors,
+  errorProcessorDefaults,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
@@ -141,6 +142,7 @@ export function createGoalScorer({
   requestContext?: RequestContext<any>;
   inputProcessors?: ScorerJudgeConfig['inputProcessors'];
   errorProcessors?: ScorerJudgeConfig['errorProcessors'];
+  errorProcessorDefaults?: ScorerJudgeConfig['errorProcessorDefaults'];
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
@@ -163,6 +165,7 @@ export function createGoalScorer({
       // still supply either list.
       ...(inputProcessors ? { inputProcessors } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
+      ...(errorProcessorDefaults !== undefined ? { errorProcessorDefaults } : {}),
       ...(hasTools ? { tools } : {}),
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),

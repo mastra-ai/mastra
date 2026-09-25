@@ -14,8 +14,10 @@ new Agent({ ..., errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5
 new Agent({ ..., errorProcessors: [myProcessor], errorProcessorDefaults: false })
 
 // Run with no error processors at all.
-new Agent({ ..., errorProcessors: [] })
+new Agent({ ..., errorProcessorDefaults: false })
 ```
+
+`errorProcessorDefaults: false` is the only opt-out: an empty `errorProcessors` list merges like any other and still gets the defaults.
 
 The default retry processor retries transient failures only. Transient failures recover through provider `isRetryable` metadata or the built-in connection-reset matcher, while deterministic failures — a rejected structured-output attempt, a validation error, or any HTTP 400 the repair processors cannot fix — surface immediately instead of being replayed unchanged. Pass `StreamErrorRetryProcessor({ retryUnknownErrors: true })` in `errorProcessors` to retry unmatched errors. `createCodingAgent` keeps its shipped behavior, retrying both unmatched errors and bad-request responses, as it always has.
 

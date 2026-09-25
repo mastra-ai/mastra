@@ -180,15 +180,17 @@ describe('createGoalScorer provider history compatibility', () => {
     expect(scorer.config.judge?.errorProcessors).toBeUndefined();
   });
 
-  it('keeps caller-supplied judge processors, including an empty error lane', () => {
+  it('keeps caller-supplied judge processors and the defaults opt-out', () => {
     const custom = new ProviderHistoryCompat();
     const scorer = createGoalScorer({
       judgeModel,
       inputProcessors: [custom],
       errorProcessors: [],
+      errorProcessorDefaults: false,
     });
     expect(scorer.config.judge?.inputProcessors).toEqual([custom]);
     expect(scorer.config.judge?.errorProcessors).toEqual([]);
+    expect(scorer.config.judge?.errorProcessorDefaults).toBe(false);
   });
 
   it('gets ProviderHistoryCompat from the Agent when the judge is built the way the runtime builds it', async () => {
@@ -304,11 +306,11 @@ describe('goal-only JSON fallback placement', () => {
     // the shared stability error processors; their retry would recover inside the first stream
     // instead of letting the fallback run. Opt the judge out to keep the fallback path under test.
     const scorer = goal
-      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools, errorProcessors: [] })
+      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools, errorProcessorDefaults: false })
       : createScorer({
           id: 'ordinary-scorer',
           description: 'Review documentation',
-          judge: { model, instructions: 'Custom judge prompt.', tools, errorProcessors: [] },
+          judge: { model, instructions: 'Custom judge prompt.', tools, errorProcessorDefaults: false },
         })
           .analyze({
             description: 'Review the work',
@@ -367,7 +369,7 @@ describe('goal-only JSON fallback placement', () => {
       const stream = vi.spyOn(model, 'doStream');
       // The default error processors would retry the invalid output before the JSON fallback runs,
       // so opt out to keep the native-then-fallback flow under test.
-      const scorer = createGoalScorer({ judgeModel: model, errorProcessors: [] });
+      const scorer = createGoalScorer({ judgeModel: model, errorProcessorDefaults: false });
       await expect(scorer.run({ input: 'Update docs', output: 'Done' })).rejects.toThrow(
         'Structured output validation failed',
       );

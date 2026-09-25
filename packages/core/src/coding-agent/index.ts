@@ -123,20 +123,22 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * - `outputProcessors` is used verbatim when provided; otherwise it defaults to
  *   {@link CyberRefusalHandler}, which retries once after an Anthropic cyber
  *   classifier stop.
- * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
- *   the provider-history, prefill, and cyber-refusal repair processors, followed by catch-all
- *   stream retries with specialized ECONNRESET/bad-request policies.
- * - `maxProcessorRetries` defaults to {@link DEFAULT_MAX_PROCESSOR_RETRIES} so
- *   the default output-lane cyber-refusal retry has a budget. Output-step
- *   retries only read this option, so the implicit error-lane cap does not
- *   cover them.
+ * - `errorProcessors` is passed through when provided; otherwise it defaults to
  *   {@link defaultStabilityErrorProcessors} — provider-history compatibility,
  *   then prefill-error recovery, then catch-all stream retries with specialized
  *   ECONNRESET/bad-request policies. The repairs run before the retry because
  *   error processors short-circuit on the first `retry: true`, and the retry's
  *   bad-request matcher claims the same `400`s they repair. Unlike a bare
  *   agent's defaults, this stack also retries unmatched errors, which is the
- *   portable coding agent's long-standing behavior.
+ *   portable coding agent's long-standing behavior. A provided list is merged
+ *   with the shared defaults by the agent, like any `errorProcessors` list;
+ *   `errorProcessorDefaults: false` runs only the provided list, or none. When
+ *   the caller configures `outputProcessors`, cyber-refusal recovery is added
+ *   as a `CyberRefusalHandler` ahead of the shared defaults.
+ * - `maxProcessorRetries` defaults to {@link DEFAULT_MAX_PROCESSOR_RETRIES} so
+ *   the default output-lane cyber-refusal retry has a budget. Output-step
+ *   retries only read this option, so the implicit error-lane cap does not
+ *   cover them.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *
@@ -182,15 +184,14 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
     outputProcessors: outputProcessors ?? [new CyberRefusalHandler()],
     errorProcessors:
       errorProcessors ??
-      // Shared stability defaults; a CyberRefusalHandler is appended only when
-      // the caller configured outputProcessors — in that case the default
-      // output-lane handler is not built, so nothing else covers refusals.
-      outputProcessors
-        ? [
-            ...defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true }),
-            new CyberRefusalHandler(),
-          ]
-        : defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true }),
+      // With `errorProcessorDefaults: false` the caller runs only what they
+      // configured, so the coding stack is not supplied either. CyberRefusalHandler
+      // runs first: the retry processor would otherwise claim the retryable refusal
+      // and resend it without the `continue` nudge. It is always in the error lane
+      // (OpenAI refusals throw); the output-lane handler above covers Anthropic stops.
+      (rest.errorProcessorDefaults === false
+        ? undefined
+        : [new CyberRefusalHandler(), ...defaultStabilityErrorProcessors({ retryUnknownErrors: true, retryBadRequests: true })]),
     // Output-step retries only read the raw option; the implicit error-lane cap
     // from `resolveMaxProcessorRetries` never reaches them. Default it here so
     // the default output-lane handler can retry instead of ending as a tripwire.

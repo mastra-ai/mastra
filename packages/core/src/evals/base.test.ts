@@ -646,7 +646,7 @@ describe('createScorer', () => {
         id: 'v2-judge-no-retry-scorer',
         name: 'v2-judge-no-retry-scorer',
         description: 'Leaves V2 judge retries disabled when the judge opts out',
-        judge: { model, instructions: 'Test instructions', errorProcessors: [] },
+        judge: { model, instructions: 'Test instructions', errorProcessorDefaults: false },
       }).generateScore({
         description: 'score',
         createPrompt: () => 'score this',
@@ -1072,7 +1072,7 @@ describe('createScorer', () => {
             // This case isolates the judge's structured-output fallback path. The shared stability
             // error processors would retry inside the first stream instead of letting the fallback
             // run, so opt the judge out to keep that path under test.
-            errorProcessors: [],
+            errorProcessorDefaults: false,
           },
         }).generateScore({
           description: 'score',
@@ -1300,7 +1300,7 @@ describe('createScorer', () => {
         description: 'Retains a completed score on reason failure',
         // A terminal provider rejection is the subject; the shared default error processors are
         // opted out so their retry does not turn one failed attempt into several.
-        judge: { model, instructions: 'Evaluate the output.', errorProcessors: [] },
+        judge: { model, instructions: 'Evaluate the output.', errorProcessorDefaults: false },
       })
         .generateScore({ description: 'score', createPrompt: () => 'score this output' })
         .generateReason({ description: 'reason', createPrompt: () => 'explain this score' });
@@ -1381,7 +1381,7 @@ describe('createScorer', () => {
         description: 'Records an attempted judge invocation',
         // The shared default error processors would retry inside the first stream and absorb the
         // fallback this case asserts, so the judge opts out to keep the failure path under test.
-        judge: { model, instructions: 'Return a score.', errorProcessors: [] },
+        judge: { model, instructions: 'Return a score.', errorProcessorDefaults: false },
       }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
       const error = await scorer.run(testData.scoringInput).catch(error => error);
@@ -1420,7 +1420,7 @@ describe('createScorer', () => {
           // This case asserts the structured-output fallback path itself. The shared default error
           // processors would retry inside the first stream instead of letting the fallback run, so
           // opt the judge out to keep that path under test.
-          judge: { model, instructions: 'Return a score.', errorProcessors: [] },
+          judge: { model, instructions: 'Return a score.', errorProcessorDefaults: false },
         }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
         const error = await scorer.run(testData.scoringInput).catch(error => error);
@@ -1455,7 +1455,7 @@ describe('createScorer', () => {
           // This case asserts the structured-output fallback path itself. The shared default error
           // processors would retry inside the first stream instead of letting the fallback run, so
           // opt the judge out to keep that path under test.
-          judge: { model, instructions: 'Return a score.', errorProcessors: [] },
+          judge: { model, instructions: 'Return a score.', errorProcessorDefaults: false },
         }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
         const error = await scorer.run(testData.scoringInput).catch(error => error);

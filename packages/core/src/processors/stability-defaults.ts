@@ -77,7 +77,7 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * `{ retryUnknownErrors: true }` likewise to retry unmatched errors.
  *
  * A caller-supplied processor whose id matches one of these keeps its place at
- * that id's position; `errorProcessors: []` opts out entirely.
+ * that id's position; `errorProcessorDefaults: false` opts out entirely.
  *
  * Returns a fresh array of fresh instances on every call — never a shared
  * mutable array.
