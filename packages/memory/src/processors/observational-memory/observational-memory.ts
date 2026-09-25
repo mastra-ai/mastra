@@ -3209,12 +3209,17 @@ ${formattedMessages}
         chunk.push(message);
         chunkTokens += messageTokens;
       }
-      if (chunk.length === 0) break;
+
+      // In resource scope the pending context can come entirely from other threads, which the
+      // strategy loads itself. Observe without messages so those threads are reached instead of
+      // reporting nothing to compact while other-thread context is still pending.
+      const observeOtherThreads = chunk.length === 0 && this.scope === 'resource' && !!resourceId;
+      if (chunk.length === 0 && !observeOtherThreads) break;
 
       const result = await this.observe({
         threadId,
         resourceId,
-        messages: chunk,
+        messages: observeOtherThreads ? undefined : chunk,
         messageList,
         trigger: 'compact',
         bypassThreshold: true,
@@ -3230,7 +3235,11 @@ ${formattedMessages}
       if (!result.observed) break;
 
       observed = true;
-      chunk.forEach(message => compactedIds.add(message.id));
+      if (observeOtherThreads) {
+        result.record.observedMessageIds?.forEach(id => compactedIds.add(id));
+      } else {
+        chunk.forEach(message => compactedIds.add(message.id));
+      }
       status = await this.getStatus({ threadId, resourceId, messages: currentMessages() });
       const madeProgress = status.pendingTokens < pendingTokens;
       pendingTokens = status.pendingTokens;
@@ -3977,7 +3986,10 @@ ${formattedMessages}
             );
 
         if (opts.bypassThreshold) {
-          if (unobservedMessages.length === 0) return;
+          // In resource scope the strategy observes every thread of the resource, so an empty
+          // current-thread set does not mean there is nothing to observe — it loads the
+          // resource's threads itself.
+          if (unobservedMessages.length === 0 && this.scope !== 'resource') return;
         } else if (
           !this.meetsObservationThreshold({
             record: freshRecord,
