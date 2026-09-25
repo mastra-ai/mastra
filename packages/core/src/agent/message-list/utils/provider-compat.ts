@@ -31,6 +31,10 @@ export type ToolResultWithInput = ToolResultPart & {
  * @see https://github.com/mastra-ai/mastra/issues/7287 - Tool call ordering
  * @see https://github.com/mastra-ai/mastra/issues/8053 - Single turn validation
  * @see https://github.com/mastra-ai/mastra/issues/13045 - Empty thread support
+ *
+ * @deprecated `MessageList` no longer applies this. The agent loops insert the
+ * user turn only for providers that need it (Bedrock, Google/Vertex) via the
+ * `ensure-user-first-turn` rule in `ProviderHistoryCompat`'s module.
  */
 export function ensureGeminiCompatibleMessages<T extends ModelMessage | CoreMessageV4>(
   messages: T[],
