@@ -1,3 +1,4 @@
+import { PROVIDERS } from '@mastra/connect';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { connectTools } from '../agents/connect-agent';
@@ -26,9 +27,29 @@ const WRITE_VERBS =
 const READ_VERBS = /(^|_)(get|list|search|retrieve|query|count)(_|$)/;
 
 /**
+ * Tool keys are `<integration>_<action>`, but integration ids can themselves
+ * contain separators (`incident-io` → `incident_io_create_action`), so
+ * splitting a key at the first underscore can truncate the id. Match each key
+ * against Connect's provider registry instead (longest prefix wins), and only
+ * fall back to the first segment for MCP-discovered integrations the static
+ * registry doesn't know about.
+ */
+function integrationIdForToolKey(key: string): string {
+  let best: { id: string; length: number } | undefined;
+  for (const { integrationId } of PROVIDERS) {
+    for (const prefix of new Set([integrationId, integrationId.replace(/-/g, '_')])) {
+      if (key.startsWith(`${prefix}_`) && (!best || prefix.length > best.length)) {
+        best = { id: integrationId, length: prefix.length };
+      }
+    }
+  }
+  return best?.id ?? key.split('_')[0]!;
+}
+
+/**
  * Calls the Connect resolver directly (outside an agent) to see which
- * integrations are currently connected. Tool keys are `<integration>_<action>`,
- * so the integration ids are the distinct key prefixes.
+ * integrations are currently connected, mapping each tool key back to its
+ * integration id via the Connect provider registry.
  */
 const discoverIntegrationsStep = createStep({
   id: 'discover-integrations',
@@ -44,7 +65,7 @@ const discoverIntegrationsStep = createStep({
   execute: async ({ inputData, mastra }) => {
     const tools = await connectTools({ mastra });
     const keys = Object.keys(tools);
-    const integrations = [...new Set(keys.map(key => key.split('_')[0]!))].sort();
+    const integrations = [...new Set(keys.map(integrationIdForToolKey))].sort();
     const readOnlyTools = keys.filter(key => READ_VERBS.test(key) && !WRITE_VERBS.test(key));
     return { focus: inputData.focus, integrations, readOnlyTools };
   },
