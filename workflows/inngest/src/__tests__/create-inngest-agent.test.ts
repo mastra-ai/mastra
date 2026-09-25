@@ -383,6 +383,61 @@ describe('createInngestAgent observe-replay wiring', () => {
     );
   });
 
+  it('keeps the message of a serialized step error on the workflow error event', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-serialized-error-message'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    // A failed step result carries a serialized error (`SerializedError`), not an `Error` instance.
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: { name: 'Error', message: 'step output size is greater than the limit' },
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-serialized-error-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow();
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
+    }
+
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({
+        type: AgentStreamEventTypes.ERROR,
+        runId,
+        data: { error: { name: 'Error', message: 'step output size is greater than the limit' } },
+      }),
+      undefined,
+    );
+  });
+
   it('should receive both cached and live events', async () => {
     const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-mixed'), inngest });
     swapInnerToInProcess(durableAgent);
