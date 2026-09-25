@@ -62,6 +62,23 @@ export const workIdleStatusScenario: McE2eScenario = {
       clock.mockReturnValue(startedAt + 71_000);
       yield { type: 'text-delta', payload: { id: 'text', text: ' complete.' } };
       yield { type: 'text-end', payload: { id: 'text' } };
+      // A goal evaluation closes the assistant message before the step finishes, so the
+      // TUI sees message_end ahead of the usage this step still reports.
+      yield {
+        type: 'goal',
+        payload: {
+          objective: 'Prove throughput',
+          iteration: 1,
+          maxRuns: 3,
+          passed: false,
+          status: 'active',
+          results: [],
+          duration: 0,
+          timedOut: false,
+          maxRunsReached: false,
+          suppressFeedback: true,
+        },
+      };
       clock.mockReturnValue(startedAt + 120_000);
       yield {
         type: 'step-finish',

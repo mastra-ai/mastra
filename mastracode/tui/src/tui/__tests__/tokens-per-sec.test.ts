@@ -251,42 +251,30 @@ describe('tokens/sec over streamed generation time', () => {
   it('does not carry the decode window into the next step when a step reported no usage', async () => {
     const state = createMinimalState();
     const ectx = createEctx();
-    state.streamingMessage = {
-      id: 'step-1',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: { format: 2, parts: [{ type: 'text', text: '' }] },
-    };
-    vi.setSystemTime(1000);
-    await dispatchEvent(
-      { type: 'message_update', id: 'step-1', event: { type: 'text-delta', delta: 'One' } },
-      ectx,
-      state,
-    );
-    // Step ends without a usage_update: the window must not survive the close.
-    await dispatchEvent({ type: 'message_end', id: 'step-1' }, ectx, state);
-    expect(state.decodeStartedAt).toBe(0);
-
-    state.streamingMessage = {
-      id: 'step-2',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: { format: 2, parts: [{ type: 'text', text: '' }] },
-    };
-    for (const at of [30_000, 31_000]) {
+    const stream = (id: string, at: number, delta: string) => {
+      state.streamingMessage = {
+        id,
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      };
       vi.setSystemTime(at);
-      await dispatchEvent(
-        { type: 'message_update', id: 'step-2', event: { type: 'text-delta', delta: 'Two' } },
-        ectx,
-        state,
-      );
-    }
+      return dispatchEvent({ type: 'message_update', id, event: { type: 'text-delta', delta } }, ectx, state);
+    };
+
+    // Step 1 streams, then never reports usage. Step 2 is a different assistant message:
+    // its 40 tokens must be timed over its own 1s, not the 29s window step 1 left open.
+    await stream('step-1', 1000, 'One');
+    await stream('step-2', 30_000, 'Two');
+    await stream('step-2', 31_000, ' continues');
     vi.setSystemTime(60_000);
     await dispatchEvent(usageEvent(40), ectx, state);
     expect(state.tokensPerSec).toBe(40);
   });
 
-  it('keeps an in-flight window when a non-assistant message closes', async () => {
+  it('still measures a step whose message closed before its usage arrived', async () => {
+    // The goal path closes the assistant message before the step's step-finish, so
+    // message_end lands first. The pending usage must still measure that step.
     const state = createMinimalState({
       streamingMessage: {
         id: 'm',
@@ -296,25 +284,18 @@ describe('tokens/sec over streamed generation time', () => {
       },
     });
     const ectx = createEctx();
-    vi.setSystemTime(1000);
-    await dispatchEvent(
-      { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
-      ectx,
-      state,
-    );
-    // A signal's own start/end pair must not discard the assistant's window.
-    await dispatchEvent({ type: 'message_end', id: 'signal-1' }, ectx, state);
-    expect(state.decodeStartedAt).toBe(1000);
-
-    vi.setSystemTime(3000);
-    await dispatchEvent(
-      { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: ' done' } },
-      ectx,
-      state,
-    );
-    vi.setSystemTime(6000);
+    for (const at of [1000, 2000]) {
+      vi.setSystemTime(at);
+      await dispatchEvent(
+        { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Answer' } },
+        ectx,
+        state,
+      );
+    }
+    await dispatchEvent({ type: 'message_end', id: 'm' }, ectx, state);
+    vi.setSystemTime(60_000);
     await dispatchEvent(usageEvent(40), ectx, state);
-    expect(state.tokensPerSec).toBe(20);
+    expect(state.tokensPerSec).toBe(40);
   });
 
   it('does not cap legitimate fast model output', async () => {

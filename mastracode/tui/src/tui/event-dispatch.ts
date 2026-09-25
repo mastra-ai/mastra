@@ -139,6 +139,7 @@ export async function dispatchEvent(
       // last turn's reading stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
       state.tokensPerSec = 0;
+      state.decodeMessageId = undefined;
       state.decodeStartedAt = 0;
       state.decodeLastDeltaAt = 0;
       state.decodeHasReasoning = false;
@@ -153,6 +154,7 @@ export async function dispatchEvent(
 
     case 'agent_end':
       // Keep tokensPerSec as the last turn's reading while idle.
+      state.decodeMessageId = undefined;
       state.decodeStartedAt = 0;
       state.decodeLastDeltaAt = 0;
       state.decodeHasReasoning = false;
@@ -190,15 +192,20 @@ export async function dispatchEvent(
       if (!updated) break;
 
       // Measure streamed generation, including thinking, but never replayed tool results.
+      // The window is bound to the assistant message, so a step whose usage never arrived
+      // cannot leave its interval open over the next step's tool execution.
       if (
         (event.event.type === 'text-delta' || event.event.type === 'reasoning-delta') &&
         event.event.delta.length > 0
       ) {
         const now = Date.now();
         state.agentRunLastStreamPartAt = now;
+        if (state.decodeMessageId !== event.id) {
+          state.decodeMessageId = event.id;
+          state.decodeStartedAt = now;
+          state.decodeHasReasoning = event.event.type === 'reasoning-delta';
+        }
         state.decodeLastDeltaAt = now;
-        if (state.decodeStartedAt === 0) state.decodeStartedAt = now;
-        if (event.event.type === 'reasoning-delta') state.decodeHasReasoning = true;
         ectx.updateStatusLine();
       }
       handleMessageUpdate(ectx, updated);
@@ -207,12 +214,6 @@ export async function dispatchEvent(
 
     case 'message_end':
       if (state.streamingMessage?.id === event.id && isMessageForCurrentThread(state.streamingMessage, state)) {
-        // The step's usage_update lands before this close, so clearing here only
-        // matters when a step reported no usage at all: without it the window would
-        // stay open across the next step's tool execution and dilute that reading.
-        state.decodeStartedAt = 0;
-        state.decodeLastDeltaAt = 0;
-        state.decodeHasReasoning = false;
         handleMessageEnd(ectx, state.streamingMessage);
       }
       break;
@@ -272,6 +273,8 @@ export async function dispatchEvent(
       if (typeof event.argsTextDelta === 'string') {
         if (event.argsTextDelta.length > 0) {
           const now = Date.now();
+          // Tool arguments belong to the step the window is already measuring;
+          // they only open it when the step's first output was streamed arguments.
           if (state.decodeStartedAt === 0) state.decodeStartedAt = now;
           state.decodeLastDeltaAt = now;
         }
@@ -428,6 +431,7 @@ export async function dispatchEvent(
         const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
         state.tokensPerSec = Math.round(ema);
       }
+      state.decodeMessageId = undefined;
       state.decodeStartedAt = 0;
       state.decodeLastDeltaAt = 0;
       state.decodeHasReasoning = false;

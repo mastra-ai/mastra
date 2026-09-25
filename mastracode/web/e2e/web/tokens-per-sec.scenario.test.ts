@@ -237,6 +237,49 @@ describe('tokens/sec (reducer-level)', () => {
     expect(state.tokensPerSec).toBe(40);
   });
 
+  it('does not carry the generation window into the next step when a step reported no usage', () => {
+    // Step 1 streams then never reports usage. Step 2 is a different assistant message
+    // generating at 30_000/31_000: its 40 tokens must be timed over that 1s, not the
+    // 29s window step 1 left open.
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-1', event: { type: 'text-delta', delta: 'One' } },
+    });
+    vi.setSystemTime(30_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-2', event: { type: 'text-delta', delta: 'Two' } },
+    });
+    vi.setSystemTime(31_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: 'step-2', event: { type: 'text-delta', delta: ' continues' } },
+    });
+    vi.setSystemTime(60_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 100, totalTokens: 140 } },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('still measures a step whose message closed before its usage arrived', () => {
+    // The goal path closes the assistant message before the step's step-finish, so
+    // message_end lands first. The pending usage must still measure that step.
+    vi.setSystemTime(1000);
+    let state = runtimeReducer(initialChatRuntime, { type: 'event', event: assistantTextDelta() });
+    vi.setSystemTime(2000);
+    state = runtimeReducer(state, { type: 'event', event: assistantTextDelta() });
+    state = runtimeReducer(state, { type: 'event', event: { type: 'message_end', id: 'assistant-1' } });
+    vi.setSystemTime(60_000);
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 100, totalTokens: 140 } },
+    });
+    expect(state.tokensPerSec).toBe(40);
+  });
+
   it('shows full streaming lifecycle: start → rate builds → end persists → next start clears', () => {
     let state = runtimeReducer(initialChatRuntime, {
       type: 'event',

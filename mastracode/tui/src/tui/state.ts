@@ -319,6 +319,8 @@ export interface TUIState {
   lastAgentRunEndReason?: 'done' | 'aborted' | 'error';
 
   // ── Tokens/sec tracking ────────────────────────────────────────────────
+  /** Assistant message the decode window measures; a different message starts a new window. */
+  decodeMessageId: string | undefined;
   /** First generation delta in the current model step; 0 means not started. */
   decodeStartedAt: number;
   /** Last generation delta, excluding subsequent tool execution and usage delivery. */
@@ -481,6 +483,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     githubPrPollingActive: false,
 
     // Tokens/sec tracking
+    decodeMessageId: undefined,
     decodeStartedAt: 0,
     decodeLastDeltaAt: 0,
     decodeHasReasoning: false,

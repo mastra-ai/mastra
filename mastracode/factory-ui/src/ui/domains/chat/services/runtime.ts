@@ -20,11 +20,11 @@ export interface ChatRuntimeState {
   bufferingObservations: boolean;
   goal?: GoalSnapshot;
   tokensPerSec: number;
+  /** Assistant message the decode window measures; a different message starts a new window. */
+  _decodeMessageId?: string;
   _decodeStartedAt: number;
   _decodeLastDeltaAt: number;
   _decodeHasReasoning: boolean;
-  /** Streaming assistant message id, so its close can bound the generation window. */
-  _streamingAssistantId?: string;
 }
 
 export const initialChatRuntime: ChatRuntimeState = {
@@ -57,51 +57,44 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
       return {
         ...state,
         tokensPerSec: 0,
+        _decodeMessageId: undefined,
         _decodeStartedAt: 0,
         _decodeLastDeltaAt: 0,
         _decodeHasReasoning: false,
-        _streamingAssistantId: undefined,
       };
     case 'agent_end':
       return {
         ...state,
-        _decodeStartedAt: 0,
-        _decodeLastDeltaAt: 0,
-        _decodeHasReasoning: false,
-        _streamingAssistantId: undefined,
-      };
-    case 'message_start':
-      return event.message.role === 'assistant' ? { ...state, _streamingAssistantId: event.message.id } : state;
-    case 'message_end': {
-      if (event.id !== state._streamingAssistantId) return state;
-      // The step's usage_update lands before this close, so clearing here only matters
-      // when a step reported no usage at all: without it the window would stay open
-      // across the next step's tool execution and dilute that reading.
-      return {
-        ...state,
-        _streamingAssistantId: undefined,
+        _decodeMessageId: undefined,
         _decodeStartedAt: 0,
         _decodeLastDeltaAt: 0,
         _decodeHasReasoning: false,
       };
-    }
     case 'message_update':
       if (
         (event.event.type === 'text-delta' || event.event.type === 'reasoning-delta') &&
         event.event.delta.length > 0
       ) {
         const now = Date.now();
+        // The window is bound to the assistant message, so a step whose usage never
+        // arrived cannot leave its interval open over the next step's tool execution.
+        const startsWindow = state._decodeMessageId !== event.id;
         return {
           ...state,
-          _decodeStartedAt: state._decodeStartedAt || now,
+          _decodeMessageId: event.id,
+          _decodeStartedAt: startsWindow ? now : state._decodeStartedAt,
           _decodeLastDeltaAt: now,
-          _decodeHasReasoning: state._decodeHasReasoning || event.event.type === 'reasoning-delta',
+          _decodeHasReasoning: startsWindow
+            ? event.event.type === 'reasoning-delta'
+            : state._decodeHasReasoning || event.event.type === 'reasoning-delta',
         };
       }
       return state;
     case 'tool_input_delta':
       if (typeof event.argsTextDelta === 'string' && event.argsTextDelta.length > 0) {
         const now = Date.now();
+        // Tool arguments belong to the step the window is already measuring; they only
+        // open it when the step's first output was streamed arguments.
         return { ...state, _decodeStartedAt: state._decodeStartedAt || now, _decodeLastDeltaAt: now };
       }
       return state;
@@ -125,7 +118,15 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
             ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
             : Math.round(instantaneous);
       }
-      return { ...state, usage, tokensPerSec, _decodeStartedAt: 0, _decodeLastDeltaAt: 0, _decodeHasReasoning: false };
+      return {
+        ...state,
+        usage,
+        tokensPerSec,
+        _decodeMessageId: undefined,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+      };
     }
     case 'display_state_changed':
       return {

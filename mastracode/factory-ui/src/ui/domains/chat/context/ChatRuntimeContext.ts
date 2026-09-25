@@ -4,7 +4,7 @@ import type { ChatRuntimeState } from '../services/runtime';
 
 export type ChatRuntimeApi = Omit<
   ChatRuntimeState,
-  '_decodeStartedAt' | '_decodeLastDeltaAt' | '_decodeHasReasoning' | '_streamingAssistantId'
+  '_decodeMessageId' | '_decodeStartedAt' | '_decodeLastDeltaAt' | '_decodeHasReasoning'
 >;
 
 export const ChatRuntimeContext = createContext<ChatRuntimeApi | null>(null);
