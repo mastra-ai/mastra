@@ -1693,7 +1693,65 @@ describe('AgentChannels', () => {
         mastra: mockMastra,
         requestContext: expect.any(RequestContext),
         signalMetadata: {},
+        skipped: [],
       });
+
+      spy.mockRestore();
+    });
+
+    it('gives a custom handler the messages batched by the SDK as ctx.skipped', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const earlier = { ...message, id: 'msg-earlier', text: 'first part' };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message, {}, { skipped: [earlier], totalSinceLastHandler: 2 });
+
+      const ctx = onDirectMessage.mock.calls[0]![3] as { skipped: unknown[] };
+      expect(ctx.skipped).toEqual([earlier]);
+
+      spy.mockRestore();
+    });
+
+    it('merges batched messages into one agent turn, oldest first', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, second, {}, { skipped: [first], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(1);
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('first part');
+      expect(serialized).toContain('second part');
+      expect(serialized.indexOf('first part')).toBeLessThan(serialized.indexOf('second part'));
 
       spy.mockRestore();
     });

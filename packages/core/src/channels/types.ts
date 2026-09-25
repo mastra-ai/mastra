@@ -382,6 +382,13 @@ export interface ChannelHandlerContext {
    * through both idle `wake` and active `deliver` paths.
    */
   readonly signalMetadata: Record<string, unknown>;
+  /**
+   * Earlier messages the Chat SDK batched into this dispatch when a
+   * `chatOptions.concurrency` strategy such as `burst`, `debounce`, or `queue`
+   * is set, oldest first. Empty when nothing was batched. `defaultHandler`
+   * merges them into the same agent turn as the current message.
+   */
+  readonly skipped: readonly Message[];
 }
 
 /**

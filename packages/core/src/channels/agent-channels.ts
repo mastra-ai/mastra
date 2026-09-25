@@ -446,21 +446,23 @@ export class AgentChannels {
       // MUST be built per message, never once at initialize() time: a custom
       // handler may write the sender's tenant onto the request context, and a
       // shared instance would leak that tenant into the next message's run.
-      const beginMessage = () => {
+      // `skipped` holds earlier messages the Chat SDK batched into this dispatch
+      // under a `burst`/`debounce`/`queue` concurrency strategy (oldest first).
+      const beginMessage = (skipped: readonly Message[] = []) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
-        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata, skipped };
         return { defaultHandler, handlerContext };
       };
 
       if (onDirectMessage !== false) {
-        chat.onDirectMessage((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onDirectMessage((thread, message, _channel, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onDirectMessage === 'function') {
             return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -469,8 +471,8 @@ export class AgentChannels {
       }
 
       if (onMention !== false) {
-        chat.onNewMention((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onNewMention((thread, message, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onMention === 'function') {
             return onMention(thread, message, defaultHandler, handlerContext);
           }
@@ -479,8 +481,8 @@ export class AgentChannels {
       }
 
       if (onSubscribedMessage !== false) {
-        chat.onSubscribedMessage((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onSubscribedMessage((thread, message, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onSubscribedMessage === 'function') {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -1090,9 +1092,10 @@ export class AgentChannels {
     mastra: Mastra,
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown>,
+    skipped: readonly Message[] = [],
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
+      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       // A refused request is not a malfunction: the host decided this sender
@@ -1130,8 +1133,11 @@ export class AgentChannels {
     mastra: Mastra,
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown> = {},
+    skipped: readonly Message[] = [],
   ): Promise<void> {
     const platform = chatThread.adapter.name;
+    // Messages batched by a concurrency strategy, oldest first, then the current one.
+    const batch = [...skipped, message].filter(m => !this.isContentlessMessage(m));
 
     // Some adapters lift platform side-channel events (read receipts, delivery
     // acks) into inbound messages carrying no text and no attachments. Running
@@ -1140,7 +1146,7 @@ export class AgentChannels {
     // nothing to answer here, so drop it before any thread, memory, or run
     // work happens. Custom handlers run ahead of this and still see the
     // message if they want it.
-    if (this.isContentlessMessage(message)) {
+    if (batch.length === 0) {
       this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
         messageId: message.id,
       });
@@ -1202,10 +1208,13 @@ export class AgentChannels {
       }
     }
 
-    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
-    const text = [historyBlock, richText || message.text].filter(Boolean).join('\n\n');
+    const messageTexts = batch.map(m => {
+      const richText = m.formatted ? chatModule().stringifyMarkdown(m.formatted).trim() : undefined;
+      return richText || m.text;
+    });
+    const text = [historyBlock, ...messageTexts].filter(Boolean).join('\n\n');
     const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
-    const attachments = message.attachments.filter(a => a.url || a.fetchData);
+    const attachments = batch.flatMap(m => m.attachments ?? []).filter(a => a.url || a.fetchData);
 
     // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
     // Inline types are sent as file parts (the LLM adapter converts image/* to
