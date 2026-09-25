@@ -100,7 +100,9 @@ export interface DiscordProviderConfig {
    * App credentials (bot token / public key / application id). May be omitted
    * here and provided via the `DISCORD_BOT_TOKEN` / `DISCORD_PUBLIC_KEY` /
    * `DISCORD_APPLICATION_ID` env vars, or later via {@link DiscordProvider.configure}.
-   * Whichever source resolves first is persisted **once** to channels storage.
+   * A bot token alone is enough: `publicKey` and `applicationId` are resolved
+   * from `GET /applications/@me` when omitted. Whichever source resolves first
+   * is persisted **once** to channels storage.
    */
   app?: Partial<DiscordAppConfig>;
   /**

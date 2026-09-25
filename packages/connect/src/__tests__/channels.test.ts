@@ -291,17 +291,22 @@ describe('channels()', () => {
     );
   });
 
-  it('warns when Discord metadata lacks applicationId or publicKey', async () => {
+  it('builds Discord from the bot token alone — applicationId/publicKey are backfilled by the provider', async () => {
     vi.doMock('@mastra/discord', () => ({ DiscordProvider: fakeDiscord() }));
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
       credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
-      // No metadata → both applicationId and publicKey are missing.
+      // No metadata → DiscordProvider self-resolves applicationId/publicKey
+      // from `GET /applications/@me`, so no warning fires.
     });
     const { channels: channelsFn } = await import('../channels.js');
     const providers = await channelsFn(options(fetchMock));
     expect(providers.discord).toBeDefined();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/applicationId \+ publicKey/));
+    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+      'discord',
+      expect.objectContaining({ app: expect.objectContaining({ botToken: DISCORD_BOT_TOKEN }) }),
+    );
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it('resolves slack + telegram + discord together into a single ChannelProvider map', async () => {

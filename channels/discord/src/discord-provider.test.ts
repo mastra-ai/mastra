@@ -72,12 +72,15 @@ function makeProvider(config: Partial<ConstructorParameters<typeof DiscordProvid
 }
 
 /** Stub `GET /applications/@me` — the bot-token validation call. */
-function stubValidateApp(opts: { ok?: boolean; name?: string } = {}) {
-  const { ok = true, name = 'Test App' } = opts;
+function stubValidateApp(opts: { ok?: boolean; name?: string; verifyKey?: string } = {}) {
+  const { ok = true, name = 'Test App', verifyKey = APP.publicKey } = opts;
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: '/api/v10/applications/@me', method: 'GET' })
-    .reply(ok ? 200 : 401, ok ? { id: APP.applicationId, name } : { message: '401: Unauthorized', code: 0 });
+    .reply(
+      ok ? 200 : 401,
+      ok ? { id: APP.applicationId, name, verify_key: verifyKey } : { message: '401: Unauthorized', code: 0 },
+    );
 }
 
 /** Stub `GET /guilds/{id}` —200 when the bot is a member, 403 otherwise. */
@@ -137,6 +140,14 @@ describe('DiscordProvider — discovery + skeleton', () => {
     expect(provider.getInfo().isConfigured).toBe(false);
   });
 
+  it('is configured with only a bot token (rest is backfilled from Discord)', () => {
+    const provider = new DiscordProvider({
+      storage: new InMemoryChannelsStorage(),
+      app: { botToken: APP.botToken },
+    });
+    expect(provider.getInfo().isConfigured).toBe(true);
+  });
+
   it('mounts a single POST interactions route (requiresAuth false — Ed25519, not bearer)', () => {
     const routes = makeProvider().provider.getRoutes();
     expect(routes).toHaveLength(1);
@@ -180,6 +191,48 @@ describe('DiscordProvider.connect', () => {
     await expect(provider.connect('agent-1')).rejects.toThrow(/rejected the bot token/i);
     expect(await provider.listInstallations()).toHaveLength(0);
     // Invalid token ⇒ app config must not be persisted either.
+    expect(await storage.getConfig('discord')).toBeNull();
+  });
+
+  it('backfills applicationId + publicKey from /applications/@me when only a bot token is supplied', async () => {
+    const { provider, storage } = makeProvider({ app: { botToken: APP.botToken } });
+    // A single-use interceptor: a second /applications/@me call would find no
+    // matching stub and fail — proving the backfill's validation is reused
+    // rather than repeated by connect().
+    stubValidateApp();
+
+    const result = await provider.connect('agent-1');
+
+    expect(result).toMatchObject({ type: 'oauth' });
+    // client_id in the invite URL comes from the backfilled application id.
+    const url = new URL((result as { authorizationUrl: string }).authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(APP.applicationId);
+    // The completed config is persisted so later webhooks/restores never
+    // depend on the Discord API again.
+    const stored = (await storage.getConfig('discord')) as { data: Record<string, unknown> } | null;
+    expect(stored?.data).toMatchObject({ publicKey: APP.publicKey, applicationId: APP.applicationId });
+  });
+
+  it('keeps explicitly supplied fields over backfilled ones', async () => {
+    const explicitAppId = '999999999999999999';
+    const { provider, storage } = makeProvider({
+      app: { botToken: APP.botToken, applicationId: explicitAppId },
+    });
+    stubValidateApp();
+
+    await provider.connect('agent-1');
+
+    const stored = (await storage.getConfig('discord')) as { data: Record<string, unknown> } | null;
+    // publicKey was missing → backfilled from verify_key; applicationId was
+    // supplied → kept as-is.
+    expect(stored?.data).toMatchObject({ publicKey: APP.publicKey, applicationId: explicitAppId });
+  });
+
+  it('rejects the connect when the bot token is invalid in the backfill path, persisting nothing', async () => {
+    const { provider, storage } = makeProvider({ app: { botToken: APP.botToken } });
+    stubValidateApp({ ok: false });
+
+    await expect(provider.connect('agent-1')).rejects.toThrow(/rejected the bot token/i);
     expect(await storage.getConfig('discord')).toBeNull();
   });
 
