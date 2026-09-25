@@ -2,4 +2,4 @@
 '@mastra/connect': patch
 ---
 
-Fixed Slack channel connections breaking after token rotation. channels() now builds the Slack provider with a token resolver that fetches a fresh App Configuration access token from the Mastra platform before each manifest call, instead of rotating the platform's single-use refresh token locally. This prevents the "Slack refresh token is invalid" error caused by the platform's credential vendor and the provider both rotating the same token.
+Fixed Slack channel connections that failed with "Slack refresh token is invalid" when connecting an agent. The Mastra platform now manages the Slack credential refresh cycle, so `channels()` no longer competes with it over the single-use refresh token.
