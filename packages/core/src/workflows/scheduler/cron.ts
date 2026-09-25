@@ -85,12 +85,15 @@ function findNextFireAt(cron: string, timezone: string | undefined, reference: D
  * Validate the timing fields of a schedule: exactly one of `cron` or a future
  * `runAt`, `endAt` only alongside `cron` and in the future. Throws on invalid input.
  */
-export function validateScheduleTiming(input: {
-  cron?: string;
-  timezone?: string;
-  runAt?: number | Date;
-  endAt?: number | Date;
-}): void {
+export function validateScheduleTiming(
+  input: {
+    cron?: string;
+    timezone?: string;
+    runAt?: number | Date;
+    endAt?: number | Date;
+  },
+  options: { requireFutureEndAt?: boolean } = {},
+): void {
   const hasCron = input.cron !== undefined && input.cron !== '';
   const hasRunAt = input.runAt !== undefined;
   if (hasCron === hasRunAt) {
@@ -115,7 +118,7 @@ export function validateScheduleTiming(input: {
     if (!Number.isFinite(endAt)) {
       throw new Error('Schedule `endAt` must be a valid date or ms epoch timestamp.');
     }
-    if (endAt <= Date.now()) {
+    if (options.requireFutureEndAt !== false && endAt <= Date.now()) {
       throw new Error('Schedule `endAt` must be in the future.');
     }
   }

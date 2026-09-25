@@ -94,6 +94,27 @@ describe('createWorkflow (evented) — schedule config', () => {
     ).toThrow();
   });
 
+  it('accepts a one-off runAt (even in the past) and a cron with a past endAt', () => {
+    const wf = createWorkflow({
+      id: 'once-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      schedule: [
+        { id: 'once', runAt: Date.now() - 1000 },
+        { id: 'bounded', cron: '*/5 * * * *', endAt: new Date(Date.now() - 1000) },
+      ],
+    });
+    expect(wf.getScheduleConfigs()).toHaveLength(2);
+  });
+
+  it('rejects schedules with both or neither of cron/runAt, or endAt on a one-off', () => {
+    const build = (schedule: any) => () =>
+      createWorkflow({ id: 'bad-timing', inputSchema: z.object({}), outputSchema: z.object({}), schedule });
+    expect(build({ cron: '*/5 * * * *', runAt: Date.now() + 1000 })).toThrow(/exactly one/);
+    expect(build({ timezone: 'UTC' })).toThrow(/exactly one/);
+    expect(build({ runAt: Date.now() + 1000, endAt: Date.now() + 2000 })).toThrow(/endAt/);
+  });
+
   it('validates cron on every entry of an array form', () => {
     expect(() =>
       createWorkflow({

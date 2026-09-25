@@ -1,8 +1,8 @@
 ---
-title: "Scheduled workflows | Workflows"
-description: "Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime."
+title: 'Scheduled workflows | Workflows'
+description: 'Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Scheduled workflows
@@ -67,12 +67,27 @@ const dailyReport = createWorkflow({
 
 Fields:
 
-- `cron` (required): a 5-, 6-, or 7-part cron expression. Validated at workflow construction time.
+- `cron`: a 5-, 6-, or 7-part cron expression. Validated at workflow construction time. Provide exactly one of `cron` or `runAt`.
+- `runAt` (optional): fire once at this time (epoch milliseconds or `Date`) instead of on a cron. After it fires, the schedule moves to `completed` and later deploys don't re-arm it unless you change `runAt`. A `runAt` that has already passed when the schedule is first registered is recorded as `completed` without firing.
+- `endAt` (optional): only with `cron`. Stop firing after this time; the schedule moves to `completed` once its next occurrence would fall after `endAt`.
 - `timezone` (optional): IANA timezone, for example `America/New_York`. Defaults to the host's local timezone. Set this explicitly in production so fire times don't depend on server locale.
 - `inputData` (optional): payload passed as the workflow's input on every fire.
 - `initialState` (optional): initial state for the run.
 - `requestContext` (optional): request context attached to the run.
 - `metadata` (optional): arbitrary metadata persisted alongside the schedule row.
+
+To run a workflow once at a fixed time, use `runAt`:
+
+```typescript title="src/mastra/workflows/launch-announcement.ts"
+const launchAnnouncement = createWorkflow({
+  id: 'launch-announcement',
+  schedule: {
+    runAt: new Date('2026-12-01T09:00:00Z'),
+    inputData: { userId: 'system' },
+  },
+  // ...
+})
+```
 
 ## Multiple schedules
 

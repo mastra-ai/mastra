@@ -99,6 +99,7 @@ import {
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
+import { toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -2131,14 +2132,28 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
+        const runAt = cfg.runAt !== undefined ? toEpochMs(cfg.runAt) : undefined;
+        const endAt = cfg.endAt !== undefined ? toEpochMs(cfg.endAt) : undefined;
+        const cron = cfg.cron ?? '';
+        // A one-off whose `runAt` has already passed is recorded as completed
+        // rather than fired, so a fresh deploy never runs a stale one-off.
+        const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
+          if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
+          const nextFireAt = computeNextFireAt(cron, { timezone: cfg.timezone, after: now });
+          return { nextFireAt, status: endAt !== undefined && nextFireAt > endAt ? 'completed' : 'active' };
+        };
+
         if (!existing) {
+          const timing = computeTiming();
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
-            cron: cfg.cron,
+            cron,
             timezone: cfg.timezone,
-            status: 'active',
-            nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
+            ...(runAt !== undefined ? { runAt } : {}),
+            ...(endAt !== undefined ? { endAt } : {}),
+            status: timing.status,
+            nextFireAt: timing.nextFireAt,
             createdAt: now,
             updatedAt: now,
             metadata: cfg.metadata,
@@ -2150,18 +2165,29 @@ export class Mastra<
         // We deliberately leave `status` alone — a row may have been paused
         // out-of-band via storage, and a redeploy shouldn't unpause it.
         const patch: ScheduleUpdate = {};
-        const cronChanged = existing.cron !== cfg.cron;
+        const cronChanged = existing.cron !== cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+        const runAtChanged = (existing.runAt ?? undefined) !== runAt;
+        const endAtChanged = (existing.endAt ?? undefined) !== endAt;
 
-        if (cronChanged) patch.cron = cfg.cron;
+        if (cronChanged) patch.cron = cron;
         if (timezoneChanged) patch.timezone = cfg.timezone;
+        // Adapters clear the column when the key is present but undefined.
+        if (runAtChanged) patch.runAt = runAt;
+        if (endAtChanged) patch.endAt = endAt;
         if (!targetsEqual(existing.target, target)) patch.target = target;
         if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
 
-        // Cron or timezone change invalidates the stored nextFireAt — recompute
-        // from now so we don't fire on the old schedule.
-        if (cronChanged || timezoneChanged) {
-          patch.nextFireAt = computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now });
+        // A timing change invalidates the stored nextFireAt — recompute from
+        // now so we don't fire on the old schedule. A completed row is only
+        // re-armed by a timing change; an unchanged config never resurrects it.
+        // Otherwise `status` is left alone — a row may have been paused
+        // out-of-band, and a redeploy shouldn't unpause it.
+        if (cronChanged || timezoneChanged || runAtChanged || endAtChanged) {
+          const timing = computeTiming();
+          patch.nextFireAt = timing.nextFireAt;
+          if (timing.status === 'completed') patch.status = 'completed';
+          else if (existing.status === 'completed') patch.status = 'active';
         }
 
         if (Object.keys(patch).length > 0) {
