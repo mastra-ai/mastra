@@ -222,4 +222,78 @@ describe('thread ownership (#24878)', () => {
     await expect(result.accepted).resolves.toEqual({ action: 'discard' });
     second.unsubscribe();
   });
+
+  it('does not let a lease that reports a finished local run as live displace the active run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    pubsub.retain = true;
+    const threadId = 'lease-replay-thread';
+    const resourceId = 'lease-replay-user';
+    const topic = `agent.thread-stream.${encodeURIComponent([resourceId, threadId].join('\u0000'))}`;
+    const agent = { id: 'lease-replay-agent' } as unknown as Agent<any, any, any, any>;
+
+    const runA = registerRun(runtime, agent, pubsub, 'run-a', threadId, resourceId);
+    await runA.registered;
+    runA.markFinished();
+    pubsub.owners.clear();
+    const runB = registerRun(runtime, agent, pubsub, 'run-b', threadId, resourceId);
+    await runB.registered;
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+
+    // Fallback lease providers report every run as leased; model that by
+    // pointing the lease at run A before its registration is redelivered.
+    const [leaseKey] = [...pubsub.owners.keys()];
+    pubsub.owners.set(leaseKey!, 'run-a');
+    const registeredA = pubsub
+      .retainedEvents(topic)
+      .find(event => event.data?.type === 'run-registered' && event.runId === 'run-a');
+    await pubsub.publish(topic, { ...registeredA, data: { ...registeredA.data, sourceId: 'other-instance' } });
+    await nextTicks(20);
+
+    expect(subscription.activeRunId()).toBe('run-b');
+    subscription.unsubscribe();
+    runA.complete();
+    runB.complete();
+  });
+
+  it('does not deliver a signal to a remote run whose owner agent is unknown', async () => {
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const senderAgent = { id: 'unknown-owner-sender', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'unknown-owner-thread';
+    const resourceId = 'unknown-owner-user';
+    const key = [resourceId, threadId].join('\u0000');
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+
+    const subscription = await senderRuntime.subscribeToThread(senderAgent, { threadId, resourceId }, pubsub);
+    // A stream part arrives before the run's registration, so the owner agent is unknown.
+    pubsub.owners.set(key, 'part-first-run');
+    await pubsub.publish(topic, {
+      type: 'agent.thread-stream',
+      runId: 'part-first-run',
+      data: {
+        type: 'stream-part',
+        runId: 'part-first-run',
+        streamId: 'part-first-stream',
+        sourceId: 'other-instance',
+        part: { type: 'start', runId: 'part-first-run' },
+      },
+    });
+    await vi.waitFor(() => expect(subscription.activeRunId()).toBe('part-first-run'));
+
+    const result = senderRuntime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'hello' },
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toEqual({
+      action: 'blocked',
+      reason: 'thread-blocked',
+      runId: 'part-first-run',
+    });
+    expect((senderAgent as any).stream).not.toHaveBeenCalled();
+    subscription.unsubscribe();
+  });
 });

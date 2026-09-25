@@ -3809,7 +3809,8 @@ export class AgentThreadStreamRuntime {
       state.activeThreadStreamIds.set(key, streamId);
       if (!local) {
         state.remoteThreadKeysByRunId.set(runId, key);
-        state.unobservedRemoteRunIds.delete(runId);
+        // The lease check awaited; only trust the run if someone still observes the thread.
+        if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
       }
     };
 
@@ -3943,16 +3944,20 @@ export class AgentThreadStreamRuntime {
         const currentActiveRunId = state.activeThreadRunIds.get(key);
         const displacesActiveRun =
           localRecord !== undefined && currentActiveRunId !== undefined && currentActiveRunId !== data.runId;
+        const sameSourceLive =
+          !backlog && !displacesActiveRun && data.sourceId !== undefined && data.sourceId === this.#getSourceId();
+        // A nonblocking local record is never live via the lease: fallback lease
+        // providers report every run as leased.
         const live =
-          (localRecord !== undefined && this.#isThreadBlockingRun(state, localRecord)) ||
-          (!backlog && !displacesActiveRun && data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
-          (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+          localRecord !== undefined
+            ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
+            : sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
           if (!local) {
             state.remoteThreadKeysByRunId.set(data.runId, key);
-            state.unobservedRemoteRunIds.delete(data.runId);
+            if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
             if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
           }
         }
@@ -4660,8 +4665,11 @@ export class AgentThreadStreamRuntime {
           state.threadKeysByRunId.get(activeRunId) === key ||
           (state.remoteThreadKeysByRunId.get(activeRunId) === key && !state.unobservedRemoteRunIds.has(activeRunId))
         ) {
-          const remoteAgentId = state.remoteAgentIdsByRunId.get(activeRunId);
-          remoteCrossAgent = remoteAgentId !== undefined && remoteAgentId !== agent.id;
+          // A remote run whose owner agent is unknown (e.g. seen via a stream part
+          // before its registration) is not a safe target for this agent.
+          remoteCrossAgent =
+            state.threadKeysByRunId.get(activeRunId) !== key &&
+            state.remoteAgentIdsByRunId.get(activeRunId) !== agent.id;
           // A run can be reserved before its stream record is registered. Keep the reserved
           // id so early follow-ups still attach to the run that is starting.
           runId = activeRunId;
