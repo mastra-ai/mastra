@@ -111,8 +111,8 @@ const workflowRunSchema = z.object({
 export const workflowRunSummariesResponseSchema = z.object({
   runs: z.array(
     workflowRunSchema.omit({ snapshot: true }).extend({
-      status: workflowRunStatusSchema,
-      timestamp: z.number(),
+      status: workflowRunStatusSchema.optional(),
+      timestamp: z.number().optional(),
     }),
   ),
   total: z.number(),

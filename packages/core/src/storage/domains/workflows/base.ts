@@ -67,13 +67,24 @@ export abstract class WorkflowsStorage extends StorageDomain {
     return {
       total,
       runs: runs.map(run => {
-        const snapshot =
-          typeof run.snapshot === 'string' ? (JSON.parse(run.snapshot) as WorkflowRunState) : run.snapshot;
+        let snapshot: WorkflowRunState | undefined;
+        if (typeof run.snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(run.snapshot) as WorkflowRunState;
+          } catch {
+            // Legacy snapshots can remain unparsed. Preserve the row without failing the list.
+          }
+        } else {
+          snapshot = run.snapshot;
+        }
         return {
           workflowName: run.workflowName,
           runId: run.runId,
-          status: snapshot.status,
-          timestamp: snapshot.timestamp,
+          status: snapshot && typeof snapshot === 'object' ? snapshot.status : undefined,
+          timestamp:
+            snapshot && typeof snapshot === 'object' && typeof snapshot.timestamp === 'number'
+              ? snapshot.timestamp
+              : undefined,
           createdAt: run.createdAt,
           updatedAt: run.updatedAt,
           resourceId: run.resourceId,

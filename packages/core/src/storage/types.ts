@@ -37,8 +37,8 @@ export interface WorkflowRuns {
 export interface WorkflowRunSummary {
   workflowName: string;
   runId: string;
-  status: WorkflowRunStatus;
-  timestamp: number;
+  status?: WorkflowRunStatus;
+  timestamp?: number;
   createdAt: Date;
   updatedAt: Date;
   resourceId?: string;
