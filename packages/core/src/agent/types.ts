@@ -1009,16 +1009,17 @@ interface AgentConfigBase<
    * `PrefillErrorHandler`, and `StreamErrorRetryProcessor`, in that order. Each default is added only
    * when no processor in your list carries its `id`. An added default is placed at the position its
    * `id` gives it, so naming a later default does not invert the order; your processors are never
-   * reordered relative to each other.
+   * reordered relative to each other. An empty list is merged the same way, so it
+   * resolves to the defaults; use `errorProcessorDefaults: false` to opt out.
    * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
    */
   errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   /**
    * Set to `false` to run only the error processors you configure, with no shared
-   * stability defaults added. Without this, `errorProcessors` is a base that the
-   * three defaults are merged into, so there is no other way to run a custom list
-   * with none of the framework's processors. Defaults to `true` (defaults on).
-   * `errorProcessors: []` still opts out of error processors entirely.
+   * stability defaults added. This is the only way to opt out of the defaults:
+   * `errorProcessors` is always a base that the three defaults are merged into,
+   * including when it is empty. With `false` and no `errorProcessors`, the agent
+   * runs no error processors. Defaults to `true` (defaults on).
    */
   errorProcessorDefaults?: boolean;
   /**

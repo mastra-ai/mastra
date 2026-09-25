@@ -101,7 +101,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -124,7 +124,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -147,7 +147,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -170,7 +170,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -195,7 +195,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -216,7 +216,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -238,7 +238,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [{ model: primaryModel, maxRetries: 0 }],
       });
 
@@ -255,7 +255,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         model: [
           { model: primaryModel, maxRetries: 0 },
           { model: secondaryModel, maxRetries: 0 },
@@ -281,7 +281,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 3 },
             { model: secondaryModel, maxRetries: 0 },
@@ -308,7 +308,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 3 },
             { model: secondaryModel, maxRetries: 0 },
@@ -334,7 +334,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 2 },
             { model: secondaryModel, maxRetries: 0 },
@@ -360,7 +360,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 2 },
             { model: secondaryModel, maxRetries: 0 },
@@ -388,7 +388,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 3 },
             { model: secondaryModel, maxRetries: 0 },
@@ -413,7 +413,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 3 },
             { model: secondaryModel, maxRetries: 0 },
@@ -438,7 +438,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 2 },
             { model: secondaryModel, maxRetries: 0 },
@@ -463,7 +463,7 @@ describe('Credential/Auth Error Fallback', () => {
           instructions: 'You are a test agent',
           // Model-level fallback/retry counts are the subject here, so these agents opt out of the
           // default error processors — their retry layer would add calls on top.
-          errorProcessors: [],
+          errorProcessorDefaults: false,
           model: [
             { model: primary.model, maxRetries: 2 },
             { model: secondaryModel, maxRetries: 0 },
@@ -500,7 +500,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         memory: mockMemory,
         model: [
           { model: primaryModel, maxRetries: 0 },
@@ -541,7 +541,7 @@ describe('Credential/Auth Error Fallback', () => {
         instructions: 'You are a test agent',
         // Model-level fallback/retry counts are the subject here, so these agents opt out of the
         // default error processors — their retry layer would add calls on top.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         memory: mockMemory,
         model: [
           { model: primary.model, maxRetries: 1 },

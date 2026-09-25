@@ -58,7 +58,9 @@ const workspace = new Workspace({
  * core version.
  *
  * Exported so callers can compose a custom processor list that keeps the
- * subset they want (e.g. `[...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom]`).
+ * subset they want. Pass it with `errorProcessorDefaults: false`, or the
+ * builder merges the omitted defaults back in:
+ * `createBuilderAgent({ errorProcessors: [...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom], errorProcessorDefaults: false })`.
  */
 export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
   new ProviderHistoryCompat(),
@@ -75,22 +77,26 @@ export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>)
   // older cores. A caller instance with a default's id replaces that default
   // at its position, so repairs keep running ahead of retries; caller
   // processors with other ids run after the defaults so they can observe or
-  // extend retries the defaults trigger. An explicitly empty array opts out.
-  // A function-typed override (DynamicArgument) is passed through unchanged —
-  // callers using the dynamic form manage the full list.
+  // extend retries the defaults trigger. An empty array merges like any other,
+  // matching core; `errorProcessorDefaults: false` is the only opt-out and
+  // passes the caller's list through as given (the flag is also forwarded, so
+  // newer cores add nothing either). A function-typed override
+  // (DynamicArgument) is passed through unchanged — callers using the dynamic
+  // form manage the full list.
   const callerErrorProcessors = args?.errorProcessors;
-  const errorProcessors = Array.isArray(callerErrorProcessors)
-    ? callerErrorProcessors.length
-      ? [
-          ...DEFAULT_BUILDER_ERROR_PROCESSORS.map(
-            processor => callerErrorProcessors.find(caller => caller.id === processor.id) ?? processor,
-          ),
-          ...callerErrorProcessors.filter(
-            caller => !DEFAULT_BUILDER_ERROR_PROCESSORS.some(processor => processor.id === caller.id),
-          ),
-        ]
-      : callerErrorProcessors
-    : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
+  const errorProcessors =
+    args?.errorProcessorDefaults === false
+      ? callerErrorProcessors
+      : Array.isArray(callerErrorProcessors)
+        ? [
+            ...DEFAULT_BUILDER_ERROR_PROCESSORS.map(
+              processor => callerErrorProcessors.find(caller => caller.id === processor.id) ?? processor,
+            ),
+            ...callerErrorProcessors.filter(
+              caller => !DEFAULT_BUILDER_ERROR_PROCESSORS.some(processor => processor.id === caller.id),
+            ),
+          ]
+        : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
 
   const config: AgentConfig<'builder-agent'> = {
     instructions: `You are the Agent Builder.

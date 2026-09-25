@@ -1832,8 +1832,8 @@ export class Agent<
    * when no configured processor already carries its id, and is inserted at the position its id
    * gives it among the defaults, so naming a subset of them still yields the correct relative order
    * — supplying only `stream-error-retry-processor`, for instance, still puts `provider-history-compat`
-   * ahead of it. Configured processors are never reordered. An explicitly empty array means no error
-   * processors.
+   * ahead of it. Configured processors are never reordered. An empty list is merged like any other,
+   * so it resolves to the defaults; `errorProcessorDefaults: false` is the only opt-out.
    *
    * Pass `includeDefaults: false` to resolve only what the caller configured. `getConfiguredProcessorIds`
    * uses that mode because its contract is the raw configured list — the editor clones it to storage, so
@@ -1859,9 +1859,6 @@ export class Agent<
     if (!includeDefaults) return configured ?? [];
     if (this.#errorProcessorDefaults === false) return configured ?? [];
     if (!configured) return defaultStabilityErrorProcessors();
-
-    // Explicit empty array means "no error processors".
-    if (configured.length === 0) return [];
 
     const configuredIds = new Set(configured.map(processor => processor.id));
     const missingDefaults = defaultStabilityErrorProcessors().filter(processor => !configuredIds.has(processor.id));
@@ -2224,9 +2221,9 @@ export class Agent<
    * stability defaults it does not already name. A configured processor whose id matches a default
    * means that default is not added again. Each added default is placed at the position its id gives
    * it, so the defaults keep their relative order even when you name only one of them — the two
-   * processors that repair a request stay ahead of the retry processor, whose bad-request matcher
-   * claims any `400` and would otherwise resend a request they could have fixed.
-   * `errorProcessors: []` means no error processors.
+   * processors that repair a request stay ahead of the retry processor, which would otherwise resend
+   * a request they could have fixed. An empty configured list resolves to the defaults; with
+   * `errorProcessorDefaults: false` only the configured list is returned.
    */
   public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
     return this.#resolveErrorProcessors({

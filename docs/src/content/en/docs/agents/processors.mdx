@@ -148,19 +148,7 @@ const agent = new Agent({
 
 The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults your list never names. Pass all three ids to run a completely custom set.
 
-To run with no error processors at all, pass an explicitly empty array:
-
-```typescript
-new Agent({
-  id: 'no-error-recovery-agent',
-  name: 'no-error-recovery-agent',
-  model: '__GATEWAY_OPENAI_MODEL_BASE__',
-  instructions: '...',
-  errorProcessors: [],
-})
-```
-
-To run only the processors you configure, with none of the defaults merged in, set `errorProcessorDefaults: false`:
+An empty `errorProcessors` list merges like any other, so it still gets the three defaults. To turn the defaults off, set `errorProcessorDefaults: false`. The agent then runs only the processors you configure, or none when you configure none:
 
 ```typescript
 new Agent({
@@ -172,6 +160,8 @@ new Agent({
   errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
 })
 ```
+
+An `errorProcessors` list passed to a single `generate()` or `stream()` call works differently: it replaces the agent's resolved list for that call, defaults included.
 
 Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
 

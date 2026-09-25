@@ -3926,10 +3926,13 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved[1]).toBe(customRetry);
   });
 
-  it('treats an explicitly empty caller list as an opt-out', async () => {
+  it('merges the defaults into an explicitly empty caller list', async () => {
     const agent = bareAgent({ errorProcessors: [] });
 
-    expect(await agent.listErrorProcessors()).toEqual([]);
+    // An empty list is a base like any other; `errorProcessorDefaults: false` is the only opt-out.
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toEqual([
+      ...DEFAULT_ERROR_PROCESSOR_IDS,
+    ]);
   });
 
   it('resolves a function-form errorProcessors list before deduping', async () => {

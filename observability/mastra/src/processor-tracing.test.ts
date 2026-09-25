@@ -377,7 +377,7 @@ class ProcessorWithAgent implements Processor {
       model,
       // The internal agent's span tree is the subject here, so the framework's
       // default error processors stay out of its request lane.
-      errorProcessors: [],
+      errorProcessorDefaults: false,
     });
   }
 
@@ -528,7 +528,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         inputProcessors: [new SimpleInputProcessor('validator')],
       });
 
@@ -639,7 +639,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         outputProcessors: [new SimpleOutputProcessor('formatter')],
       });
 
@@ -1081,7 +1081,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         inputProcessors: [new FullProcessor('full-input')],
         outputProcessors: [new FullProcessor('full-output')],
       });
@@ -1171,7 +1171,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         outputProcessors: [new OutputStreamProcessor('stream-first'), new OutputStreamProcessor('stream-second')],
       });
 
@@ -1289,7 +1289,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         inputProcessors: [new ProcessorWithAgent('validator', model)],
       });
 
@@ -1389,7 +1389,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
       });
 
@@ -1726,7 +1726,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         inputProcessors: [
           new SimpleInputProcessor('simple'), // processInput only
           new InputStepProcessor('step'), // processInputStep only
@@ -1972,7 +1972,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         memory: mockMemory,
         inputProcessors: [new SimpleInputProcessor('custom-input')],
         outputProcessors: [new SimpleOutputProcessor('custom-output')],
@@ -2050,7 +2050,7 @@ describe('Processor Tracing Tests', () => {
         model,
         // These cases assert the span tree of the processors they configure, so the
         // framework's default error processors stay out of the request lane.
-        errorProcessors: [],
+        errorProcessorDefaults: false,
         memory: mockMemory,
         inputProcessors: [new SimpleInputProcessor('guardrail')],
         outputProcessors: [new SimpleOutputProcessor('filter')],

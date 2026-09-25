@@ -170,7 +170,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
       // conversation history to rescue — so a retry only adds its delay, and
       // the request-lane span would surface inside the caller's trace even
       // though this agent is internal.
-      errorProcessors: [],
+      errorProcessorDefaults: false,
       options: {
         tracingPolicy: { internal: InternalSpans.ALL },
       },

@@ -392,8 +392,25 @@ describe('createBuilderAgent stability processors', () => {
     expect(resolved[3]).toBe(callerProcessor);
   });
 
-  it('treats an explicitly empty error processor list as an opt-out', async () => {
+  it('keeps the builder defaults when the caller list is empty', async () => {
     const agent = createBuilderAgent({ errorProcessors: [] });
+
+    expect(await agent.listErrorProcessors()).toEqual(DEFAULT_BUILDER_ERROR_PROCESSORS);
+  });
+
+  it('runs only the caller list when errorProcessorDefaults is false', async () => {
+    const callerProcessor = { id: 'caller-retry', processAPIError: async () => undefined };
+    const withoutRetry = DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor');
+    const agent = createBuilderAgent({
+      errorProcessors: [...withoutRetry, callerProcessor],
+      errorProcessorDefaults: false,
+    });
+
+    expect(await agent.listErrorProcessors()).toEqual([...withoutRetry, callerProcessor]);
+  });
+
+  it('runs no error processors when errorProcessorDefaults is false without a list', async () => {
+    const agent = createBuilderAgent({ errorProcessorDefaults: false });
 
     expect(await agent.listErrorProcessors()).toEqual([]);
   });

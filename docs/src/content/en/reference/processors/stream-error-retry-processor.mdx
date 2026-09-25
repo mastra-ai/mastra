@@ -28,7 +28,7 @@ export const agent = new Agent({
 })
 ```
 
-To run with no error processors at all, pass `errorProcessors: []`. An explicitly empty list means the agent adds none of the defaults. Supplying your own processor for all three default ids has the same effect while keeping your own implementations. To run only the processors you configure with none of the defaults merged in, set `errorProcessorDefaults: false`.
+To run only the processors you configure, with none of the defaults merged in, set `errorProcessorDefaults: false`. Without an `errorProcessors` list, the agent then runs no error processors. An empty `errorProcessors` list still gets the defaults. Supplying your own processor for all three default ids replaces every default with your own implementation.
 
 ## How it works
 

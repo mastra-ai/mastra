@@ -17,8 +17,9 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * waits ~1s of real time; the request counts below are the source suite's
  * expectations verbatim.
  *
- * Like the source suite, every scenario passes `errorProcessors: []` so the
- * counts measure model-call retries alone. The agent's default
+ * Every scenario passes `errorProcessors: []`, which the harness forwards at
+ * call time, where it replaces the agent's resolved list — defaults included —
+ * so the counts measure model-call retries alone. The agent's default
  * `StreamErrorRetryProcessor` also retries provider errors marked retryable,
  * which would multiply these counts.
  */
