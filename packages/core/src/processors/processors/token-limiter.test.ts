@@ -2020,5 +2020,18 @@ describe('TokenLimiterProcessor', () => {
     it('rejects a non-positive maxToolResultTokens', () => {
       expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
+
+    it('throws instead of silently dropping an oversized current-run context message', async () => {
+      // If a caller-supplied 'context' message isn't counted as part of the current run, the budget
+      // pre-check passes using only user-now's size, and best-fit trimming then just skips the oversized
+      // context message (it doesn't "fit") instead of keeping it or failing loudly.
+      const processor = new TokenLimiterProcessor({ limit: 60 });
+      const messageList = new MessageList();
+      messageList.add(text('user-now', 'user', 'go', 1), 'input');
+      messageList.add(text('ctx-now', 'user', 'x '.repeat(500), 2), 'context');
+
+      await expect(run(processor, messageList)).rejects.toThrow(/current run's messages/);
+      expect(messageList.get.all.db().map(m => m.id)).toContain('ctx-now');
+    });
   });
 });
