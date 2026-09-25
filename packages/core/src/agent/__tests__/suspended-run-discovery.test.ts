@@ -1329,6 +1329,54 @@ describe('suspended-run discovery', () => {
     }, 30000);
 
     /**
+     * The durable tool-call step suspends a directly approval-gated tool with
+     * `{ type: 'approval', toolCallId, toolName, args }` rather than the
+     * `requireToolApproval` envelope, and must still be reported as requiring
+     * approval (#25154).
+     */
+    it('reports durable approval suspensions as requiring approval', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      const snapshot = structuredClone(run!.snapshot as WorkflowRunState);
+      let rewritten = 0;
+      for (const step of Object.values(snapshot.context) as Record<string, any>[]) {
+        if (step?.status !== 'suspended') continue;
+        const { requireToolApproval: _requireToolApproval, __workflow_meta: _meta, ...rest } = step.suspendPayload;
+        step.suspendPayload = {
+          ...rest,
+          type: 'approval',
+          toolCallId,
+          toolName: 'findUserTool',
+          args: { name: 'Dero Israel' },
+        };
+        rewritten++;
+      }
+      expect(rewritten).toBeGreaterThan(0);
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        resourceId: 'resource-1',
+        snapshot,
+      });
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      const { runs } = await restartedAgent.listSuspendedRuns({ resourceId: 'resource-1' });
+
+      expect(runs).toHaveLength(1);
+      expect(runs[0]!.toolCalls).toContainEqual({
+        toolCallId,
+        toolName: 'findUserTool',
+        args: { name: 'Dero Israel' },
+        requiresApproval: true,
+      });
+    }, 30000);
+
+    /**
      * Durable rows written before the resourceId column was populated (pre
      * #21844 write-side fix) have a NULL column value and carry the resource
      * only inside the snapshot. Since the resourceId filter is now pushed
