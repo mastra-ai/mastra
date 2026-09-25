@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderAgentView from '../view';
 import { authDisabledCapabilities, builderSettingsDisabled, currentUser } from './fixtures/auth';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+vi.mock('@/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 

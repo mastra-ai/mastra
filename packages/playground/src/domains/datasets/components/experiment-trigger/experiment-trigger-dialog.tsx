@@ -17,6 +17,8 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
@@ -29,8 +31,6 @@ import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { DynamicForm } from '@/lib/form';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;

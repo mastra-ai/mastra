@@ -24,7 +24,7 @@ const unauthenticatedCapabilities = {
   enabled: true,
   login: { type: 'credentials' as const },
 } satisfies AuthCapabilities;
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+vi.mock('@/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 

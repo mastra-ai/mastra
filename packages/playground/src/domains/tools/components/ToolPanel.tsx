@@ -1,5 +1,6 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
@@ -9,7 +10,6 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useTool } from '@/domains/tools/hooks';
 import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface ToolPanelProps {

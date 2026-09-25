@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderFavoritePage from '..';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+vi.mock('@/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 
