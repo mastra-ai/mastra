@@ -83,15 +83,20 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
   });
 
   it('without maxToolResultTokens, an oversized tool result is ordinary trimmable content and can be dropped', async () => {
-    const { agent, prompts } = setup('result '.repeat(3000), new TokenLimiterProcessor({ limit: 2000 }));
-    await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
+    const { agent, prompts, executions } = setup('result '.repeat(3000), new TokenLimiterProcessor({ limit: 2000 }));
+    const result = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
 
-    // No cap set, so nothing protects the oversized result from best-fit trimming.
-    // Callers who need the current run's tool data preserved must set maxToolResultTokens.
-    const secondPrompt = prompts[1] ?? [];
-    const hasToolResult = secondPrompt.some(
-      (m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool-result'),
-    );
-    expect(hasToolResult).toBe(false);
+    // No cap set, so nothing protects the oversized result from best-fit trimming: every
+    // later prompt has the tool result trimmed back out, so the model never sees it, calls
+    // the tool again, and the loop runs to maxSteps with no final answer. This is the
+    // original #24110 symptom for callers who don't set maxToolResultTokens; setting it is
+    // now the documented remedy (see the previous test).
+    expect(executions()).toBe(5);
+    expect(prompts).toHaveLength(5);
+    expect(result.text).toBe('');
+    for (const p of prompts) {
+      const hasToolResult = p.some((m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool-result'));
+      expect(hasToolResult).toBe(false);
+    }
   });
 });
