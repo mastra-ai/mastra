@@ -1,12 +1,13 @@
 ---
 title: "Server Adapters | Server"
-description: "Run Mastra with Elysia, Express, Fastify, Hono, Koa, NestJS, Next.js, or TanStack Start server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
+description: "Run Mastra with Elysia, Express, Fastify, Hono, Koa, NestJS, Next.js, SvelteKit, or TanStack Start server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
 packages:
   - "@mastra/elysia"
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/nestjs"
   - "@mastra/next"
+  - "@mastra/sveltekit"
   - "@mastra/tanstack-start"
 ---
 
@@ -48,6 +49,7 @@ Mastra currently provides these official server adapters:
 - [@mastra/koa](/reference/server/koa-adapter)
 - [@mastra/nestjs](/reference/server/nestjs-adapter)
 - [@mastra/next](/reference/server/next-adapter)
+- [@mastra/sveltekit](/reference/server/sveltekit-adapter)
 - [@mastra/tanstack-start](/reference/server/tanstack-start-adapter)
 
 You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
@@ -96,6 +98,12 @@ Install the adapter for the framework of your choice.
   <TabItem value="nextjs" label="Next.js">
     ```bash npm2yarn
     npm install @mastra/next@latest hono
+    ```
+  </TabItem>
+
+  <TabItem value="sveltekit" label="SvelteKit">
+    ```bash npm2yarn
+    npm install @mastra/sveltekit@latest hono
     ```
   </TabItem>
 
@@ -499,6 +507,7 @@ See [MCP](/docs/connections/mcp) for configuration details and how to set up MCP
 - [Express Adapter](/reference/server/express-adapter) - Express-specific setup
 - [NestJS Adapter](/reference/server/nestjs-adapter) - NestJS-specific setup
 - [Next.js Adapter](/reference/server/next-adapter) - Next.js-specific setup
+- [SvelteKit Adapter](/reference/server/sveltekit-adapter) - SvelteKit-specific setup
 - [TanStack Start Adapter](/reference/server/tanstack-start-adapter) - TanStack Start-specific setup
 - [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/server/overview) - Using `mastra build` instead
