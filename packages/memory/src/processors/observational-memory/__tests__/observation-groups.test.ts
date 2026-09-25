@@ -137,16 +137,22 @@ _range: \`3:4\`_
 - A later fact`);
   });
 
-  it('stays linear when many groups quote opening tags inline', () => {
-    const groups = Array.from(
-      { length: 10_000 },
-      (_, i) =>
-        `<observation-group id="g${i}" range="${i}:${i}">\n- mentions <observation-group id="x"> inline\n</observation-group>`,
-    ).join('\n');
+  it('stays linear when no opening tag starts a line', () => {
+    // Every opening is inline and the content has newlines, so without the cached result each
+    // nested-opening search would walk every remaining newline to the end of the input.
+    const count = 80_000;
+    const observations = 'a<observation-group id="x" range="1:1">\nv\n</observation-group>'.repeat(count);
 
     const started = performance.now();
-    expect(parseObservationGroups(groups)).toHaveLength(10_000);
-    expect(performance.now() - started).toBeLessThan(2_000);
+    const groups = parseObservationGroups(observations);
+    const elapsed = performance.now() - started;
+
+    expect(groups).toEqual(
+      Array.from({ length: count }, () => ({ id: 'x', range: '1:1', kind: undefined, content: 'v' })),
+    );
+    expect(stripObservationGroups(observations)).toBe('av'.repeat(count));
+    expect(renderObservationGroupsForReflection(observations)).toBe('a## Group `x`\n_range: `1:1`_\n\nv'.repeat(count));
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it('drops a lone unterminated opening tag and keeps its text', () => {
