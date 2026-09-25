@@ -2885,6 +2885,61 @@ describe('A2A Handler', () => {
       expect(task?.history).toHaveLength(1);
       expect(['race-message-1', 'race-message-2']).toContain(task?.history?.[0]?.messageId);
     });
+
+    it('should resume only once when concurrent message/stream follow-ups arrive for the same input-required task', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-stream-race',
+          contextId: 'ctx-hitl-stream-race',
+          suspendedRunId: 'task-hitl-stream-race',
+        }),
+      });
+
+      const resumeStream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Done'] }));
+      const stream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Fresh run'] }));
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+
+      const streamFollowUp = async (messageId: string) => {
+        const events: any[] = [];
+        for await (const event of handleMessageStream({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId: 'task-hitl-stream-race',
+              parts: [{ kind: 'text', text: '{"approved":true}' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        })) {
+          events.push(event);
+        }
+        return events;
+      };
+
+      const results = await Promise.all([
+        streamFollowUp('stream-race-message-1'),
+        streamFollowUp('stream-race-message-2'),
+      ]);
+
+      expect(resumeStream).toHaveBeenCalledTimes(1);
+      expect(stream).not.toHaveBeenCalled();
+      for (const events of results) {
+        const last = events.at(-1)?.result;
+        expect(last?.status?.state).toBe('completed');
+      }
+
+      const task = await mockTaskStore.load({ agentId, taskId: 'task-hitl-stream-race' });
+      expect(task?.status.state).toBe('completed');
+      expect(task?.history).toHaveLength(1);
+      expect(['stream-race-message-1', 'stream-race-message-2']).toContain(task?.history?.[0]?.messageId);
+    });
   });
 
   describe('handleTaskResubscribe with interrupted tasks', () => {
