@@ -19207,3 +19207,109 @@ describe('filterObservedMessages — tool-call/result pair preservation', () => 
     expect(remainingIds).not.toContain('tool-call-msg-alone');
   });
 });
+
+describe('observed time zone wiring', () => {
+  /** Run `fn` with the process time zone pinned, so the record's zone is the only thing that can decide the output. */
+  async function withProcessZone<T>(zone: string, fn: () => Promise<T>): Promise<T> {
+    const previousZone = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      return await fn();
+    } finally {
+      if (previousZone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousZone;
+    }
+  }
+
+  it('writes Observer dates in the record time zone during observation', async () => {
+    await withProcessZone('UTC', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'tz-observer-write-thread';
+      const resourceId = 'tz-observer-write-resource';
+
+      let capturedPrompt: any = null;
+      const mockModel = createStreamCapableMockModel({
+        doGenerate: async options => {
+          capturedPrompt = options.prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [{ type: 'text' as const, text: '<observations>\n- User was up late\n</observations>' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observation: { messageTokens: 10, model: mockModel as any },
+        reflection: { observationTokens: 100000 },
+        scope: 'thread',
+      });
+
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+        observedTimezone: 'America/Los_Angeles',
+      });
+
+      const early = createTestMessage('was up late working on the schema migration', 'user', 'tz-msg-1');
+      early.createdAt = new Date('2024-03-01T02:30:00Z');
+      const reply = createTestMessage('noted, we can pick it up tomorrow morning', 'assistant', 'tz-msg-2');
+      reply.createdAt = new Date('2024-03-01T02:31:00Z');
+      await om.observe({ threadId, resourceId, messages: [early, reply] });
+
+      expect(capturedPrompt).not.toBeNull();
+      const promptText = (capturedPrompt as any[])
+        .map(message => (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)))
+        .join('\n');
+      // 2024-03-01T02:30Z is still the evening of Feb 29 in Los Angeles, but already Mar 1 in the pinned process zone
+      expect(promptText).toContain('Feb 29 2024');
+      expect(promptText).toContain('6:30 PM');
+      expect(promptText).not.toContain('Mar 1 2024');
+    });
+  });
+
+  it('annotates relative dates in the record time zone when rendering context', async () => {
+    await withProcessZone('UTC', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'tz-render-thread';
+      const resourceId = 'tz-render-resource';
+
+      const om = new ObservationalMemory({
+        storage,
+        observation: { model: createStreamCapableMockModel({}) as any },
+        reflection: { observationTokens: 100000 },
+        scope: 'thread',
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+        observedTimezone: 'America/Los_Angeles',
+      });
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: 'Date: Jun 22, 2024\n- User booked the exam',
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      const blocks = await om.buildContextSystemMessages({
+        threadId,
+        resourceId,
+        currentDate: new Date('2024-06-23T00:00:00Z'),
+      });
+
+      const text = (blocks ?? []).join('\n\n');
+      // Midnight UTC on Jun 23 is still the evening of Jun 22 in Los Angeles
+      expect(text).toContain('Date: Jun 22, 2024 (today)');
+      expect(text).not.toContain('(yesterday)');
+    });
+  });
+});

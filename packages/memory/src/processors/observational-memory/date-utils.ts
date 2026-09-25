@@ -44,13 +44,6 @@ function calendarDayIn(instant: Date, timeZone: string | undefined): number {
   return Date.UTC(part('year'), part('month') - 1, part('day')) / DAY_MS;
 }
 
-/**
- * Format a relative time string like "5 days ago", "2 weeks ago", "today", etc.
- */
-export function formatRelativeTime(date: Date, currentDate: Date): string {
-  return formatRelativeDays(Math.floor((currentDate.getTime() - date.getTime()) / DAY_MS));
-}
-
 function formatRelativeDays(diffDays: number): string {
   if (diffDays < 0) {
     const futureDays = Math.abs(diffDays);
@@ -345,10 +338,10 @@ export function expandInlineEstimatedDates(observations: string, currentDate: Da
 
     const relative = relativeSpan(span, today);
 
-    // A planned action whose date has passed has likely happened; the intent is in the text before the note.
+    // A planned action whose date is behind us has likely happened; the intent is in the text before the note.
     const lineStart = observations.lastIndexOf('\n', offset) + 1;
     const lineBeforeDate = observations.slice(lineStart, offset);
-    if (calendarDay(span.end) <= today && isFutureIntentObservation(lineBeforeDate)) {
+    if (calendarDay(span.end) < today && isFutureIntentObservation(lineBeforeDate)) {
       return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
     }
 
