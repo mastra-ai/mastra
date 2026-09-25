@@ -325,21 +325,26 @@ describe('attachment download recovery', () => {
       });
     });
 
-    it('sends an attachment again when a later message re-sends a recorded URL and it downloads', async () => {
-      const { run, prompts } = setup({ durable });
-      failure = '404';
-      expect((await run(attachment())).text).toBe('ok');
-      expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+    // The first is a permanent 404, the second a transient network drop like the reviewer's probe.
+    it.each(['404', 'network'] as const)(
+      'sends an attachment again when a later message re-sends a URL recorded after a %s',
+      async outage => {
+        const { run, prompts } = setup({ durable });
+        failure = outage;
+        expect((await run(attachment())).text).toBe('ok');
+        expect(promptAttachments(prompts.at(-1)!).placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
 
-      failure = undefined;
-      const recovered = await run(attachment());
-      expect(recovered.errors).toEqual([]);
-      expect(recovered.text).toBe('ok');
-      // The recorded message keeps its placeholder; the new message carries the attachment.
-      const latest = promptAttachments(prompts.at(-1)!);
-      expect(latest.files).toHaveLength(1);
-      expect(latest.placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
-    });
+        // The server is back, so re-sending the same URL downloads it again.
+        failure = undefined;
+        const recovered = await run(attachment());
+        expect(recovered.errors).toEqual([]);
+        expect(recovered.text).toBe('ok');
+        // The recorded message keeps its placeholder; the new message carries the attachment.
+        const latest = promptAttachments(prompts.at(-1)!);
+        expect(latest.files).toHaveLength(1);
+        expect(latest.placeholders).toEqual(['[Attachment unavailable: application/pdf]']);
+      },
+    );
 
     it('replaces an undecodable data URL in history with a placeholder right away', async () => {
       const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: true }));
