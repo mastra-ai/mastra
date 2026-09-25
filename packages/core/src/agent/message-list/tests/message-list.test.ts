@@ -2558,6 +2558,7 @@ describe('MessageList', () => {
             result: 123,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2611,6 +2612,7 @@ describe('MessageList', () => {
             result: 42,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2711,6 +2713,7 @@ describe('MessageList', () => {
             result: 100,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2756,6 +2759,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'B', toolName: 'bar', args: {}, result: 7 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2803,6 +2807,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-4', toolName: 'baz', args: {}, result: 5 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2869,6 +2874,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-5', toolName: 'foo', args: {}, result: 123 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });

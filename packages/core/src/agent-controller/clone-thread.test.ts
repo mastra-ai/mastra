@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -23,7 +24,7 @@ describe('AgentController cloneThread', () => {
     let resolvedControllerContext: any;
     const memoryFactory = vi.fn().mockImplementation(({ requestContext }) => {
       resolvedControllerContext = requestContext.get('controller');
-      return { cloneThread };
+      return Object.assign(new MockMemory(), { cloneThread });
     });
 
     const controller = new AgentController({
@@ -61,6 +62,8 @@ describe('AgentController cloneThread', () => {
     });
     const storageCloneThread = vi.spyOn(memoryStore, 'cloneThread');
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // The new session's history subscription resolves memory once.
+    expect(memoryFactory).toHaveBeenCalledTimes(1);
 
     const cloned = await session.thread.clone({
       sourceThreadId: 'source-thread-id',
@@ -68,7 +71,8 @@ describe('AgentController cloneThread', () => {
       resourceId: 'target-resource',
     });
 
-    expect(memoryFactory).toHaveBeenCalledTimes(1);
+    // Once for the clone, and once per history subscription: the new session's thread and the clone.
+    expect(memoryFactory).toHaveBeenCalledTimes(3);
     expect(resolvedControllerContext).toMatchObject({
       controllerId: 'test-controller',
       state: { memoryProfile: 'session-profile' },
@@ -157,10 +161,10 @@ describe('AgentController cloneThread', () => {
     });
 
     await controller.init();
-    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    await expect(session.thread.clone({ sourceThreadId: 'source-thread-id' })).rejects.toThrow(
-      'Dynamic memory factory returned empty value',
+    // The session's history subscription resolves memory, so the empty factory surfaces there.
+    await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
+      'Function-based memory returned empty value',
     );
   });
 });

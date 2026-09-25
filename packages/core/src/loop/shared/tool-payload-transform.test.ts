@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { CoreTool } from '../../../tools/types';
-import { applyToolPayloadTransformToChunk } from './apply-tool-payload-transform';
+import type { CoreTool } from '../../tools/types';
+import { applyToolPayloadTransformToChunk } from './tool-payload-transform';
 
 describe('applyToolPayloadTransformToChunk', () => {
   it('stamps the tool title on streaming-start chunks and leaves untitled tools untouched', async () => {

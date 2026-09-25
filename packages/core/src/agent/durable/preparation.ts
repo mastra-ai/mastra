@@ -1,4 +1,6 @@
+import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -15,6 +17,7 @@ import {
   mergeVersionOverrides,
 } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import { getRequestContextInputValues } from '../../request-context/input-source';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -127,6 +130,8 @@ function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] 
 interface DurablePreparationAgent {
   id: string;
   name?: string;
+  maxRetries?: number;
+  requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
@@ -158,6 +163,7 @@ interface DurablePreparationAgent {
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
+  __getMaxRetriesConfigured?(): boolean;
   __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
 }
 
@@ -263,6 +269,33 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
+
+  // 2a. Validate the request context against the agent's requestContextSchema,
+  // mirroring Agent.stream()/generate(). Without this, schema violations are
+  // silently ignored on the durable path.
+  if (typedAgent.requestContextSchema) {
+    const contextValues = getRequestContextInputValues(requestContext);
+    const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
+
+    if (validation.issues) {
+      const errorMessages = validation.issues
+        .map(e => {
+          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
+          return `- ${pathStr}: ${e.message}`;
+        })
+        .join('\n');
+      throw new MastraError({
+        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
+        details: {
+          agentId: publicAgentId,
+          agentName: publicAgentName,
+        },
+      });
+    }
+  }
 
   // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
@@ -666,6 +699,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     runId,
     agentId: publicAgentId,
     agentName: publicAgentName,
+    // Pin the exact stored version this run resolved to (if any) so a resume
+    // after a newer publish still re-resolves to the started version.
+    agentVersionId: resolvedVersionId,
     messageList,
     tools,
     model,
@@ -676,6 +712,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
       modelSettings: execOptions?.modelSettings as any,
+      // Agent-level retry config for the llm-execution step's retry ladder.
+      // Single-model agents have no modelList entry to carry maxRetries, so
+      // it rides on options; the flag preserves the in-process precedence
+      // rule (an explicitly configured agent value — including 0 — beats
+      // call-time modelSettings.maxRetries).
+      agentMaxRetries: typedAgent.maxRetries,
+      agentMaxRetriesConfigured: typedAgent.__getMaxRetriesConfigured?.() ?? false,
       // Function-form approval policies are closures that can't ride on the
       // serialized workflow input — the live closure is parked on the run
       // registry below. This boolean shadow is the cross-process fallback:
@@ -792,6 +835,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // workflow input so they never reach durable storage; the durable
     // llm-execution step reads them from this registry slot instead.
     callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
+    // Run-level execution budget (#21724). Parked on the registry so the
+    // abort-controller install sites (stream/resume) can arm a session
+    // timer without re-deriving it from options or the snapshot.
+    timeoutTotalMs: (execOptions?.modelSettings as { timeout?: { totalMs?: number } } | undefined)?.timeout?.totalMs,
     // Call-time structured output config with the live schema. The schema is
     // non-serializable (Zod / standard-schema instance), so it lives on the
     // in-process registry. The durable stream adapter reads it to pipe LLM
