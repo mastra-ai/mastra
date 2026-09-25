@@ -1716,32 +1716,6 @@ describe('FactoryDecisionDispatcher', () => {
         lastError: expect.stringContaining('observation retry failed after 400 attempts'),
       });
     });
-
-    it('reapplies managed memory settings when reusing an existing session', async () => {
-      const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-refresh-reuse'));
-      const { controller, session } = createSession();
-      await bindRole(storage, item.id, 'plan');
-      const refreshManagedMemorySettings = vi.fn(async () => {});
-      const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
-        isAutoRunEnabled: async () => true,
-        transitionService,
-        storage,
-        ownerId: 'worker-1',
-        refreshManagedMemorySettings,
-      });
-
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-      expect(refreshManagedMemorySettings).toHaveBeenCalledWith(
-        expect.objectContaining({ binding: expect.objectContaining({ role: 'plan' }), session }),
-      );
-      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
-        attempts: 1,
-      });
-    });
   });
 
   it('appends the work item feed to the invokeSkill kickoff', async () => {

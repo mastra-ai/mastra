@@ -70,6 +70,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       resourceId: this.opts.resourceId,
       trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
+      currentModel: this.opts.currentModel,
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',

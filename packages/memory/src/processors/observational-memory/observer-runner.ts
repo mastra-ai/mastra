@@ -31,16 +31,28 @@ import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
 import { applyBeforeObservation, applyTextTransform } from './transform-hooks';
-import type { ObserveTransformHooks, ObserveTrigger, ResolvedObservationConfig } from './types';
+import type {
+  ObservationModelContext,
+  ObserveTransformHooks,
+  ObserveTrigger,
+  ResolvedObservationConfig,
+} from './types';
 
-type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
+type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], ModelByInputTokens | 'auto'>;
 
-type ObservationModelResolver = (inputTokens: number) => {
+type ObservationModelResolver = (
+  inputTokens: number,
+  options?: {
+    requestContext?: RequestContext;
+    mainAgent?: ProcessorContext['agent'];
+    currentModel?: ObservationModelContext;
+  },
+) => Promise<{
   model: ConcreteObservationModel;
   selectedThreshold?: number;
   routingStrategy?: 'model-by-input-tokens';
   routingThresholds?: string;
-};
+}>;
 
 /**
  * Runs the Observer agent for extracting observations from messages.
@@ -80,6 +92,7 @@ interface ObserverCallOptions {
   /** Which pipeline path initiated this cycle; passed to transform hooks. */
   trigger?: ObserveTrigger;
   mainAgent?: ProcessorContext['agent'];
+  currentModel?: ObservationModelContext;
 }
 
 interface ObserverCallResult {
@@ -263,19 +276,24 @@ export class ObserverRunner {
     options?: ObserverCallOptions,
   ): Promise<ObserverCallResult> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
-    const resolvedModel = (() => {
-      try {
-        return options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-      } catch (error) {
-        this.mastra?.getLogger?.().error('OM observer model resolution failed', {
-          diagnostic: formatOmError(error),
-          inputTokens,
-          threadId: messagesToObserve[0]?.threadId,
-          hasRequestContext: Boolean(options?.requestContext),
-        });
-        throw error;
-      }
-    })();
+    let resolvedModel: Awaited<ReturnType<ObservationModelResolver>>;
+    try {
+      resolvedModel = options?.model
+        ? { model: options.model }
+        : await this.resolveModel(inputTokens, {
+            requestContext: options?.requestContext,
+            mainAgent: options?.mainAgent,
+            currentModel: options?.currentModel,
+          });
+    } catch (error) {
+      this.mastra?.getLogger?.().error('OM observer model resolution failed', {
+        diagnostic: formatOmError(error),
+        inputTokens,
+        threadId: messagesToObserve[0]?.threadId,
+        hasRequestContext: Boolean(options?.requestContext),
+      });
+      throw error;
+    }
     const activeExtractors = await resolveExtractors(
       filterObserverExtractors(this.observationConfig.extractors, options?.skipContinuationHints),
       {
@@ -455,6 +473,8 @@ export class ObserverRunner {
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
     hookContext?: { resourceId?: string; trigger?: ObserveTrigger },
+    mainAgent?: ProcessorContext['agent'],
+    currentModel?: ObservationModelContext,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -484,6 +504,8 @@ export class ObserverRunner {
       priorMetadataByThread,
       observabilityContext,
       model,
+      mainAgent,
+      currentModel,
     );
 
     for (const threadId of allThreadOrder) {
@@ -515,6 +537,8 @@ export class ObserverRunner {
     >,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
+    mainAgent?: ProcessorContext['agent'],
+    currentModel?: ObservationModelContext,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -528,22 +552,23 @@ export class ObserverRunner {
       (total, messages) => total + this.tokenCounter.countMessages(messages),
       0,
     );
-    const resolvedModel = (() => {
-      try {
-        return model ? { model } : this.resolveModel(inputTokens);
-      } catch (error) {
-        this.mastra?.getLogger?.().error('OM multi-thread observer model resolution failed', {
-          diagnostic: formatOmError(error),
-          inputTokens,
-          threadIds: {
-            sample: threadOrder.slice(0, 10).map(threadId => threadId.slice(0, 128)),
-            total: threadOrder.length,
-          },
-          hasRequestContext: Boolean(requestContext),
-        });
-        throw error;
-      }
-    })();
+    let resolvedModel: Awaited<ReturnType<ObservationModelResolver>>;
+    try {
+      resolvedModel = model
+        ? { model }
+        : await this.resolveModel(inputTokens, { requestContext, mainAgent, currentModel });
+    } catch (error) {
+      this.mastra?.getLogger?.().error('OM multi-thread observer model resolution failed', {
+        diagnostic: formatOmError(error),
+        inputTokens,
+        threadIds: {
+          sample: threadOrder.slice(0, 10).map(threadId => threadId.slice(0, 128)),
+          total: threadOrder.length,
+        },
+        hasRequestContext: Boolean(requestContext),
+      });
+      throw error;
+    }
     const firstThreadMessages = messagesByThread.get(threadOrder[0] ?? '') ?? [];
     const activeExtractors = await resolveExtractors(this.observationConfig.extractors ?? [], {
       source: 'observer',

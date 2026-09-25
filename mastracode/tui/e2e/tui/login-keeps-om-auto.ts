@@ -6,10 +6,10 @@ import { createGlobalPatchScope } from './global-patches.js';
 import { readMutableSettingsFixture } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
-export const loginSeedsOmDefaultScenario = {
-  name: 'login-seeds-om-default',
-  description: 'Seeds both OM roles from a successful provider login while OM is untouched.',
-  testName: 'matches observer and reflector models to the provider selected in /login',
+export const loginKeepsOmAutoScenario = {
+  name: 'login-keeps-om-auto',
+  description: 'A successful provider login changes reachability only; OM roles stay auto.',
+  testName: 'leaves auto observer and reflector intent unpinned after /login',
   prepare({ appDataDir }) {
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     const settingsPath = join(appDataDir, 'settings.json');
@@ -27,17 +27,19 @@ export const loginSeedsOmDefaultScenario = {
       activeOmPackId: null,
       omModelOverride: null,
       observerModelOverride: null,
+      observerModelSelection: null,
       reflectorModelOverride: null,
+      reflectorModelSelection: null,
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
     patches.setProperty(openaiCodexOAuthProvider, 'login', async callbacks => {
-      callbacks.onProgress?.('MC_LOGIN_OM_DEFAULT_FAKE_LOGIN');
+      callbacks.onProgress?.('MC_LOGIN_OM_AUTO_FAKE_LOGIN');
       return {
-        access: 'mc-login-om-default-access',
-        refresh: 'mc-login-om-default-refresh',
+        access: 'mc-login-om-auto-access',
+        refresh: 'mc-login-om-auto-refresh',
         expires: Date.now() + 60 * 60 * 1000,
       };
     });
@@ -70,15 +72,17 @@ export const loginSeedsOmDefaultScenario = {
     await runtime.waitForScreenText(/Successfully logged in to ChatGPT Plus\/Pro/i, terminal, 8_000);
     terminal.submit('/memory');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Observer model\s+gpt-5.4-mini/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+gpt-5.4-mini/i, terminal, 8_000);
+    // The login switched the main model to `openai/gpt-5.6-sol`, so auto roles
+    // now resolve to the OpenAI low-cost OM pack.
+    await runtime.waitForScreenText(/Observer model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+Auto \(gpt-5\.4-mini\)/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("LOGIN_OM_DEFAULT="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+(s.models.omModelOverride||"none"));'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("LOGIN_OM_AUTO="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+(s.models.omModelOverride||"none")+":"+(s.models.observerModelSelection||"none"));'`,
     );
-    await runtime.waitForScreenText(/LOGIN_OM_DEFAULT=openai:openai:none/i, terminal, 8_000);
+    await runtime.waitForScreenText(/LOGIN_OM_AUTO=null:null:none:none/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

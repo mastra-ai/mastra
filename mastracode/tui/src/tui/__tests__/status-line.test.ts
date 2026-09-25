@@ -1,7 +1,10 @@
 import type * as PiTui from '@earendil-works/pi-tui';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(() => ({
+const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock, getEffectiveOMRoleModelIdMock } = vi.hoisted(() => ({
+  getEffectiveOMRoleModelIdMock: vi.fn((_session: unknown, role: 'observer' | 'reflector') =>
+    role === 'observer' ? 'deepseek/deepseek-v4-flash' : 'anthropic/claude-haiku-4-5',
+  ),
   visibleWidthMock: vi.fn((value: string) => value.length),
   chalkRgbMock: vi.fn(),
   applyGradientSweepMock: vi.fn((value: string) => value),
@@ -36,6 +39,10 @@ vi.mock('chalk', () => {
 
 vi.mock('../components/obi-loader.js', () => ({
   applyGradientSweep: applyGradientSweepMock,
+}));
+
+vi.mock('../om-model.js', () => ({
+  getEffectiveOMRoleModelId: getEffectiveOMRoleModelIdMock,
 }));
 
 vi.mock('../theme.js', () => ({
@@ -142,6 +149,7 @@ describe('updateStatusLine', () => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
     applyGradientSweepMock.mockClear();
+    getEffectiveOMRoleModelIdMock.mockClear();
     applyGradientSweepMock.mockImplementation((value: string) => value);
     process.stdout.columns = 200;
   });
@@ -532,6 +540,37 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('pursuing');
     expect(rendered).not.toContain('(');
     vi.useRealTimers();
+  });
+
+  it('resolves the OM role model once per observing or reflecting phase', () => {
+    const state = createState();
+    const base = state.controller.session.displayState.get();
+    const setStatus = (status: string) =>
+      state.controller.session.displayState.get.mockReturnValue({
+        ...base,
+        omProgress: { ...base.omProgress, status },
+      });
+
+    setStatus('observing');
+    updateStatusLine(state);
+    updateStatusLine(state);
+    updateStatusLine(state);
+    expect(getEffectiveOMRoleModelIdMock).toHaveBeenCalledTimes(1);
+    expect(getEffectiveOMRoleModelIdMock).toHaveBeenLastCalledWith(state.session, 'observer');
+    expect(state.statusLine.setText.mock.calls.at(-1)?.[0]).toContain('deepseek-v4-flash');
+
+    setStatus('reflecting');
+    updateStatusLine(state);
+    updateStatusLine(state);
+    expect(getEffectiveOMRoleModelIdMock).toHaveBeenCalledTimes(2);
+    expect(getEffectiveOMRoleModelIdMock).toHaveBeenLastCalledWith(state.session, 'reflector');
+    expect(state.statusLine.setText.mock.calls.at(-1)?.[0]).toContain('claude-haiku-4-5');
+
+    setStatus('idle');
+    updateStatusLine(state);
+    setStatus('observing');
+    updateStatusLine(state);
+    expect(getEffectiveOMRoleModelIdMock).toHaveBeenCalledTimes(3);
   });
 
   it('keeps judge status ahead of OM and long model details on narrow screens', () => {

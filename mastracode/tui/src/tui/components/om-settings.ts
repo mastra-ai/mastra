@@ -8,8 +8,8 @@
 
 import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
+import type { OMModel } from '@mastra/core/agent-controller';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
-import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
 
 // =============================================================================
@@ -17,8 +17,14 @@ import type { ModelItem } from './model-selector.js';
 // =============================================================================
 
 export interface OMSettingsConfig {
+  observerModel: OMModel;
   observerModelId: string;
+  observerAutoModelId: string;
+  reflectorModel: OMModel;
   reflectorModelId: string;
+  reflectorAutoModelId: string;
+  /** Set while the active mode pack has its own memory model, which overrides both roles. */
+  packMemoryModelId?: string;
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
@@ -27,12 +33,75 @@ export interface OMSettingsConfig {
 
 export interface OMSettingsCallbacks {
   onObserverModelChange: (model: ModelItem) => void | Promise<void>;
+  onObserverAuto: () => void | Promise<void>;
   onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
+  onReflectorAuto: () => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onCavemanObservationsChange: (enabled: boolean) => void;
   onObserveAttachmentsChange: (value: 'auto' | boolean) => void | Promise<void>;
   onClose: () => void;
+}
+
+class OMModelSubmenu extends Container implements Focusable {
+  private readonly selector: SelectList;
+  private _focused = false;
+
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+  }
+
+  constructor(args: {
+    model: OMModel;
+    effectiveModelId: string;
+    models: ModelItem[];
+    onAuto: () => void | Promise<void>;
+    onModel: (model: ModelItem) => void | Promise<void>;
+    onDone: (value?: string) => void;
+    tui: TUI;
+    title: string;
+  }) {
+    super();
+    const autoItem: SelectItem = {
+      value: '__auto__',
+      label: `  Auto (${getShortModelName(args.effectiveModelId)})`,
+      description: 'Follow the active main model provider',
+    };
+    const modelItems: SelectItem[] = args.models.map(model => ({ value: model.id, label: `  ${model.id}` }));
+    this.selector = new SelectList(
+      [autoItem, ...modelItems],
+      Math.min(modelItems.length + 1, 12),
+      getSelectListTheme(),
+    );
+    const selectedModelId = args.model === 'auto' ? undefined : args.model;
+    const currentIndex = selectedModelId
+      ? Math.max(0, modelItems.findIndex(item => item.value === selectedModelId) + 1)
+      : 0;
+    this.selector.setSelectedIndex(currentIndex);
+    this.selector.onSelect = async item => {
+      if (item.value === '__auto__') {
+        await args.onAuto();
+        args.onDone(`Auto (${getShortModelName(args.effectiveModelId)})`);
+        return;
+      }
+      const model = args.models.find(candidate => candidate.id === item.value);
+      if (!model) return;
+      await args.onModel(model);
+      args.onDone(getShortModelName(model.id));
+    };
+    this.selector.onCancel = () => args.onDone();
+    this.addChild(new Text(theme.bold(theme.fg('accent', args.title)), 0, 0));
+    this.addChild(new Spacer(1));
+    this.addChild(this.selector);
+  }
+
+  handleInput(data: string): void {
+    this.selector.handleInput(data);
+  }
 }
 
 interface BooleanSubmenuLabels {
@@ -223,38 +292,48 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'observer-model',
         label: 'Observer model',
         description: 'Model used for observing and summarizing message history',
-        currentValue: getShortModelName(config.observerModelId),
+        currentValue: formatModel(config.observerModel, config.observerModelId, config.packMemoryModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectorComponent({
+          new OMModelSubmenu({
             tui,
             models,
-            currentModelId: config.observerModelId,
+            model: config.observerModel,
+            effectiveModelId: config.observerAutoModelId,
             title: 'Observer Model',
-            onSelect: async model => {
-              await callbacks.onObserverModelChange(model);
-              config.observerModelId = model.id;
-              done(getShortModelName(model.id));
+            onAuto: async () => {
+              await callbacks.onObserverAuto();
+              config.observerModel = 'auto';
             },
-            onCancel: () => done(),
+            onModel: async model => {
+              await callbacks.onObserverModelChange(model);
+              config.observerModel = model.id;
+              config.observerModelId = model.id;
+            },
+            onDone: done,
           }),
       },
       {
         id: 'reflector-model',
         label: 'Reflector model',
         description: 'Model used for compressing observations when they grow too large',
-        currentValue: getShortModelName(config.reflectorModelId),
+        currentValue: formatModel(config.reflectorModel, config.reflectorModelId, config.packMemoryModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectorComponent({
+          new OMModelSubmenu({
             tui,
             models,
-            currentModelId: config.reflectorModelId,
+            model: config.reflectorModel,
+            effectiveModelId: config.reflectorAutoModelId,
             title: 'Reflector Model',
-            onSelect: async model => {
-              await callbacks.onReflectorModelChange(model);
-              config.reflectorModelId = model.id;
-              done(getShortModelName(model.id));
+            onAuto: async () => {
+              await callbacks.onReflectorAuto();
+              config.reflectorModel = 'auto';
             },
-            onCancel: () => done(),
+            onModel: async model => {
+              await callbacks.onReflectorModelChange(model);
+              config.reflectorModel = model.id;
+              config.reflectorModelId = model.id;
+            },
+            onDone: done,
           }),
       },
       {
@@ -375,6 +454,11 @@ function getShortModelName(modelId: string): string {
   if (!modelId) return '(none)';
   const parts = modelId.split('/');
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
+}
+
+function formatModel(model: OMModel, effectiveModelId: string, packMemoryModelId?: string): string {
+  if (packMemoryModelId) return `${getShortModelName(effectiveModelId)} (set by active pack)`;
+  return model === 'auto' ? `Auto (${getShortModelName(effectiveModelId)})` : getShortModelName(model);
 }
 
 function formatAttachmentValue(value: 'auto' | boolean): string {

@@ -1,21 +1,30 @@
-import { applyOmRoleOverride, persistOmObserveAttachments } from '@mastra/code-sdk/onboarding/om-settings';
+import { getActivePackMemoryModelId } from '@mastra/code-sdk/agents/model';
+import {
+  applyOmRoleAuto,
+  applyOmRoleOverride,
+  persistOmObserveAttachments,
+} from '@mastra/code-sdk/onboarding/om-settings';
+import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { OMSettingsComponent } from '../components/om-settings.js';
+import { getEffectiveOMRoleModelId } from '../om-model.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 // Re-exported for existing importers/tests; the implementations live in
 // onboarding/om-settings.ts so non-TUI surfaces (web routes) can share them.
-export { applyOmRoleOverride, persistOmObserveAttachments };
+export { applyOmRoleAuto, applyOmRoleOverride, persistOmObserveAttachments };
 
-function persistOmRoleOverride(
-  role: 'observer' | 'reflector',
-  modelId: string,
-  otherRoleCurrentModelId: string | null,
-): void {
+function persistOmRoleOverride(role: 'observer' | 'reflector', modelId: string): void {
   const settings = loadSettings();
-  applyOmRoleOverride(settings, role, modelId, otherRoleCurrentModelId);
+  applyOmRoleOverride(settings, role, modelId);
+  saveSettings(settings);
+}
+
+function persistOmRoleAuto(role: 'observer' | 'reflector'): void {
+  const settings = loadSettings();
+  applyOmRoleAuto(settings, role);
   saveSettings(settings);
 }
 
@@ -46,9 +55,22 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.controller.listAvailableModels();
 
   const agentControllerState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
+  const observerModelId = getEffectiveOMRoleModelId(ctx.state.session, 'observer') ?? '';
+  const reflectorModelId = getEffectiveOMRoleModelId(ctx.state.session, 'reflector') ?? '';
+  const packMemoryModelId = getActivePackMemoryModelId(
+    loadSettings(),
+    agentControllerState,
+    ctx.state.session.thread.getId(),
+  );
+  const autoModelId = resolveAutoOMModelId(ctx.state.session.model.get() ?? undefined);
   const config = {
-    observerModelId: ctx.state.session.om.observer.modelId() ?? '',
-    reflectorModelId: ctx.state.session.om.reflector.modelId() ?? '',
+    observerModel: ctx.state.session.om.observer.model() ?? 'auto',
+    observerModelId,
+    observerAutoModelId: autoModelId,
+    reflectorModel: ctx.state.session.om.reflector.model() ?? 'auto',
+    reflectorModelId,
+    reflectorAutoModelId: autoModelId,
+    packMemoryModelId,
     observationThreshold: ctx.state.session.om.observer.threshold() ?? 30_000,
     reflectionThreshold: ctx.state.session.om.reflector.threshold() ?? 40_000,
     cavemanObservations: (agentControllerState?.cavemanObservations as boolean | undefined) ?? false,
@@ -61,17 +83,25 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       {
         onObserverModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          const currentReflector = ctx.state.session.om.reflector.modelId() ?? null;
           await ctx.state.session.om.observer.switchModel({ modelId: model.id });
-          persistOmRoleOverride('observer', model.id, currentReflector);
+          persistOmRoleOverride('observer', model.id);
           ctx.showInfo(`Observer model → ${model.id}`);
+        },
+        onObserverAuto: async () => {
+          await ctx.state.session.om.observer.switchModel({ modelId: 'auto' });
+          persistOmRoleAuto('observer');
+          ctx.showInfo(`Observer model → Auto (${ctx.state.session.om.observer.modelId() ?? 'unavailable'})`);
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          const currentObserver = ctx.state.session.om.observer.modelId() ?? null;
           await ctx.state.session.om.reflector.switchModel({ modelId: model.id });
-          persistOmRoleOverride('reflector', model.id, currentObserver);
+          persistOmRoleOverride('reflector', model.id);
           ctx.showInfo(`Reflector model → ${model.id}`);
+        },
+        onReflectorAuto: async () => {
+          await ctx.state.session.om.reflector.switchModel({ modelId: 'auto' });
+          persistOmRoleAuto('reflector');
+          ctx.showInfo(`Reflector model → Auto (${ctx.state.session.om.reflector.modelId() ?? 'unavailable'})`);
         },
         onObservationThresholdChange: async value => {
           await ctx.state.session.state.set({ observationThreshold: value } as any);

@@ -2189,6 +2189,9 @@ describe('Factory session routes', () => {
     expect(named.resourceId).toBe(sessionId);
     // Naming runs as the session's owner, so it bills their model credentials.
     expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
     // A closed session has no live state, so the owner's stored observer model
     // is what keeps a manual rename on the model that names threads on its own.
     expect(named.model({ requestContext: named.requestContext }).modelId).toContain('claude-haiku-4-5');
@@ -2209,7 +2212,9 @@ describe('Factory session routes', () => {
 
     expect(response.status).toBe(200);
     // No stored model to override with, so naming runs on the memory's own title model.
-    expect(controller.generateThreadTitle.mock.calls[0][0].model).toBeUndefined();
+    const named = controller.generateThreadTitle.mock.calls[0][0];
+    expect(named.model).toBeUndefined();
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toBeNull();
     expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
   });
 

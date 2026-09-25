@@ -33,7 +33,7 @@ export const agent = new Agent({
 
 ## Configuration
 
-The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `__GATEWAY_GOOGLE_MODEL_FLASH__` as the default model. When passing a config object, set `model` at the top level or on `observation.model` and/or `reflection.model`; when all model fields are omitted, OM falls back to `__GATEWAY_GOOGLE_MODEL_FLASH__`.
+The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with automatic model selection. When passing a config object, set `model` at the top level or on `observation.model` and/or `reflection.model`. When all model fields are omitted, each role defaults to `'auto'`.
 
 Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
@@ -51,11 +51,25 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
+    type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
     description:
-      'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When this and `observation.model`/`reflection.model` are all omitted, OM falls back to `google/gemini-2.5-flash`. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
+      'Model for both the Observer and Reflector agents. Cannot be used together with `observation.model` or `reflection.model`. When all model fields are omitted, each role defaults to `"auto"`. Automatic selection prefers `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is configured, then a low-cost model for the active provider, then the active main model. Use `"default"` for the legacy fixed default.',
     isOptional: true,
-    defaultValue: "'google/gemini-2.5-flash'",
+    defaultValue: "'auto'",
+  },
+  {
+    name: 'autoModels',
+    type: 'Record<string, string>',
+    description:
+      'Overrides the model automatic selection picks for a provider, keyed by provider ID. For example, `{ openai: "__GATEWAY_OPENAI_MODEL_NANO__" }`. Providers not listed use the built-in pick.',
+    isOptional: true,
+  },
+  {
+    name: 'resolveModel',
+    type: '(modelId: string, context: { requestContext?: RequestContext }) => MastraModelConfig | Promise<MastraModelConfig>',
+    description:
+      'Creates the model automatic selection picked, so it can use your credentials and routing. Receives only concrete model IDs, never `"auto"`. When omitted, the picked ID goes through Mastra model routing.',
+    isOptional: true,
   },
   {
     name: 'scope',
@@ -122,9 +136,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
+            type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
             description:
-              'Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.',
+              "Model for the Observer agent. With `'auto'`, each observation uses the Gemini default when `GOOGLE_GENERATIVE_AI_API_KEY` is set, otherwise a low-cost model for the calling agent's effective provider, then the calling model or configured model instance. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
             isOptional: true,
           },
           {
@@ -298,9 +312,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
+            type: "'auto' | string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]",
             description:
-              'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
+              "Model for the Reflector agent. With `'auto'`, each reflection uses the Gemini default when `GOOGLE_GENERATIVE_AI_API_KEY` is set, otherwise a low-cost model for the calling agent's effective provider, then the calling model or configured model instance. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
             isOptional: true,
           },
           {

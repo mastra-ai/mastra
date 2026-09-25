@@ -1,4 +1,3 @@
-import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -248,9 +247,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
   });
 
-  it('hydrates board runs with built-in memory defaults, never per-user settings', async () => {
-    // The connection owner ("user-1") has personal OM settings stored — a
-    // board run must not inherit them: it hydrates with the built-in defaults.
+  it('leaves persisted observational-memory settings for per-invocation resolution', async () => {
     const storage = await createFactoryStorageForTests();
     await storage.memorySettings.patch({
       orgId: 'org-1',
@@ -269,50 +266,15 @@ describe('FactoryStartCoordinator', () => {
       storage.workItems,
       undefined,
       makeSourceControl() as never,
-      storage.memorySettings,
     );
 
     await coordinator.prepare(startRequest());
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.state.set).toHaveBeenCalledWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
-  it("hydrates board runs with the factory project's shared memory settings when stored", async () => {
-    const storage = await createFactoryStorageForTests();
-    await storage.memorySettings.patch({
-      orgId: 'org-1',
-      userId: factoryMemorySettingsUserId(PROJECT_ID),
-      patch: {
-        observerModelId: 'anthropic/claude-haiku-4-5',
-        reflectorModelId: 'anthropic/claude-opus-5',
-        observationThreshold: 12_000,
-        reflectionThreshold: 23_000,
-        observeAttachments: true,
-      },
-    });
-    const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage.workItems,
-      undefined,
-      makeSourceControl() as never,
-      storage.memorySettings,
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ observationThreshold: expect.any(Number) }),
     );
-
-    await coordinator.prepare(startRequest());
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
-    expect(session.state.set).toHaveBeenCalledWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: 23_000,
-      observeAttachments: true,
-    });
   });
 
   it('continues preparing a board run when its saved default model is no longer available', async () => {

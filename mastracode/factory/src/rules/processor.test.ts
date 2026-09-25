@@ -132,6 +132,281 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 }
 
 describe('FactoryPhaseStateProcessor', () => {
+  it('reconciles caller memory settings once per request, before the step hooks', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    const context = requestContext();
+
+    await processor.processInput(inputArgs(context, []));
+    await processor.processInputStep(inputArgs(context, []));
+    await processor.processInputStep(inputArgs(context, []));
+
+    // Memory's processors run before configured ones, so the row must land in the
+    // input phase: loading during processInputStep would run after an observation
+    // for the step may already have resolved its model.
+    expect(loadMemorySettings).toHaveBeenCalledTimes(1);
+    expect(loadMemorySettings).toHaveBeenCalledWith({
+      requestContext: context,
+      binding: expect.objectContaining({ orgId: 'org-1', role: 'work', resourceId: 'resource-1' }),
+    });
+  });
+
+  it('loads caller memory settings when the session has no active run binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+
+    // Project-scoped session with no binding row: an interactive Factory session
+    // still reads the shared project row rather than silently keeping whatever
+    // was seeded at session start.
+    await processor.processInputStep(inputArgs(requestContext(), []));
+    expect(loadMemorySettings).toHaveBeenCalledWith({ requestContext: expect.anything(), binding: null });
+  });
+
+  it('loads caller memory settings for a session with no factory project at all', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'resource-2',
+      threadId: 'thread-2',
+      scope: '/worktree',
+      state: { thinkingLevel: 'high' },
+      getState: () => ({ thinkingLevel: 'high' }),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+    });
+
+    await processor.processInputStep(inputArgs(context, []));
+    expect(loadMemorySettings).toHaveBeenCalledWith({ requestContext: context, binding: null });
+  });
+
+  it('recovers the run binding by thread when a resumed session lost its factory project', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    // A resumed session ("Continue") is recreated with empty controller state, so
+    // the binding table is the only remaining link to the project row. Without
+    // this lookup the run reads the caller's personal row instead.
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktree',
+      state: {},
+      getState: () => ({}),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+    });
+
+    await processor.prepareMemorySettings(context);
+
+    expect(loadMemorySettings).toHaveBeenCalledWith({
+      requestContext: context,
+      binding: expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, resourceId: 'resource-1' }),
+    });
+  });
+
+  it('reloads authoritative memory settings when a request context is reused for another invocation', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const loadMemorySettings = vi.fn(async ({ requestContext }) => {
+      requestContext?.set('mastra__factoryMemorySettings', {
+        observerModelId: `openai/observer-${loadMemorySettings.mock.calls.length}`,
+      });
+    });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    const context = requestContext();
+
+    await processor.prepareMemorySettings(context);
+    await processor.prepareMemorySettings(context);
+
+    expect(loadMemorySettings).toHaveBeenCalledTimes(2);
+    expect(context.get('mastra__factoryMemorySettings')).toEqual({ observerModelId: 'openai/observer-2' });
+  });
+
+  it('recovers the run binding from the step hook too, where resumed runs land', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const loadMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    // Resumed runs skip the input-processor phase, so the step hook must reach
+    // the same recovery path rather than passing a null binding through.
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktree',
+      state: {},
+      getState: () => ({}),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+    });
+
+    await processor.processInputStep(inputArgs(context, []));
+
+    expect(loadMemorySettings).toHaveBeenCalledWith({
+      requestContext: context,
+      binding: expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, resourceId: 'resource-1' }),
+    });
+  });
+
+  it('keeps model processing fail-soft when memory settings reconciliation fails', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings: vi.fn(async () => {
+        throw new Error('storage unavailable');
+      }),
+    });
+
+    const context = requestContext();
+    const emitEvent = vi.fn();
+    context.set('controller', { ...(context.get('controller') as object), emitEvent });
+    await expect(processor.prepareMemorySettings(context)).resolves.toBeUndefined();
+    await processor.processInputStep(inputArgs(context, []));
+    expect(context.get('mastra__factoryMemorySettings')).toEqual({
+      status: 'unavailable',
+      reason: 'storage unavailable',
+    });
+    expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to load settings for run', {
+      error: 'storage unavailable',
+    });
+    // The thread hears about the fallback once per run, not once per retry.
+    expect(emitEvent).toHaveBeenCalledTimes(1);
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        errorType: 'factory_memory_settings_unavailable',
+        error: expect.objectContaining({ message: expect.stringContaining('using Auto models') }),
+      }),
+    );
+    warn.mockRestore();
+  });
+
+  it('retries an unavailable memory-settings load on the next processor hook', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadMemorySettings = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockImplementationOnce(async ({ requestContext }) => {
+        requestContext?.set('mastra__factoryMemorySettings', null);
+      });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    const context = requestContext();
+
+    await processor.prepareMemorySettings(context);
+    expect(context.get('mastra__factoryMemorySettings')).toMatchObject({ status: 'unavailable' });
+
+    await processor.processInputStep(inputArgs(context, []));
+    expect(loadMemorySettings).toHaveBeenCalledTimes(2);
+    expect(context.get('mastra__factoryMemorySettings')).toBeNull();
+    warn.mockRestore();
+  });
+
+  it('retries after a reused context changes from loaded to unavailable', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadMemorySettings = vi
+      .fn()
+      .mockImplementationOnce(async ({ requestContext }) => {
+        requestContext?.set('mastra__factoryMemorySettings', { observerModelId: 'openai/observer-1' });
+      })
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockImplementationOnce(async ({ requestContext }) => {
+        requestContext?.set('mastra__factoryMemorySettings', { observerModelId: 'openai/observer-2' });
+      });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    const context = requestContext();
+
+    await processor.prepareMemorySettings(context);
+    await processor.prepareMemorySettings(context);
+    expect(context.get('mastra__factoryMemorySettings')).toMatchObject({ status: 'unavailable' });
+
+    await processor.processInputStep(inputArgs(context, []));
+    expect(loadMemorySettings).toHaveBeenCalledTimes(3);
+    expect(context.get('mastra__factoryMemorySettings')).toEqual({ observerModelId: 'openai/observer-2' });
+    warn.mockRestore();
+  });
+
+  it('keeps memory settings fail-closed when binding recovery fails on a retry step', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    vi.spyOn(storage, 'findRunBindingBySession').mockRejectedValue(new Error('binding storage unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadMemorySettings = vi.fn();
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+      loadMemorySettings,
+    });
+    const context = requestContext();
+    context.set('mastra__factoryMemorySettings', {
+      status: 'unavailable',
+      reason: 'memory settings unavailable',
+    });
+
+    await expect(processor.processInputStep(inputArgs(context, []))).resolves.toBeUndefined();
+    expect(context.get('mastra__factoryMemorySettings')).toEqual({
+      status: 'unavailable',
+      reason: 'binding storage unavailable',
+    });
+    expect(loadMemorySettings).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('ingests completed tool results once using binding, message, and tool-call identity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);

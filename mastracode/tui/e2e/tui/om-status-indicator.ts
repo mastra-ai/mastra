@@ -51,6 +51,7 @@ export const omStatusIndicatorScenario: McE2eScenario = {
   name: 'om-status-indicator',
   description: 'Verifies the unified opposing-fill OM context indicator in the real TUI.',
   testName: 'renders combined OM usage responsively and confines buffering animation to each segment',
+  enableObservationalMemory: true,
   async inProcessApp({ startMastraCodeApp }) {
     const app = await startMastraCodeApp({
       onTuiCreated(tui: any) {

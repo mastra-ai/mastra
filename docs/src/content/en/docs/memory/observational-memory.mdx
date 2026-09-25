@@ -86,7 +86,7 @@ export const agent = new Agent({
   The `resource` identifies the user or entity, while the `thread` identifies the conversation. Reuse both values to continue the same conversation. Observational Memory processes the stored history as it grows and replaces older messages with observations when its activation conditions are met.
 </Inject>
 
-The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `__GATEWAY_GOOGLE_MODEL_FLASH__` by default. To use a different model, pass it in the config object:
+The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses automatic model selection. To use a specific model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
@@ -113,9 +113,19 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/oracledb` storage adapters.
-It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
+It uses background agents for managing memory. When no model is set, the default is `model: 'auto'`.
 
 :::
+
+### Automatic models in Mastra Code and Factory
+
+Mastra Code and Factory surface the same automatic selection as a per-role **Auto** option in their settings.
+
+An automatic Observer or Reflector follows the active main model provider. Mastra Code uses that provider's built-in low-cost Observational Memory model when one is configured. For custom providers and providers without a built-in choice, it uses the active main model. The effective model is resolved when the role runs, so changing the main model doesn't rewrite the saved automatic selection.
+
+Select an explicit model to pin one role independently. Reset that role to **Auto** to resume following the main model provider. Existing saved concrete model IDs remain explicit until you reset them.
+
+Factory stores automatic intent separately from the effective model shown in settings. A missing provider credential can mark that effective model unavailable, but it doesn't replace the saved selection or prevent Factory from starting.
 
 ## Temporal gap markers
 
@@ -548,11 +558,30 @@ The progress bars update live while the agent is observing or reflecting, showin
 
 ## Models
 
-The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When no model is set, the default model is `google/gemini-2.5-flash`.
+The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When no model is set, the default is `model: 'auto'`.
+
+Automatic selection uses `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is configured. Otherwise, it selects a low-cost model for the active main model's provider, then falls back to the active main model. Observer and Reflector resolve independently before each invocation.
+
+Automatic selection reads the main model's `provider/model` ID. Models created from a plain model string carry that ID, and a dynamic model function can label a custom model by returning `{ model, id }`. When the ID is unknown, such as a model with a custom URL, API key, headers, or gateway, automatic selection reuses the main model itself because a sibling model isn't known to share that route. Pass a concrete model ID to the role to override either behavior.
+
+Use `autoModels` to change the model picked for a provider, and `resolveModel` to create the picked model with your own credentials or routing:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      autoModels: { openai: '__GATEWAY_OPENAI_MODEL_NANO__' },
+      resolveModel: (modelId, { requestContext }) => createRoutedModel(modelId, requestContext),
+    },
+  },
+})
+```
+
+`resolveAutoModelId(mainModelId, { autoModels })` from `@mastra/memory` returns the model automatic selection would pick, which is useful for showing the effective model in a settings UI.
 
 Mastra recommends using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
+To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
 
 ```typescript
 const memory = new Memory({

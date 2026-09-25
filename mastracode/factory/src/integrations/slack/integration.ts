@@ -136,7 +136,6 @@ export class SlackIntegration implements FactoryIntegration {
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
       sourceControls,
-      memorySettings: ctx.storage.memorySettings,
       modelPacks: ctx.storage.modelPacks,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,

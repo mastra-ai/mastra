@@ -3439,6 +3439,17 @@ describe('Memory', () => {
     });
   });
 
+  it('normalizes the observationalMemory boolean shorthand to automatic model selection', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: true },
+    });
+
+    const om = await memory.omEngine;
+    expect((om as any).observationConfig.model).toBe('auto');
+    expect((om as any).reflectionConfig.model).toBe('auto');
+  });
+
   describe('deleteThread observational-memory coordination', () => {
     const threadId = 'drain-thread';
     const resourceId = 'drain-resource';

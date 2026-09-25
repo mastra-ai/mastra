@@ -278,8 +278,58 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
   {
     name: 'omConfig',
     type: 'AgentControllerOMConfig',
-    description: 'Default observational memory models and thresholds.',
+    description: 'Default observational memory model selections, automatic model resolver, and thresholds.',
     isOptional: true,
+    properties: [
+      {
+        type: 'AgentControllerOMConfig',
+        parameters: [
+          {
+            name: 'defaultObserverModelId',
+            type: 'string',
+            description: 'Concrete observer fallback used when automatic resolution returns no model or throws.',
+            isOptional: true,
+          },
+          {
+            name: 'observerModel',
+            type: "'auto' | string",
+            description: "Default observer model. Use 'auto' to follow the active main model.",
+            isOptional: true,
+          },
+          {
+            name: 'defaultReflectorModelId',
+            type: 'string',
+            description: 'Concrete reflector fallback used when automatic resolution returns no model or throws.',
+            isOptional: true,
+          },
+          {
+            name: 'reflectorModel',
+            type: "'auto' | string",
+            description: "Default reflector model. Use 'auto' to follow the active main model.",
+            isOptional: true,
+          },
+          {
+            name: 'resolveAutoModelId',
+            type: '(args: ResolveAutoOMModelArgs) => string | undefined',
+            description:
+              'Synchronously resolves an automatic role selection to a concrete model ID from the role, current main model, and read-only session state.',
+            isOptional: true,
+          },
+          {
+            name: 'defaultObservationThreshold',
+            type: 'number',
+            description: 'Default observation threshold in tokens.',
+            isOptional: true,
+          },
+          {
+            name: 'defaultReflectionThreshold',
+            type: 'number',
+            description: 'Default reflection threshold in tokens.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'disableBuiltinTools',

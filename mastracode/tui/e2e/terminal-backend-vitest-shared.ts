@@ -213,6 +213,8 @@ async function prepareTerminalRun(
     MASTRACODE_DISABLE_HOOKS: '1',
     MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: '1',
     ...(scenario.disableMemory === true ? { MASTRACODE_DISABLE_MEMORY: '1' } : {}),
+    ...(scenario.enableObservationalMemory === true ? {} : { MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY: '1' }),
+    ...(scenario.enableTitleGeneration === true ? {} : { MASTRACODE_DISABLE_TITLE_GENERATION: '1' }),
     ...(scenario.name === 'update-startup-prompt' ? {} : { MASTRACODE_DISABLE_UPDATE_CHECK: '1' }),
     ...(scenario.useOpenAIModel ? { MASTRACODE_MODEL_ID: 'openai/gpt-5.4-mini', MASTRACODE_YOLO: '1' } : {}),
     FORCE_COLOR: '1',

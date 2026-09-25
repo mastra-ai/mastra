@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerRegistryMock: Record<string, unknown> = {};
@@ -61,7 +62,9 @@ const agentConstructorMock = vi.fn();
 function resolveInputProcessors(): Array<{ id?: string }> {
   const config = agentConstructorMock.mock.calls[0]?.[0] as { inputProcessors?: unknown } | undefined;
   expect(typeof config?.inputProcessors).toBe('function');
-  return (config!.inputProcessors as () => Array<{ id?: string }>)();
+  return (config!.inputProcessors as (args: { requestContext: RequestContext }) => Array<{ id?: string }>)({
+    requestContext: new RequestContext(),
+  });
 }
 
 function resolveOutputProcessors(): Array<{ id?: string }> {
@@ -1460,6 +1463,33 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors()).toEqual([]);
+  });
+
+  it('resolves request-scoped input processors before mandatory built-ins', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'request-scoped-reconciler', processInputStep: vi.fn() };
+    const inputProcessors = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => {
+      expect(requestContext.get('authoritative-settings')).toBe('loaded');
+      return [customProcessor];
+    });
+
+    await createMastraCode({ inputProcessors, disablePlugins: true });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as {
+      inputProcessors?: (args: { requestContext: RequestContext }) => Promise<Array<{ id?: string }>>;
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('authoritative-settings', 'loaded');
+    const processors = await agentConfig.inputProcessors?.({ requestContext });
+
+    expect(inputProcessors).toHaveBeenCalledWith({ requestContext });
+    expect(processors?.map(processor => processor.id)).toEqual([
+      'request-scoped-reconciler',
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+      'mastracode-account-start-notice',
+    ]);
   });
 
   it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {

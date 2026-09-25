@@ -8,7 +8,7 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
@@ -16,6 +16,7 @@ import xxhash from 'xxhash-wasm';
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
+import { resolveAutoModelId } from './auto-model';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
@@ -89,6 +90,15 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
   const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
   return `${first.id}:${last.id}`;
+}
+
+/** The full model ID a main model was configured or labeled with, when known. */
+function getModelId(model: unknown): string | undefined {
+  if (typeof model === 'string') return model;
+  if (model && typeof model === 'object' && 'specificationVersion' in model && 'id' in model) {
+    return typeof model.id === 'string' ? model.id : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -277,6 +287,15 @@ import type {
 
 let hasWarnedResourceScopeDeprecation = false;
 
+type ResolvedInvocationModel = Exclude<ObservationalMemoryModel, ModelByInputTokens | 'auto'>;
+
+type InvocationModelResolution<TModel> = {
+  model: TModel;
+  selectedThreshold?: number;
+  routingStrategy?: 'model-by-input-tokens';
+  routingThresholds?: string;
+};
+
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -356,6 +375,8 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+  private readonly autoModels?: ObservationalMemoryConfig['autoModels'];
+  private readonly resolveAutoModelHook?: ObservationalMemoryConfig['resolveModel'];
   private memory?: Memory;
 
   /**
@@ -491,6 +512,8 @@ export class ObservationalMemory {
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
+    this.autoModels = config.autoModels;
+    this.resolveAutoModelHook = config.resolveModel;
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
@@ -506,17 +529,17 @@ export class ObservationalMemory {
     const resolveModel = (model: WidenedObservationalMemoryModel | undefined, defaultModel: string) =>
       model === 'default' ? defaultModel : model;
 
-    // Resolution order: top-level model → sub-config model → the other sub-config model → default.
+    // Resolution order: top-level model → sub-config model → the other sub-config model → auto.
     const observationModel =
       resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
-      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+      'auto';
     const reflectionModel =
       resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
-      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+      'auto';
 
     // Get base thresholds first (needed for shared budget calculation)
     const messageTokens = config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
@@ -545,7 +568,7 @@ export class ObservationalMemory {
       return false;
     };
     const usesDefaultOutputTokenBudget = (model: WidenedObservationalMemoryModel | undefined) =>
-      model === undefined || model === 'default' || model instanceof ModelByInputTokens;
+      model === undefined || model === 'default' || model === 'auto' || model instanceof ModelByInputTokens;
 
     const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
     const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
@@ -708,7 +731,7 @@ export class ObservationalMemory {
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,
       observedMessageIds: this.observedMessageIds,
-      resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
+      resolveModel: (inputTokens, options) => this.resolveObservationModel(inputTokens, options),
       tokenCounter: this.tokenCounter,
       mastra: config.mastra,
       memory: this.memory,
@@ -732,7 +755,7 @@ export class ObservationalMemory {
       persistMarkerToStorage: (m, t, r) => this.persistMarkerToStorage(m, t, r),
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
-      resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
+      resolveModel: (inputTokens, options) => this.resolveReflectionModel(inputTokens, options),
       mastra: config.mastra,
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
@@ -847,44 +870,118 @@ export class ObservationalMemory {
     return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
   }
 
-  private resolveObservationModel(inputTokens: number): {
-    model: Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
-    selectedThreshold?: number;
-    routingStrategy?: 'model-by-input-tokens';
-    routingThresholds?: string;
-  } {
-    return this.resolveTieredModel(this.observationConfig.model, inputTokens);
-  }
-
-  private resolveReflectionModel(inputTokens: number): {
-    model: Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
-    selectedThreshold?: number;
-    routingStrategy?: 'model-by-input-tokens';
-    routingThresholds?: string;
-  } {
-    return this.resolveTieredModel(this.reflectionConfig.model, inputTokens);
-  }
-
-  private resolveTieredModel<TModel extends ObservationalMemoryModel>(
-    model: TModel,
+  private async resolveObservationModel(
     inputTokens: number,
-  ): {
-    model: Exclude<TModel, ModelByInputTokens>;
+    options?: {
+      requestContext?: RequestContext;
+      mainAgent?: ProcessorContext['agent'];
+      currentModel?: ObservationModelContext;
+    },
+  ): Promise<{
+    model: Exclude<ResolvedObservationConfig['model'], ModelByInputTokens | 'auto'>;
     selectedThreshold?: number;
     routingStrategy?: 'model-by-input-tokens';
     routingThresholds?: string;
-  } {
+  }> {
+    return this.resolveInvocationModel(this.observationConfig.model, inputTokens, options);
+  }
+
+  private async resolveReflectionModel(
+    inputTokens: number,
+    options?: {
+      requestContext?: RequestContext;
+      mainAgent?: ProcessorContext['agent'];
+      currentModel?: ObservationModelContext;
+    },
+  ): Promise<{
+    model: Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens | 'auto'>;
+    selectedThreshold?: number;
+    routingStrategy?: 'model-by-input-tokens';
+    routingThresholds?: string;
+  }> {
+    return this.resolveInvocationModel(this.reflectionConfig.model, inputTokens, options);
+  }
+
+  private async resolveInvocationModel(
+    model: ObservationalMemoryModel,
+    inputTokens: number,
+    options?: {
+      requestContext?: RequestContext;
+      mainAgent?: ProcessorContext['agent'];
+      currentModel?: ObservationModelContext;
+    },
+  ): Promise<InvocationModelResolution<ResolvedInvocationModel>> {
+    const tiered = this.resolveTieredModel(model, inputTokens);
+    const resolved = {
+      ...tiered,
+      model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
+        | ResolvedInvocationModel
+        | 'auto',
+    };
+    if (resolved.model !== 'auto') {
+      return resolved as InvocationModelResolution<ResolvedInvocationModel>;
+    }
+
+    return {
+      ...resolved,
+      model: await this.resolveAutoModel(options),
+    };
+  }
+
+  private async resolveAutoModel(options?: {
+    requestContext?: RequestContext;
+    mainAgent?: ProcessorContext['agent'];
+    currentModel?: ObservationModelContext;
+  }): Promise<ResolvedInvocationModel> {
+    let mainModel: ResolvedInvocationModel | undefined = options?.currentModel?.model;
+    if (!mainModel && options?.mainAgent) {
+      mainModel = (await options.mainAgent.getModel({
+        requestContext: options.requestContext,
+      })) as ResolvedInvocationModel;
+    }
+    const mainModelId = getModelId(mainModel);
+    const pick =
+      resolveAutoModelId(mainModelId, { autoModels: this.autoModels }) ??
+      (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
+
+    // No cheaper sibling is known: reuse the main model exactly as configured.
+    if (mainModel && (!pick || pick === mainModelId)) {
+      return mainModel;
+    }
+    const modelId = pick!;
+    return this.resolveAutoModelHook
+      ? ((await this.resolveAutoModelHook(modelId, {
+          requestContext: options?.requestContext,
+        })) as ResolvedInvocationModel)
+      : modelId;
+  }
+
+  private async resolveModelFunction(
+    model: WidenedObservationalMemoryModel,
+    requestContext?: RequestContext,
+  ): Promise<WidenedObservationalMemoryModel> {
+    if (typeof model !== 'function') {
+      return model;
+    }
+    return (await model({
+      requestContext: requestContext ?? new RequestContext(),
+      mastra: this.mastra,
+    })) as WidenedObservationalMemoryModel;
+  }
+
+  private resolveTieredModel(
+    model: ObservationalMemoryModel,
+    inputTokens: number,
+  ): InvocationModelResolution<ResolvedInvocationModel | 'auto'> {
     if (!(model instanceof ModelByInputTokens)) {
-      return {
-        model: model as Exclude<TModel, ModelByInputTokens>,
-      };
+      return { model };
     }
 
     const thresholds = model.getThresholds();
     const selectedThreshold = thresholds.find(upTo => inputTokens <= upTo) ?? thresholds.at(-1);
 
     return {
-      model: model.resolve(inputTokens) as Exclude<TModel, ModelByInputTokens>,
+      model: model.resolve(inputTokens) as ResolvedInvocationModel,
       selectedThreshold,
       routingStrategy: 'model-by-input-tokens',
       routingThresholds: thresholds.join(','),
@@ -896,10 +993,14 @@ export class ObservationalMemory {
     requestContext?: RequestContext,
   ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> {
     try {
-      if (modelConfig instanceof ModelByInputTokens) {
+      const model = (await this.resolveModelFunction(modelConfig, requestContext)) as ObservationalMemoryModel;
+      if (model === 'auto') {
+        return { model: 'auto' };
+      }
+      if (model instanceof ModelByInputTokens) {
         const routing = await Promise.all(
-          modelConfig.getThresholds().map(async upTo => {
-            const resolvedModel = modelConfig.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
+          model.getThresholds().map(async upTo => {
+            const resolvedModel = model.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
             const resolved = await this.resolveModelContext(resolvedModel, requestContext);
 
             return {
@@ -915,7 +1016,7 @@ export class ObservationalMemory {
         };
       }
 
-      const resolved = await this.resolveModelContext(modelConfig, requestContext);
+      const resolved = await this.resolveModelContext(model, requestContext);
       return {
         model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
       };
@@ -930,7 +1031,17 @@ export class ObservationalMemory {
     requestContext?: RequestContext,
     inputTokens?: number,
   ): Promise<TokenCounterModelContext | undefined> {
-    const modelToResolve = this.getModelToResolve(modelConfig, inputTokens);
+    if (modelConfig === 'auto') {
+      return undefined;
+    }
+    const concreteModel = await this.resolveModelFunction(
+      this.getConcreteModel(modelConfig, inputTokens),
+      requestContext,
+    );
+    if (concreteModel === 'auto') {
+      return undefined;
+    }
+    const modelToResolve = this.getModelToResolve(concreteModel as ObservationalMemoryModel, inputTokens);
     if (!modelToResolve) {
       return undefined;
     }
@@ -948,8 +1059,12 @@ export class ObservationalMemory {
    */
   async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
     try {
-      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
-      const modelId = resolved?.modelId ?? '';
+      const reflectionModel = await this.resolveModelFunction(this.reflectionConfig.model, requestContext);
+      const modelId =
+        reflectionModel === 'auto'
+          ? (resolveAutoModelId(undefined, { autoModels: this.autoModels }) ?? '')
+          : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ??
+            '');
 
       // gemini-2.5-flash is conservative about compression - start at level 2
       if (modelId.includes('gemini-2.5-flash')) {

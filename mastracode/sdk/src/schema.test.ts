@@ -61,6 +61,25 @@ describe('stateSchema', () => {
     expect(parsed.factoryOrgId).toBe('FOdo4tqL98ibdYH8uhLXs0mZrDDE5Uiw');
   });
 
+  it('defaults fresh OM roles to auto without materializing model IDs', () => {
+    const parsed = stateSchema.parse({});
+
+    expect(parsed.observerModelId).toBeUndefined();
+    expect(parsed.reflectorModelId).toBeUndefined();
+    expect(parsed.observerModelSelection).toBe('auto');
+    expect(parsed.reflectorModelSelection).toBe('auto');
+  });
+
+  it('treats legacy concrete OM model IDs as explicit selections', () => {
+    const parsed = stateSchema.parse({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+
+    expect(parsed.observerModelSelection).toBe('openai/gpt-5.4-mini');
+    expect(parsed.reflectorModelSelection).toBe('anthropic/claude-haiku-4-5');
+  });
+
   // Regression: /browser status compares the persisted active snapshot against the
   // settings file to detect drift. Any BrowserSettings field missing here is
   // stripped on parse, so the snapshot never matches the file and status reports

@@ -3,6 +3,7 @@ import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModelItem } from '../model-selector.js';
 import { ModelSelectorComponent } from '../model-selector.js';
+import { OMSettingsComponent } from '../om-settings.js';
 
 const WIDTH = 100;
 
@@ -23,6 +24,84 @@ function makeModels(): ModelItem[] {
     { id: 'openai/gpt-5-codex', provider: 'openai', modelName: 'gpt-5-codex', hasApiKey: true },
   ];
 }
+
+describe('OM settings auto selection', () => {
+  it('shows auto intent with the effective concrete model for each role', () => {
+    const component = new OMSettingsComponent(
+      {
+        observerModel: 'auto',
+        observerModelId: 'anthropic/claude-haiku-4-5',
+        observerAutoModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModel: 'auto',
+        reflectorModelId: 'anthropic/claude-haiku-4-5',
+        reflectorAutoModelId: 'anthropic/claude-haiku-4-5',
+        observationThreshold: 30_000,
+        reflectionThreshold: 40_000,
+        cavemanObservations: false,
+        observeAttachments: 'auto',
+      },
+      {
+        onObserverModelChange: vi.fn(),
+        onObserverAuto: vi.fn(),
+        onReflectorModelChange: vi.fn(),
+        onReflectorAuto: vi.fn(),
+        onObservationThresholdChange: vi.fn(),
+        onReflectionThresholdChange: vi.fn(),
+        onCavemanObservationsChange: vi.fn(),
+        onObserveAttachmentsChange: vi.fn(),
+        onClose: vi.fn(),
+      },
+      makeModels(),
+      { requestRender: vi.fn() } as unknown as TUI,
+    );
+
+    const rendered = component
+      .render(WIDTH)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered).toContain('Observer model');
+    expect(rendered).toContain('Reflector model');
+    expect(rendered.match(/Auto \(claude-haiku-4-5\)/g)).toHaveLength(2);
+  });
+
+  it("shows the active pack's memory model for pinned and auto roles", () => {
+    const component = new OMSettingsComponent(
+      {
+        observerModel: 'openai/gpt-5.4-mini',
+        observerModelId: 'deepseek/deepseek-v4-flash',
+        observerAutoModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModel: 'auto',
+        reflectorModelId: 'deepseek/deepseek-v4-flash',
+        reflectorAutoModelId: 'anthropic/claude-haiku-4-5',
+        packMemoryModelId: 'deepseek/deepseek-v4-flash',
+        observationThreshold: 30_000,
+        reflectionThreshold: 40_000,
+        cavemanObservations: false,
+        observeAttachments: 'auto',
+      },
+      {
+        onObserverModelChange: vi.fn(),
+        onObserverAuto: vi.fn(),
+        onReflectorModelChange: vi.fn(),
+        onReflectorAuto: vi.fn(),
+        onObservationThresholdChange: vi.fn(),
+        onReflectionThresholdChange: vi.fn(),
+        onCavemanObservationsChange: vi.fn(),
+        onObserveAttachmentsChange: vi.fn(),
+        onClose: vi.fn(),
+      },
+      makeModels(),
+      { requestRender: vi.fn() } as unknown as TUI,
+    );
+
+    const rendered = component
+      .render(WIDTH)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered.match(/deepseek-v4-flash \(set by active pack\)/g)).toHaveLength(2);
+    expect(rendered).not.toContain('gpt-5.4-mini');
+  });
+});
 
 describe('OM model picker (ModelSelectorComponent)', () => {
   it('filters models when typing search text and selects filtered result on enter', () => {

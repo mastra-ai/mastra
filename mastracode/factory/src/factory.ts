@@ -37,6 +37,7 @@ import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
+  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
@@ -71,10 +72,10 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { resolveFactorySessionAddress } from './rules/binding-context.js';
+import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
-import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -85,12 +86,12 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
+import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
-import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
@@ -110,13 +111,17 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import {
+  factoryMemorySettingsUserId,
+  MemorySettingsStorage,
+  type MemorySettingsRecord,
+} from './storage/domains/memory-settings/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
@@ -821,11 +826,56 @@ export class MastraFactory {
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(workItemsReady ? { workItems: workItemsStorage } : {}),
     });
+    const loadMemorySettings = async ({
+      requestContext,
+      binding,
+    }: {
+      requestContext: RequestContext | undefined;
+      binding: FactoryRunBindingRecord | null;
+    }) => {
+      if (!requestContext) return;
+      const scope = readFactorySessionScope(requestContext);
+      const user = getFactoryAuthUserFromContext(requestContext);
+      const callerUserId = getFactoryAuthUserId(user);
+      const callerOrgId = factoryUserOrgId(user);
+      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
+      // Project-scoped sessions share one row per project, addressed by the
+      // sentinel user id the settings UI picks when it passes a `factoryId`;
+      // unscoped sessions read the caller's own row. Both are rows the
+      // settings UI writes, so intent and the run agree without any session
+      // mutation.
+      const target = factoryProjectId
+        ? {
+            orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
+            userId: factoryMemorySettingsUserId(factoryProjectId),
+          }
+        : callerUserId && callerOrgId
+          ? { orgId: callerOrgId, userId: callerUserId }
+          : { orgId: 'local', userId: 'local' };
+      const record = await memorySettingsStorage.get(target);
+      // A channel sender's own settings beat the project's for every knob they
+      // saved. Best-effort: a failed personal read keeps the project's row.
+      let personal: MemorySettingsRecord | null = null;
+      if (factoryProjectId && requestContext.get('channel') && callerUserId && callerOrgId) {
+        try {
+          personal = await memorySettingsStorage.get({ orgId: callerOrgId, userId: callerUserId });
+        } catch (error) {
+          console.warn("[Factory Memory Settings] Unable to read the sender's memory settings", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      requestContext.set(
+        'mastra__factoryMemorySettings',
+        layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
+      );
+    };
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
+          loadMemorySettings,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -991,7 +1041,19 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
+        inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
+          if (factoryProcessor) {
+            await factoryProcessor.prepareMemorySettings(requestContext);
+            return [factoryProcessor];
+          }
+          // Without work items there is no run binding, so the caller's row applies.
+          try {
+            await loadMemorySettings({ requestContext, binding: null });
+          } catch (error) {
+            reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
+          }
+          return [];
+        },
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
         sourceControlToolProviders.length > 0 ||
@@ -1191,13 +1253,6 @@ export class MastraFactory {
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
-                refreshManagedMemorySettings: ({ binding, session }) =>
-                  refreshFactorySessionMemorySettings(session, {
-                    orgId: binding.orgId,
-                    factoryProjectId: binding.factoryProjectId,
-                    projects: factoryProjectsStorage,
-                    memorySettings: memorySettingsStorage,
-                  }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
@@ -1308,7 +1363,6 @@ export class MastraFactory {
       session =>
         hydrateSupervisorSession(session, {
           projects: factoryProjectsStorage,
-          memorySettings: memorySettingsStorage,
         }).catch(error => {
           console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
             error: error instanceof Error ? error.message : String(error),
@@ -1317,16 +1371,12 @@ export class MastraFactory {
       { blocking: true },
     );
 
-    // Blocking: `createSession` awaits this seed, so when hydration succeeds
-    // a session's first run starts with the owner's stored OM settings.
-    // Best-effort — failures are logged inside the helper, never thrown, and
-    // the session then falls back to its persisted/default OM configuration.
+    // Blocking: `createSession` awaits the organization seed so per-invocation
+    // memory settings and knowledge capture use the correct tenant immediately.
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: { sessions: sourceControlSessions },
-          projects: factoryProjectsStorage,
-          memorySettings: memorySettingsStorage,
         }),
       { blocking: true },
     );

@@ -337,7 +337,7 @@ describe('turn.end() idle buffering', () => {
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });
 
-  it('should pass all context fields to buffer()', async () => {
+  it('captures the invocation model for automatic resolution in the async buffer', async () => {
     const unobservedMessages = createMessages(3);
     const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages });
     const mockMessageList = createMockMessageList(unobservedMessages);
@@ -345,7 +345,8 @@ describe('turn.end() idle buffering', () => {
     const mockSendSignal = vi.fn();
     const mockRequestContext = { get: vi.fn() };
     const mockObservabilityContext = { span: vi.fn() };
-    const mockActorModelContext = { provider: 'test-provider', modelId: 'test-model' };
+    const actorModel = { provider: 'test-provider', modelId: 'test-model' };
+    const mockActorModelContext = { provider: 'test-provider', modelId: 'test-model', model: actorModel };
 
     const turn = new ObservationTurn({
       om: mockOM as any,

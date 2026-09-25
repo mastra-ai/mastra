@@ -557,18 +557,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       }))
     : undefined;
   const startCoordinator = transitionService
-    ? new FactoryStartCoordinator(
-        deps.controller,
-        deps.domains.workItems,
-        transitionService,
-        request =>
-          resolveFactorySourceControl({
-            sourceControls,
-            orgId: request.orgId,
-            factoryProjectId: request.factoryProjectId,
-            sessionId: request.sessionId,
-          }),
-        deps.domains.memorySettings,
+    ? new FactoryStartCoordinator(deps.controller, deps.domains.workItems, transitionService, request =>
+        resolveFactorySourceControl({
+          sourceControls,
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          sessionId: request.sessionId,
+        }),
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -628,7 +623,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
-      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({

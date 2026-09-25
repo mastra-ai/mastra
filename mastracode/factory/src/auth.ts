@@ -153,6 +153,18 @@ export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string |
 }
 
 /**
+ * The org rung a user's rows are keyed by: the organization they belong to, or a
+ * per-user rung for personal (no-org) accounts so their rows never land in the
+ * shared `local` scope. Every writer and reader of a `(org, user)` row must
+ * agree on this, so it lives here rather than being re-derived per call site.
+ */
+export function factoryUserOrgId(user: FactoryAuthUser | undefined): string | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  return getFactoryAuthOrgId(user) ?? `user:${userId}`;
+}
+
+/**
  * Resolve the tenant identity `(orgId, userId)` from the authenticated user on
  * the context. Returns `undefined` when there is no signed-in user (auth
  * disabled or unauthenticated). `orgId` is `undefined` for personal accounts;

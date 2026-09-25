@@ -216,6 +216,35 @@ console.log(session.model.get())
 
 Use `scope: 'global'` for an in-memory selection that shouldn't be written to thread settings.
 
+### Select Observational Memory models
+
+Observer and reflector model choices are independent. Each role can use an explicit model or an automatic selection that the host resolves from the active main model and session state.
+
+Configure automatic selection with a synchronous resolver that returns a concrete model ID:
+
+```typescript
+const controller = new AgentController({
+  // ...
+  omConfig: {
+    observerModel: 'auto',
+    reflectorModel: 'auto',
+    defaultObserverModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    defaultReflectorModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    resolveAutoModelId: ({ currentModelId }) => currentModelId,
+  },
+})
+```
+
+`session.om.observer.model()` returns `'auto'` or a concrete model ID. `session.om.observer.modelId()` returns the effective concrete model. A host can therefore change the main model without rewriting automatic role settings.
+
+Reset one role to automatic selection without changing the other:
+
+```typescript
+await session.om.observer.switchModel({ modelId: 'auto' })
+```
+
+If the resolver returns `undefined` or throws, the role uses its concrete `defaultObserverModelId` or `defaultReflectorModelId` fallback. See the [`Session` Observational Memory API](/reference/agent-controller/session#observational-memory) for explicit selection.
+
 ## Manage threads and state
 
 List stored conversations with [`session.thread.list()`](/reference/agent-controller/session#sessionthreadlistoptions):

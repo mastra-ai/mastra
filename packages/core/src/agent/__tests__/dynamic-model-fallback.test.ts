@@ -870,4 +870,61 @@ describe('Dynamic Model Selection with Fallback', () => {
     const requestContext = new RequestContext();
     await expect(agent.stream('test', { requestContext })).rejects.toThrow('No enabled models found in model list');
   });
+
+  describe('labeled { model, id } results', () => {
+    function textModel(text: string) {
+      return new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: text },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+    }
+
+    it('runs the labeled model and exposes its ID to processors', async () => {
+      const seenIds: Array<string | undefined> = [];
+      const agent = new Agent({
+        id: 'labeled-dynamic-model',
+        name: 'Labeled Dynamic Model',
+        instructions: 'You are a test agent',
+        model: () => ({ model: textModel('labeled response'), id: 'mastra/openai/gpt-5.5' }),
+        inputProcessors: [
+          {
+            id: 'model-id-probe',
+            processInputStep: async ({ model }) => {
+              seenIds.push((model as { id?: string }).id);
+            },
+          },
+        ],
+      });
+
+      const result = await agent.stream('test');
+
+      expect(await result.text).toBe('labeled response');
+      expect(seenIds).toEqual(['mastra/openai/gpt-5.5']);
+      expect(((await agent.getModel()) as { id?: string }).id).toBe('mastra/openai/gpt-5.5');
+    });
+
+    it('exposes labels on fallback entries', async () => {
+      const agent = new Agent({
+        id: 'labeled-fallback-model',
+        name: 'Labeled Fallback Model',
+        instructions: 'You are a test agent',
+        model: [{ model: () => ({ model: textModel('fallback response'), id: 'mastra/anthropic/claude-opus-4-7' }) }],
+      });
+
+      const result = await agent.stream('test');
+
+      expect(await result.text).toBe('fallback response');
+      expect(((await agent.getModel()) as { id?: string }).id).toBe('mastra/anthropic/claude-opus-4-7');
+    });
+  });
 });

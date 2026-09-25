@@ -1,31 +1,24 @@
-import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { MemorySettingsRecord } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import {
-  applyPersonalMemorySettings,
-  applyStoredMemorySettings,
-  DEFAULT_OBSERVATION_THRESHOLD,
-  DEFAULT_REFLECTION_THRESHOLD,
   hydrateSessionMemorySettings,
+  layerPersonalMemorySettings,
   type MemorySettingsHydrationDependencies,
   type MemorySettingsHydrationSession,
 } from './memory-settings-hydration.js';
 
-function createSession(state: Record<string, unknown> = {}, modelIds: { observer?: string; reflector?: string } = {}) {
-  const session: MemorySettingsHydrationSession = {
+function createSession(state: MastraCodeState = {}) {
+  return {
     identity: { getResourceId: () => 'session-1' },
-    om: {
-      observer: { modelId: () => modelIds.observer, switchModel: vi.fn().mockResolvedValue(undefined) },
-      reflector: { modelId: () => modelIds.reflector, switchModel: vi.fn().mockResolvedValue(undefined) },
-    },
     state: {
       get: () => state,
-      set: vi.fn().mockResolvedValue(undefined),
+      set: vi.fn(async updates => Object.assign(state, updates)),
     },
-  };
-  return session;
+  } satisfies MemorySettingsHydrationSession;
 }
 
 function sourceControlRow(): SourceControlSession {
@@ -49,530 +42,107 @@ function sourceControlRow(): SourceControlSession {
   };
 }
 
-function memorySettingsRow(overrides: Partial<MemorySettingsRecord> = {}): MemorySettingsRecord {
-  return {
-    orgId: 'org-1',
-    userId: 'user-1',
-    observerModelId: 'anthropic/claude-haiku-4-5',
-    reflectorModelId: 'anthropic/claude-haiku-4-5',
-    observationThreshold: null,
-    reflectionThreshold: null,
-    observeAttachments: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    ...overrides,
-  };
-}
-
-function createDependencies({
-  row = sourceControlRow(),
-  settings = memorySettingsRow(),
-  projectDefaultModelId = 'anthropic/claude-sonnet-4-5',
-}: {
-  row?: SourceControlSession | null;
-  settings?: MemorySettingsRecord | null;
-  projectDefaultModelId?: string | null;
-} = {}): MemorySettingsHydrationDependencies {
+function createDependencies(
+  row: SourceControlSession | null = sourceControlRow(),
+): MemorySettingsHydrationDependencies {
   return {
     sourceControl: { sessions: { getBySessionId: vi.fn().mockResolvedValue(row) } },
-    projects: {
-      get: vi.fn().mockResolvedValue(
-        projectDefaultModelId === null
-          ? null
-          : {
-              id: 'project-1',
-              orgId: 'org-1',
-              defaultModelId: projectDefaultModelId,
-            },
-      ),
-    } as MemorySettingsHydrationDependencies['projects'],
-    memorySettings: { get: vi.fn().mockResolvedValue(settings) },
   };
 }
 
-describe('applyStoredMemorySettings', () => {
-  it('resets knobs without a stored value to the built-in defaults', async () => {
-    // A record whose model fields are null must not preserve stale session
-    // values — the row is authoritative, matching the settings routes.
-    const session = createSession(
-      { observationThreshold: 12_000, reflectionThreshold: 21_000, observeAttachments: false },
-      { observer: 'openai/gpt-5-mini', reflector: 'openai/gpt-5-mini' },
-    );
-
-    await applyStoredMemorySettings(session, memorySettingsRow({ observerModelId: null, reflectorModelId: null }));
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-      observeAttachments: 'auto',
-    });
-  });
-
-  it('applies a partial row: stored knobs win, the rest reset to defaults', async () => {
-    const session = createSession({}, { observer: 'openai/gpt-5-mini', reflector: 'anthropic/claude-haiku-4-5' });
-
-    await applyStoredMemorySettings(
-      session,
-      memorySettingsRow({
-        observerModelId: 'anthropic/claude-haiku-4-5',
-        reflectorModelId: null,
-        observationThreshold: 12_000,
-      }),
-    );
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
-  it('skips model switches and state writes that are already in effect', async () => {
-    const session = createSession(
-      {
-        observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-        reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-      },
-      { observer: DEFAULT_OM_MODEL_ID, reflector: DEFAULT_OM_MODEL_ID },
-    );
-
-    await applyStoredMemorySettings(session, null);
-
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-    expect(session.state.set).not.toHaveBeenCalled();
-  });
-});
-
 describe('hydrateSessionMemorySettings', () => {
-  it('applies the stored OM models keyed by the session row tenant', async () => {
+  it('seeds the tenant org from the session source-control row', async () => {
     const session = createSession();
     const dependencies = createDependencies();
 
     await hydrateSessionMemorySettings(session, dependencies);
 
     expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalledExactlyOnceWith('session-1');
-    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', userId: 'user-1' });
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
-  });
-
-  it('applies stored thresholds and attachment preferences to session state', async () => {
-    // Org pre-seeded: the seed has its own cases, and these assert the exact
-    // settings write.
-    const session = createSession({ factoryOrgId: 'org-1' });
-    const dependencies = createDependencies({
-      settings: memorySettingsRow({ observationThreshold: 12_000, observeAttachments: false }),
-    });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-      observeAttachments: false,
-    });
-  });
-
-  it('resets stale session state when the stored row has null knobs', async () => {
-    const session = createSession(
-      { observationThreshold: 99_000, factoryOrgId: 'org-1' },
-      { observer: 'google/gemini-3.5-flash', reflector: 'google/gemini-3.5-flash' },
-    );
-    const dependencies = createDependencies();
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
-  it('seeds the tenant org from the session row so knowledge curation is scoped to it', async () => {
-    // Without this seed the curation side falls back to the session owner id —
-    // the controller's own id for web chat sessions — and every curated node
-    // lands under an org rung the knowledge reader never queries.
-    const session = createSession();
-    const dependencies = createDependencies();
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
   });
 
-  it('does not rewrite an org that already matches the row', async () => {
-    const session = createSession({ factoryOrgId: 'org-1' });
-    const dependencies = createDependencies();
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.state.set).not.toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
-  });
-
-  it('overwrites a stale org with the row org, since the row is authoritative', async () => {
+  it('overwrites a stale org with the authoritative row org', async () => {
     const session = createSession({ factoryOrgId: 'stale-org' });
-    const dependencies = createDependencies();
 
-    await hydrateSessionMemorySettings(session, dependencies);
+    await hydrateSessionMemorySettings(session, createDependencies());
 
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
   });
 
-  it('marks the session unresolved and does not throw when it has no source-control row', async () => {
-    // No row means no org. Staying silent here is what let a Factory session be
-    // mistaken for a local one and filed under a scope nothing can read.
+  it('marks the session unresolved when it has no source-control row', async () => {
     const session = createSession();
-    const dependencies = createDependencies({ row: null });
 
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
-    expect(session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
-    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
-  });
-
-  it('marks the session unresolved when the row carries an empty org', async () => {
-    const session = createSession();
-    const dependencies = createDependencies({ row: { orgId: '  ', userId: 'user-1' } as never });
-
-    await hydrateSessionMemorySettings(session, dependencies);
+    await hydrateSessionMemorySettings(session, createDependencies(null));
 
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
   });
 
   it('re-resolves a tagged session whose stored org is blank', async () => {
-    // The coordinator-hydrated early return has to agree with the curation side,
-    // which trims: a blank org is unresolved, so this session still needs a seed.
     const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: '   ' });
-    const dependencies = createDependencies({ row: { orgId: 'org-1', userId: 'user-1' } as never });
 
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
-  });
-
-  it('marks the session unresolved when the row lookup rejects', async () => {
-    const session = createSession();
-    const dependencies = createDependencies();
-    dependencies.sourceControl.sessions.getBySessionId.mockRejectedValueOnce(new Error('storage down'));
-
-    await expect(hydrateSessionMemorySettings(session, dependencies)).resolves.toBeUndefined();
-
-    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
-  });
-
-  it('applies project-scoped settings to a tagged web session that never went through the coordinator', async () => {
-    const session = createSession({ factoryProjectId: 'project-1' });
-    const dependencies = createDependencies({
-      settings: memorySettingsRow({
-        userId: 'factory-project:project-1',
-        observerModelId: 'openai/gpt-5.6-sol',
-        reflectorModelId: 'openai/gpt-5.6-sol',
-      }),
-    });
-
-    await hydrateSessionMemorySettings(session, dependencies);
+    await hydrateSessionMemorySettings(session, createDependencies());
 
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
-    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
-      orgId: 'org-1',
-      userId: 'factory-project:project-1',
-    });
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
   });
 
-  it('uses the project provider fallback when a project settings row only configures thresholds', async () => {
-    const session = createSession(
-      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
-      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
-    );
-    const dependencies = createDependencies({
-      settings: memorySettingsRow({
-        userId: 'factory-project:project-1',
-        observerModelId: null,
-        reflectorModelId: null,
-        observationThreshold: 12_000,
-      }),
-    });
+  it('skips fully hydrated factory-run sessions owned by the start coordinator', async () => {
+    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: 'org-1' });
+    const dependencies = createDependencies();
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(dependencies.projects.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', id: 'project-1' });
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
+    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
   });
 
-  it('preserves current models for threshold-only settings when the project has no default model', async () => {
-    const session = createSession(
-      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
-      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
-    );
-    const dependencies = createDependencies({
-      projectDefaultModelId: null,
-      settings: memorySettingsRow({
-        userId: 'factory-project:project-1',
-        observerModelId: null,
-        reflectorModelId: null,
-        observationThreshold: 12_000,
-      }),
-    });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
-  it('applies an explicit role model without replacing the unset role when the project has no default model', async () => {
-    const session = createSession(
-      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
-      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
-    );
-    const dependencies = createDependencies({
-      projectDefaultModelId: null,
-      settings: memorySettingsRow({
-        userId: 'factory-project:project-1',
-        observerModelId: 'openai/gpt-5.6-sol',
-        reflectorModelId: null,
-      }),
-    });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-  });
-
-  it('uses an explicit project role model and the project provider fallback for the unset role', async () => {
-    const session = createSession(
-      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
-      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
-    );
-    const dependencies = createDependencies({
-      settings: memorySettingsRow({
-        userId: 'factory-project:project-1',
-        observerModelId: 'openai/gpt-5.6-sol',
-        reflectorModelId: null,
-      }),
-    });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'anthropic/claude-haiku-4-5',
-    });
-  });
-
-  it('repairs a tagged web session whose org was previously seeded without project settings', async () => {
-    const session = createSession(
-      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
-      { observer: 'openai/gpt-5.4-mini', reflector: 'openai/gpt-5.4-mini' },
-    );
-    const dependencies = createDependencies({
-      settings: memorySettingsRow({
-        userId: 'factory-project:project-1',
-        observerModelId: 'openai/gpt-5.6-sol',
-        reflectorModelId: 'openai/gpt-5.6-sol',
-      }),
-    });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
-      orgId: 'org-1',
-      userId: 'factory-project:project-1',
-    });
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
-  });
-
-  it('preserves a coordinator-hydrated provider fallback when the project has no stored settings', async () => {
-    const session = createSession(
-      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
-      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
-    );
-    const dependencies = createDependencies({ settings: null });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
-      orgId: 'org-1',
-      userId: 'factory-project:project-1',
-    });
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-  });
-
-  it('skips sessions without a source-control row', async () => {
-    const session = createSession();
-    const dependencies = createDependencies({ row: null });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-  });
-
-  it('resets to defaults when the owner has no stored settings row', async () => {
-    // A missing row must behave like the settings routes: stale persisted
-    // session values reset to the built-in defaults instead of surviving.
-    const session = createSession(
-      { observationThreshold: 99_000, factoryOrgId: 'org-1' },
-      { observer: 'openai/gpt-5-mini', reflector: 'openai/gpt-5-mini' },
-    );
-    const dependencies = createDependencies({ settings: null });
-
-    await hydrateSessionMemorySettings(session, dependencies);
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
-  it('warns instead of throwing when a lookup fails', async () => {
+  it('warns and marks the org unresolved when lookup fails', async () => {
     const session = createSession();
     const dependencies = createDependencies();
-    dependencies.memorySettings.get = vi.fn().mockRejectedValue(new Error('db down'));
+    dependencies.sourceControl.sessions.getBySessionId = vi.fn().mockRejectedValue(new Error('storage down'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     await expect(hydrateSessionMemorySettings(session, dependencies)).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith(
-      '[Factory memory-settings hydration] Unable to apply stored memory settings.',
+      '[Factory session hydration] Unable to resolve the session organization.',
       expect.any(Error),
     );
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
     warn.mockRestore();
   });
 });
 
-describe('applyPersonalMemorySettings', () => {
-  /** Roles whose `modelId()` reports what the last switch selected. */
-  function createRoles(observer: string, reflector: string) {
-    const role = (initial: string) => {
-      let current = initial;
-      return {
-        modelId: () => current,
-        switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
-          current = modelId;
-        }),
-      };
-    };
-    return { observer: role(observer), reflector: role(reflector) };
-  }
-
-  function createPersonalSession(state: Record<string, unknown> = {}) {
-    return {
-      om: createRoles('anthropic/claude-haiku-4-5', 'anthropic/claude-haiku-4-5'),
-      state: { get: () => state, set: vi.fn().mockResolvedValue(undefined) },
-    };
-  }
-
-  const memorySettings = (record: MemorySettingsRecord | null) => ({ get: vi.fn().mockResolvedValue(record) });
-
-  // Where the personal row is silent, the value the session already runs with
-  // stands — the project's, or the provider-aware fallback resolved for it.
-  // Resetting to the built-in default here would move observation onto a
-  // provider the factory may hold no credentials for.
-  it('applies what the user saved and keeps what they never touched', async () => {
-    const session = createPersonalSession({
-      observationThreshold: 12_000,
-      reflectionThreshold: 21_000,
-      observeAttachments: false,
-    });
-
-    await applyPersonalMemorySettings(session, {
-      memorySettings: memorySettings(
-        memorySettingsRow({ observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 222 }),
-      ),
-      orgId: 'org-1',
-      userId: 'user-1',
-    });
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.4-mini' });
-    // The reflector they never set keeps observing with the project's model.
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({ observationThreshold: 222 });
+describe('layerPersonalMemorySettings', () => {
+  const row = (overrides: Partial<MemorySettingsRecord>): MemorySettingsRecord => ({
+    orgId: 'org-1',
+    userId: 'factory-project:fp-1',
+    observerModelId: null,
+    reflectorModelId: null,
+    observationThreshold: null,
+    reflectionThreshold: null,
+    observeAttachments: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    ...overrides,
   });
 
-  it('leaves the observation models alone when the user only saved thresholds', async () => {
-    const session = createPersonalSession({ observeAttachments: 'auto' });
+  it("lets the sender's saved knobs win and keeps the project's for the rest", () => {
+    const project = row({ observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 });
+    const personal = row({ userId: 'user-1', reflectorModelId: 'openai/gpt-5-mini', observationThreshold: 222 });
 
-    await applyPersonalMemorySettings(session, {
-      memorySettings: memorySettings(memorySettingsRow({ observerModelId: null, reflectorModelId: null })),
-      orgId: 'org-1',
-      userId: 'user-1',
+    expect(layerPersonalMemorySettings(project, personal)).toMatchObject({
+      userId: 'factory-project:fp-1',
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'openai/gpt-5-mini',
+      observationThreshold: 222,
     });
-
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
-  it('does nothing without a stored row', async () => {
-    const session = createPersonalSession();
+  it('uses whichever row exists when the other is missing', () => {
+    const personal = row({ userId: 'user-1', observerModelId: 'openai/gpt-5-mini' });
 
-    await applyPersonalMemorySettings(session, {
-      memorySettings: memorySettings(null),
-      orgId: 'org-1',
-      userId: 'user-1',
-    });
-
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
-    expect(session.state.set).not.toHaveBeenCalled();
-  });
-
-  it('reads nothing without the domain', async () => {
-    const session = createPersonalSession();
-    const settings = memorySettings(memorySettingsRow());
-
-    await applyPersonalMemorySettings(session, {
-      memorySettings: undefined,
-      orgId: 'org-1',
-      userId: 'user-1',
-    });
-
-    expect(settings.get).not.toHaveBeenCalled();
-    expect(session.state.set).not.toHaveBeenCalled();
-  });
-
-  it('warns instead of throwing when the read fails', async () => {
-    const session = createPersonalSession();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    await expect(
-      applyPersonalMemorySettings(session, {
-        memorySettings: { get: vi.fn().mockRejectedValue(new Error('db down')) },
-        orgId: 'org-1',
-        userId: 'user-1',
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(warn).toHaveBeenCalledWith(
-      "[Factory memory-settings hydration] Unable to apply the user's memory settings.",
-      expect.any(Error),
-    );
-    warn.mockRestore();
+    expect(layerPersonalMemorySettings(null, personal)).toBe(personal);
+    expect(layerPersonalMemorySettings(personal, null)).toBe(personal);
+    expect(layerPersonalMemorySettings(null, null)).toBeNull();
   });
 });

@@ -700,8 +700,8 @@ function stubIntakeConfig(initial: Record<string, unknown> = {}) {
 
 /**
  * Stub everything the last step writes: the Factory create, the repository
- * link, the intake wiring, the PATCH that saves the model pick and the hidden
- * OM provider-defaults save — plus the provider catalog the step lists. `calls`
+ * link, the intake wiring and the PATCH that saves the model pick — plus the
+ * provider catalog the step lists. `calls`
  * records the write order; the returned arrays collect the PATCH and intake
  * bodies.
  */
@@ -761,7 +761,6 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
         ],
       }),
     ),
-    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
   );
   return { patchedBodies, intakeConfigs };
 }

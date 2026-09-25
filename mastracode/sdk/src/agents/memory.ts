@@ -5,60 +5,130 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { resolveModel, resolvePackMemoryModelChain } from './model.js';
+import { resolveActiveModePackId, resolveModel, resolvePackMemoryModelChain } from './model.js';
 import type { PackMemoryModelChainEntry } from './model.js';
 
 /**
- * Resolve one OM role's model for this invocation. Lookup order:
- *   1. The explicit role override (`observerModelOverride` / `reflectorModelOverride`).
- *   2. The active mode pack's optional `models.memory`, walking the pack's fallback
- *      chain so OM fails over alongside (and independently of) the main agent.
- *      The pending pack-hop marker wins over the settled pack id so an immediate
- *      retrigger observes on the landed pack.
- *   3. The standalone OM configuration seeded into controller state
- *      (`observerModelId` / `reflectorModelId`), then the default OM model.
+ * The authoritative per-caller Factory memory-settings row, placed on the request
+ * context before Factory's model-dependent processors run. `null` means the row
+ * exists but is empty (every role auto). An unavailable sentinel or a missing
+ * value on a Factory-owned session disables model-driven memory work.
+ */
+interface FactoryMemorySettings {
+  observerModelId: string | null;
+  reflectorModelId: string | null;
+  observationThreshold: number | null;
+  reflectionThreshold: number | null;
+  observeAttachments: 'auto' | boolean | null;
+}
+
+type FactoryMemorySettingsContext =
+  | FactoryMemorySettings
+  | null
+  | { status: 'unavailable'; reason: string }
+  | undefined;
+
+function getFactoryMemorySettingsContext(requestContext: RequestContext): FactoryMemorySettingsContext {
+  return requestContext.get('mastra__factoryMemorySettings') as FactoryMemorySettingsContext;
+}
+
+function isFactoryMemorySettingsUnavailable(
+  settings: FactoryMemorySettingsContext,
+): settings is { status: 'unavailable'; reason: string } {
+  return settings !== null && typeof settings === 'object' && 'status' in settings && settings.status === 'unavailable';
+}
+
+function getMainModelId(requestContext: RequestContext): string | undefined {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  return controller?.session.modelId || (controller?.getState()?.currentModelId as string | undefined);
+}
+
+/**
+ * Resolve one OM role's model for this invocation. Returns `'auto'` for Memory's
+ * auto policy, or a concrete model. Factory's DB row is authoritative for
+ * Factory sessions (an unreadable row falls back to auto). Otherwise an active
+ * pack's memory model wins, then the per-role selection, then legacy concrete
+ * settings.
  */
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
   settingsPath?: string,
-): GatewayLanguageModel | PackMemoryModelChainEntry[] {
+): 'auto' | GatewayLanguageModel | PackMemoryModelChainEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
+  const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
+  const isFactory = typeof state?.factoryProjectId === 'string';
+
+  const useModel = (modelId: string) => {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, modelId);
+    return resolveModel(modelId, resolveOptions);
+  };
+  const useAuto = () => {
+    requestContext.set(`om.${role}.selectionMode`, 'auto');
+    // These two keys are declared in the span-context allowlist
+    // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
+    // the effective concrete model without either being mistaken for a model ID.
+    requestContext.set(`om.${role}.effectiveModelId`, resolveAutoOMModelId(getMainModelId(requestContext)));
+    return 'auto' as const;
+  };
+
+  if (
+    isFactoryMemorySettingsUnavailable(factorySettingsContext) ||
+    (factorySettingsContext === undefined && isFactory)
+  ) {
+    return useAuto();
+  }
+  if (factorySettingsContext !== undefined) {
+    const factoryModelId = factorySettingsContext?.[`${role}ModelId`];
+    return factoryModelId ? useModel(factoryModelId) : useAuto();
+  }
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
   // for observational memory as it does for the main model.
   const settings = loadSettings(settingsPath);
-  const roleOverride =
-    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
-  if (roleOverride) return resolveModel(roleOverride, resolveOptions);
-
-  const pendingState = state?.mastracodePendingPackFallback as
-    | { toPackId?: unknown; threadId?: unknown }
-    | null
-    | undefined;
-  const pendingPackId =
-    pendingState &&
-    (pendingState.threadId === undefined || pendingState.threadId === controller?.threadId) &&
-    typeof pendingState.toPackId === 'string' &&
-    pendingState.toPackId.length > 0
-      ? pendingState.toPackId
-      : undefined;
-  const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
-  if (typeof packId === 'string' && packId.length > 0) {
-    const chained = resolvePackMemoryModelChain(settings, packId, resolveOptions);
-    if (chained) return chained;
+  const packId = resolveActiveModePackId(settings, state, controller?.threadId);
+  if (packId) {
+    const packModel = resolvePackMemoryModelChain(settings, packId, resolveOptions);
+    if (packModel === 'auto') return useAuto();
+    if (packModel) {
+      requestContext.set(`om.${role}.selectionMode`, 'model');
+      requestContext.set(
+        `om.${role}.effectiveModelId`,
+        Array.isArray(packModel) ? packModel[0]?.model.modelId : packModel.modelId,
+      );
+      return packModel;
+    }
   }
 
-  const stateModelId = role === 'observer' ? state?.observerModelId : state?.reflectorModelId;
-  return resolveModel(stateModelId ?? DEFAULT_OM_MODEL_ID, resolveOptions);
+  const selection: unknown = state?.[`${role}ModelSelection`];
+  if (selection === 'auto') return useAuto();
+  if (typeof selection === 'string' && selection) return useModel(selection);
+  if (
+    selection &&
+    typeof selection === 'object' &&
+    'modelId' in selection &&
+    typeof selection.modelId === 'string' &&
+    selection.modelId
+  ) {
+    return useModel(selection.modelId);
+  }
+
+  const roleOverride =
+    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
+  if (roleOverride) return useModel(roleOverride);
+  const legacyModelId = state?.[`${role}ModelId`];
+  if (typeof legacyModelId === 'string' && legacyModelId) return useModel(legacyModelId);
+  return useAuto();
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =
@@ -157,6 +227,10 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     resolveOmRoleModelForRequest('observer', requestContext, settingsPath);
   const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
     resolveOmRoleModelForRequest('reflector', requestContext, settingsPath);
+  // Routes the concrete model Memory's `'auto'` picks through Mastra Code's
+  // credential-aware resolver, like every other Mastra Code model.
+  const resolveMemoryModel = (modelId: string, { requestContext }: { requestContext?: RequestContext }) =>
+    resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -187,14 +261,31 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
-    const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
-    const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
+    // The Factory row is authoritative and read per invocation, so a stored
+    // threshold/attachment change reaches the running Memory without a session.
+    const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
+    const factorySettingsUnavailable =
+      isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory);
+    const factorySettings = factorySettingsUnavailable ? null : factorySettingsContext;
+    const obsThreshold =
+      factorySettings !== undefined
+        ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
+        : (state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD);
+    const refThreshold =
+      factorySettings !== undefined
+        ? (factorySettings?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD)
+        : (state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD);
     const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const observeAttachments = state?.observeAttachments;
+    // The row is authoritative: an absent value means the user left it on Auto,
+    // which the config API reports as 'auto' and Memory resolves by model
+    // capability.
+    const observeAttachments =
+      factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
-    // carries a factory presence bit to keep the two configs from cross-serving.
+    // carries Factory presence and settings availability to keep those configs
+    // from cross-serving.
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
@@ -217,46 +308,57 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         // the same title in its thread list and active-session chrome. Title
         // generation takes the primary OM model only — its model field does not
         // accept fallback arrays.
-        generateTitle: {
-          model: ({ requestContext }) => {
-            const resolved = getObserverModel({ requestContext });
-            return Array.isArray(resolved) ? resolved[0]!.model : resolved;
-          },
-        },
-        observationalMemory: {
-          enabled: true,
-          temporalMarkers: true,
-          retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousAvailable
-            ? new Subconscious({
-                defaultScope: 'resource',
-                maxScope: 'resource',
-                pins: true,
-                ...(isFactory ? { maxSteps: 25 } : {}),
-              })
-            : undefined,
-          scope: omScope,
-          activateAfterIdle: 'auto',
-          activateOnProviderChange: true,
-          observation: {
-            bufferTokens: isResourceScope ? false : 1 / 5,
-            bufferActivation: isResourceScope ? undefined : 2000,
-            model: getObserverModel,
-            messageTokens: obsThreshold,
-            blockAfter: 2,
-            previousObserverTokens: observerPreviousObservationTokens,
-            threadTitle: true,
-            instruction: observerInstruction,
-            observeAttachments,
-          },
-          reflection: {
-            bufferActivation: isResourceScope ? undefined : 1 / 2,
-            blockAfter: 1.1,
-            model: getReflectorModel,
-            observationTokens: refThreshold,
-            instruction: reflectionInstruction,
-          },
-        },
+        generateTitle:
+          process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
+            ? false
+            : {
+                model: ({ requestContext }) => {
+                  const resolved = getObserverModel({ requestContext });
+                  if (resolved === 'auto') {
+                    return resolveMemoryModel(resolveAutoOMModelId(getMainModelId(requestContext)), { requestContext });
+                  }
+                  return Array.isArray(resolved) ? resolved[0]!.model : resolved;
+                },
+              },
+        observationalMemory:
+          process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
+            ? false
+            : {
+                enabled: true,
+                autoModels: MASTRACODE_AUTO_OM_MODELS,
+                resolveModel: resolveMemoryModel,
+                temporalMarkers: true,
+                retrieval: vector ? { vector: true } : true,
+                experimental_subconscious: subconsciousAvailable
+                  ? new Subconscious({
+                      defaultScope: 'resource',
+                      maxScope: 'resource',
+                      pins: true,
+                      ...(isFactory ? { maxSteps: 25 } : {}),
+                    })
+                  : undefined,
+                scope: omScope,
+                activateAfterIdle: 'auto',
+                activateOnProviderChange: true,
+                observation: {
+                  bufferTokens: isResourceScope ? false : 1 / 5,
+                  bufferActivation: isResourceScope ? undefined : 2000,
+                  model: getObserverModel,
+                  messageTokens: obsThreshold,
+                  blockAfter: 2,
+                  previousObserverTokens: observerPreviousObservationTokens,
+                  threadTitle: true,
+                  instruction: observerInstruction,
+                  observeAttachments,
+                },
+                reflection: {
+                  bufferActivation: isResourceScope ? undefined : 1 / 2,
+                  blockAfter: 1.1,
+                  model: getReflectorModel,
+                  observationTokens: refThreshold,
+                  instruction: reflectionInstruction,
+                },
+              },
       },
     });
     cachedMemoryKey = cacheKey;

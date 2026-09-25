@@ -126,15 +126,19 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
   readonly gatewayId: string;
+  /** Full `provider/model` router ID, when the ID alone resolves this model's route. */
+  id?: string;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGatewayInterface;
   private _supportedUrlsPromise: Promise<Record<string, RegExp[]>> | null = null;
   private readonly instanceGatewayCache = createGatewayModelCache();
+  private readonly hasCustomGateways: boolean;
   #lastStreamTransport: StreamTransport | undefined;
   #manager: GatewayManager;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGatewayInterface[]) {
+    this.hasCustomGateways = Boolean(customGateways?.length);
     // Normalize config to always have an 'id' field for routing
     let normalizedConfig: {
       id: `${string}/${string}`;
@@ -193,6 +197,17 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
+    // Only expose the ID when it alone can resolve the same route again: custom endpoints,
+    // credentials, headers, and gateways are not carried by the ID.
+    if (
+      !this.hasCustomGateways &&
+      !parsedConfig.url &&
+      !parsedConfig.apiKey &&
+      !parsedConfig.headers &&
+      !parsedConfig.api
+    ) {
+      this.id = parsedConfig.routerId;
+    }
 
     // Create a lazy PromiseLike for supportedUrls that resolves the underlying model's supportedUrls
     // This allows providers like Mistral to expose their native URL support (e.g., PDF URLs)

@@ -25,6 +25,18 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
 }
 
 const baseConfig: OMConfigInfo = {
+  observer: {
+    model: 'openai/observer-x',
+    effectiveModelId: 'openai/observer-x',
+    effectiveModelSource: 'explicit',
+    providerStatus: 'available',
+  },
+  reflector: {
+    model: 'openai/reflector-x',
+    effectiveModelId: 'openai/reflector-x',
+    effectiveModelSource: 'explicit',
+    providerStatus: 'available',
+  },
   observerModelId: 'openai/observer-x',
   reflectorModelId: 'openai/reflector-x',
   observationThreshold: 1000,
@@ -54,7 +66,16 @@ describe('OMSection', () => {
     server.use(
       http.get(OM_URL, () =>
         HttpResponse.json({
-          config: { ...baseConfig, reflectorModelId: 'google/gemini-3.5-flash' },
+          config: {
+            ...baseConfig,
+            reflector: {
+              model: 'google/gemini-3.5-flash',
+              effectiveModelId: 'google/gemini-3.5-flash',
+              effectiveModelSource: 'explicit',
+              providerStatus: 'unavailable',
+            },
+            reflectorModelId: 'google/gemini-3.5-flash',
+          },
         }),
       ),
     );
@@ -67,6 +88,59 @@ describe('OMSection', () => {
     const [observerModel, reflectorModel] = screen.getAllByRole('combobox');
     expect(observerModel).toHaveTextContent('openai/observer-x');
     expect(reflectorModel).toHaveTextContent('google/gemini-3.5-flash');
+  });
+
+  it('displays auto intent with its effective model and resets one role independently', async () => {
+    let requestBody: unknown;
+    const autoConfig: OMConfigInfo = {
+      ...baseConfig,
+      observer: {
+        model: 'auto',
+        effectiveModelId: 'openai/gpt-5.4-mini',
+        effectiveModelSource: 'configured-default',
+        providerStatus: 'available',
+      },
+      observerModelId: 'openai/gpt-5.4-mini',
+    };
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: autoConfig })),
+      http.put(`${OM_URL}/reflector/model`, async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({
+          ok: true,
+          config: {
+            ...autoConfig,
+            reflector: {
+              model: 'auto',
+              effectiveModelId: 'openai/gpt-5.4-mini',
+              effectiveModelSource: 'configured-default',
+              providerStatus: 'available',
+            },
+            reflectorModelId: 'openai/gpt-5.4-mini',
+          },
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<OMSection models={models} />);
+
+    await screen.findByDisplayValue('1000');
+    const [observerTrigger, reflectorTrigger] = screen.getAllByRole('combobox');
+    const observerAuto = screen.getByRole('button', { name: 'Use automatic observer model' });
+    const reflectorAuto = screen.getByRole('button', { name: 'Use automatic reflector model' });
+    expect(observerAuto).toHaveTextContent('Auto (configured default: openai/gpt-5.4-mini)');
+    expect(reflectorAuto).toHaveTextContent('Auto');
+    expect(observerAuto).toHaveAttribute('aria-pressed', 'true');
+    expect(reflectorAuto).toHaveAttribute('aria-pressed', 'false');
+    expect(observerTrigger).toHaveTextContent('Select observer model');
+    expect(reflectorTrigger).toHaveTextContent('openai/reflector-x');
+
+    await user.click(reflectorAuto);
+
+    await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto' }));
+    expect(observerAuto).toHaveAttribute('aria-pressed', 'true');
+    expect(reflectorAuto).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('loads the observer, reflector, thresholds, and attachment setting', async () => {
@@ -115,7 +189,18 @@ describe('OMSection', () => {
       http.get(OM_URL, () => HttpResponse.json({ config: baseConfig })),
       http.put(`${OM_URL}/observer/model`, async ({ request }) => {
         requestBody = await request.json();
-        return HttpResponse.json({ ok: true, config: { ...baseConfig, observerModelId: 'openai/reflector-x' } });
+        return HttpResponse.json({
+          ok: true,
+          config: {
+            ...baseConfig,
+            observer: {
+              model: 'openai/reflector-x',
+              effectiveModelId: 'openai/reflector-x',
+              providerStatus: 'available',
+            },
+            observerModelId: 'openai/reflector-x',
+          },
+        });
       }),
     );
 
