@@ -2940,6 +2940,76 @@ describe('A2A Handler', () => {
       expect(task?.history).toHaveLength(1);
       expect(['stream-race-message-1', 'stream-race-message-2']).toContain(task?.history?.[0]?.messageId);
     });
+
+    it('should make a message/stream follow-up wait for an already-claimed resume instead of starting a run', async () => {
+      const taskId = 'task-hitl-stream-claimed';
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({ taskId, contextId: 'ctx-hitl-stream-claimed', suspendedRunId: taskId }),
+      });
+
+      let releaseResume!: () => void;
+      const resumeGate = new Promise<void>(resolve => {
+        releaseResume = resolve;
+      });
+      const resumeStream = vi.fn(async () => {
+        await resumeGate;
+        return createStreamResult({ chunks: ['Done'] });
+      });
+      const stream = vi.fn().mockResolvedValue(createStreamResult({ chunks: ['Fresh run'] }));
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+
+      const streamFollowUp = async (messageId: string, abortSignal?: AbortSignal) => {
+        const events: any[] = [];
+        for await (const event of handleMessageStream({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId,
+              parts: [{ kind: 'text', text: '{"approved":true}' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+          abortSignal,
+        })) {
+          events.push(event);
+        }
+        return events;
+      };
+
+      const winner = streamFollowUp('claimed-winner');
+      await vi.waitFor(() => expect(resumeStream).toHaveBeenCalledTimes(1));
+      expect((await mockTaskStore.load({ agentId, taskId }))?.status.state).toBe('working');
+
+      const abortController = new AbortController();
+      const abortedFollower = streamFollowUp('claimed-aborted', abortController.signal);
+      abortController.abort();
+      await expect(abortedFollower).rejects.toThrow();
+
+      let followerSettled = false;
+      const follower = streamFollowUp('claimed-follower').finally(() => {
+        followerSettled = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(followerSettled).toBe(false);
+
+      releaseResume();
+      const [, followerEvents] = await Promise.all([winner, follower]);
+
+      expect(resumeStream).toHaveBeenCalledTimes(1);
+      expect(stream).not.toHaveBeenCalled();
+      expect(followerEvents).toHaveLength(1);
+      const task = await mockTaskStore.load({ agentId, taskId });
+      expect(followerEvents[0].result).toEqual(task);
+      expect(task?.status.state).toBe('completed');
+      expect(task?.history?.map(message => message.messageId)).toEqual(['claimed-winner']);
+    });
   });
 
   describe('handleTaskResubscribe with interrupted tasks', () => {
