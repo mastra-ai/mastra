@@ -80,8 +80,8 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     console.info(`⚠ ${warning}`);
   });
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
-  const loadBrowser = () => {
-    browserPromise ??= createBrowserFromSettings(settings.browser);
+  const loadBrowser = (chatModelId: string | undefined) => {
+    browserPromise ??= createBrowserFromSettings(settings.browser, { chatModelId });
     return browserPromise;
   };
 
@@ -174,14 +174,16 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   });
 
   if (settings.browser.enabled) {
-    void loadBrowser()
+    // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
+    const chatModelId = session.model.get();
+    void loadBrowser(chatModelId)
       .then(browser => {
         if (!browser) return;
         controller.setBrowser(browser);
         void session.state
           .set({
             activeBrowserSettings: toActiveBrowserSettings(settings.browser),
-            activeBrowserModel: resolveStagehandModel(settings.browser),
+            activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
           } as any)
           .catch(() => {});
       })

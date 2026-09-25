@@ -43,6 +43,11 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
+  feedback: z
+    .boolean()
+    .describe(
+      'Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501.',
+    ),
 });
 
 export const editorSourceSchema = z.enum(['code', 'db']);

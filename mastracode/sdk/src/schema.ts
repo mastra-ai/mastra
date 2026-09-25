@@ -126,7 +126,8 @@ export interface MastraCodeState {
   };
   activeBrowserModel?: {
     modelName?: string;
-    source: 'settings' | 'codex-oauth' | 'stagehand-default';
+    source: 'settings' | 'chat-model' | 'codex-oauth' | 'stagehand-default';
+    viaCodexOAuth: boolean;
   };
 }
 
@@ -268,7 +269,8 @@ export const stateSchema = z.object({
   activeBrowserModel: z
     .object({
       modelName: z.string().optional(),
-      source: z.enum(['settings', 'codex-oauth', 'stagehand-default']),
+      source: z.enum(['settings', 'chat-model', 'codex-oauth', 'stagehand-default']),
+      viaCodexOAuth: z.boolean(),
     })
     .optional(),
 });

@@ -434,6 +434,7 @@ describe('work item read wire', () => {
           number: 42,
           [FACTORY_RULE_MATERIALIZATION_KEY]: 'caller-materialization',
           [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+          externalSourceMissingAt: '2099-01-01T00:00:00.000Z',
         },
       }),
     );
@@ -445,6 +446,7 @@ describe('work item read wire', () => {
         prNumber: 7,
         [FACTORY_RULE_MATERIALIZATION_KEY]: 'replacement-materialization',
         [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed',
+        externalSourceMissingAt: '2099-01-01T00:00:00.000Z',
       },
     });
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });

@@ -1,9 +1,9 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { formatDistanceToNowStrict } from 'date-fns';
 import { Pause, Timer } from 'lucide-react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
@@ -95,7 +95,7 @@ export function RunWorkflowHeader({
         </Txt>
         <CopyButton content={runId} tooltip="Copy run ID" variant="ghost" size="icon-sm" className="shrink-0" />
         {timestamp !== undefined && Number.isFinite(timestamp) ? (
-          <span className="ml-auto shrink-0">{formatDistanceToNowStrict(timestamp, { addSuffix: true })}</span>
+          <RelativeTimestamp value={timestamp} className="ml-auto shrink-0" />
         ) : null}
       </div>
     </div>

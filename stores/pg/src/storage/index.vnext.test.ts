@@ -118,6 +118,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
+          'feedback',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -135,6 +136,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
+          'feedback',
         ]);
       } finally {
         coreFeatures.clear();

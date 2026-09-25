@@ -11,6 +11,7 @@ import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/sect
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
@@ -26,7 +27,6 @@ import { WorkflowStepDetailContent } from '@/domains/workflows/components/workfl
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;

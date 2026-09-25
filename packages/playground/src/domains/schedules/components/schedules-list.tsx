@@ -1,14 +1,14 @@
 import type { ScheduleResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo } from 'react';
-import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
-import { useLinkComponent } from '@/lib/framework';
 
 export type SchedulesSortKey = 'target' | 'status' | 'nextFireAt' | 'lastFireAt';
 export type SchedulesSort = ListSort<SchedulesSortKey>;
@@ -95,23 +95,19 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
           <DataList.Cell>
             <ScheduleStatusText status={s.status} />
           </DataList.Cell>
-          <DataList.Cell>
-            <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.nextFireAt)}>
-              {formatRelativeTime(s.nextFireAt)}
-            </span>
-          </DataList.Cell>
+          <DataList.Cell>{s.nextFireAt ? <RelativeTimestamp value={s.nextFireAt} /> : '—'}</DataList.Cell>
           <DataList.Cell>
             {s.lastRun ? (
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <WorkflowRunStatusInline status={s.lastRun.status} />
-                <span className="text-caption text-muted-foreground" title={formatScheduleTimestamp(s.lastFireAt)}>
-                  {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : ''}
-                </span>
+                {s.lastFireAt ? (
+                  <Txt as="span" variant="caption" tone="muted">
+                    <RelativeTimestamp value={s.lastFireAt} />
+                  </Txt>
+                ) : null}
               </span>
             ) : s.lastFireAt ? (
-              <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.lastFireAt)}>
-                {formatRelativeTime(s.lastFireAt)}
-              </span>
+              <RelativeTimestamp value={s.lastFireAt} />
             ) : (
               <span className="text-muted-foreground">Never</span>
             )}

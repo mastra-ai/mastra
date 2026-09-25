@@ -19,7 +19,7 @@ import { overlaySurfaceStyle } from '../../../ds/primitives/raised-surface';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import { tToTimestampMs } from '../lib/replay-selection';
 import type { TDomain } from '../lib/timeline';
-import { formatTimeDisplay, tToTimestamp } from '../lib/timeline';
+import { tToTimestamp } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
 import {
   getAreaRowYMax,
@@ -32,6 +32,7 @@ import {
   toMessageData,
   toSelectedT,
 } from './flame-graph-data';
+import { formatDate } from '@/utils/date-format';
 
 export interface ZoomRange {
   left: number;
@@ -71,7 +72,7 @@ function TimeAxis({ domain }: { domain: TDomain }) {
       <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
         {ticks.map(t => (
           <Txt key={t} as="span" variant="meta" font="mono">
-            {formatTimeDisplay(tToTimestamp(t, domain))}
+            {formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' })}
           </Txt>
         ))}
       </div>
@@ -92,7 +93,8 @@ export function FlameTooltip({
 }) {
   if (!active || !payload?.length) return null;
   const t = payload[0]?.payload?.t;
-  const time = domain != null && t != null ? formatTimeDisplay(tToTimestamp(t, domain)) : null;
+  const time =
+    domain != null && t != null ? formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' }) : null;
   const visibleEntries = payload.filter(entry => entry.name !== 't' && entry.name !== 'time' && entry.value != null);
 
   if (showValue) {

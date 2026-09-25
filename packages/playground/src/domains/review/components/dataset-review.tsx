@@ -18,7 +18,9 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
@@ -27,13 +29,10 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
-import { useLinkComponent } from '@/lib/framework';
 
 const REVIEW_LIST_COLUMNS = [
   { name: 'itemId', label: 'Item ID', size: 'auto' },
@@ -65,6 +64,10 @@ export interface ReviewListFilters {
 }
 
 export interface DatasetReviewProps {
+  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
+  withQueryTrace: boolean;
+  /** Shows the Feedback tabs on the result and trace drawers. */
+  withFeedback: boolean;
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
@@ -110,6 +113,8 @@ export function DatasetReview({
   toolbarEnd,
   onCreateScorer,
   breadcrumbs,
+  withQueryTrace,
+  withFeedback,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
@@ -545,6 +550,8 @@ export function DatasetReview({
 
   const detailPanel = (
     <ExperimentResultDetail
+      withQueryTrace={withQueryTrace}
+      withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}
       scores={featuredItem ? featuredScoresByItemId?.[featuredItem.itemId] : undefined}

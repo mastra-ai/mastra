@@ -1,4 +1,4 @@
-import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
+import { assertSupportedPatterns, getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   DatasetRecord,
@@ -139,6 +139,8 @@ export abstract class DatasetsStorage extends StorageDomain {
 
     // If schemas changing, validate all existing items against new schemas
     if (inputSchemaChanging || groundTruthSchemaChanging) {
+      if (inputSchemaChanging) assertSupportedPatterns(args.inputSchema);
+      if (groundTruthSchemaChanging) assertSupportedPatterns(args.groundTruthSchema);
       const itemsResult = await this.listItemsForMutation({
         datasetId: args.id,
         pagination: { page: 0, perPage: false }, // Get all items

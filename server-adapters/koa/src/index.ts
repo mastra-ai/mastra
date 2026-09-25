@@ -138,6 +138,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.status = status;
         ctx.body = { error: error.message || 'Unknown error' };
 
+        // The route handler already logged this 501 at warn level. Skip the emit when only
+        // Koa's default listener would receive it, since that prints to console.error.
+        // Apps that register their own 'error' listeners still get the event.
+        const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
+        const onlyDefaultListener = ctx.app.listeners('error').every(listener => listener === ctx.app.onerror);
+        if (loggedAsWarning && onlyDefaultListener) {
+          return;
+        }
+
         // Emit the error for logging (standard Koa pattern) but don't re-throw
         // since this middleware is the final error boundary.
         ctx.app.emit('error', err, ctx);
@@ -517,6 +526,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           path: route.path,
           method: route.method,
         });
+        (ctx as any)._mastraLoggedNotImplementedError = httpStatus === 501 ? error : undefined;
       }
       const customResponse = getCustomHTTPExceptionResponse(error);
       if (customResponse) {

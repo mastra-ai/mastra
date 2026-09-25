@@ -36,6 +36,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
@@ -137,7 +138,7 @@ export class ExperimentsPG extends ExperimentsStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
