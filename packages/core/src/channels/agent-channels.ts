@@ -1137,7 +1137,18 @@ export class AgentChannels {
   ): Promise<void> {
     const platform = chatThread.adapter.name;
     // Messages batched by a concurrency strategy, oldest first, then the current one.
-    const batch = [...skipped, message].filter(m => !this.isContentlessMessage(m));
+    // Only the current sender's messages are merged: the run is attributed to and
+    // authorized as `message.author`, so another user's content must not ride
+    // along under that identity. Custom handlers still see all of them in `skipped`.
+    const otherAuthors = skipped.filter(m => m.author?.userId !== message.author?.userId);
+    if (otherAuthors.length > 0) {
+      this.log('debug', `[${platform}] Not merging batched messages from other senders`, {
+        messageIds: otherAuthors.map(m => m.id),
+      });
+    }
+    const batch = [...skipped.filter(m => !otherAuthors.includes(m)), message].filter(
+      m => !this.isContentlessMessage(m),
+    );
 
     // Some adapters lift platform side-channel events (read receipts, delivery
     // acks) into inbound messages carrying no text and no attachments. Running
@@ -1191,7 +1202,11 @@ export class AgentChannels {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
         this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
-        const history = await this.fetchThreadHistory(chatThread, message.id, maxMessages);
+        const history = await this.fetchThreadHistory(
+          chatThread,
+          new Set([...skipped, message].map(m => m.id)),
+          maxMessages,
+        );
         this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
         if (history.length > 0) {
           const lines = ['[Thread context — messages in this thread before you joined]'];
@@ -1397,7 +1412,7 @@ export class AgentChannels {
    */
   private async fetchThreadHistory(
     chatThread: Thread,
-    currentMessageId: string,
+    excludeIds: ReadonlySet<string>,
     maxMessages: number,
   ): Promise<ThreadHistoryMessage[]> {
     const messages: ThreadHistoryMessage[] = [];
@@ -1405,8 +1420,8 @@ export class AgentChannels {
     try {
       // chatThread.messages is an async iterator that yields newest-first
       for await (const msg of chatThread.messages) {
-        // Skip the current message that triggered this request
-        if (msg.id === currentMessageId) continue;
+        // Skip the messages that triggered this request
+        if (excludeIds.has(msg.id)) continue;
 
         const historyText = msg.formatted ? chatModule().stringifyMarkdown(msg.formatted).trim() : undefined;
         messages.push({
