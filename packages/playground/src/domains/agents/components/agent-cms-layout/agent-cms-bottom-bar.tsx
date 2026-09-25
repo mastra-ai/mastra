@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useAgentCmsNavigation } from '../agent-cms-sidebar/use-agent-cms-navigation';
-import { useLinkComponent } from '@/lib/framework';
 
 interface AgentCmsBottomBarProps {
   basePath: string;

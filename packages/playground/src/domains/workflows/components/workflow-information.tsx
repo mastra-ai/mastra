@@ -2,6 +2,7 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronRight, Plus } from 'lucide-react';
@@ -17,7 +18,6 @@ import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
 import { useWorkflow } from '@/hooks/use-workflows';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowInformationProps {
   workflowId: string;

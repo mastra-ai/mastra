@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -19,7 +20,6 @@ import { RequestContextLabel } from '@/domains/request-context/components/reques
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
-import { useLinkComponent } from '@/lib/framework';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 interface RequestContextProps {

@@ -1,11 +1,11 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxExecutionBadge } from '../sandbox-execution-badge';
 import { paths } from '@/lib/app-routing';
-import { LinkComponentProvider } from '@/lib/framework';
 
 const Link = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(function Link(props, ref) {
   return <a ref={ref} {...props} />;

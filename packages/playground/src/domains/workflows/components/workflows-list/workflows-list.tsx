@@ -6,6 +6,7 @@ import {
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
@@ -17,7 +18,6 @@ import type { WorkflowsSort, WorkflowsSortKey } from './workflows-sort';
 import { useWorkflowsRunCounts } from '@/domains/workflows/hooks/use-workflows-run-counts';
 import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows';
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowsListProps {
   workflows: Record<string, GetWorkflowResponse>;

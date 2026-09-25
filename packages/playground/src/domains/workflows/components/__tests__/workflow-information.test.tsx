@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -14,8 +16,6 @@ import type { WorkflowRunContextType } from '../../context/workflow-run-context'
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
 import { WorkflowInformation } from '../workflow-information';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
