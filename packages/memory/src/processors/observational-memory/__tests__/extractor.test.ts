@@ -385,7 +385,7 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
-  it('retries transient provider failures on the OM retry ladder', async () => {
+  it('retries a transient provider failure in native output mode', async () => {
     const originalRetryConfig = { ...RETRY_CONFIG };
     RETRY_CONFIG.initialDelayMs = 1;
     RETRY_CONFIG.maxDelayMs = 4;
@@ -401,7 +401,6 @@ describe('Extractor', () => {
         agent: { stream } as unknown as Agent<any, any, any, any>,
         source: 'observer',
         extractors: [priority],
-        maxRetries: 1,
       });
 
       expect(result.values).toEqual({ priority: 'high' });
@@ -409,13 +408,13 @@ describe('Extractor', () => {
       expect(stream).toHaveBeenCalledTimes(2);
       // Retried in the same (native) output mode rather than falling through to
       // the json-prompt-injection fallback.
-      expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+      expect(stream.mock.calls[1]![1].structuredOutput.jsonPromptInjection).toBeUndefined();
     } finally {
       Object.assign(RETRY_CONFIG, originalRetryConfig);
     }
   });
 
-  it('returns failures without a second retry ladder once transient retries are exhausted', async () => {
+  it('retries a transient extraction failure once, independent of the stage retry budget, with no fallback ladder', async () => {
     const originalRetryConfig = { ...RETRY_CONFIG };
     RETRY_CONFIG.initialDelayMs = 1;
     RETRY_CONFIG.maxDelayMs = 4;
@@ -428,12 +427,12 @@ describe('Extractor', () => {
         agent: { stream } as unknown as Agent<any, any, any, any>,
         source: 'observer',
         extractors: [priority],
-        maxRetries: 2,
       });
 
       expect(result.failures).toEqual([{ slug: 'priority', error: 'rate limited' }]);
-      // One ladder (initial call + 2 retries), and no JSON-prompt fallback ladder.
-      expect(stream).toHaveBeenCalledTimes(3);
+      // Fixed budget: initial call + 1 retry. The Observer/Reflector `maxRetries`
+      // (default 8) must not apply here, and there is no JSON-prompt fallback ladder.
+      expect(stream).toHaveBeenCalledTimes(2);
       expect(stream.mock.calls.every(call => call[1].structuredOutput.jsonPromptInjection === undefined)).toBe(true);
     } finally {
       Object.assign(RETRY_CONFIG, originalRetryConfig);

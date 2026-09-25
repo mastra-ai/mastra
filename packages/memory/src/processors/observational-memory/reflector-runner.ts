@@ -611,7 +611,6 @@ export class ReflectorRunner {
       requestContext: internalRequestContext,
       observabilityContext,
       abortSignal,
-      maxRetries: this.reflectionConfig.maxRetries,
     });
     const parsedExtractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
     const parsedExtractionFailures = mergeExtractionFailures(parsed.extractionFailures, structuredExtraction.failures);

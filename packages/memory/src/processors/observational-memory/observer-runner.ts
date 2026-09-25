@@ -413,7 +413,6 @@ export class ObserverRunner {
       requestContext: internalRequestContext,
       observabilityContext: options?.observabilityContext,
       abortSignal,
-      maxRetries: this.observationConfig.maxRetries,
     });
     const extractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
     const extractionFailures = mergeExtractionFailures(parsed.extractionFailures, structuredExtraction.failures);

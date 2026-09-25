@@ -37,8 +37,6 @@ export async function extractStructuredValues(opts: {
   requestContext?: RequestContext;
   observabilityContext?: ObservabilityContext;
   abortSignal?: AbortSignal;
-  /** Transient-failure retry budget for the extraction call (OM-owned ladder). */
-  maxRetries?: number;
 }): Promise<StructuredExtractionResult> {
   const structuredExtractors = (opts.extractors ?? []).filter(extractor => extractor.mode === 'structured');
   if (structuredExtractors.length === 0) {
@@ -70,12 +68,13 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   const failures: Array<{ slug: string; error: string }> = [];
 
   const streamWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') =>
-    // OM agents pin model-level `maxRetries: 0`, so transient-failure retries
-    // for this call have to come from the OM ladder like every other OM call.
+    // OM agents pin model-level `maxRetries: 0`. Extraction failures are tolerated
+    // (returned as `failures`), so use a small fixed budget rather than the
+    // Observer/Reflector `maxRetries`, which only governs the stage's model call.
     withRetry(() => streamOnce(jsonPromptInjection), {
       label: `om-${opts.source}-structured-extraction`,
       abortSignal: opts.abortSignal,
-      maxRetries: opts.maxRetries,
+      maxRetries: 1,
     });
 
   const streamOnce = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
