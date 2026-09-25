@@ -192,7 +192,7 @@ for await (const chunk of output.fullStream) {
 }
 ```
 
-If you pass `idleTimeoutMs`, a stream that goes quiet for that long ends with an error chunk and detaches the observer. The run itself is only cleaned up when you also pass `isAlive` and it reports the run is no longer running.
+If you pass `idleTimeoutMs`, a stream that receives no chunks for that long ends with an error chunk and detaches the observer. The run itself is only cleaned up when you also pass `isAlive` and it reports the run is no longer running.
 
 `createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
@@ -253,7 +253,9 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 ## Cleanup
 
-Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub, removes the run from the internal registry, and clears the run's cached events, so no one can replay the run afterward. When you don't call it, an automatic timer (`cleanupTimeoutMs`) runs cleanup once the run finishes, errors, or is aborted, but detaching an observer or hitting a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
+Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
+
+When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
 
 Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
 
