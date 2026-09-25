@@ -61,15 +61,27 @@ function createModel() {
   });
 }
 
+// `evented-fallback` is an EventedAgent on a store without atomic concurrent
+// updates, which runs the loop on the default engine instead.
+type AgentKind = 'durable' | 'evented-fallback';
+
 // A fresh module graph per process keeps module-level state (run registry,
 // local recovery claims) from leaking between the original run and recovery.
-async function startProcess() {
+async function startProcess(kind: AgentKind) {
   vi.resetModules();
-  const [{ Mastra }, { InMemoryStore }, { Agent }, { createDurableAgent }, { globalRunRegistry }] = await Promise.all([
+  const [
+    { Mastra },
+    { InMemoryStore },
+    { Agent },
+    { createDurableAgent },
+    { createEventedAgent },
+    { globalRunRegistry },
+  ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
     import('../../agent'),
     import('../create-durable-agent'),
+    import('../create-evented-agent'),
     import('../run-registry'),
   ]);
 
@@ -87,10 +99,15 @@ async function startProcess() {
       },
     },
   });
-  const durableAgent = createDurableAgent({ agent });
+  const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+  const storage = new InMemoryStore();
+  // Before `new Mastra(...)`: the engine resolves during agent registration.
+  if (kind === 'evented-fallback') {
+    vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
+  }
   const mastra = new Mastra({
     agents: { crashAgent: durableAgent },
-    storage: new InMemoryStore(),
+    storage,
     logger: false,
     recovery: { durableAgents: 'auto' },
   });
@@ -130,8 +147,51 @@ function finishedBeforeCrash({ outer }: Checkpoint) {
   return outer?.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
 }
 
-async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<string> {
-  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess();
+// The outer step a restart from this checkpoint resumes from.
+function outerTargetId({ outer }: Checkpoint) {
+  return (outer?.serializedStepGraph?.[outer.activePaths?.[0] ?? -1] as { id?: string } | undefined)?.id;
+}
+
+// Runs a two-round tool-calling turn to completion, copying the workflow store
+// after every write.
+async function captureCheckpoints(kind: AgentKind) {
+  const original = await startProcess(kind);
+  const rows = new Map<string, SnapshotRow>();
+  const checkpoints: Checkpoint[] = [];
+  const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
+  original.workflows.persistWorkflowSnapshot = async args => {
+    rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+    const copy = [...rows.values()].map(row => structuredClone(row));
+    checkpoints.push({
+      outer: copy.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
+      inner: copy.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
+      rows: copy,
+    });
+    return persist(args);
+  };
+
+  const result = await original.durableAgent.stream('Look two things up');
+  let text = '';
+  for await (const chunk of result.fullStream) {
+    if (chunk.type === 'text-delta') text += chunk.payload.text;
+  }
+  expect(text).toBe('done');
+  // A finished run deletes its snapshots; wait for that so every write has been captured.
+  await vi.waitFor(
+    async () =>
+      expect(
+        await original.workflows.loadWorkflowSnapshot({
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+          runId: result.runId,
+        }),
+      ).toBeFalsy(),
+    { timeout: 5_000 },
+  );
+  return { agent: original.durableAgent, checkpoints, runId: result.runId };
+}
+
+async function recoverFrom(checkpoint: Checkpoint, runId: string, kind: AgentKind): Promise<string> {
+  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(kind);
   for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
 
   let finishEvents = 0;
@@ -182,39 +242,7 @@ async function recoverFrom(checkpoint: Checkpoint, runId: string): Promise<strin
 
 describe('DurableAgent crash recovery', () => {
   it('recovers from every checkpoint of a tool-calling run', async () => {
-    // Process 1: run to completion, copying the workflow store after every write.
-    const original = await startProcess();
-    const rows = new Map<string, SnapshotRow>();
-    const checkpoints: Checkpoint[] = [];
-    const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
-    original.workflows.persistWorkflowSnapshot = async args => {
-      rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
-      const copy = [...rows.values()].map(row => structuredClone(row));
-      checkpoints.push({
-        outer: copy.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
-        inner: copy.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
-        rows: copy,
-      });
-      return persist(args);
-    };
-
-    const result = await original.durableAgent.stream('Look two things up');
-    let text = '';
-    for await (const chunk of result.fullStream) {
-      if (chunk.type === 'text-delta') text += chunk.payload.text;
-    }
-    expect(text).toBe('done');
-    // A finished run deletes its snapshots; wait for that so every write has been captured.
-    await vi.waitFor(
-      async () =>
-        expect(
-          await original.workflows.loadWorkflowSnapshot({
-            workflowName: DurableStepIds.AGENTIC_LOOP,
-            runId: result.runId,
-          }),
-        ).toBeFalsy(),
-      { timeout: 5_000 },
-    );
+    const { checkpoints, runId } = await captureCheckpoints('durable');
 
     const recoverable = checkpoints.filter(checkpoint => !knownUnrecoverable(checkpoint));
     // Each case the trimming used to break must be among the recovered checkpoints.
@@ -224,19 +252,36 @@ describe('DurableAgent crash recovery', () => {
     expect(recoverable.some(c => inner(c) && activeStepIds(c.outer).length === 0)).toBe(true);
     // FINISH already went out: once with map-final-output as the step to resume
     // from, once with scorer execution running.
-    const outerTarget = (c: Checkpoint) => c.outer?.serializedStepGraph?.[c.outer.activePaths?.[0] ?? -1];
-    const targets = (id: string) =>
-      recoverable.some(c => finishedBeforeCrash(c) && (outerTarget(c) as { id?: string } | undefined)?.id === id);
+    const targets = (id: string) => recoverable.some(c => finishedBeforeCrash(c) && outerTargetId(c) === id);
     expect(targets(MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
     expect(targets('execute-scorers')).toBe(true);
 
     const failures: string[] = [];
     for (const [index, checkpoint] of checkpoints.entries()) {
       if (knownUnrecoverable(checkpoint)) continue;
-      const outcome = await recoverFrom(checkpoint, result.runId);
+      const outcome = await recoverFrom(checkpoint, runId, 'durable');
       if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
     }
     expect(failures).toEqual([]);
     expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
   }, 120_000);
+
+  // The fallback agent reports the evented engine but runs on the default one,
+  // which skips the finished map-final-output on restart. Recovery must still
+  // publish FINISH, or the recovered stream hangs.
+  it('finishes the recovered stream of an EventedAgent that fell back to the default engine', async () => {
+    const { agent, checkpoints, runId } = await captureCheckpoints('evented-fallback');
+    expect((agent.getWorkflow() as any).engineType).toBe('default');
+
+    const afterFinish = checkpoints.filter(c => !knownUnrecoverable(c) && finishedBeforeCrash(c));
+    expect(afterFinish.some(c => outerTargetId(c) === MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
+    expect(afterFinish.some(c => outerTargetId(c) === 'execute-scorers')).toBe(true);
+
+    const failures: string[] = [];
+    for (const checkpoint of afterFinish) {
+      const outcome = await recoverFrom(checkpoint, runId, 'evented-fallback');
+      if (outcome !== 'ok') failures.push(`${describeCheckpoint(checkpoint)}: ${outcome}`);
+    }
+    expect(failures).toEqual([]);
+  }, 60_000);
 });

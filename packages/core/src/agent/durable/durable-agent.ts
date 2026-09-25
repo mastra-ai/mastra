@@ -2958,9 +2958,13 @@ export class DurableAgent<
       // continues after a finished step instead of re-running it, so FINISH is
       // never published again, and the recovered stream (subscribed from the
       // topic's current end) would wait for it forever. The evented engine
-      // re-runs the step, which publishes FINISH itself.
+      // re-runs the step, which publishes FINISH itself. Check the resolved
+      // engine: an EventedAgent can fall back to the default one. Once the
+      // evented engine also continues after a finished step (COR-1354), drop
+      // the engine check.
       finishPublishedBeforeCrash =
-        this.workflowEngine === 'default' && loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+        this.resolveWorkflowEngine() === 'default' &&
+        loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
       recoveryLease.assertOwned();
       recoveryState = await this.#rehydrateRecoveryState({
         runId,
