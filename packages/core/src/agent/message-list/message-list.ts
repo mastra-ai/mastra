@@ -454,7 +454,8 @@ export class MessageList {
 
   private removeMatchingTransientSignals(incoming: MastraDBMessage): void {
     const incomingMeta = incoming.content.metadata?.signal as
-      { id?: string; type?: string; tagName?: string } | undefined;
+      | { id?: string; type?: string; tagName?: string }
+      | undefined;
     // The stored copy's parts gain bookkeeping fields (e.g. a per-part `createdAt` stamp)
     // during conversion, so compare contents with those stripped.
     const serializeParts = (parts: MastraDBMessage['content']['parts']) =>
@@ -466,7 +467,8 @@ export class MessageList {
       if (!isTransientSignalMessage(existing)) continue;
 
       const existingMeta = existing.content.metadata?.signal as
-        { id?: string; type?: string; tagName?: string } | undefined;
+        | { id?: string; type?: string; tagName?: string }
+        | undefined;
 
       const sameId = existing.id === incoming.id;
       const sameLogicalSignal =
