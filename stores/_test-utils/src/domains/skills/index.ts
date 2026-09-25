@@ -35,6 +35,52 @@ export function createSkillsTests({ storage }: { storage: MastraStorage }) {
       await skillsStorage.dangerouslyClearAll();
     });
 
+    it('persists visibility on create, update, and list', async () => {
+      const publicSkill = createSkill(`skill-public-${Date.now()}`);
+      const created = await skillsStorage.create({ skill: publicSkill });
+      expect(created.visibility).toBe('public');
+      expect((await skillsStorage.getById(publicSkill.id))?.visibility).toBe('public');
+
+      const { visibility: _visibility, ...privateInput } = createSkill(`skill-private-${Date.now()}`);
+      await skillsStorage.create({ skill: privateInput });
+      expect((await skillsStorage.getById(privateInput.id))?.visibility).toBe('private');
+
+      const publicList = await skillsStorage.list({ visibility: 'public' });
+      expect(publicList.skills.map(s => s.id)).toEqual([publicSkill.id]);
+
+      await skillsStorage.update({ id: privateInput.id, visibility: 'public' });
+      expect((await skillsStorage.getById(privateInput.id))?.visibility).toBe('public');
+      expect(await skillsStorage.countVersions(privateInput.id)).toBe(1);
+
+      const updatedList = await skillsStorage.list({ visibility: 'public' });
+      expect(updatedList.skills.map(s => s.id).sort()).toEqual([privateInput.id, publicSkill.id].sort());
+    });
+
+    it('list filters by status and entityIds, with filtered totals', async () => {
+      const draft = createSkill(`skill-draft-${Date.now()}`);
+      const published = createSkill(`skill-pub-${Date.now()}`);
+      await skillsStorage.create({ skill: draft });
+      await skillsStorage.create({ skill: published });
+      const latest = await skillsStorage.getLatestVersion(published.id);
+      await skillsStorage.update({ id: published.id, activeVersionId: latest!.id, status: 'published' });
+
+      const byStatus = await skillsStorage.list({ status: 'published' });
+      expect(byStatus.skills.map(s => s.id)).toEqual([published.id]);
+      expect(byStatus.total).toBe(1);
+
+      const empty = await skillsStorage.list({ entityIds: [] });
+      expect(empty.skills).toEqual([]);
+      expect(empty.total).toBe(0);
+
+      const byIds = await skillsStorage.list({ entityIds: [draft.id] });
+      expect(byIds.skills.map(s => s.id)).toEqual([draft.id]);
+      expect(byIds.total).toBe(1);
+
+      const combined = await skillsStorage.list({ entityIds: [draft.id], status: 'published' });
+      expect(combined.skills).toEqual([]);
+      expect(combined.total).toBe(0);
+    });
+
     it('does not create duplicate versions for semantically unchanged snapshots', async () => {
       const skill = createSkill(`skill-${Date.now()}`);
       await skillsStorage.create({ skill });

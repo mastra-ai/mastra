@@ -30,6 +30,8 @@ export type { RouteHandlerParams, RouteHandlerResult, RouteMatch } from './servi
 export { RequestContextService } from './services/request-context.service';
 export { ShutdownService } from './services/shutdown.service';
 export { AuthService } from './services/auth.service';
+export type { AuthenticateOptions } from './services/auth.service';
+export { CustomRouteService } from './services/custom-route.service';
 
 // Middleware (for custom usage)
 export { BodyLimitMiddleware } from './middleware/body-limit.middleware';

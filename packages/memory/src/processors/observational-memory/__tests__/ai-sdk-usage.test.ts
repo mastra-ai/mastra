@@ -483,7 +483,7 @@ describe('AI SDK: buffer in one turn, activate + generateText in next', () => {
         readFileSync(join(threadCaptureDir, runDir!, 'observer-exchange.json'), 'utf8'),
       );
       expect(observerExchange.systemPrompt).toBeTruthy();
-      expect(observerExchange.observerMessages).toHaveLength(2);
+      expect(observerExchange.observerMessages).toHaveLength(1);
       expect(observerExchange.rawOutput).toContain('<observations>');
     } finally {
       if (previousCapture === undefined) {

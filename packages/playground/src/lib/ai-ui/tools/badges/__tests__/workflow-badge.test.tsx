@@ -6,7 +6,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowBadge } from '../workflow-badge';
 import { badgeWorkflow, badgeWorkflowRuns, RUN_ID, WORKFLOW_ID } from './fixtures/workflow-badge';
@@ -47,9 +47,13 @@ describe('WorkflowBadge', () => {
   // those providers itself or the graph throws
   // "useWorkflowStepDetail must be used within WorkflowStepDetailProvider".
   it('renders the workflow graph for a completed run without throwing the step-detail provider error', async () => {
+    const listRequests = vi.fn();
     server.use(
       http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(badgeWorkflow)),
-      http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json(badgeWorkflowRuns)),
+      http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => {
+        listRequests();
+        return HttpResponse.json(badgeWorkflowRuns);
+      }),
       http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${RUN_ID}`, () =>
         HttpResponse.json(badgeWorkflowRuns.runs[0]),
       ),
@@ -69,5 +73,7 @@ describe('WorkflowBadge', () => {
 
     await waitFor(() => expect(screen.getByTestId('workflow-badge')).toBeTruthy());
     await waitFor(() => expect(screen.getByTestId('workflow-graph-viewport')).toBeTruthy());
+    // The badge loads only its own run, never the full runs list with every snapshot.
+    expect(listRequests).not.toHaveBeenCalled();
   });
 });

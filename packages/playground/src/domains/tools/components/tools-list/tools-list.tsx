@@ -6,13 +6,13 @@ import {
 } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import type { ToolWithAgents } from '@/domains/tools/utils/prepareToolsTable';
-import { useLinkComponent } from '@/lib/framework';
 
 export type ToolsSortKey = 'name' | 'agents';
 export type ToolsSort = ListSort<ToolsSortKey>;

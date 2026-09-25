@@ -55,6 +55,9 @@ import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
 
+/** Platforms whose chat-SDK adapters render interactive approval buttons. */
+const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -292,7 +295,7 @@ export class AgentChannels {
             memory,
             // Without approval-button rendering, auto-approve tools to
             // avoid getting stuck waiting for input we can't ask for.
-            autoResumeSuspendedTools,
+            ...(autoResumeSuspendedTools ? { autoResumeSuspendedTools } : {}),
           },
         },
       },
@@ -320,6 +323,12 @@ export class AgentChannels {
         // The run already started; the output processor reports its failure.
         this.log('debug', 'accepted consume failed', err);
       }
+    } else {
+      this.log(
+        accepted.action === 'deliver' ? 'debug' : 'warn',
+        `[dispatchInboundMessage] inbound message did not start a run (action: ${accepted.action}); the thread may be suspended awaiting tool approval`,
+        { threadId: memory.thread, resourceId: memory.resource },
+      );
     }
   }
 
@@ -570,6 +579,7 @@ export class AgentChannels {
               let toolArgs: Record<string, unknown> | undefined;
 
               const stashed = this.pendingApprovalCards.get(toolCallId);
+              let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
@@ -587,7 +597,7 @@ export class AgentChannels {
                   orderBy: { field: 'createdAt', direction: 'DESC' },
                 });
 
-                for (const msg of messages) {
+                for (const [index, msg] of messages.entries()) {
                   const pending = msg.content?.metadata?.pendingToolApprovals as
                     | Record<
                         string,
@@ -606,6 +616,33 @@ export class AgentChannels {
                         runId = toolData.parentRunId ?? toolData.runId;
                         toolName = toolData.toolName;
                         toolArgs = toolData.args;
+                        // Recover the card's owner from the user turn that led to it
+                        // (messages are newest-first). If that turn has messages from
+                        // more than one author we can't tell who triggered the tool,
+                        // so no one may answer the card.
+                        const earlier = messages.slice(index + 1);
+                        const turnStart = earlier.findIndex(m => m.role === 'user');
+                        const turnEnd = earlier.findIndex((m, i) => i > turnStart && m.role !== 'user');
+                        const authors = new Set(
+                          (turnStart === -1 ? [] : earlier.slice(turnStart, turnEnd === -1 ? undefined : turnEnd))
+                            .map(
+                              m =>
+                                (
+                                  m.content?.providerMetadata?.mastra as
+                                    | { channels?: Record<string, { author?: { userId?: string } }> }
+                                    | undefined
+                                )?.channels?.[platform]?.author?.userId,
+                            )
+                            .filter((id): id is string => !!id),
+                        );
+                        if (!requesterId && authors.size > 1) {
+                          this.log(
+                            'info',
+                            `Ignoring tool approval action: requester for toolCallId=${toolCallId} is ambiguous`,
+                          );
+                          return;
+                        }
+                        requesterId ??= [...authors][0];
                         break;
                       }
                     }
@@ -616,6 +653,17 @@ export class AgentChannels {
 
               if (!runId) {
                 this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
+                return;
+              }
+
+              // Only the user whose message triggered the tool call may answer
+              // its approval card. Skip the check when either identity is unknown.
+              const actorId = event.user?.userId;
+              if (requesterId && actorId && requesterId !== actorId) {
+                this.log(
+                  'info',
+                  `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer toolCallId=${toolCallId}`,
+                );
                 return;
               }
 
@@ -660,7 +708,7 @@ export class AgentChannels {
                 const { requestContext } = handlerContext;
                 requestContext.set('channel', channelContext);
 
-                const renderContext = this._buildRenderContext(chatThread, platform);
+                const renderContext = this._buildRenderContext(chatThread, platform, { requesterId });
                 requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
                 try {
@@ -712,7 +760,10 @@ export class AgentChannels {
               const { requestContext } = handlerContext;
               requestContext.set('channel', channelContext);
 
-              const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });
+              const renderContext = this._buildRenderContext(chatThread, platform, {
+                approvalContext: { toolCallId, messageId },
+                requesterId,
+              });
               requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
               await this.dispatchApproval({
@@ -1304,7 +1355,10 @@ export class AgentChannels {
       toolDisplay === 'cards' ||
       toolDisplay === 'timeline' ||
       toolDisplay === 'grouped' ||
-      toolDisplay === 'hidden';
+      // `'hidden'` still posts approval cards, but only adapters with
+      // interactive buttons can act on them. Button-less surfaces (SMS,
+      // iMessage, custom gateways) must auto-resume or the thread gets stuck.
+      (toolDisplay === 'hidden' && (adapterConfig?.approvalButtons ?? APPROVAL_BUTTON_PLATFORMS.has(platform)));
 
     this.log('info', '[processChatMessage] tool approval config', {
       platform,
@@ -1335,7 +1389,7 @@ export class AgentChannels {
     // subscription consumer: rendering now happens inline with the run that
     // produces the chunks, so only the Lambda that won the wake race
     // (signals reservation) renders the reply.
-    const renderContext = this._buildRenderContext(chatThread, platform);
+    const renderContext = this._buildRenderContext(chatThread, platform, { requesterId: message.author?.userId });
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
@@ -1420,7 +1474,10 @@ export class AgentChannels {
   _buildRenderContext(
     chatThread: Thread,
     platform: string,
-    approvalContext?: { toolCallId: string; messageId: string },
+    {
+      approvalContext,
+      requesterId,
+    }: { approvalContext?: { toolCallId: string; messageId: string }; requesterId?: string } = {},
   ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
@@ -1436,7 +1493,7 @@ export class AgentChannels {
     const typingGate = { active: false };
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
-      this.pendingApprovalCards.set(toolCallId, record);
+      this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
     const takePendingApproval = (id: string) => {
@@ -1464,6 +1521,19 @@ export class AgentChannels {
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };
+  }
+
+  /**
+   * Whether a `tool-call-approval` chunk for `toolName` should render
+   * Approve/Deny controls in the chat. The base class always renders them;
+   * subclasses that resolve approval policy themselves (e.g. an agent
+   * controller auto-approving `allow` tools) return `false` when no human
+   * decision is actually pending.
+   *
+   * @internal
+   */
+  async shouldRenderToolApproval(_requestContext: RequestContext | undefined, _toolName: string): Promise<boolean> {
+    return true;
   }
 
   /**

@@ -198,7 +198,7 @@ export const getTraceQueryValuesArgsSchema = z
   .object({
     timeRange: traceQueryDiscoveryTimeRangeSchema,
     predicateScope: traceQueryPredicateScopeSchema,
-    path: predicatePathSchema.transform(path => normalizePath(path)),
+    path: predicatePathSchema.transform(path => normalizeTraceQueryPath(path)),
     search: traceQueryDiscoverySearchSchema,
     limit: traceQueryDiscoveryLimitSchema,
   })
@@ -526,6 +526,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     resourceId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
+    durationMs: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
     environment: stringField(true),
@@ -760,6 +761,8 @@ export type TraceQueryIssueCode =
   | 'operator_not_allowed'
   | 'invalid_operands'
   | 'invalid_literal'
+  | 'too_many_buckets'
+  | 'too_many_rows'
   | 'group_order_not_supported'
   | 'pagination_mode_conflict'
   | 'group_pagination_not_supported';
@@ -905,7 +908,7 @@ export function isTraceQueryMetadataPath(path: string): path is TraceQueryMetada
 }
 
 export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: string): boolean {
-  return getTraceQueryFieldRule(scope, normalizePath(path))?.valueSuggestions === true;
+  return getTraceQueryFieldRule(scope, normalizeTraceQueryPath(path))?.valueSuggestions === true;
 }
 
 export function getTraceQueryCanonicalFieldDescriptors(
@@ -967,7 +970,7 @@ export function planTraceQueryObservedFields(
     predicateScope: args.predicateScope,
     search: args.search,
     limit: args.limit,
-    scope: normalizeTenantScope(options.scope),
+    scope: normalizeTraceQueryTenantScope(options.scope),
   };
 }
 
@@ -978,8 +981,14 @@ export function planTraceQueryValues(
   return { ...planTraceQueryObservedFields(args, options), path: args.path };
 }
 
-/** Drops an absent `resourceId` so the plan and cursor binding are canonical. */
-function normalizeTenantScope(scope: TraceQueryTenantScope | undefined): TraceQueryTenantScope | undefined {
+/**
+ * Drops an absent `resourceId` so the plan and cursor binding are canonical.
+ *
+ * @internal Shared with the trace-aggregate planner.
+ */
+export function normalizeTraceQueryTenantScope(
+  scope: TraceQueryTenantScope | undefined,
+): TraceQueryTenantScope | undefined {
   if (!scope) return undefined;
   return scope.resourceId === undefined
     ? { organizationId: scope.organizationId }
@@ -1053,7 +1062,7 @@ export function planTraceQuery(
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
-  const scope = normalizeTenantScope(options.scope);
+  const scope = normalizeTraceQueryTenantScope(options.scope);
 
   if (request.group) {
     const result = 'groups' as const;
@@ -1180,7 +1189,7 @@ export function planThreadQuery(
     where: traceWhere,
   };
   const orderBy = { field: 'threadId', direction: 'asc' } as const;
-  const scope = normalizeTenantScope(options.scope);
+  const scope = normalizeTraceQueryTenantScope(options.scope);
   const binding = digestBinding({ traces, where, result, orderBy, authorization: options.authorizationBinding, scope });
   const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
 
@@ -1331,6 +1340,22 @@ function planThreadPredicate(
   return undefined;
 }
 
+/**
+ * Plans a trace-scope selection predicate with a fresh complexity budget, appending any
+ * problems to `issues`.
+ *
+ * @internal Shared with the trace-aggregate planner so both apply identical selection
+ * validation (Aggregate Query API Decision 2).
+ */
+export function planTraceQuerySelectionPredicate(
+  where: TraceQueryPredicate,
+  issues: TraceQueryIssue[],
+  path: Array<string | number> = ['where'],
+): TrustedTraceQueryPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  return planPredicate(where, 'trace', path, 1, state);
+}
+
 function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,
   context: PredicateContext,
@@ -1385,7 +1410,7 @@ function planPredicate(
 
   const rules = rulesForContext(context);
   if (predicate.op === 'exists' || predicate.op === 'notExists') {
-    const field = normalizePath(predicate.path);
+    const field = normalizeTraceQueryPath(predicate.path);
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
@@ -1408,7 +1433,7 @@ function planPredicate(
         state,
       );
     }
-    const field = normalizePath(predicate.path);
+    const field = normalizeTraceQueryPath(predicate.path);
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
@@ -1437,7 +1462,7 @@ function planPredicate(
       });
       return undefined;
     }
-    const field = normalizePath(predicate.value.path);
+    const field = normalizeTraceQueryPath(predicate.value.path);
     const rule = getRule(field, context, rules, [...path, 'value', 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
@@ -1475,7 +1500,7 @@ function planPredicate(
     });
     return undefined;
   }
-  const field = normalizePath(comparison.left.path);
+  const field = normalizeTraceQueryPath(comparison.left.path);
   const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
   if (!rule) return undefined;
   if (!rule.operators.includes(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
@@ -1529,7 +1554,13 @@ function addOperatorIssue(operator: string, field: string, path: Array<string | 
   });
 }
 
-function normalizePath(path: string): string {
+/**
+ * Unwraps `${...}` templates and trims a caller-supplied field path.
+ *
+ * @internal Shared with the trace-aggregate planner so dimension, measure, and `having`
+ * paths are normalized exactly like predicate paths.
+ */
+export function normalizeTraceQueryPath(path: string): string {
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
   const unwrapped = match?.[1] ?? path;
   const normalized = unwrapped.trim();

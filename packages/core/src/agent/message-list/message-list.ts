@@ -44,10 +44,12 @@ import type {
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
+import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
-import { stampPart } from './utils/stamp-part';
+import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
+import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -103,6 +105,69 @@ function mergeBackgroundTasks(
       isPlainRecord(existingTask) && isPlainRecord(incomingTask) ? { ...existingTask, ...incomingTask } : incomingTask;
   }
   return merged;
+}
+
+/**
+ * Returns `live` with every tool part that would not move its stored counterpart forward turned
+ * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
+ * stays canonical, and a stale or edited echo can't overwrite it. Live state may only fill in a
+ * call the stored copy still has pending.
+ */
+function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
+  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  for (const part of stored.content.parts) {
+    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+  }
+  if (storedStates.size === 0) return live;
+
+  let changed = false;
+  const parts = live.content.parts.map(part => {
+    if (part.type !== 'tool-invocation') return part;
+    const storedState = storedStates.get(part.toolInvocation.toolCallId);
+    if (!storedState || advancesToolInvocationState(storedState, part.toolInvocation.state)) return part;
+    changed = true;
+    const { toolCallId, toolName, args } = part.toolInvocation;
+    return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
+  });
+  return changed ? { ...live, content: { ...live.content, parts } } : live;
+}
+
+/**
+ * Returns only the tool parts of a client-sent assistant message that move a stored call
+ * forward with a state a client produces (an approval answer or an outcome). The client's text,
+ * reasoning, and metadata are its own rendering of the stored message, which can differ from
+ * what was saved (an output processor may rewrite text before it is persisted), so none of it is
+ * layered onto the stored copy. Only the new state and its outcome fields are taken; the call's
+ * arguments and metadata stay as stored. A provider-executed call can only take an approval
+ * answer, since the provider, not the client, produces its outcome.
+ */
+function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
+  const storedCalls = new Map<string, MastraToolInvocationPart>();
+  for (const part of stored.content.parts) {
+    if (part.type === 'tool-invocation') storedCalls.set(part.toolInvocation.toolCallId, part);
+  }
+  const parts = live.content.parts.flatMap(part => {
+    if (part.type !== 'tool-invocation') return [];
+    const { state, toolCallId, result, errorText, approval } = part.toolInvocation;
+    const storedCall = storedCalls.get(toolCallId);
+    if (
+      !storedCall ||
+      !isClientToolInvocationUpdate(state) ||
+      !advancesToolInvocationState(storedCall.toolInvocation.state, state) ||
+      (storedCall.providerExecuted && state !== 'approval-responded')
+    ) {
+      return [];
+    }
+    const toolInvocation = {
+      ...storedCall.toolInvocation,
+      state,
+      result,
+      errorText,
+      approval: approval ?? storedCall.toolInvocation.approval,
+    };
+    return [{ type: 'tool-invocation' as const, toolInvocation }];
+  });
+  return { ...live, content: { format: 2, parts } };
 }
 
 type MessageListAddOptions = {
@@ -1235,6 +1300,23 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /**
+   * Apply transcript payload transforms to messages without draining them.
+   *
+   * Persistence paths that read messages directly instead of draining (e.g.
+   * the MessageHistory output processor persisting `get.response.db()`) must
+   * apply the same transcript redaction as {@link drainUnsavedMessages}.
+   * Otherwise the two writers race last-writer-wins on the same message id: a
+   * background tool result committed via {@link updateToolInvocation} holds
+   * the raw payload plus its transcript transform in providerMetadata, and a
+   * direct save landing after the redacting save-queue flush would persist
+   * the raw payload. The transform is idempotent — re-applying it to an
+   * already-transformed message writes the same values.
+   */
+  public transformMessagesForTranscript(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages.map(message => this.transformMessageForTranscript(message));
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;
@@ -1658,7 +1740,7 @@ export class MessageList {
           })()
         : undefined;
 
-    msg.content.parts![i] = {
+    const mergedPart: Extract<MastraMessagePart, { type: 'tool-invocation' }> = {
       ...inputPart,
       toolInvocation: {
         ...inputPart.toolInvocation,
@@ -1671,6 +1753,9 @@ export class MessageList {
       ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
+    if (part.updatedAt !== undefined && mergedPart.updatedAt === undefined) mergedPart.updatedAt = part.updatedAt;
+    stampToolPartUpdate(mergedPart, part.toolInvocation, inputPart.updatedAt);
+    msg.content.parts![i] = mergedPart;
 
     // `backgroundTasks` is a per-toolCallId record — merge instead of
     // overwrite so multiple concurrent background dispatches on the
@@ -2071,6 +2156,61 @@ export class MessageList {
     const latestMessageIndex = this.messages.length - 1;
     const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
 
+    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+
+    // Stored history loads as the base layer, underneath whatever this run already holds.
+    // When a stored row shares an id with a live message (client input, or a response part
+    // such as a tool result), the stored copy must not replace it wholesale - that would drop
+    // the client-supplied content from the prompt. Fold the stored copy into the live one and
+    // keep the live message's source so it stays visible to output processing. A client-sent
+    // assistant message contributes only tool outcomes for calls the stored copy has pending.
+    const replacementTargetSource: MessageSource | undefined = !replacementTarget
+      ? undefined
+      : this.stateManager.isUserMessage(replacementTarget)
+        ? 'input'
+        : this.stateManager.isResponseMessage(replacementTarget)
+          ? 'response'
+          : this.stateManager.isContextMessage(replacementTarget)
+            ? 'context'
+            : undefined;
+
+    if (
+      messageSource === 'memory' &&
+      replacementTarget &&
+      replacementTargetSource &&
+      !MessageMerger.isSealed(messageV2)
+    ) {
+      const replacementIndex = this.messages.indexOf(replacementTarget);
+      if (replacementTargetSource === 'input') {
+        MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
+      } else if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+        messageV2.content = {
+          ...messageV2.content,
+          ...replacementTarget.content,
+          metadata: {
+            ...(messageV2.content.metadata ?? {}),
+            ...(replacementTarget.content.metadata ?? {}),
+          },
+        };
+      } else {
+        for (const incomingPart of replacementTarget.content.parts) {
+          if (incomingPart.type !== 'text') continue;
+          const storedPart = messageV2.content.parts.find(
+            part => part.type === 'text' && part.text.trim() === incomingPart.text.trim(),
+          );
+          if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
+        }
+        MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
+      }
+      this.stateManager.removeMessage(replacementTarget);
+      this.messages[replacementIndex] = messageV2;
+      this.pushMessageToSource(messageV2, 'memory');
+      this.pushMessageToSource(messageV2, replacementTargetSource);
+      this.updateLastCreatedAt(messageV2);
+      this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      return this;
+    }
+
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
         // don't double store any messages
@@ -2080,7 +2220,6 @@ export class MessageList {
       }
     }
 
-    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
     const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
 
     // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
@@ -2192,6 +2331,9 @@ export class MessageList {
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
             return this;
           }
+          // The replaced object must not linger in its old source set, otherwise a
+          // client-echoed input message replaced by its stored copy would be re-persisted.
+          this.stateManager.removeMessage(existingMessage);
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {

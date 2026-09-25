@@ -91,7 +91,7 @@ export function ReferenceViewerDialog({
               <p className="text-body text-muted-foreground">{error}</p>
             </div>
           ) : content ? (
-            <pre className="overflow-auto rounded-lg bg-card p-4 font-mono text-body whitespace-pre-wrap text-foreground">
+            <pre className="overflow-auto rounded-lg bg-card p-4 text-body whitespace-pre-wrap text-foreground">
               {content}
             </pre>
           ) : (

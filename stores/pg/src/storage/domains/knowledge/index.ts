@@ -48,9 +48,11 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 
 // #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
 // installed core fails feature-detection instead of breaking module load.
@@ -123,7 +125,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     return transformed;
   });
   if (schemaName) {
-    const quotedSchema = `"${parseSqlIdentifier(schemaName, 'schema name')}"`;
+    const quotedSchema = `"${parseSchemaName(schemaName)}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
       for (const table of [
@@ -262,7 +264,7 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: string }> {
   const table = (name: string) => {
     const quotedName = `"${parseSqlIdentifier(name, 'table name')}"`;
-    return schemaName ? `"${parseSqlIdentifier(schemaName, 'schema name')}".${quotedName}` : quotedName;
+    return schemaName ? `"${parseSchemaName(schemaName)}".${quotedName}` : quotedName;
   };
   return [
     {
@@ -663,6 +665,7 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const parent = await this.#resolveTerminalNode(tx, nodeReferenceId(input.node));
       if (!parent) throw new KnowledgeNotFoundError('node', nodeReferenceId(input.node));
+      const metadataJson = input.metadata ? toPgJson(input.metadata) : null;
       const record: KnowledgeRecord = {
         id: input.id ?? createKnowledgeUlid(),
         node: parent.id,
@@ -686,13 +689,13 @@ export class KnowledgePG extends KnowledgeStorage {
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
-          record.metadata ? JSON.stringify(record.metadata) : null,
+          metadataJson,
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
       await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
-      return record;
+      return metadataJson ? { ...record, metadata: JSON.parse(metadataJson) } : record;
     });
   }
 
