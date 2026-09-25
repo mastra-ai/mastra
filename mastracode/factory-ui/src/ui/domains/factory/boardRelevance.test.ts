@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { boardFiltersFromParams } from './boardFilters';
 import {
   gitlabCandidate,
   incidentioCandidate,
@@ -101,6 +102,33 @@ describe('board relevance', () => {
       workItemMatchesRelevance(item, activityPage, 'github:monalisa', new Set(['authored', 'review-requested'])),
     ).toBe(true);
     expect(workItemMatchesRelevance(item, activityPage, undefined, new Set())).toBe(true);
+  });
+
+  it('applies URL-restored relevance types to distinct review cards', () => {
+    const authored = boardFiltersFromParams(
+      new URLSearchParams('teammate=github%3Aoctocat&relevance=authored'),
+      'review',
+    );
+    const assigned = { ...item, metadata: { ...item.metadata, author: 'another-user', assignees: ['octocat'] } };
+    expect(workItemMatchesRelevance(item, activityPage, authored.participantId, authored.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, authored.participantId, authored.relevanceTypes)).toBe(
+      false,
+    );
+
+    const either = boardFiltersFromParams(
+      new URLSearchParams('teammate=github%3Aoctocat&relevance=authored%2Cassigned'),
+      'review',
+    );
+    expect(workItemMatchesRelevance(item, activityPage, either.participantId, either.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, either.participantId, either.relevanceTypes)).toBe(true);
+    expect(
+      workItemMatchesRelevance(
+        { ...assigned, metadata: { author: 'another-user', assignees: ['hubot'] } },
+        activityPage,
+        either.participantId,
+        either.relevanceTypes,
+      ),
+    ).toBe(false);
   });
 
   it('filters intake candidates by GitHub, GitLab, and Linear provider metadata', () => {
