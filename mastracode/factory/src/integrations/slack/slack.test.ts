@@ -1,4 +1,4 @@
-import { ChannelSessionRejectedError } from '@mastra/core/channels';
+import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -513,19 +513,14 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
   });
 
-  // Past the deployment checks a thread the bot cannot place is refused, not
-  // downgraded: a chat-only session would answer outside the sender's project,
-  // on the SDK's built-in defaults. The rejection error is what core turns into
-  // a silent drop instead of an error posted back into the thread.
+  // A project without a repository cannot start a session. Explain the
+  // missing setup instead of downgrading to a chat-only session.
   it('a factory without a repository refuses the new thread instead of starting a chat-only session', async () => {
     const sourceControl = makeSourceControl({ hasRepo: false });
     const deps = makeResolverDeps({ sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    // A project with no linked repository resolves to *no* source-control
-    // partition at all, so either failure description is legitimate here.
-    await expect(resolve(resolveArgs())).rejects.toThrow(ChannelSessionRejectedError);
-    await expect(resolve(resolveArgs())).rejects.toThrow(/no source-control connection|no linked repository/i);
+    await expect(resolve(resolveArgs())).rejects.toThrow(/connect source control|link a repository/i);
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
@@ -573,13 +568,69 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
-  it('a source-control failure surfaces instead of dropping to a chat-only thread', async () => {
-    const sourceControl = makeSourceControl();
-    sourceControl.sessions.create.mockRejectedValue(new Error('db down'));
-    const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+  it.each(['source-control selection', 'repository resolution', 'session lookup', 'session creation'])(
+    'a %s failure is reported safely instead of dropping to a chat-only thread',
+    async operation => {
+      const sourceControl = makeSourceControl();
+      const failure = new Error('db down: postgres://private');
+      if (operation === 'source-control selection') sourceControl.connections.list.mockRejectedValue(failure);
+      if (operation === 'repository resolution') {
+        sourceControl.connections.list.mockResolvedValueOnce([
+          { id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' },
+        ]).mockRejectedValueOnce(failure);
+      }
+      if (operation === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(failure);
+      if (operation === 'session creation') sourceControl.sessions.create.mockRejectedValue(failure);
+      const deps = makeResolverDeps({ sourceControl });
+      const resolve = createChannelResourceIdResolver(deps as any);
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(resolve(resolveArgs())).rejects.toThrow('db down');
+      await expect(resolve(resolveArgs())).rejects.toThrow('Could not start a session right now. Please try again later.');
+      expect(log).toHaveBeenCalledWith(
+        '[slack] failed to start repo-backed session for thread',
+        'slack:C-1:1700.42',
+        failure,
+      );
+    },
+  );
+
+  it.each([
+    { failure: 'missing repository', hasRepo: false, expected: /connect|link.*repository/i },
+    { failure: 'storage outage', hasRepo: true, expected: /try again later/i },
+  ])('posts one safe explanation for a $failure without creating a thread or card', async ({ hasRepo, expected }) => {
+    const sourceControl = makeSourceControl({ hasRepo });
+    if (hasRepo) sourceControl.sessions.create.mockRejectedValue(new Error('db down: postgres://private'));
+    const deps = makeResolverDeps({ sourceControl });
+    deps.projects = makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: true }]);
+    const workItems = { upsert: vi.fn() };
+    const store = { listThreads: vi.fn().mockResolvedValue({ threads: [] }), saveThread: vi.fn() };
+    const mastra = { getStorage: () => ({ getStore: async () => store }) };
+    const thread = {
+      ...makeThread(),
+      id: 'slack:C-1:1700.42',
+      isSubscribed: vi.fn().mockResolvedValue(false),
+      post: vi.fn().mockResolvedValue({ id: 'posted-1' }),
+    };
+    const message = { ...makeMessage('T-1'), id: 'msg-1', attachments: [] };
+    const channels = new AgentChannels({
+      adapters: { slack: { name: 'slack' } as any },
+      resolveResourceId: createChannelResourceIdResolver(deps as any),
+    });
+    const handlers = createHandlers({ ...deps, workItems } as any);
+    const ctx = handlerCtx(mastra);
+
+    await handlers.onDirectMessage!(thread, message, (t: any, m: any) =>
+      (channels as any).handleChatMessage(t, m, mastra, ctx.requestContext, {}), ctx);
+
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.post.mock.calls[0]![0]).toMatch(expected);
+    expect(thread.post.mock.calls[0]![0]).not.toContain('db down');
+    expect(thread.post.mock.calls[0]![0]).not.toContain('postgres://');
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(store.saveThread).not.toHaveBeenCalled();
+    expect(workItems.upsert).not.toHaveBeenCalled();
+    if (!hasRepo) expect(sourceControl.sessions.create).not.toHaveBeenCalled();
+    else expect(sourceControl.sessions.create).toHaveBeenCalledTimes(1);
   });
 });
 

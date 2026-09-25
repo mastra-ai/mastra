@@ -55,6 +55,8 @@ const SLACK_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_WORK_ITEM_TITLE_CHARS = 80;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
+class SlackSessionStartError extends Error {}
+
 /**
  * A card is titled with what the sender wrote. Cutting counts graphemes, not
  * code points: `👍🏼` is a base plus a skin-tone modifier, and a cut between
@@ -347,9 +349,9 @@ function threadBranch(threadId: string): string {
  * A gated deployment refuses a thread it cannot place, rather than falling back
  * to a chat-only session: a repo-backed thread is the whole point of the
  * integration, and answering in a chat-only one would run the sender's request
- * in no project, on the SDK's built-in defaults. The refusal is a
- * `ChannelSessionRejectedError`, which core logs and drops without posting —
- * a sender the bot turns away must not get a reply confirming it is present.
+ * in no project, on the SDK's built-in defaults. A linked sender whose project
+ * cannot start a session gets an actionable error in Slack; the dispatch gate
+ * handles unlinked or unrouted senders before this hook runs.
  * The hook only runs when a NEW thread is actually created (`getOrCreateThread`
  * resolves the owner lazily), so an established conversation is never touched:
  * it keeps its session, its model, and its history.
@@ -414,37 +416,45 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
     // repository to work in there is no thread to start, and starting one
     // anyway would answer in a project the sender never picked, on the SDK's
     // built-in defaults.
-    const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
-    if (!sourceControl) {
-      throw new ChannelSessionRejectedError(`No source-control connection owns Factory project ${factoryProjectId}`);
-    }
-    const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
-    if (!repo.found) {
-      throw new ChannelSessionRejectedError(
-        `Factory project ${factoryProjectId} has no ${repo.reason === 'connection' ? 'source-control connection' : 'linked repository'}`,
-      );
-    }
+    try {
+      const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
+      if (!sourceControl) {
+        throw new SlackSessionStartError('Could not start a session: connect source control to this Factory project.');
+      }
+      const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
+      if (!repo.found) {
+        throw new SlackSessionStartError(
+          repo.reason === 'connection'
+            ? 'Could not start a session: connect source control to this Factory project.'
+            : 'Could not start a session: link a repository to this Factory project.',
+        );
+      }
 
-    const branch = threadBranch(thread.id);
-    // Attributed to the Slack sender, not to whoever connected the repository:
-    // unlike an autonomous rule run, a Slack thread has a real interactive user.
-    const existing = await sourceControl.sessions.getForBranch({
-      projectRepositoryId: repo.projectRepositoryId,
-      userId: link.userId,
-      branch,
-    });
-    if (existing) return existing.sessionId;
-    const session = await sourceControl.sessions.create({
-      sessionId: randomUUID(),
-      projectRepositoryId: repo.projectRepositoryId,
-      orgId,
-      userId: link.userId,
-      branch,
-      baseBranch: repo.baseBranch,
-      // DMs are the only private origin; channel threads are org-visible.
-      visibility: thread.isDM ? 'private' : 'org',
-    });
-    return session.sessionId;
+      const branch = threadBranch(thread.id);
+      // Attributed to the Slack sender, not to whoever connected the repository:
+      // unlike an autonomous rule run, a Slack thread has a real interactive user.
+      const existing = await sourceControl.sessions.getForBranch({
+        projectRepositoryId: repo.projectRepositoryId,
+        userId: link.userId,
+        branch,
+      });
+      if (existing) return existing.sessionId;
+      const session = await sourceControl.sessions.create({
+        sessionId: randomUUID(),
+        projectRepositoryId: repo.projectRepositoryId,
+        orgId,
+        userId: link.userId,
+        branch,
+        baseBranch: repo.baseBranch,
+        // DMs are the only private origin; channel threads are org-visible.
+        visibility: thread.isDM ? 'private' : 'org',
+      });
+      return session.sessionId;
+    } catch (error) {
+      if (error instanceof SlackSessionStartError) throw error;
+      console.error('[slack] failed to start repo-backed session for thread', thread.id, error);
+      throw new SlackSessionStartError('Could not start a session right now. Please try again later.', { cause: error });
+    }
   };
 }
 
