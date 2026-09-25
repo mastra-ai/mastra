@@ -16,7 +16,10 @@ const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number }
   };
 };
 
-export const getLayoutedElements = (nodes: WorkflowGraphNode[], edges: WorkflowGraphEdge[]) => {
+export const getLayoutedElements = (
+  nodes: WorkflowGraphNode[],
+  edges: WorkflowGraphEdge[],
+): { nodes: WorkflowGraphNode[]; edges: WorkflowGraphEdge[] } => {
   const dagreGraph = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({ rankdir: 'TB', ranksep: 84, nodesep: 64 });
 
