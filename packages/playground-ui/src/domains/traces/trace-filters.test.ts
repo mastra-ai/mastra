@@ -209,6 +209,13 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('spans.model')?.operators).toEqual(['is', 'isNot', 'in', 'notIn', 'exists', 'notExists']);
   });
 
+  it('marks the text operators as free text so strict fields still accept typed words', () => {
+    const byOperatorId = Object.fromEntries(TRACE_FILTER_BAR_OPERATORS.map(o => [o.id, o]));
+    expect(byOperatorId.matches?.freeText).toBe(true);
+    expect(byOperatorId.notMatches?.freeText).toBe(true);
+    expect(byOperatorId.is?.freeText).toBeUndefined();
+  });
+
   it('keeps feedback comment free text because the values endpoint rejects it', () => {
     const fields = createTraceFilterBarFields({
       availableRootEntityNames: [],
