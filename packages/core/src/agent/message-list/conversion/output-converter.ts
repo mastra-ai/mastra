@@ -21,6 +21,7 @@ import {
   RESPONSE_ITEM_ID_PROVIDERS,
   RESPONSE_RESULT_ITEM_ID_KEY,
 } from '../utils/response-item-metadata';
+import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Merges text parts that share the same OpenAI-compatible itemId.
@@ -381,9 +382,9 @@ export function sanitizeV5UIMessages(
                 // convertToModelMessages to receive a raw array which gets stringified.
                 // See: https://github.com/mastra-ai/mastra/issues/17876
                 if (obj.type === 'content' && Array.isArray(obj.value)) return o;
-                // For other wrapped shapes (legacy), unwrap as before
-                if ('value' in obj) return obj.value;
-                return o;
+                // Unwrap AI SDK typed output wrappers before model-message conversion.
+                if ('type' in obj && 'value' in obj && Object.keys(obj).length === 2) return obj.value;
+                return unwrapLegacyToolOutput(o);
               })(),
             };
           }
