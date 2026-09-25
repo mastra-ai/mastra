@@ -1522,6 +1522,20 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('\nUser: later');
     });
 
+    it('writes dates and times in the given time zone, whatever the process zone', () => {
+      const message = createTestMessage('late night', 'user');
+      message.createdAt = new Date('2024-03-01T02:30:00Z');
+
+      expect(formatMessagesForObserver([message], { timeZone: 'UTC' })).toMatch(/^Mar 1 2024:\nUser \(2:30 AM\)/);
+      expect(formatMessagesForObserver([message], { timeZone: 'America/Los_Angeles' })).toMatch(
+        /^Feb 29 2024:\nUser \(6:30 PM\)/,
+      );
+      // An unknown zone falls back to the process zone rather than throwing
+      expect(formatMessagesForObserver([message], { timeZone: 'Not/AZone' })).toBe(
+        formatMessagesForObserver([message]),
+      );
+    });
+
     it('should include attachment placeholders for image and file parts', () => {
       const msg = createTestMessage('ignored', 'user');
       msg.content = {
@@ -4985,13 +4999,13 @@ describe('ObservationalMemory Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         true,
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('## Group `group-1`\n_range: `msg-1:msg-2`_');
       expect(formattedText).toContain('- 🔴 User prefers direct answers');
-      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {

@@ -490,6 +490,49 @@ describe('addRelativeTimeToObservations', () => {
     expect(result).toContain('June 10, 2025 (5 days ago)');
   });
 
+  describe('time zone', () => {
+    // Midnight UTC is still the previous evening in Los Angeles and already morning in Tokyo
+    const midnightUtc = new Date('2024-06-23T00:00:00Z');
+    const observations = [
+      'Date: Jun 15, 2024',
+      '- User booked the exam for June 22, 2024',
+      'Date: Jun 22, 2024',
+      '- User will call the clinic (meaning Jun 22, 2024)',
+    ].join('\n');
+
+    it('counts days from the date in the observations time zone, not the process zone', () => {
+      const result = addRelativeTimeToObservations(observations, midnightUtc, 'UTC');
+      expect(result).toContain('Date: Jun 15, 2024 (1 week ago)');
+      expect(result).toContain('June 22, 2024 (yesterday)');
+      expect(result).toContain('Date: Jun 22, 2024 (yesterday)');
+      expect(result).toContain('(meaning Jun 22, 2024 - yesterday, likely already happened)');
+    });
+
+    it('follows the observations time zone when it differs', () => {
+      const result = addRelativeTimeToObservations(observations, midnightUtc, 'America/Los_Angeles');
+      expect(result).toContain('Date: Jun 15, 2024 (1 week ago)');
+      expect(result).toContain('Date: Jun 22, 2024 (today)');
+      expect(result).toContain('(meaning Jun 22, 2024 - today, likely already happened)');
+      expect(addRelativeTimeToObservations(observations, midnightUtc, 'Asia/Tokyo')).toContain(
+        'Date: Jun 22, 2024 (yesterday)',
+      );
+    });
+
+    it('falls back to the process time zone when the zone is missing or unknown', () => {
+      const processZone = addRelativeTimeToObservations(observations, midnightUtc);
+      expect(addRelativeTimeToObservations(observations, midnightUtc, 'Not/AZone')).toBe(processZone);
+      expect(formatRelativeSpan(parseDateSpan('Jun 22, 2024')!, midnightUtc, undefined)).toBe(
+        formatRelativeSpan(parseDateSpan('Jun 22, 2024')!, midnightUtc, ''),
+      );
+    });
+  });
+
+  it('measures gaps in calendar days, so a daylight-saving change does not shorten a week', () => {
+    // US clocks sprang forward on Mar 10, 2024; local midnights either side are 7 days minus an hour apart there
+    const result = addRelativeTimeToObservations('Date: Mar 5, 2024\n- a\nDate: Mar 12, 2024\n- b', now);
+    expect(result).toContain('[1 week later]');
+  });
+
   it('inserts gap markers between dates with significant gaps', () => {
     const input = ['Date: May 1, 2025', '- Early observation', 'Date: June 10, 2025', '- Later observation'].join('\n');
     const result = addRelativeTimeToObservations(input, now);

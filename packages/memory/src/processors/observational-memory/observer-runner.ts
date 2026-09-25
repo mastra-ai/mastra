@@ -80,6 +80,8 @@ interface ObserverCallOptions {
   /** Which pipeline path initiated this cycle; passed to transform hooks. */
   trigger?: ObserveTrigger;
   mainAgent?: ProcessorContext['agent'];
+  /** Zone the Observer sees message dates in: the record's `observedTimezone`. */
+  timeZone?: string;
 }
 
 interface ObserverCallResult {
@@ -306,7 +308,7 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
           extractors: activeExtractors,
         },
-        { attachmentFilter },
+        { attachmentFilter, timeZone: options?.timeZone },
       ),
     ];
 
@@ -455,6 +457,7 @@ export class ObserverRunner {
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
     hookContext?: { resourceId?: string; trigger?: ObserveTrigger },
+    timeZone?: string,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -484,6 +487,7 @@ export class ObserverRunner {
       priorMetadataByThread,
       observabilityContext,
       model,
+      timeZone,
     );
 
     for (const threadId of allThreadOrder) {
@@ -515,6 +519,7 @@ export class ObserverRunner {
     >,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
+    timeZone?: string,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -570,6 +575,7 @@ export class ObserverRunner {
             priorThreadTitle: priorMetadataByThread?.get(threadId)?.threadTitle,
             priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
             model: resolvedModel.model,
+            timeZone,
           },
         );
         results.set(threadId, {
@@ -605,7 +611,7 @@ export class ObserverRunner {
         undefined,
         this.observationConfig.threadTitle,
         activeExtractors,
-        { attachmentFilter: multiThreadAttachmentFilter },
+        { attachmentFilter: multiThreadAttachmentFilter, timeZone },
       ),
     ];
 

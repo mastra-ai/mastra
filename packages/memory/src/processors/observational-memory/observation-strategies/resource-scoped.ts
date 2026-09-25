@@ -267,6 +267,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.observabilityContext,
           undefined,
           { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
+          this.opts.record.observedTimezone,
         );
       }),
     );
@@ -314,7 +315,10 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         failures: result.extractionFailures,
         previousValues,
         rawObservations: result.observations,
-        recentMessages: formatMessagesForObserver(threadMessages, { maxPartLength: 500 }),
+        recentMessages: formatMessagesForObserver(threadMessages, {
+          maxPartLength: 500,
+          timeZone: this.opts.record.observedTimezone,
+        }),
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,

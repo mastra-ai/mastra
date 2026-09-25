@@ -1769,6 +1769,7 @@ export class ObservationalMemory {
     unobservedContextBlocks?: string,
     currentDate?: Date,
     retrieval = false,
+    timeZone?: string,
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
     let optimized = retrieval
@@ -1777,7 +1778,7 @@ export class ObservationalMemory {
 
     // Add relative time annotations to date headers if currentDate is provided
     if (currentDate) {
-      optimized = addRelativeTimeToObservations(optimized, currentDate);
+      optimized = addRelativeTimeToObservations(optimized, currentDate, timeZone);
     }
 
     const messages = [
@@ -1980,6 +1981,7 @@ export class ObservationalMemory {
   private async formatUnobservedContextBlocks(
     messagesByThread: Map<string, MastraDBMessage[]>,
     currentThreadId: string,
+    timeZone: string | undefined,
   ): Promise<string> {
     const blocks: string[] = [];
 
@@ -1992,7 +1994,7 @@ export class ObservationalMemory {
 
       // Format messages with timestamps, truncating large parts (e.g. tool results)
       // since this is injected as context for the actor, not sent to the observer
-      const formattedMessages = formatMessagesForObserver(messages, { maxPartLength: 500 });
+      const formattedMessages = formatMessagesForObserver(messages, { maxPartLength: 500, timeZone });
 
       if (formattedMessages) {
         const obscuredId = await this.representThreadIDInContext(threadId);
@@ -2752,6 +2754,7 @@ ${formattedMessages}
       unobservedContextBlocks,
       currentDate,
       this.retrieval,
+      record.observedTimezone,
     );
   }
 
@@ -2795,7 +2798,11 @@ ${formattedMessages}
     }
 
     if (messagesByThread.size === 0) return undefined;
-    const blocks = await this.formatUnobservedContextBlocks(messagesByThread, currentThreadId);
+    const blocks = await this.formatUnobservedContextBlocks(
+      messagesByThread,
+      currentThreadId,
+      record?.observedTimezone,
+    );
     return blocks || undefined;
   }
 
