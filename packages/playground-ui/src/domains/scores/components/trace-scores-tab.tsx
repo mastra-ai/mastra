@@ -1,24 +1,23 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList } from '@mastra/playground-ui/components/DataList';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { getShortId } from '@mastra/playground-ui/components/Text';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
-
-import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { useTraceSpanScores } from '../hooks/use-trace-span-scores';
+import { Button } from '@/ds/components/Button';
+import { DataList } from '@/ds/components/DataList';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
+import { Spinner } from '@/ds/components/Spinner';
+import { getShortId } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/date-format';
 
 const REASON_PREVIEW_LENGTH = 100;
 
-type TraceScoresTabProps = {
+export type TraceScoresTabProps = {
   traceId: string;
   spanId: string;
   onScoreSelect: (scoreId: string) => void;
@@ -59,6 +58,7 @@ export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTa
 function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSelect: () => void }) {
   const createdAt = new Date(score.createdAt);
   const scorerName = String(score.scorer?.name || score.scorer?.id || 'Scorer');
+  const { Link, paths } = useLinkComponent();
 
   return (
     <MetricsKpiCard className="min-w-0">
@@ -79,8 +79,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}
       <Button
-        as={Link}
-        to={`/scorers/${score.scorerId}?scoreId=${score.id}`}
+        render={<Link href={`${paths.scorerLink(score.scorerId)}?scoreId=${score.id}`} />}
         variant="ghost"
         size="sm"
         className="-ml-2 justify-self-start"

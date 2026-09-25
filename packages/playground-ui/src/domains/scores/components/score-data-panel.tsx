@@ -1,13 +1,13 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
-import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
+import { ScoreAsItemDialog } from './score-as-item-dialog';
+import { Button } from '@/ds/components/Button';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import { formatTimestampPrecise } from '@/utils/date-format';
 
 function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
   if (!score) return false;
@@ -105,7 +105,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 )}
               </DataKeysAndValues>
 
-              <div className="mt-6 mb-6 flex justify-end">
+              <div className="my-6 flex justify-end">
                 <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
                   Save as Dataset Item
                 </Button>
@@ -115,7 +115,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 <div
                   className={cn(
                     'flex items-baseline gap-2 text-body text-placeholder',
-                    '[&>svg]:h-5 [&>svg]:w-5 [&>svg]:translate-y-1',
+                    '[&>svg]:size-5 [&>svg]:translate-y-1',
                   )}
                 >
                   <GaugeIcon />

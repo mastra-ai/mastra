@@ -4,6 +4,7 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { ScoreAsItemDialog } from '@mastra/playground-ui/domains/scores';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import {
@@ -18,7 +19,6 @@ import {
   SaveIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { ScoreAsItemDialog } from './score-as-item-dialog';
 
 function isCodeBasedScorer(score?: ScoreRowData): boolean {
   if (!score) return false;

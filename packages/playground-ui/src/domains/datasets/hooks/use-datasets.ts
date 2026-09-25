@@ -1,8 +1,8 @@
 import type { ExperimentTargetType, ListDatasetsParams } from '@mastra/client-js';
-import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useInView } from '@/hooks/use-in-view';
 
 /**
  * Hook to list all datasets with optional pagination

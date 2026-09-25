@@ -1,9 +1,6 @@
-import {
-  isObservabilityUnavailableError,
-  isUnsupportedObservabilityOperationError,
-} from '@mastra/playground-ui/utils/query-utils';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@/utils/query-utils';
 
 const TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS = 3000;
 

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTraceSpanScores, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
@@ -11,10 +12,8 @@ import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
-import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
