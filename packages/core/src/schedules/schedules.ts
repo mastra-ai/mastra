@@ -512,6 +512,8 @@ export class Schedules {
       ...(filter?.status ? { status: filter.status } : {}),
     });
     const views = schedules
+      // Completed schedules are hidden unless explicitly requested by status.
+      .filter(s => filter?.status !== undefined || s.status !== 'completed')
       .map(toScheduleView)
       .filter((s): s is AnySchedule => s !== null)
       // `workflowId` filters at the store level, but an `agentId` filter must

@@ -307,6 +307,12 @@ describe('mastra.schedules canonical service', () => {
     await mastra.schedules.pause(a.id);
     const paused = await mastra.schedules.list({ status: 'paused' });
     expect(paused.map(s => s.id)).toEqual([a.id]);
+
+    const once = await mastra.schedules.create({ agentId: 'a', runAt: Date.now() + 60_000, prompt: 'z' });
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(once.id, { status: 'completed' });
+    expect((await mastra.schedules.list()).map(s => s.id)).not.toContain(once.id);
+    expect((await mastra.schedules.list({ status: 'completed' })).map(s => s.id)).toEqual([once.id]);
   });
 
   it('delete is idempotent', async () => {

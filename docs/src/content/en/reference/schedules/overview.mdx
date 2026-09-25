@@ -401,3 +401,4 @@ await mastra.schedules.delete('pinger')
 - `run()` publishes a manual fire immediately and doesn't change the stored cron cadence.
 - Schedules have three statuses: `active`, `paused`, and `completed`. Only the scheduler sets `completed`, when a one-off fires or a bounded cron passes its `endAt`. `run()` doesn't complete a one-off schedule.
 - Updating `runAt` on a one-off, or `endAt` on a cron schedule (`null` removes the bound), reactivates a `completed` schedule.
+- `list()` hides `completed` schedules unless you pass `status: 'completed'`.
