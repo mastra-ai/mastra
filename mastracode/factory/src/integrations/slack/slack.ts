@@ -461,6 +461,12 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       return session.sessionId;
     } catch (error) {
       if (error instanceof ChannelSessionRejectedError || error instanceof SlackSessionStartError) throw error;
+      if (error instanceof FactorySourceControlConflictError) {
+        throw new SlackSessionStartError(
+          'Could not start a session: this Factory project has repositories from more than one source-control provider.',
+          { cause: error },
+        );
+      }
       console.error('[slack] failed to start repo-backed session for thread', thread.id, error);
       throw new SlackSessionStartError('Could not start a session right now. Please try again later.', {
         cause: error,
