@@ -42,15 +42,25 @@ function startWorker(): Promise<ChildProcess> {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
     });
-    const timer = setTimeout(() => reject(new Error('worker did not become ready in 90s')), 90_000);
-    const onData = (buf: Buffer) => {
-      if (buf.toString().includes('[worker] ready')) {
-        clearTimeout(timer);
-        resolve(proc);
-      }
+    const timer = setTimeout(() => {
+      proc.kill('SIGKILL');
+      reject(new Error('worker did not become ready in 90s'));
+    }, 90_000);
+    // Chunks don't preserve line boundaries, so buffer each stream until the ready line is complete.
+    const watch = (stream: NodeJS.ReadableStream | null) => {
+      let buffered = '';
+      stream?.on('data', (buf: Buffer) => {
+        buffered += buf.toString();
+        const lines = buffered.split('\n');
+        buffered = lines.pop() ?? '';
+        if (lines.some(line => line.includes('[worker] ready'))) {
+          clearTimeout(timer);
+          resolve(proc);
+        }
+      });
     };
-    proc.stdout?.on('data', onData);
-    proc.stderr?.on('data', onData);
+    watch(proc.stdout);
+    watch(proc.stderr);
     proc.on('exit', code => {
       clearTimeout(timer);
       reject(new Error(`worker exited early with code ${code}`));
@@ -62,7 +72,17 @@ describe('Inngest durable agent tool approval over HTTP (real Inngest dev server
   beforeAll(async () => {
     devServer = await startConnectInngestDevServer();
     worker = await startWorker();
-    await new Promise(r => setTimeout(r, 3000)); // let Inngest register the worker's functions
+    // connect() returning doesn't mean the dev server has registered the loop function yet.
+    await vi.waitFor(
+      async () => {
+        const data = await (await fetch(`http://localhost:${INNGEST_PORT}/dev`)).json();
+        const registered = (data.functions ?? []).some((fn: { slug?: string }) =>
+          fn.slug?.endsWith(`workflow.${LOOP_WORKFLOW}`),
+        );
+        if (!registered) throw new Error(`${LOOP_WORKFLOW} function not registered yet`);
+      },
+      { timeout: 60_000, interval: 500 },
+    );
   });
 
   afterAll(async () => {
