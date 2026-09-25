@@ -15,19 +15,24 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
     return value;
   }
 
+  // Nullable objects and arrays can be represented as `anyOf: [{...}, {type:
+  // 'null'}]`. Use the value-carrying branch while traversing so optional
+  // fields inside the nullable container are handled.
+  const traversableSchema = unwrapNullableSchema(jsonSchema);
+
   if (typeof value !== 'object' || Array.isArray(value)) {
-    if (Array.isArray(value) && jsonSchema.items && typeof jsonSchema.items === 'object') {
-      return value.map(item => transformNullToUndefined(item, jsonSchema.items as Record<string, unknown>));
+    if (Array.isArray(value) && traversableSchema.items && typeof traversableSchema.items === 'object') {
+      return value.map(item => transformNullToUndefined(item, traversableSchema.items as Record<string, unknown>));
     }
     return value;
   }
 
-  const properties = jsonSchema.properties as Record<string, Record<string, unknown>> | undefined;
+  const properties = traversableSchema.properties as Record<string, Record<string, unknown>> | undefined;
   if (!properties) {
     return value;
   }
 
-  const required = (jsonSchema.required as string[]) || [];
+  const required = (traversableSchema.required as string[]) || [];
   const result: Record<string, unknown> = {};
 
   for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
@@ -43,6 +48,18 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
   }
 
   return result;
+}
+
+function unwrapNullableSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(schema.anyOf)) {
+    return schema;
+  }
+
+  const valueSchema = schema.anyOf.find(
+    branch => typeof branch === 'object' && branch !== null && (branch as Record<string, unknown>).type !== 'null',
+  );
+
+  return valueSchema && typeof valueSchema === 'object' ? (valueSchema as Record<string, unknown>) : schema;
 }
 
 /**

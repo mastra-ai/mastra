@@ -87,6 +87,49 @@ describe('transformNullToUndefined', () => {
     });
   });
 
+  it('handles optional fields inside nullable objects', () => {
+    const jsonSchema = {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            street: { type: 'string' },
+            unit: { type: 'string' },
+          },
+          required: ['street'],
+        },
+        { type: 'null' },
+      ],
+    };
+
+    const result = transformNullToUndefined({ street: 'Main', unit: null }, jsonSchema);
+    expect(result).toEqual({ street: 'Main', unit: undefined });
+  });
+
+  it('handles optional fields inside nullable arrays', () => {
+    const jsonSchema = {
+      anyOf: [
+        {
+          type: 'array',
+          items: {
+            anyOf: [
+              {
+                type: 'object',
+                properties: { label: { type: 'string' } },
+                required: [],
+              },
+              { type: 'null' },
+            ],
+          },
+        },
+        { type: 'null' },
+      ],
+    };
+
+    const result = transformNullToUndefined([{ label: null }], jsonSchema);
+    expect(result).toEqual([{ label: undefined }]);
+  });
+
   it('passes through non-object values', () => {
     const jsonSchema = { type: 'string' };
     expect(transformNullToUndefined('hello', jsonSchema)).toBe('hello');
@@ -133,6 +176,25 @@ describe('wrapSchemaWithNullTransform', () => {
     const result = await wrapped['~standard'].validate({ name: 'hi', note: null });
     expect(result.issues).toBeUndefined();
     expect((result as { value: unknown }).value).toEqual({ name: 'hi', note: null });
+  });
+
+  it('transforms optional fields inside nullable nested objects and arrays', async () => {
+    const schema = z.object({
+      address: z.object({ street: z.string(), unit: z.string().optional() }).nullable(),
+      contacts: z.array(z.object({ email: z.string().optional() })).nullable(),
+    });
+
+    const wrapped = wrapSchemaWithNullTransform(toStandardSchema(schema));
+    const result = await wrapped['~standard'].validate({
+      address: { street: 'Main', unit: null },
+      contacts: [{ email: null }],
+    });
+
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({
+      address: { street: 'Main' },
+      contacts: [{}],
+    });
   });
 
   it('delegates jsonSchema to inner schema', () => {
