@@ -105,6 +105,22 @@ describe('resumed runs keep input processor system messages', () => {
     expect(systemTexts(prompts[1]!)).toEqual(systemTexts(prompts[0]!));
   });
 
+  it('keeps system message replacements and tags on resume', async () => {
+    const processor: Processor = {
+      id: 'replaces-and-tags',
+      processInput: ({ messages, messageList }) => {
+        messageList.addSystem({ role: 'system', content: 'Tagged guidance' }, 'guidance');
+        return { messages, systemMessages: [{ role: 'system', content: 'Replaced instructions' }] };
+      },
+    };
+    const { agent, prompts } = setup([processor]);
+    await runWithApproval(agent);
+
+    expect(prompts).toHaveLength(2);
+    expect(systemTexts(prompts[0]!)).toEqual(['Replaced instructions', 'Tagged guidance']);
+    expect(systemTexts(prompts[1]!)).toEqual(systemTexts(prompts[0]!));
+  });
+
   it('does not trip TokenLimiterProcessor on resume', async () => {
     const { agent, prompts } = setup([new TokenLimiterProcessor({ limit: 1000 })]);
     const resumed = await runWithApproval(agent);

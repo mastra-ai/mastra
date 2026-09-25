@@ -44,9 +44,12 @@ async function replayInputProcessorSystemMessages({
   messageList: MessageList;
   inputProcessorOverrides: InnerAgentExecutionOptions['inputProcessors'];
 }): Promise<void> {
-  const existing = messageList.getAllSystemMessages();
+  const existingTagged = { ...messageList.getPersisted.taggedSystemMessages };
   const replayList = new MessageList();
-  replayList.addSystem(existing);
+  replayList.addSystem(messageList.getSystemMessages());
+  for (const [tag, messages] of Object.entries(existingTagged)) {
+    replayList.addSystem(messages, tag);
+  }
 
   try {
     await capabilities.runInputProcessors({
@@ -61,12 +64,13 @@ async function replayInputProcessorSystemMessages({
     return;
   }
 
-  const seen = new Set(existing.map(message => JSON.stringify(message)));
-  for (const message of replayList.getAllSystemMessages()) {
-    const key = JSON.stringify(message);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    messageList.addSystem(message);
+  // Mirror the replayed buckets so replacements, removals and tags match a fresh run.
+  messageList.replaceAllSystemMessages(replayList.getSystemMessages());
+  const replayedTagged = replayList.getPersisted.taggedSystemMessages;
+  for (const tag of new Set([...Object.keys(existingTagged), ...Object.keys(replayedTagged)])) {
+    messageList.clearSystemMessages(tag);
+    const messages = replayedTagged[tag];
+    if (messages?.length) messageList.addSystem(messages, tag);
   }
 }
 
