@@ -559,7 +559,8 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   });
 
   it.each([
-    { failure: 'missing repository', expected: /connect|link.*repository/i },
+    { failure: 'missing connection', expected: /connect source control/i },
+    { failure: 'missing repository', expected: /link a repository/i },
     { failure: 'account-link reread', expected: /try again later/i },
     { failure: 'project reread', expected: /try again later/i },
     { failure: 'source-control selection', expected: /try again later/i },
@@ -567,7 +568,8 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     { failure: 'session lookup', expected: /try again later/i },
     { failure: 'session creation', expected: /try again later/i },
   ])('posts one safe explanation for $failure without creating a thread or card', async ({ failure, expected }) => {
-    const sourceControl = makeSourceControl({ hasRepo: failure !== 'missing repository' });
+    const sourceControl = makeSourceControl({ hasRepo: !['missing connection', 'missing repository'].includes(failure) });
+    if (failure === 'missing connection') sourceControl.connections.list.mockResolvedValue([]);
     const outage = new Error('db down: postgres://private');
     if (failure === 'source-control selection') sourceControl.connections.list.mockRejectedValue(outage);
     if (failure === 'repository resolution') {
