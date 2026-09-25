@@ -64,6 +64,7 @@ vi.mock('@mastra/code-sdk/utils/project', async importOriginal => {
 });
 
 import { createTUIState } from '../state.js';
+import { MIN_TERM_WIDTH } from '../theme.js';
 
 function createSession() {
   return {
@@ -182,8 +183,7 @@ describe('createTUIState', () => {
     }
   });
 
-  it('does not turn a transient narrow terminal width negative', async () => {
-    const { Text } = await vi.importActual<typeof import('@earendil-works/pi-tui')>('@earendil-works/pi-tui');
+  it('floors a transient narrow terminal width to the minimum layout width', () => {
     const originalColumns = process.stdout.columns;
     Object.defineProperty(process.stdout, 'columns', {
       value: 2,
@@ -205,8 +205,7 @@ describe('createTUIState', () => {
       });
       state = createdState;
 
-      expect(() => new Text('status', 1, 1).render(createdState.terminal.columns)).not.toThrow();
-      expect(createdState.terminal.columns).toBe(2);
+      expect(createdState.terminal.columns).toBe(MIN_TERM_WIDTH);
     } finally {
       state?.renderScheduler?.dispose();
       Object.defineProperty(process.stdout, 'columns', {
