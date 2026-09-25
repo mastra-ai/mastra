@@ -579,6 +579,17 @@ export class AgentChannels {
               let toolArgs: Record<string, unknown> | undefined;
 
               const stashed = this.pendingApprovalCards.get(toolCallId);
+              // Only the user whose message triggered the tool call may answer
+              // its approval card. Skip the check when either identity is unknown.
+              const requesterId = stashed?.requesterId;
+              const actorId = event.user?.userId;
+              if (requesterId && actorId && requesterId !== actorId) {
+                this.log(
+                  'info',
+                  `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer toolCallId=${toolCallId}`,
+                );
+                return;
+              }
               if (stashed?.runId) {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
@@ -669,7 +680,7 @@ export class AgentChannels {
                 const { requestContext } = handlerContext;
                 requestContext.set('channel', channelContext);
 
-                const renderContext = this._buildRenderContext(chatThread, platform);
+                const renderContext = this._buildRenderContext(chatThread, platform, undefined, stashed?.requesterId);
                 requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
                 try {
@@ -721,7 +732,12 @@ export class AgentChannels {
               const { requestContext } = handlerContext;
               requestContext.set('channel', channelContext);
 
-              const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });
+              const renderContext = this._buildRenderContext(
+                chatThread,
+                platform,
+                { toolCallId, messageId },
+                stashed?.requesterId,
+              );
               requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
               await this.dispatchApproval({
@@ -1347,7 +1363,7 @@ export class AgentChannels {
     // subscription consumer: rendering now happens inline with the run that
     // produces the chunks, so only the Lambda that won the wake race
     // (signals reservation) renders the reply.
-    const renderContext = this._buildRenderContext(chatThread, platform);
+    const renderContext = this._buildRenderContext(chatThread, platform, undefined, message.author?.userId);
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
@@ -1433,6 +1449,7 @@ export class AgentChannels {
     chatThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
+    requesterId?: string,
   ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
@@ -1448,7 +1465,7 @@ export class AgentChannels {
     const typingGate = { active: false };
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
-      this.pendingApprovalCards.set(toolCallId, record);
+      this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
     const takePendingApproval = (id: string) => {
