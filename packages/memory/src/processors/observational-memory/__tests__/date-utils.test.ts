@@ -457,6 +457,14 @@ describe('expandInlineEstimatedDates', () => {
     },
   );
 
+  it('stays fast on a long run of spaces inside a closed note or a header', () => {
+    const spaces = ' '.repeat(20_000);
+    const started = performance.now();
+    expandInlineEstimatedDates(`(meaning a${spaces}b 2024)`, now);
+    addRelativeTimeToObservations(`Date: a${spaces}b`, now);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
   it('uses forward-looking strings for future dates', () => {
     const input = `Event scheduled (estimated July 15, 2025)`;
     const result = expandInlineEstimatedDates(input, now);

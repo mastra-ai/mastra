@@ -192,6 +192,7 @@ function parseSpanAlternative(text: string): DateSpan | null {
 
 function normalizeDateText(text: string): string {
   return text
+    .replace(/\s+/g, ' ')
     .trim()
     .replace(/^(?:approx(?:\.|imately)?|about|around|circa|c\.|~)\s*/i, '')
     .replace(/^(?:by|in|until|before|after)\s+/i, '')
@@ -203,7 +204,7 @@ function normalizeDateText(text: string): string {
     })
     .replace(new RegExp(TIME, 'g'), '')
     .replace(/\b(early|mid|late|to)-/gi, '$1 ')
-    .replace(/\s+/g, ' ')
+    .replace(/ {2,}/g, ' ')
     .trim();
 }
 
@@ -339,13 +340,13 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
     currentDate,
   );
 
-  const dateHeaderRegex = /^(Date:[ \t]*)(.*?)[ \t]*$/gm;
+  const dateHeaderRegex = /^(Date:[ \t]*)(.*)$/gm;
 
   // First pass: collect every header that parses as a date or range, in order
   const dates: { index: number; span: DateSpan; match: string; prefix: string; dateStr: string }[] = [];
   let regexMatch: RegExpExecArray | null;
   while ((regexMatch = dateHeaderRegex.exec(withInlineDates)) !== null) {
-    const dateStr = regexMatch[2]!;
+    const dateStr = regexMatch[2]!.trimEnd();
     const span = parseDateSpan(dateStr);
     if (span) {
       dates.push({ index: regexMatch.index, span, match: regexMatch[0], prefix: regexMatch[1]!, dateStr });
