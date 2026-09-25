@@ -1240,7 +1240,7 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     isOptional: true,
     defaultValue: "'low'",
     description:
-      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints.",
+      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints. Image and file parts show their filename, media type, and stored URL or provider file ID so the agent can reuse the attachment. Inline file data such as base64 or data URIs is omitted.",
   },
   {
     name: 'partType',

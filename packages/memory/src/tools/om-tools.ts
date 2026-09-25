@@ -525,6 +525,37 @@ function makePart(
   return { messageId: msg.id, partIndex, role: msg.role, type, text, fullText, toolName };
 }
 
+const PROVIDER_FILE_ID_PATTERN = /^file-[A-Za-z0-9_-]+$/;
+// Scheme followed by `//` — matches http(s), gs, s3, file, etc. but not data:/blob: URIs or Windows paths.
+const REUSABLE_URL_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
+
+/**
+ * Renders an image/file part with its media type and, when the stored payload is a reusable
+ * reference (URL or provider file ID), that reference so the agent can reuse the attachment.
+ * Stored parts use the v4 (`data`/`mimeType`) or v5 (`url`/`mediaType`) shape; prompt-style
+ * image parts carry the payload in `image`. Inline payloads (data URIs, base64, bytes) are never rendered.
+ */
+function formatAttachmentPart(partType: 'image' | 'file', part: Record<string, unknown>): string {
+  const filename = typeof part.filename === 'string' && part.filename ? `: ${part.filename}` : '';
+  const payload = part.image ?? part.data ?? part.url;
+  const payloadString = payload instanceof URL ? payload.href : typeof payload === 'string' ? payload.trim() : '';
+  let mediaType = [part.mimeType, part.mediaType].find((v): v is string => typeof v === 'string' && v.length > 0);
+
+  let reference = '';
+  if (payloadString.startsWith('data:')) {
+    mediaType ??= /^data:([^;,]+)/.exec(payloadString)?.[1];
+    reference = '(inline data omitted)';
+  } else if (PROVIDER_FILE_ID_PATTERN.test(payloadString)) {
+    reference = `file id: ${payloadString}`;
+  } else if (REUSABLE_URL_PATTERN.test(payloadString)) {
+    reference = `url: ${payloadString}`;
+  } else if (payloadString || payload instanceof Uint8Array || payload instanceof ArrayBuffer) {
+    reference = '(inline data omitted)';
+  }
+
+  return [`[${partType === 'image' ? 'Image' : 'File'}${filename}]`, mediaType, reference].filter(Boolean).join(' ');
+}
+
 function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
   const parts: FormattedPart[] = [];
 
@@ -605,10 +636,7 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
           parts.push(makePart(msg, i, 'reasoning', reasoning, detail));
         }
       } else if (partType === 'image' || partType === 'file') {
-        const filename = (part as any).filename;
-        const label = filename ? `: ${filename}` : '';
-        const fullText = `[${partType === 'image' ? 'Image' : 'File'}${label}]`;
-        parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
+        parts.push(makePart(msg, i, partType, formatAttachmentPart(partType, part), detail));
       } else if (partType?.startsWith('data-')) {
         // skip data parts — these are internal OM markers (buffering, observation, etc.)
       } else if (partType) {

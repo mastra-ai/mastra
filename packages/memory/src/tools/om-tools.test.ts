@@ -1702,6 +1702,134 @@ describe('om-tools', () => {
     });
   });
 
+  describe('attachment parts', () => {
+    let memory: Memory;
+    const threadId = 'thread-attachments';
+    const resourceId = 'resource-attachments';
+    const base64Png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const signedUrl = `https://example.invalid/uploads/report.pdf?X-Amz-Signature=${'a1b2c3d4'.repeat(80)}`;
+
+    beforeEach(async () => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { model: 'test-model', scope: 'thread', retrieval: true } } as any,
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Attachment thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-attachments',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'file',
+                  data: 'https://example.invalid/original.png',
+                  mimeType: 'image/png',
+                  filename: 'original.png',
+                } as any,
+                { type: 'file', url: 'https://example.invalid/deck.pptx', mediaType: 'application/vnd.ms-powerpoint' },
+                { type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'inline.png' } as any,
+                { type: 'file', data: base64Png, mimeType: 'image/png' } as any,
+                { type: 'file', data: 'file-abc123', mimeType: 'application/pdf', filename: 'uploaded.pdf' } as any,
+                { type: 'file', data: signedUrl, mimeType: 'application/pdf', filename: 'report.pdf' } as any,
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+    });
+
+    const fetchPart = (partIndex: number, charOffset?: number) =>
+      recallPart({ memory: memory as any, threadId, resourceId, cursor: 'msg-attachments', partIndex, charOffset });
+
+    it('returns the stored URL and media type for a URL-backed file part via the recall tool', async () => {
+      const recall = memory.listTools().recall!;
+      const result = await recall.execute?.(
+        { mode: 'messages', cursor: 'msg-attachments', partIndex: 0, detail: 'high' },
+        {
+          memory,
+          agent: { threadId, resourceId },
+        } as any,
+      );
+
+      expect((result as any).text).toBe('[File: original.png] image/png url: https://example.invalid/original.png');
+    });
+
+    it('reads v5-shaped file parts (url/mediaType)', async () => {
+      const result = await fetchPart(1);
+      expect(result.text).toBe('[File] application/vnd.ms-powerpoint url: https://example.invalid/deck.pptx');
+    });
+
+    it('omits inline data but keeps the media type', async () => {
+      const dataUri = await fetchPart(2);
+      expect(dataUri.text).toBe('[File: inline.png] image/png (inline data omitted)');
+
+      const rawBase64 = await fetchPart(3);
+      expect(rawBase64.text).toBe('[File] image/png (inline data omitted)');
+    });
+
+    it('returns provider file IDs', async () => {
+      const result = await fetchPart(4);
+      expect(result.text).toBe('[File: uploaded.pdf] application/pdf file id: file-abc123');
+    });
+
+    it('continues a long signed URL across charOffset chunks', async () => {
+      const chunks: string[] = [];
+      let charOffset: number | undefined;
+      do {
+        const chunk = await recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'msg-attachments',
+          partIndex: 5,
+          charOffset,
+          maxTokens: 100,
+        });
+        chunks.push(chunk.text);
+        charOffset = chunk.nextCharOffset;
+      } while (charOffset !== undefined);
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(`[File: report.pdf] application/pdf url: ${signedUrl}`);
+    });
+
+    it('includes references in paged recall and truncates long ones at low detail', async () => {
+      const high = await recallThreadFromStart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        detail: 'high',
+        maxTokens: 10_000,
+      });
+      expect(high.messages).toContain('[p0] [File: original.png] image/png url: https://example.invalid/original.png');
+      expect(high.messages).toContain(signedUrl);
+      expect(high.messages).not.toContain(base64Png);
+
+      const low = await recallThreadFromStart({ memory: memory as any, threadId, resourceId, detail: 'low' });
+      expect(low.messages).toContain('url: https://example.invalid/original.png');
+      expect(low.messages).not.toContain(signedUrl);
+      expect(low.messages).toContain('recall cursor="msg-attachments" partIndex=5 detail="high"');
+      expect(low.messages).not.toContain(base64Png);
+    });
+  });
+
   describe('listThreadsForResource', () => {
     let memory: Memory;
     const resourceId = 'resource-threads';
