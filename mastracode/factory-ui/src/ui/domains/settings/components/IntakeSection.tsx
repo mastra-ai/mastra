@@ -395,13 +395,16 @@ function IncidentioIntakeSection({
   // connection — the section must stay reachable so the org can still select
   // and route sources.
   const directConfigured = Boolean(
-    statusQuery.data?.enabled && statusQuery.data.configured && statusQuery.data.mode === 'api-key',
+    statusQuery.data?.enabled &&
+      statusQuery.data.configured &&
+      statusQuery.data.mode === 'api-key' &&
+      statusQuery.data.reason === 'ready',
   );
   const active = connectionsQuery.data?.filter(connection => connection.status === 'active') ?? [];
   const credentialActive = active.length > 0 || directConfigured;
   const sourcesQuery = useIncidentioSourcesQuery(credentialActive);
   if (connectionsQuery.isPending || statusQuery.isPending) return null;
-  if (connectionsQuery.isError && !isPlatformConnectUnavailableError(connectionsQuery.error)) {
+  if (connectionsQuery.isError && !directConfigured && !isPlatformConnectUnavailableError(connectionsQuery.error)) {
     // A transient failure must keep the section reachable with a retry, or an
     // org with incident.io connected silently loses its sync settings.
     return (
@@ -467,7 +470,9 @@ function IncidentioIntakeSection({
                 onCheckedChange={enabled => update({ ...config, incidentio: { ...config.incidentio, enabled } })}
               />
             </SettingsRow>
-            {connections.length > 0 && <ProviderConnectionsList provider={provider} connections={connections} />}
+            {!directConfigured && connections.length > 0 && (
+              <ProviderConnectionsList provider={provider} connections={connections} />
+            )}
             <SettingsRow
               label="Incident board configuration"
               description="Configure a dedicated board for incident response."

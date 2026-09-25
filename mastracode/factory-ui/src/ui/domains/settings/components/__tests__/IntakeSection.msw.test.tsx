@@ -1086,6 +1086,47 @@ describe('IntakeSection', () => {
       // Routing stays reachable so the source can feed a Factory board.
       expect(await screen.findByLabelText('Factory for Incident follow-ups (acme)')).toBeInTheDocument();
     });
+
+    it('stays usable when the Platform connections request fails', async () => {
+      seedFactories();
+      useIntakeHandlers({
+        config: { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+      });
+      // The direct integration does not need Platform connections, so a
+      // transient Platform failure must not collapse the section into the
+      // retry-only stub.
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({ error: 'boom' }, { status: 500 }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
+          HttpResponse.json({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' }),
+        ),
+        http.get(INTAKE_SOURCES_URL, () =>
+          HttpResponse.json({
+            sources: [
+              {
+                integrationId: 'incidentio',
+                id: 'incidentio-source:follow-ups',
+                name: 'Incident follow-ups (acme)',
+                type: 'follow-up',
+              },
+            ],
+            failures: [],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io follow-ups' });
+      expect(within(section).getByText('incident.io API key configured on this server')).toBeInTheDocument();
+      expect(within(section).queryByText("Couldn't load incident.io connections.")).not.toBeInTheDocument();
+      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
+      expect(toggle).toBeChecked();
+      expect(toggle).toBeEnabled();
+      expect(await within(section).findByRole('checkbox', { name: 'Incident follow-ups (acme)' })).toBeChecked();
+    });
   });
 
   describe('given the server omits unregistered integrations', () => {
