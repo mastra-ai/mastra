@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Fixed `POST /api/agents/:agentId/recover` returning a 500 for agents created with `createInngestAgent()`. The error told users to set `durable: true`, which does not apply to Inngest agents. Inngest owns durability for these runs, so recovering one now returns a clear 400 "not supported" error that points to `observe(runId)` for reconnecting to a running stream. With `recovery.durableAgents: 'auto'`, startup recovery now skips Inngest agents instead of logging an error for each one. Fixes #25160.
+Fixed recovery requests for agents created with `createInngestAgent()`. `POST /api/agents/:agentId/recover` now returns a clear 400 "not supported" error that points to `observe(runId)` for reconnecting to a running stream, instead of a 500. With `recovery.durableAgents: 'auto'`, startup recovery skips Inngest agents instead of logging an error for each one. Fixes [#25160](https://github.com/mastra-ai/mastra/issues/25160).
