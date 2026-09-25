@@ -432,6 +432,13 @@ describe('expandInlineEstimatedDates', () => {
     expect(expandInlineEstimatedDates(input, now)).toBe(input);
   });
 
+  it('stays fast on a long unclosed note', () => {
+    const input = `(meaning ${' '.repeat(50_000)}`;
+    const started = performance.now();
+    expect(expandInlineEstimatedDates(input, now)).toBe(input);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
   it('uses forward-looking strings for future dates', () => {
     const input = `Event scheduled (estimated July 15, 2025)`;
     const result = expandInlineEstimatedDates(input, now);

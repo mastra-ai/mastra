@@ -280,9 +280,10 @@ export function isFutureIntentObservation(line: string): boolean {
  * and expands them to "(meaning May 30, 2023 - 3 weeks ago)". Notes without a year are left alone.
  */
 export function expandInlineEstimatedDates(observations: string, currentDate: Date): string {
-  const inlineDateRegex = /\((estimated|meaning)\s+([^)]*\d{4}[^)]*)\)/gi;
+  const inlineDateRegex = /\((estimated|meaning)\s([^)]*)\)/gi;
 
-  return observations.replace(inlineDateRegex, (match, prefix: string, dateContent: string, offset: number) => {
+  return observations.replace(inlineDateRegex, (match, prefix: string, noteText: string, offset: number) => {
+    const dateContent = noteText.trimStart();
     const span = findDateSpan(dateContent);
     if (!span) return match;
 
