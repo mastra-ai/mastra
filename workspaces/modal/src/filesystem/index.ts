@@ -371,24 +371,25 @@ export class ModalFilesystem extends MastraFilesystem {
 
   private async exec(script: keyof typeof SCRIPTS, args: string[], stdin?: Uint8Array): Promise<ExecResult> {
     await this.ensureReady();
-    const runOnce = () =>
-      this.sandbox.retryOnDead(async () => {
-        const pathCount = script === 'transfer' ? '2' : '1';
-        const command = ['sh', '-c', `${CONFINE} ${SCRIPTS[script]}`, script, this.basePath, pathCount, ...args];
-        const proc = await this.sandbox.modal.exec(command, {
-          mode: 'binary',
-        });
-        if (stdin) {
-          await proc.stdin.writeBytes(stdin);
-        }
-        await proc.stdin.close();
-        const [stdout, stderr, exitCode] = await Promise.all([
-          proc.stdout.readBytes(),
-          proc.stderr.readBytes(),
-          proc.wait(),
-        ]);
-        return { exitCode, stdout, stderr: new TextDecoder().decode(stderr) };
+    const execute = async (): Promise<ExecResult> => {
+      const pathCount = script === 'transfer' ? '2' : '1';
+      const command = ['sh', '-c', `${CONFINE} ${SCRIPTS[script]}`, script, this.basePath, pathCount, ...args];
+      const proc = await this.sandbox.modal.exec(command, {
+        mode: 'binary',
       });
+      if (stdin) {
+        await proc.stdin.writeBytes(stdin);
+      }
+      await proc.stdin.close();
+      const [stdout, stderr, exitCode] = await Promise.all([
+        proc.stdout.readBytes(),
+        proc.stderr.readBytes(),
+        proc.wait(),
+      ]);
+      return { exitCode, stdout, stderr: new TextDecoder().decode(stderr) };
+    };
+    // Append isn't idempotent: the bytes may already be applied when the process dies, so never replay it.
+    const runOnce = () => (script === 'append' ? execute() : this.sandbox.retryOnDead(execute));
 
     if (!stdin) return runOnce();
 
