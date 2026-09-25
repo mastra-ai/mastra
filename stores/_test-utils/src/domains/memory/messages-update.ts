@@ -93,7 +93,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
     it('should record unavailable attachments on a stored message without losing its parts or other metadata', async () => {
       const parts: MastraDBMessage['content']['parts'] = [
         { type: 'text', text: 'What is in this picture?' },
-        { type: 'file', data: 'https://example.com/gone.png', mimeType: 'image/png', filename: 'gone.png' },
+        { type: 'file', data: 'https://example.com/gone.png', mimeType: 'image/png' },
       ];
       const originalMessage = createSampleMessageV2({
         threadId: thread.id,
