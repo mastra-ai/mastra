@@ -2760,6 +2760,44 @@ describe('A2A Handler', () => {
       expect(saved?.history).toHaveLength(0);
     });
 
+    it('stops waiting when a streaming follower disconnects', async () => {
+      const taskId = 'task-hitl-stream-aborted';
+      await mockTaskStore.save({
+        agentId,
+        data: {
+          ...createSuspendedTask({ taskId, contextId: 'ctx-stream-aborted', suspendedRunId: taskId }),
+          status: { state: 'working', timestamp: new Date().toISOString() },
+        },
+      });
+      const controller = new AbortController();
+      const stream = vi.fn();
+      const resumeStream = vi.fn();
+      const gen = handleMessageStream({
+        requestId: 'aborted-follower',
+        params: {
+          message: {
+            messageId: 'aborted-follower-message',
+            kind: 'message',
+            role: 'user',
+            taskId,
+            parts: [{ kind: 'text', text: 'yes' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: { stream, resumeStream } as unknown as Agent,
+        agentId,
+        requestContext: new RequestContext(),
+        abortSignal: controller.signal,
+      });
+      const pending = gen.next();
+      await Promise.resolve();
+      controller.abort();
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(stream).not.toHaveBeenCalled();
+      expect(resumeStream).not.toHaveBeenCalled();
+      expect((await mockTaskStore.load({ agentId, taskId }))?.status.state).toBe('working');
+    });
+
     it('should record toolCallId and approval flag when the suspension is a tool approval', async () => {
       const mockAgent = {
         // Approval suspensions carry no nested `suspendPayload` (ToolCallApprovalPayload).
