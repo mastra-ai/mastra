@@ -1530,11 +1530,12 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
 
-      // The option must not leak into the workflows: the pinned suspended-only
-      // policy stays in effect on every durable workflow (Inngest's replay
-      // owns durability; Mastra snapshots exist purely for HITL resume).
-      // Probe the complete WorkflowRunStatus matrix so no status can silently
-      // start persisting.
+      // The option must not leak into the workflows: the pinned policy stays in
+      // effect on every durable workflow (Inngest's replay owns durability;
+      // Mastra persists suspended snapshots for HITL resume and terminal ones so
+      // finished runs are not resumable — #24796). Probe the complete
+      // WorkflowRunStatus matrix so no status can silently start persisting.
+      const persisted = new Set(['suspended', 'success', 'failed', 'canceled', 'bailed', 'tripwire']);
       const allStatuses = [
         'running',
         'success',
@@ -1553,7 +1554,7 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
       for (const workflow of workflows) {
         const predicate = (workflow as any).options.shouldPersistSnapshot;
         for (const workflowStatus of allStatuses) {
-          expect(predicate({ stepResults: {}, workflowStatus })).toBe(workflowStatus === 'suspended');
+          expect(predicate({ stepResults: {}, workflowStatus })).toBe(persisted.has(workflowStatus));
         }
       }
     } finally {
