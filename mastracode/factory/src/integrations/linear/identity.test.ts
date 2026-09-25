@@ -83,6 +83,37 @@ describe('buildLinearIdentity', () => {
     expect(graphql).not.toHaveBeenCalled();
   });
 
+  it('returns empty when loading the connection throws (storage not ready)', async () => {
+    const graphql = vi.fn();
+    const host: LinearIdentityHost = {
+      loadConnection: async () => {
+        throw new Error('storage not initialized');
+      },
+      getFreshAccessToken: async () => 'token-abc',
+      linearGraphql: graphql as unknown as LinearIdentityHost['linearGraphql'],
+    };
+    const identity = buildLinearIdentity(host);
+    const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
+    expect(accounts).toEqual([]);
+    expect(graphql).not.toHaveBeenCalled();
+  });
+
+  it('drops guest users locally', async () => {
+    const { host } = makeHost({
+      pages: [
+        {
+          nodes: [
+            { id: 'u_1', displayName: 'member' },
+            { id: 'u_2', displayName: 'guest', guest: true } as { id: string; displayName: string },
+          ],
+        },
+      ],
+    });
+    const identity = buildLinearIdentity(host);
+    const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
+    expect(accounts.map(a => a.externalUserId)).toEqual(['u_1']);
+  });
+
   it('returns empty when the access token cannot be refreshed', async () => {
     const { host, graphql } = makeHost({ tokenError: new Error('expired') });
     const identity = buildLinearIdentity(host);

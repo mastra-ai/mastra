@@ -81,7 +81,9 @@ export function buildPlatformGithubIdentity(host: PlatformGithubIdentityHost): I
           continue;
         }
         for (const member of result.members ?? []) {
-          const key = `${installation.accountLogin}:${member.login}`;
+          // GitHub logins are globally unique — dedupe by login alone so a
+          // user in two connected orgs claims one row, not two.
+          const key = member.login;
           if (collected.has(key)) continue;
           collected.set(key, {
             externalUserId: member.login,

@@ -191,14 +191,20 @@ function matchesRelations(
  */
 export type ResolvedMe = ReadonlyMap<string, ReadonlySet<string>>;
 
-/** Expand `@me` into the same `source:externalId` keys the relations map uses. */
-function participantIdsForMe(resolvedMe: ResolvedMe): Set<string> {
+/**
+ * Expand `@me` into the same `source:externalId` keys the relations map
+ * uses. The `worked` relation is keyed by Factory actor id
+ * (`factory:<userId>`), not by any claimed external id, so the acting
+ * user's own Factory id joins the set when known.
+ */
+function participantIdsForMe(resolvedMe: ResolvedMe, currentUserId?: string): Set<string> {
   const ids = new Set<string>();
   for (const [integrationId, externalIds] of resolvedMe) {
     for (const externalId of externalIds) {
       ids.add(`${integrationId}:${externalId.toLowerCase()}`);
     }
   }
+  if (currentUserId) ids.add(`factory:${currentUserId}`);
   return ids;
 }
 
@@ -239,8 +245,9 @@ export function workItemMatchesMe(
   resolvedMe: ResolvedMe,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
   liveCandidate?: BoardCandidate,
+  currentUserId?: string,
 ): boolean {
-  const ids = participantIdsForMe(resolvedMe);
+  const ids = participantIdsForMe(resolvedMe, currentUserId);
   if (ids.size === 0) return false;
   if (matchesRelationsAny(workItemRelevance(item, activityPage), ids, selectedTypes)) return true;
   return liveCandidate ? matchesRelationsAny(candidateRelevance(liveCandidate), ids, selectedTypes) : false;

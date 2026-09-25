@@ -11,7 +11,6 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMemo } from 'react';
 
 import {
   useClaimIdentityMutation,
@@ -57,45 +56,37 @@ export function IdentityClaimsSection() {
 
   const identities: IdentityRow[] = identityQuery.data?.identities ?? [];
 
-  const rowByKey = useMemo(() => {
-    const map = new Map<string, IdentityRow>();
-    for (const row of identities) map.set(keyOf(row.integrationId, row.externalUserId), row);
-    return map;
-  }, [identities]);
+  const rowByKey = new Map<string, IdentityRow>();
+  for (const row of identities) rowByKey.set(keyOf(row.integrationId, row.externalUserId), row);
 
   // Group by integration so the list reads as "everything GitHub, then
   // everything Linear, …". BaseCombobox filters options client-side against
   // the label + description, so the raw external id remains searchable.
-  const options: ComboboxOption[] = useMemo(() => {
-    const sorted = [...identities].sort((a, b) => {
-      const providerA = integrationMeta(a.integrationId).label;
-      const providerB = integrationMeta(b.integrationId).label;
-      const cmp = providerA.localeCompare(providerB);
-      if (cmp !== 0) return cmp;
-      return a.label.localeCompare(b.label);
-    });
-    return sorted.map(row => {
-      const meta = integrationMeta(row.integrationId);
-      return {
-        value: keyOf(row.integrationId, row.externalUserId),
-        label: row.label && row.label !== row.externalUserId ? `${row.label} · ${row.externalUserId}` : row.externalUserId,
-        description: row.email ?? undefined,
-        start: (
-          <span className="mr-1 flex shrink-0 items-center gap-1.5">
-            <Avatar src={row.avatarUrl} name={row.label || row.externalUserId} size="sm" />
-            <Badge variant={meta.tone} emphasis="muted" size="sm">
-              {meta.label}
-            </Badge>
-          </span>
-        ),
-      };
-    });
-  }, [identities]);
+  const sortedIdentities = [...identities].sort((a, b) => {
+    const providerA = integrationMeta(a.integrationId).label;
+    const providerB = integrationMeta(b.integrationId).label;
+    const cmp = providerA.localeCompare(providerB);
+    if (cmp !== 0) return cmp;
+    return a.label.localeCompare(b.label);
+  });
+  const options: ComboboxOption[] = sortedIdentities.map(row => {
+    const meta = integrationMeta(row.integrationId);
+    return {
+      value: keyOf(row.integrationId, row.externalUserId),
+      label: row.label && row.label !== row.externalUserId ? `${row.label} · ${row.externalUserId}` : row.externalUserId,
+      description: row.email ?? undefined,
+      start: (
+        <span className="mr-1 flex shrink-0 items-center gap-1.5">
+          <Avatar src={row.avatarUrl} name={row.label || row.externalUserId} size="sm" />
+          <Badge variant={meta.tone} emphasis="muted" size="sm">
+            {meta.label}
+          </Badge>
+        </span>
+      ),
+    };
+  });
 
-  const selected = useMemo(
-    () => identities.filter(row => row.claimed).map(row => keyOf(row.integrationId, row.externalUserId)),
-    [identities],
-  );
+  const selected = identities.filter(row => row.claimed).map(row => keyOf(row.integrationId, row.externalUserId));
 
   const onValueChange = (nextKeys: string[]) => {
     const next = new Set(nextKeys);
@@ -120,18 +111,16 @@ export function IdentityClaimsSection() {
     }
   };
 
-  const claimedGroups = useMemo(() => {
-    const byIntegration = new Map<string, IdentityRow[]>();
-    for (const row of identities) {
-      if (!row.claimed) continue;
-      const existing = byIntegration.get(row.integrationId);
-      if (existing) existing.push(row);
-      else byIntegration.set(row.integrationId, [row]);
-    }
-    return Array.from(byIntegration.entries()).sort((a, b) =>
-      integrationMeta(a[0]).label.localeCompare(integrationMeta(b[0]).label),
-    );
-  }, [identities]);
+  const claimedByIntegration = new Map<string, IdentityRow[]>();
+  for (const row of identities) {
+    if (!row.claimed) continue;
+    const existing = claimedByIntegration.get(row.integrationId);
+    if (existing) existing.push(row);
+    else claimedByIntegration.set(row.integrationId, [row]);
+  }
+  const claimedGroups = Array.from(claimedByIntegration.entries()).sort((a, b) =>
+    integrationMeta(a[0]).label.localeCompare(integrationMeta(b[0]).label),
+  );
 
   if (identityQuery.isError) {
     return (
@@ -141,8 +130,23 @@ export function IdentityClaimsSection() {
     );
   }
 
+  // A failed claim/unclaim rolls the checkbox back to server state — without
+  // a message the user just sees the tick refuse to stick.
+  const mutationError = claim.isError
+    ? { action: 'claim', error: claim.error }
+    : unclaim.isError
+      ? { action: 'unclaim', error: unclaim.error }
+      : undefined;
+
   return (
     <div className="flex max-w-2xl flex-col gap-3">
+      {mutationError && (
+        <Notice variant="destructive">
+          {`Failed to ${mutationError.action} account: ${
+            mutationError.error instanceof Error ? mutationError.error.message : 'unexpected error'
+          }`}
+        </Notice>
+      )}
       <Combobox
         multiple
         options={options}

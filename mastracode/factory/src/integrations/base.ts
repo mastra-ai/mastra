@@ -34,7 +34,6 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -136,12 +135,6 @@ export interface IntegrationContext {
      * a user claims or unclaims an account.
      */
     integrationIdentity: IntegrationIdentityStorage;
-    /**
-     * Work-item comments handle. Narrowed to the single reader the identity
-     * capability needs; broader comment CRUD stays on the feed and comments
-     * domain that own it.
-     */
-    comments: Pick<WorkItemCommentsStorage, 'listExternalAuthorsForOrg'>;
   };
   /**
    * Factory runtime available when the work-item domain is ready.

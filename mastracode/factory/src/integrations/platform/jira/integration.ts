@@ -115,8 +115,13 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   readonly identity = buildPlatformJiraIdentity({
     activeContexts: async () => {
       const connections = await this.#activeConnections();
-      const contexts = await Promise.all(connections.map(connection => this.#connectionContext(connection)));
-      return contexts.map(ctx => ({ api: ctx.api, siteUrl: ctx.siteUrl }));
+      // One broken connection (missing cloudId, invalid accountLabel) must
+      // not drop the roster for every healthy site — keep the fulfilled
+      // contexts and skip the rejected ones.
+      const settled = await Promise.allSettled(connections.map(connection => this.#connectionContext(connection)));
+      return settled
+        .filter(entry => entry.status === 'fulfilled')
+        .map(entry => ({ api: entry.value.api, siteUrl: entry.value.siteUrl }));
     },
   });
   readonly #clientConfig: PlatformApiClientConfig;

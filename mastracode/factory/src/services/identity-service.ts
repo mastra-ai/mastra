@@ -65,6 +65,21 @@ export interface IntegrationIdentity extends IntegrationCandidateAccount {
  */
 export type ResolvedMe = Map<string, Set<string>>;
 
+/**
+ * Per-provider budget for one `listCandidateAccounts` call. Provider
+ * capabilities page through remote APIs; a stalled provider must degrade to
+ * an empty roster instead of hanging the whole `GET /web/identity` request.
+ */
+const CANDIDATE_LOOKUP_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const expiry = new Promise<T>(resolve => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, expiry]).finally(() => clearTimeout(timer));
+}
+
 export class IdentityService {
   readonly #storage: IntegrationIdentityStorage;
   readonly #integrations: () => IdentityServiceIntegration[];
@@ -105,10 +120,20 @@ export class IdentityService {
       Promise.all(
         registrations.map(async registration => {
           try {
-            const accounts = await registration.integration.identity!.listCandidateAccounts(registration.context, {
-              orgId,
-              ...(query !== undefined ? { query } : {}),
-            });
+            // A provider that stalls (rather than throws) gets the same
+            // fail-soft treatment: drop its roster and keep the rest.
+            const accounts = await withTimeout(
+              registration.integration.identity!.listCandidateAccounts(registration.context, {
+                orgId,
+                ...(query !== undefined ? { query } : {}),
+              }),
+              CANDIDATE_LOOKUP_TIMEOUT_MS,
+              null,
+            );
+            if (accounts === null) {
+              console.warn(`[identity] candidate lookup timed out for integration ${registration.integration.id}`);
+              return [];
+            }
             return accounts.map(account => ({ ...account, integrationId: registration.integration.id }));
           } catch {
             return [];
@@ -123,6 +148,10 @@ export class IdentityService {
     const merged: IntegrationIdentity[] = [];
     for (const account of providerRows.flat()) {
       const key = claimedKey(account.integrationId, account.externalUserId);
+      // Providers can surface the same user twice (two connections, two
+      // result pages). One row per (integrationId, externalUserId) — both
+      // would toggle the same claim anyway.
+      if (seen.has(key)) continue;
       seen.add(key);
       merged.push({ ...account, claimed: claimedByKey.has(key) });
     }

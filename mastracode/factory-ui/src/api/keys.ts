@@ -80,8 +80,12 @@ export const queryKeys = {
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
-  /** Consolidated identity index: integrations + identities (with claimed flags). */
-  identity: () => ['identity'] as const,
+  /**
+   * Consolidated identity index: integrations + identities (with claimed
+   * flags). Scoped by API endpoint so a `baseUrl` change under the same
+   * long-lived QueryClient never serves one endpoint's claims to another.
+   */
+  identity: (baseUrl: string) => ['identity', baseUrl] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,

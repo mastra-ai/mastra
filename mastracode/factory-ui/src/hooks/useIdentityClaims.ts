@@ -15,10 +15,16 @@ import type { IdentityIndex, IdentityRow } from '../ui/domains/settings/services
 export function useIdentityQuery() {
   const { baseUrl } = useApiConfig();
   return useQuery<IdentityIndex>({
-    queryKey: queryKeys.identity(),
+    queryKey: queryKeys.identity(baseUrl),
     queryFn: () => listIdentity(baseUrl),
   });
 }
+
+/**
+ * Shared mutation key for claim/unclaim so each mutation can see whether a
+ * sibling is still in flight before it refetches the shared index.
+ */
+const IDENTITY_MUTATION_KEY = ['identity-claims'] as const;
 
 /** Toggle `claimed` on the row matching (integrationId, externalUserId); no-op if absent. */
 function setClaimed(index: IdentityIndex | undefined, key: ClaimKey, claimed: boolean): IdentityIndex | undefined {
@@ -65,19 +71,41 @@ type ClaimInput = ClaimKey & { label: string; email?: string };
 export function useClaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const identityKey = queryKeys.identity(baseUrl);
   return useMutation({
+    mutationKey: IDENTITY_MUTATION_KEY,
     mutationFn: (input: ClaimInput) => claimIdentity(baseUrl, input),
     onMutate: async input => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.identity() });
-      const previous = queryClient.getQueryData<IdentityIndex>(queryKeys.identity());
-      queryClient.setQueryData<IdentityIndex>(queryKeys.identity(), current => insertClaim(current, input));
-      return { previous };
+      await queryClient.cancelQueries({ queryKey: identityKey });
+      const previous = queryClient.getQueryData<IdentityIndex>(identityKey);
+      const existingRow = previous?.identities.find(
+        row => row.integrationId === input.integrationId && row.externalUserId === input.externalUserId,
+      );
+      queryClient.setQueryData<IdentityIndex>(identityKey, current => insertClaim(current, input));
+      return { existed: Boolean(existingRow), wasClaimed: existingRow?.claimed ?? false };
     },
-    onError: (_error, _input, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.identity(), context.previous);
+    onError: (_error, input, context) => {
+      // Roll back only this identity — restoring a whole-index snapshot
+      // would erase a sibling mutation's optimistic state.
+      queryClient.setQueryData<IdentityIndex>(identityKey, current => {
+        if (!current) return current;
+        if (!context?.existed) {
+          return {
+            ...current,
+            identities: current.identities.filter(
+              row => row.integrationId !== input.integrationId || row.externalUserId !== input.externalUserId,
+            ),
+          };
+        }
+        return setClaimed(current, input, context.wasClaimed);
+      });
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.identity() });
+      // Refetching while a sibling identity mutation is still pending would
+      // clobber its optimistic row; reconcile once the last one settles.
+      if (queryClient.isMutating({ mutationKey: IDENTITY_MUTATION_KEY }) === 1) {
+        void queryClient.invalidateQueries({ queryKey: identityKey });
+      }
     },
   });
 }
@@ -90,19 +118,29 @@ export function useClaimIdentityMutation() {
 export function useUnclaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const identityKey = queryKeys.identity(baseUrl);
   return useMutation({
+    mutationKey: IDENTITY_MUTATION_KEY,
     mutationFn: (key: ClaimKey) => unclaimIdentity(baseUrl, key),
     onMutate: async key => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.identity() });
-      const previous = queryClient.getQueryData<IdentityIndex>(queryKeys.identity());
-      queryClient.setQueryData<IdentityIndex>(queryKeys.identity(), current => setClaimed(current, key, false));
-      return { previous };
+      await queryClient.cancelQueries({ queryKey: identityKey });
+      const previous = queryClient.getQueryData<IdentityIndex>(identityKey);
+      const existingRow = previous?.identities.find(
+        row => row.integrationId === key.integrationId && row.externalUserId === key.externalUserId,
+      );
+      queryClient.setQueryData<IdentityIndex>(identityKey, current => setClaimed(current, key, false));
+      return { wasClaimed: existingRow?.claimed ?? false };
     },
-    onError: (_error, _key, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.identity(), context.previous);
+    onError: (_error, key, context) => {
+      // Identity-specific rollback; see useClaimIdentityMutation.
+      queryClient.setQueryData<IdentityIndex>(identityKey, current =>
+        setClaimed(current, key, context?.wasClaimed ?? true),
+      );
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.identity() });
+      if (queryClient.isMutating({ mutationKey: IDENTITY_MUTATION_KEY }) === 1) {
+        void queryClient.invalidateQueries({ queryKey: identityKey });
+      }
     },
   });
 }

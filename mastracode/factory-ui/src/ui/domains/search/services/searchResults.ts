@@ -174,6 +174,12 @@ function externalActorIdsForCard(card: Pick<WorkItem, 'source' | 'metadata'>): {
     pushString(meta.assignee);
     pushList(meta.assignees);
     pushList(meta.requestedReviewers);
+  } else if (card.source === 'gitlab-issue' || card.source === 'gitlab-pr') {
+    integrationId = 'gitlab';
+    pushString(meta.author);
+    pushString(meta.assignee);
+    pushList(meta.assignees);
+    pushList(meta.requestedReviewers);
   } else if (card.source === 'linear-issue') {
     integrationId = 'linear';
     pushString(meta.assignee ?? meta.linearAssignee);
@@ -207,7 +213,11 @@ function meTokenForCard(
   if (!actors) return undefined;
   const claims = resolvedMe.get(actors.integrationId);
   if (!claims || claims.size === 0) return undefined;
-  return actors.externalUserIds.some(id => claims.has(id)) ? '@me' : undefined;
+  // Card actor ids are lowercased above; lower the claims at comparison time
+  // too so `Octocat` claims match `octocat` actors. Stored claims keep their
+  // original form — only this membership check is case-insensitive.
+  const loweredClaims = new Set([...claims].map(id => id.toLowerCase()));
+  return actors.externalUserIds.some(id => loweredClaims.has(id)) ? '@me' : undefined;
 }
 
 function createWorkItemResult(

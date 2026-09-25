@@ -549,7 +549,7 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 A signed-in user can claim which external accounts on each integration are theirs. Claims are persisted in the `integration_identity_claims` storage domain, keyed per `(orgId, userId, integrationId, externalUserId)`.
 
-The Connections settings page renders one panel per integration that implements the optional `identity` capability. Each panel shows candidate accounts (observed from work item comment authors on that platform) plus a manual-entry field for known external user ids that haven't been observed yet. The user checks the accounts that are theirs and saves.
+The Connections settings page renders a single consolidated searchable multi-select covering every integration that implements the optional `identity` capability. It lists candidate accounts discovered from each provider's member APIs and from work item comment authors observed on that platform, and accepts a manual entry for known external user ids that haven't been discovered yet. The user selects the accounts that are theirs; selections are saved as claims.
 
 Once claimed, `@me` is recognized as a filter chip on the board and as a token in the Cmd+K search palette. `@me` resolves to the acting user's claim map (integrationId → set of externalUserIds) and matches records whose external author, assignees, requesters, or comment-author fields match any claimed id for that integration.
 

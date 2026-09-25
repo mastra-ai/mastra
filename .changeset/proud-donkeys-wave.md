@@ -2,7 +2,7 @@
 '@mastra/connect': patch
 ---
 
-Generated `@mastra/connect` providers now cover more of the upstream template catalog. Actions that authenticate with the raw connection credential — token-introspection endpoints, for example — are generated instead of skipped, and actions that validate their input with the template validation helper are generated too. The credential is fetched from the platform only for the specific actions that read it. Under the hood this extends the platform proxy runtime and the provider generator; agents consume the resulting tools through the normal provider workflow with no API changes:
+`@mastra/connect` providers now expose more tools from each connected service, including actions that authenticate with the connection's own credential (token introspection, for example). No API changes — agents pick up the additional tools through the normal provider workflow:
 
 ```typescript
 import { Agent } from '@mastra/core/agent';

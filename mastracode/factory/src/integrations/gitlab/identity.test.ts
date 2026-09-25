@@ -9,6 +9,7 @@ const ctx = {} as IntegrationContext;
 function makeApi(pages: {
   projects?: GitLabProject[][];
   membersByProjectId?: Record<string, GitLabMember[][]>;
+  membersByGroup?: Record<string, GitLabMember[][]>;
 }) {
   const listProjects = vi.fn(async ({ page }: { page: number }) => {
     return pages.projects?.[page - 1] ?? [];
@@ -18,32 +19,35 @@ function makeApi(pages: {
     if (!set) return [];
     return set[(page ?? 1) - 1] ?? [];
   });
+  const listGroupMembers = vi.fn(async (groupId: string, { page }: { page?: number } = {}) => {
+    const set = pages.membersByGroup?.[groupId];
+    // No configured group behaves like a personal namespace: GitLab
+    // returns 404 for `/groups/:id/members/all`.
+    if (!set) throw new Error('404 Group Not Found');
+    return set[(page ?? 1) - 1] ?? [];
+  });
   return {
-    api: { listProjects, listProjectMembers } as unknown as GitLabApiClient,
+    api: { listProjects, listProjectMembers, listGroupMembers } as unknown as GitLabApiClient,
     listProjects,
     listProjectMembers,
+    listGroupMembers,
   };
 }
 
 describe('buildGitlabIdentity', () => {
-  it('dedupes members across projects and tags them with the connection host', async () => {
-    const { api } = makeApi({
+  it('reads the group roster once per top-level namespace instead of walking every project', async () => {
+    const { api, listGroupMembers, listProjectMembers } = makeApi({
       projects: [
         [
           { id: 1, name: 'Api', path_with_namespace: 'acme/api', web_url: 'https://gitlab.com/acme/api' } as GitLabProject,
           { id: 2, name: 'Web', path_with_namespace: 'acme/web', web_url: 'https://gitlab.com/acme/web' } as GitLabProject,
         ],
       ],
-      membersByProjectId: {
-        '1': [
+      membersByGroup: {
+        acme: [
           [
             { id: 10, username: 'octocat', name: 'The Octocat', state: 'active' },
             { id: 11, username: 'bob', name: 'Bob', state: 'active' },
-          ],
-        ],
-        '2': [
-          [
-            { id: 10, username: 'octocat', name: 'The Octocat', state: 'active' },
             { id: 12, username: 'carol', name: 'Carol', state: 'active' },
           ],
         ],
@@ -60,6 +64,35 @@ describe('buildGitlabIdentity', () => {
       { id: 'bob', host: 'gitlab.com' },
       { id: 'carol', host: 'gitlab.com' },
     ]);
+    // Two projects under one group: one group roster call, no per-project walk.
+    expect(listGroupMembers).toHaveBeenCalledTimes(1);
+    expect(listGroupMembers).toHaveBeenCalledWith('acme', expect.objectContaining({ page: 1 }));
+    expect(listProjectMembers).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a representative project roster for personal namespaces', async () => {
+    const { api, listGroupMembers, listProjectMembers } = makeApi({
+      projects: [
+        [
+          { id: 1, name: 'Api', path_with_namespace: 'mona/api', web_url: 'https://gitlab.com/mona/api' } as GitLabProject,
+          { id: 2, name: 'Web', path_with_namespace: 'mona/web', web_url: 'https://gitlab.com/mona/web' } as GitLabProject,
+        ],
+      ],
+      membersByProjectId: {
+        '1': [[{ id: 10, username: 'mona', name: 'Mona', state: 'active' }]],
+      },
+    });
+    const identity = buildGitlabIdentity({
+      activeContexts: async () => [{ api, host: 'gitlab.com' }],
+    });
+
+    const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
+
+    expect(accounts.map(a => a.externalUserId)).toEqual(['mona']);
+    // Group lookup 404s (personal namespace) → one representative project only.
+    expect(listGroupMembers).toHaveBeenCalledTimes(1);
+    expect(listProjectMembers).toHaveBeenCalledTimes(1);
+    expect(listProjectMembers).toHaveBeenCalledWith('1', expect.objectContaining({ page: 1 }));
   });
 
   it('drops inactive members', async () => {

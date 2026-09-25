@@ -172,6 +172,26 @@ describe('IdentityRoutes', () => {
       expect(body.identities.map(row => row.integrationId)).toEqual(['linear']);
     });
 
+    it('returns one row per (integrationId, externalUserId) even when a provider surfaces duplicates', async () => {
+      const seed = await createFactoryStorageForTests();
+      const githubList = vi.fn<IntegrationIdentityCapability['listCandidateAccounts']>().mockResolvedValue([
+        // Same login discovered through two connected orgs.
+        { externalUserId: 'octocat', label: 'octocat', installation: 'org-a' },
+        { externalUserId: 'octocat', label: 'octocat', installation: 'org-b' },
+      ]);
+      const app = await buildApp({
+        storage: seed.integrationIdentity,
+        integrations: [
+          { integration: fakeIntegration('github', { listCandidateAccounts: githubList }), context: fakeContext() },
+        ],
+        user: orgUser,
+      });
+      const response = await app.request('/web/identity');
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { identities: Array<{ externalUserId: string }> };
+      expect(body.identities.map(row => row.externalUserId)).toEqual(['octocat']);
+    });
+
     it('still surfaces claims the provider no longer lists so the user can unclaim them', async () => {
       const seed = await createFactoryStorageForTests();
       await seed.integrationIdentity.upsert({

@@ -16,6 +16,7 @@ import type { IntegrationCandidateAccount, IntegrationIdentityCapability } from 
 
 interface LinearUserNode {
   id: string;
+  guest?: boolean | null;
   name?: string | null;
   displayName?: string | null;
   email?: string | null;
@@ -29,11 +30,14 @@ interface LinearUsersConnection {
   };
 }
 
+// Linear's UserFilter does not expose `guest`, so the query filters on
+// `active` only and guests are dropped locally from each page's nodes.
 const LINEAR_USERS_QUERY = /* GraphQL */ `
   query FactoryIdentityLinearUsers($first: Int!, $after: String) {
-    users(first: $first, after: $after, filter: { active: { eq: true }, guest: { eq: false } }) {
+    users(first: $first, after: $after, filter: { active: { eq: true } }) {
       nodes {
         id
+        guest
         name
         displayName
         email
@@ -72,7 +76,14 @@ function matchesQuery(account: IntegrationCandidateAccount, query: string | unde
 export function buildLinearIdentity(host: LinearIdentityHost): IntegrationIdentityCapability {
   return {
     async listCandidateAccounts(_ctx, { orgId, query }) {
-      const connection = await host.loadConnection(orgId);
+      // loadConnection reads storage, which throws before initialize() runs
+      // or on a storage error — keep it inside the fail-soft contract.
+      let connection: { workspaceUrlKey?: string | null } | null;
+      try {
+        connection = await host.loadConnection(orgId);
+      } catch {
+        return [];
+      }
       if (!connection) return [];
       let accessToken: string;
       try {
@@ -98,6 +109,7 @@ export function buildLinearIdentity(host: LinearIdentityHost): IntegrationIdenti
           break;
         }
         for (const node of response.users.nodes) {
+          if (node.guest) continue;
           const label = node.displayName ?? node.name ?? node.id;
           collected.push({
             externalUserId: node.id,

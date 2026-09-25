@@ -243,7 +243,14 @@ function BoardContent({
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
         (meSelected
-          ? workItemMatchesMe(item, activityPage, resolvedMe.data, filters.relevanceTypes, liveCandidate)
+          ? workItemMatchesMe(
+              item,
+              activityPage,
+              resolvedMe.data,
+              filters.relevanceTypes,
+              liveCandidate,
+              auth.data?.user?.userId,
+            )
           : workItemMatchesRelevance(
               item,
               activityPage,

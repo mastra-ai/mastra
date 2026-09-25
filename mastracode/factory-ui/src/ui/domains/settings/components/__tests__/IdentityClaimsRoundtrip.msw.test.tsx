@@ -172,6 +172,8 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
 
     await selectOctocat();
 
-    await waitFor(() => expect(match).toHaveTextContent('match'));
+    // Exact match: the initial text 'no match' contains 'match', so a
+    // substring assertion would pass before the claim takes effect.
+    await waitFor(() => expect(match).toHaveTextContent(/^match$/));
   });
 });

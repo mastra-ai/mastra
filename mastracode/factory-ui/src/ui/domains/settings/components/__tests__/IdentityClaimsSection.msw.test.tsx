@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { IdentityIndex, IdentityRow } from '../../services/identityClaims';
 import { IdentityClaimsSection } from '../IdentityClaimsSection';
 
@@ -196,7 +196,7 @@ describe('IdentityClaimsSection', () => {
       }),
     );
 
-    renderWithProviders(<IdentityClaimsSection />);
+    const { client } = renderWithProviders(<IdentityClaimsSection />);
     await openCombobox();
 
     const octocatRow = await screen.findByRole('option', { name: /The Octocat/ });
@@ -204,14 +204,21 @@ describe('IdentityClaimsSection', () => {
 
     await userEvent.click(octocatRow);
 
-    // The tick must flip immediately — before we release the POST. If we were
-    // still waiting on the invalidated refetch, this would time out.
-    await waitFor(() => {
-      const row = screen.getByRole('option', { name: /The Octocat/ });
-      expect(row.getAttribute('aria-selected')).toBe('true');
-    });
-
-    releasePost();
+    try {
+      // The tick must flip immediately — before we release the POST. If we were
+      // still waiting on the invalidated refetch, this would time out.
+      await waitFor(() => {
+        const row = screen.getByRole('option', { name: /The Octocat/ });
+        expect(row.getAttribute('aria-selected')).toBe('true');
+      });
+    } finally {
+      // Always release the gate so a failed assertion doesn't leave the POST
+      // pending past the test.
+      releasePost();
+    }
+    // On the success path, let the POST + invalidated refetch finish before
+    // the test exits so nothing leaks into the next test.
+    await waitForMutationsIdle(client);
   });
 
   it('given a provider-served avatar, when the option renders, then the avatar image and initial fallback both appear', async () => {
