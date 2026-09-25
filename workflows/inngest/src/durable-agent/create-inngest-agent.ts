@@ -477,8 +477,8 @@ export interface InngestAgent<TOutput = undefined> {
   ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
 
   /**
-   * Not supported. Inngest owns durability for this agent: it retries and
-   * replays failed steps itself, so Mastra never re-drives Inngest runs.
+   * Not supported. Inngest owns durability for this agent (see the `retries`
+   * option), so Mastra never re-drives Inngest runs.
    * Use {@link InngestAgent.observe} to reconnect to a running run's stream.
    *
    * @throws MastraError `INNGEST_AGENT_RECOVER_NOT_SUPPORTED` (HTTP 400)
@@ -493,7 +493,7 @@ export interface InngestAgent<TOutput = undefined> {
   listActiveRuns(options?: unknown): Promise<never>;
 
   /**
-   * No-op. Inngest retries and replays its own runs, so boot-time durable
+   * No-op. Inngest owns durability for its runs, so boot-time durable
    * agent recovery has nothing to re-drive and skips Inngest agents.
    */
   recoverActiveRuns(options?: unknown): Promise<{ recovered: never[]; succeeded: number; failed: number }>;
@@ -830,14 +830,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
   }
 
-  // Recovery re-drives a run from Mastra's persisted snapshot. Inngest already
-  // retries and replays its own runs, so doing it here would race Inngest.
+  // Recovery re-drives a run from Mastra's persisted snapshot. Inngest drives
+  // these runs (re-invoking and replaying memoized steps when `retries` is
+  // configured), so doing it here would race Inngest.
   const recoverNotSupportedError = (method: 'recover' | 'listActiveRuns') =>
     new MastraError({
       id: 'INNGEST_AGENT_RECOVER_NOT_SUPPORTED',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
-      text: `InngestAgent.${method}() is not supported. Inngest owns durability for this agent: failed steps are retried and replayed by Inngest. Use observe(runId) to reconnect to a running run's stream.`,
+      text: `InngestAgent.${method}() is not supported. Inngest owns durability for this agent: configure \`retries\` on createInngestAgent() to have Inngest re-invoke interrupted runs. Use observe(runId) to reconnect to a running run's stream.`,
       details: { status: 400, agentId, method },
     });
 
