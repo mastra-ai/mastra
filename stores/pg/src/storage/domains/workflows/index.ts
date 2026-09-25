@@ -716,9 +716,16 @@ export class WorkflowsPG extends WorkflowsStorage {
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
       // In summary mode only read status/timestamp out of the snapshot so large snapshots aren't transferred.
-      const selectList = summary
-        ? `workflow_name, run_id, "resourceId", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", jsonb_build_object('status', snapshot::jsonb -> 'status', 'timestamp', snapshot::jsonb -> 'timestamp') AS snapshot`
-        : '*';
+      // Legacy json/text columns get the same sanitizing path as the status filter so bad escapes can't fail the list.
+      let selectList = '*';
+      if (summary) {
+        const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+        const snapshotJson =
+          snapshotType === 'jsonb'
+            ? 'snapshot'
+            : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb`;
+        selectList = `workflow_name, run_id, "resourceId", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", jsonb_build_object('status', ${snapshotJson} -> 'status', 'timestamp', ${snapshotJson} -> 'timestamp') AS snapshot`;
+      }
 
       const query = `
           SELECT ${selectList} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}

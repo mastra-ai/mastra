@@ -431,7 +431,8 @@ function toSummarySnapshot(
     try {
       parsed = JSON.parse(snapshot);
     } catch {
-      return snapshot;
+      // Never echo an unparseable (possibly huge) snapshot back in summary mode.
+      return '';
     }
   } else {
     parsed = snapshot;
