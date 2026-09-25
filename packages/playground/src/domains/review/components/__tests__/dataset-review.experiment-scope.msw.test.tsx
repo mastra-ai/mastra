@@ -131,7 +131,7 @@ describe('DatasetReview with a parent experiment source', () => {
       const first = renderWithProviders(
         <>
           <SendToReview />
-          <DatasetReview experiments={[makeExperiment('exp-1')]} />
+          <DatasetReview withQueryTrace withFeedback experiments={[makeExperiment('exp-1')]} />
         </>,
       );
       expect(await screen.findByText('No items to review')).toBeTruthy();
@@ -146,7 +146,7 @@ describe('DatasetReview with a parent experiment source', () => {
       fireEvent.click(screen.getByRole('option', { name: 'Completed' }), { detail: 1 });
       expect(await screen.findByText(/persisted input/)).toBeTruthy();
       first.unmount();
-      renderWithProviders(<DatasetReview experiments={[makeExperiment('exp-1')]} />);
+      renderWithProviders(<DatasetReview withQueryTrace withFeedback experiments={[makeExperiment('exp-1')]} />);
       expect(await screen.findByText('No items to review')).toBeTruthy();
       fireEvent.click(screen.getByRole('combobox'));
       fireEvent.pointerDown(screen.getByRole('option', { name: 'Completed' }), { pointerType: 'mouse' });
@@ -158,9 +158,11 @@ describe('DatasetReview with a parent experiment source', () => {
   describe('when the parent is loading experiments', () => {
     it('waits for the parent instead of showing an empty queue', async () => {
       setupHandlers();
-      const { rerender } = renderWithProviders(<DatasetReview experiments={[]} isLoadingExperiments />);
+      const { rerender } = renderWithProviders(
+        <DatasetReview withQueryTrace withFeedback experiments={[]} isLoadingExperiments />,
+      );
       expect(screen.queryByText('No items to review')).toBeNull();
-      rerender(<DatasetReview experiments={[]} isLoadingExperiments={false} />);
+      rerender(<DatasetReview withQueryTrace withFeedback experiments={[]} isLoadingExperiments={false} />);
       expect(await screen.findByText('No items to review')).toBeTruthy();
     });
   });
@@ -172,7 +174,7 @@ describe('DatasetReview with a parent experiment source', () => {
         HttpResponse.json({ experiments: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
       );
       server.use(http.get('*/api/experiments', discover));
-      renderWithProviders(<DatasetReview experiments={[makeExperiment('exp-2')]} />);
+      renderWithProviders(<DatasetReview withQueryTrace withFeedback experiments={[makeExperiment('exp-2')]} />);
       expect(await screen.findByText(/exp two input/)).toBeTruthy();
       expect(screen.queryByText(/exp one input/)).toBeNull();
       expect(discover).not.toHaveBeenCalled();
@@ -184,7 +186,7 @@ describe('DatasetReview scoped to an experiment', () => {
   describe('when mounted before the review queue has loaded', () => {
     it('shows that experiment’s review items once they arrive', async () => {
       setupHandlers();
-      renderWithProviders(<DatasetReview datasetId="ds-1" experimentId="exp-2" />);
+      renderWithProviders(<DatasetReview withQueryTrace withFeedback datasetId="ds-1" experimentId="exp-2" />);
 
       expect(await screen.findByText(/exp two input/)).toBeTruthy();
       expect(screen.queryByText(/exp one input/)).toBeNull();
@@ -192,7 +194,7 @@ describe('DatasetReview scoped to an experiment', () => {
 
     it('never flashes the empty state while the dataset experiments are still loading', async () => {
       setupHandlers();
-      renderWithProviders(<DatasetReview datasetId="ds-1" experimentId="exp-2" />);
+      renderWithProviders(<DatasetReview withQueryTrace withFeedback datasetId="ds-1" experimentId="exp-2" />);
 
       // Before any request resolves the queue is unknown: a spinner, not "No items to review".
       expect(screen.queryByText('No items to review')).toBeNull();
@@ -204,7 +206,7 @@ describe('DatasetReview scoped to an experiment', () => {
 describe('DatasetReview without a scope', () => {
   it('lists review items from every experiment in the project', async () => {
     setupHandlers();
-    renderWithProviders(<DatasetReview />);
+    renderWithProviders(<DatasetReview withQueryTrace withFeedback />);
 
     expect(await screen.findByText(/exp one input/)).toBeTruthy();
     expect(await screen.findByText(/exp two input/)).toBeTruthy();
@@ -227,14 +229,14 @@ describe('DatasetReview without a scope', () => {
     );
 
     const { wrapper, queryClient } = makeWrapper();
-    const first = render(<DatasetReview />, { wrapper });
+    const first = render(<DatasetReview withQueryTrace withFeedback />, { wrapper });
     expect(await screen.findByText('No items to review')).toBeTruthy();
     first.unmount();
 
     results.push(makeResult('r-1', 'exp-1', 'freshly flagged input'));
     await queryClient.invalidateQueries({ queryKey: ['review-items'] });
 
-    render(<DatasetReview />, { wrapper });
+    render(<DatasetReview withQueryTrace withFeedback />, { wrapper });
     expect(await screen.findByText(/freshly flagged input/)).toBeTruthy();
   });
 });
@@ -244,7 +246,15 @@ describe('DatasetReview scoped to an agent', () => {
     it('calls onCreateScorer with the visible items input/output', async () => {
       setupHandlers();
       const onCreateScorer = vi.fn();
-      renderWithProviders(<DatasetReview targetType="agent" targetId="chef-agent" onCreateScorer={onCreateScorer} />);
+      renderWithProviders(
+        <DatasetReview
+          withQueryTrace
+          withFeedback
+          targetType="agent"
+          targetId="chef-agent"
+          onCreateScorer={onCreateScorer}
+        />,
+      );
 
       await screen.findByText(/exp one input/);
       await screen.findByText(/exp two input/);
@@ -263,7 +273,7 @@ describe('DatasetReview scoped to an agent', () => {
   describe('when onCreateScorer is not provided', () => {
     it('does not render the Create Scorer action', async () => {
       setupHandlers();
-      renderWithProviders(<DatasetReview targetType="agent" targetId="chef-agent" />);
+      renderWithProviders(<DatasetReview withQueryTrace withFeedback targetType="agent" targetId="chef-agent" />);
 
       await screen.findByText(/exp one input/);
       expect(screen.queryByRole('button', { name: 'Create Scorer' })).toBeNull();

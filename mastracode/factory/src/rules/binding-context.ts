@@ -67,8 +67,16 @@ export async function resolveFactorySessionAddress(options: {
   requestContext: RequestContext | undefined;
   storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'get'>;
   sessions?: FactorySessionSourceLookup;
+  /**
+   * Resolve through the binding table even when state already carries
+   * `factoryProjectId`, so the row heals the rest of the session state. Prompt
+   * creation uses this: a partially persisted state can keep the project id
+   * while the untrusted-checkout posture is gone, and the direct short-circuit
+   * would take that id as proof the session is intact.
+   */
+  forceBindingLookup?: boolean;
 }): Promise<FactorySessionAddressResolution | null> {
-  const direct = getFactorySessionAddress(options.requestContext);
+  const direct = options.forceBindingLookup ? null : getFactorySessionAddress(options.requestContext);
   if (direct) return { address: direct };
 
   const requestContext = options.requestContext;
@@ -135,6 +143,12 @@ async function healRecoveredSessionState(options: {
         sourceSession?.baseBranch ||
         (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
       if (baseRef) updates.baseRef = baseRef;
+    } else {
+      // Record the trusted verdict explicitly so a healed session carries every
+      // trust field; the prompt-time recovery check treats a missing flag as
+      // "not yet verified" and would otherwise re-run on every prompt. Left
+      // unset when enrichment fails so the next prompt retries the lookup.
+      updates.untrustedCheckout = false;
     }
   } catch {
     // Enrichment is best-effort; the address itself only needs the binding.

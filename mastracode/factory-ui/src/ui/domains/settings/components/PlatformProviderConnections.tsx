@@ -81,7 +81,7 @@ function ConnectParamsDialog({ provider, title, pending, onSubmit, onClose }: Co
         <DialogBody className="flex flex-col gap-3">
           {fields.map(field => (
             <label key={field.key} className="flex flex-col gap-1.5">
-              <Txt as="span" variant="ui-sm" className="text-icon5">
+              <Txt as="span" variant="caption" className="text-foreground">
                 {field.label}
               </Txt>
               <Input
@@ -94,7 +94,7 @@ function ConnectParamsDialog({ provider, title, pending, onSubmit, onClose }: Co
                 }}
               />
               {field.hint && (
-                <Txt as="span" variant="ui-xs" className="text-icon3">
+                <Txt as="span" variant="meta" className="text-muted-foreground">
                   {field.hint}
                 </Txt>
               )}
@@ -158,7 +158,7 @@ export interface ProviderConnectControlProps {
   /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
-  size?: 'xs' | 'sm' | 'md';
+  size?: 'sm' | 'md';
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
@@ -256,11 +256,11 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
       {connections.map(connection => (
         <li key={connection.id} className="flex items-center justify-between gap-2 px-4 py-2">
           <span className="flex min-w-0 items-center gap-2">
-            <Txt as="span" variant="ui-sm" className="truncate">
+            <Txt as="span" variant="caption" className="truncate">
               {connectionName(connection)}
             </Txt>
             {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="ui-xs" className="text-red-400">
+              <Txt as="span" variant="meta" className="text-red-400">
                 Needs reauthorization
               </Txt>
             )}
@@ -269,7 +269,7 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
             provider={provider}
             reconnectConnectionId={connection.id}
             label="Reconnect"
-            size="xs"
+            size="sm"
             variant={connection.status === 'needs_reauth' ? 'default' : 'ghost'}
           />
         </li>

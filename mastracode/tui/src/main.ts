@@ -8,7 +8,12 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
-import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import {
+  createBrowserFromSettings,
+  loadSettings,
+  resolveStagehandModel,
+  toActiveBrowserSettings,
+} from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import {
   stopProcessMemoryDiagnosticsWithTimeout,
@@ -18,6 +23,7 @@ import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
+import { initialMessageOptions, pipedInputConflict, takeInitialPrompt } from './initial-prompt.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -68,14 +74,14 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(pipedInput?: string | null) {
+async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> = {}) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
   });
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
-  const loadBrowser = () => {
-    browserPromise ??= createBrowserFromSettings(settings.browser);
+  const loadBrowser = (chatModelId: string | undefined) => {
+    browserPromise ??= createBrowserFromSettings(settings.browser, { chatModelId });
     return browserPromise;
   };
 
@@ -161,18 +167,25 @@ async function tuiMain(pipedInput?: string | null) {
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     exit: exitCode => void shutdownAndExit(exitCode),
-    ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
+    ...startupMessage,
   });
   tui.run().catch(error => {
     handleFatalError(error);
   });
 
   if (settings.browser.enabled) {
-    void loadBrowser()
+    // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
+    const chatModelId = session.model.get();
+    void loadBrowser(chatModelId)
       .then(browser => {
         if (!browser) return;
         controller.setBrowser(browser);
-        void session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+        void session.state
+          .set({
+            activeBrowserSettings: toActiveBrowserSettings(settings.browser),
+            activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
+          } as any)
+          .catch(() => {});
       })
       .catch(() => {});
   }
@@ -354,11 +367,29 @@ async function main() {
     return pluginMain(process.argv.slice(3));
   }
 
-  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+  const initialPrompt = takeInitialPrompt(process.argv, process.env);
+  if (initialPrompt.error) {
+    process.stderr.write(`${initialPrompt.error}\n`);
+    process.exit(1);
+  }
+  if (initialPrompt.flag) process.argv = initialPrompt.argv;
+  // The flag only means something to the interactive TUI. Paths that can't run
+  // it reject the flag instead of dropping the prompt; an env var prompt is
+  // just ignored there.
+  const rejectInitialPromptFlag = (reason: string) => {
+    if (!initialPrompt.flag) return;
+    process.stderr.write(`${initialPrompt.flag} starts the interactive TUI; ${reason}\n`);
+    process.exit(1);
+  };
+
+  const headless = hasHeadlessFlag(process.argv);
+  if (headless) rejectInitialPromptFlag('use --prompt for headless runs');
+  if (headless || process.argv.includes('--help') || process.argv.includes('-h')) {
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
   if (process.argv.includes('--acp')) {
+    rejectInitialPromptFlag('it cannot be combined with --acp');
     const { acpMain } = await import('@mastra/code-sdk/acp/index');
     return acpMain({
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
@@ -378,12 +409,19 @@ async function main() {
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
+      rejectInitialPromptFlag('no TTY is available, so use --prompt for headless runs');
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }
   }
 
-  return tuiMain(pipedInput);
+  const conflict = pipedInputConflict(initialPrompt, pipedInput);
+  if (conflict) {
+    process.stderr.write(`${conflict}\n`);
+    process.exit(1);
+  }
+
+  return tuiMain(initialMessageOptions(initialPrompt, pipedInput));
 }
 
 main().catch(error => {

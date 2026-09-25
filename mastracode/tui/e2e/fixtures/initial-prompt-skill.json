@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "systemMessage": "you will generate a short title",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC initial prompt skill title"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Initial prompt skill instructions.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC initial prompt skill response"
+      }
+    }
+  ]
+}

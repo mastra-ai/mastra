@@ -7,7 +7,6 @@ import {
   DataListCell,
   DataListCreatedCell,
   DataListDateCell,
-  DataListDescriptionCell,
   DataListIdCell,
   DataListNameCell,
   DataListNumberCell,
@@ -203,22 +202,11 @@ describe('DataListTextCell', () => {
   });
 });
 
-describe('DataListNameCell and DataListDescriptionCell', () => {
-  it('read at their own weight', () => {
-    const name = render(<DataListNameCell>a name</DataListNameCell>);
-    expect(cellOf(name.container).classList.contains('text-neutral4')).toBe(true);
-
-    cleanup();
-
-    const description = render(<DataListDescriptionCell>a description</DataListDescriptionCell>);
-    expect(cellOf(description.container).classList.contains('text-neutral2')).toBe(true);
-  });
-
-  it('keep a caller class alongside their own', () => {
+describe('DataListNameCell', () => {
+  it('keeps a caller class alongside its own', () => {
     const { container } = render(<DataListNameCell className="my-own-class">a name</DataListNameCell>);
 
     expect(cellOf(container).classList.contains('my-own-class')).toBe(true);
-    expect(cellOf(container).classList.contains('text-neutral4')).toBe(true);
   });
 });
 
@@ -244,18 +232,6 @@ describe('DataListNumberCell', () => {
 
     expect(cellOf(container).classList.contains('text-right')).toBe(true);
     expect(cellOf(container).classList.contains('tabular-nums')).toBe(true);
-  });
-
-  it('stands out only when highlighted', () => {
-    const { container } = render(<DataListNumberCell>1,200</DataListNumberCell>);
-    expect(cellOf(container).classList.contains('font-semibold')).toBe(false);
-    expect(cellOf(container).classList.contains('text-neutral3')).toBe(true);
-
-    cleanup();
-
-    const highlighted = render(<DataListNumberCell highlight>1,200</DataListNumberCell>);
-    expect(cellOf(highlighted.container).classList.contains('font-semibold')).toBe(true);
-    expect(cellOf(highlighted.container).classList.contains('text-neutral4')).toBe(true);
   });
 });
 
@@ -364,10 +340,13 @@ describe('DataListSelectCell', () => {
 });
 
 describe('DataListDateCell', () => {
-  it('says Today for today', () => {
-    const { container } = render(<DataListDateCell timestamp={new Date()} />);
+  it('shows only the date for today', () => {
+    const today = new Date();
+    const { container } = render(<DataListDateCell timestamp={today} />);
 
-    expect(container.textContent).toBe('Today');
+    expect(container.textContent).toBe(
+      new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(today),
+    );
   });
 
   it('names the month and day for any other date', () => {
@@ -391,16 +370,26 @@ describe('DataListDateCell', () => {
 });
 
 describe('DataListCreatedCell', () => {
-  it('shows date and 12-hour time without milliseconds', () => {
-    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 7, 31, 13, 7, 47, 657)} />);
+  it('shows the date and time to seconds without requiring a hover', () => {
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 7, 31, 13, 7, 47, 657)} />);
 
-    expect(container.textContent).toBe('Aug 31 1:07:47 pm');
+    expect(container.textContent).toBe('Aug 31, 2020, 1:07:47 PM');
+    expect(cellOf(container).title).toBe('Aug 31, 2020, 1:07:47 PM');
+  });
+
+  it('keeps the time to seconds when the timestamp is today', () => {
+    const today = new Date();
+    today.setHours(9, 5, 3, 0);
+    const { container } = render(<DataListCreatedCell timestamp={today} />);
+
+    expect(container.textContent).toContain('9:05:03 AM');
+    expect(container.textContent).toContain(String(today.getFullYear()));
   });
 
   it('reads a timestamp given as a string', () => {
-    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 4, 19, 9, 5, 3).toISOString()} />);
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 4, 19, 9, 5, 3).toISOString()} />);
 
-    expect(container.textContent).toBe('May 19 9:05:03 am');
+    expect(container.textContent).toBe('May 19, 2020, 9:05:03 AM');
   });
 
   it('shows nothing for a date it cannot read', () => {
@@ -411,22 +400,22 @@ describe('DataListCreatedCell', () => {
 });
 
 describe('DataListTimeCell', () => {
-  it('shows 12-hour time by default', () => {
+  it('shows the locale time with milliseconds', () => {
     const { container } = render(<DataListTimeCell timestamp={new Date(2026, 5, 1, 17, 9, 59, 665)} />);
 
-    expect(container.textContent).toBe('5:09:59.665 pm');
+    expect(container.textContent).toBe('5:09:59.665 PM');
   });
 
   it('pads the milliseconds to three digits', () => {
     const { container } = render(<DataListTimeCell timestamp={new Date(2026, 5, 1, 17, 9, 59, 7)} />);
 
-    expect(container.textContent).toBe('5:09:59.007 pm');
+    expect(container.textContent).toBe('5:09:59.007 PM');
   });
 
   it('reads a time given as a string', () => {
     const { container } = render(<DataListTimeCell timestamp={new Date(2026, 5, 1, 9, 5, 3, 40).toISOString()} />);
 
-    expect(container.textContent).toBe('9:05:03.040 am');
+    expect(container.textContent).toBe('9:05:03.040 AM');
   });
 
   it('shows nothing for a time it cannot read', () => {

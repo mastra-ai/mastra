@@ -39,11 +39,10 @@ export function createSkill(input: InlineSkillInput): InlineSkill {
   const { name, description, instructions, license, compatibility, metadata, references } = input;
 
   // Validate metadata (same checks as filesystem-discovered skills)
-  const validation = validateSkillMetadata(
-    { name, description, license, compatibility, 'user-invocable': input['user-invocable'], metadata },
-    undefined,
+  const validation = validateSkillMetadata({
+    metadata: { name, description, license, compatibility, 'user-invocable': input['user-invocable'], metadata },
     instructions,
-  );
+  });
 
   if (!validation.valid) {
     throw new Error(`Invalid skill "${name}": ${validation.errors.join('; ')}`);

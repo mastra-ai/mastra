@@ -5,10 +5,9 @@ import {
   getScatterPlotClickedPoint,
   getScatterPlotPointColor,
 } from './scatter-plot-chart-utils';
-import { CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
+import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
-const LABEL_COLOR = '#a1a1aa';
 const DEFAULT_POINT_SIZE = 48;
 const CHART_MARGIN = { top: 16, right: 16, bottom: 16, left: 16 };
 
@@ -58,7 +57,7 @@ export function ScatterPlotChart({
     return (
       <div
         className={cn(
-          'flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3',
+          'flex items-center justify-center rounded-md border border-border text-caption text-muted-foreground',
           className,
         )}
         style={{ height }}
@@ -73,12 +72,17 @@ export function ScatterPlotChart({
       <div className={cn(fillsContainer && 'min-h-0 flex-1')} style={{ height: fillsContainer ? undefined : height }}>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart data={data} margin={CHART_MARGIN}>
-            <CartesianGrid stroke={Colors.neutral3} strokeDasharray="4 4" strokeOpacity={0.18} vertical={false} />
+            <CartesianGrid
+              stroke={Colors['muted-foreground']}
+              strokeDasharray="4 4"
+              strokeOpacity={0.18}
+              vertical={false}
+            />
             <XAxis
               dataKey={xKey}
               name={xLabel}
               type="number"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               domain={xDomain}
@@ -88,7 +92,7 @@ export function ScatterPlotChart({
               dataKey={yKey}
               name={yLabel}
               type="number"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               width={44}
@@ -97,7 +101,7 @@ export function ScatterPlotChart({
             />
             <ZAxis range={[DEFAULT_POINT_SIZE, DEFAULT_POINT_SIZE]} />
             <Tooltip
-              cursor={{ stroke: Colors.neutral3, strokeOpacity: 0.16 }}
+              cursor={{ stroke: Colors['muted-foreground'], strokeOpacity: 0.16 }}
               content={
                 <ScatterPlotChartTooltip
                   xKey={xKey}

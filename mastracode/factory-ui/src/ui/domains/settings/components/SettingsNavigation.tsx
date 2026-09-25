@@ -166,7 +166,7 @@ export function SettingsNavigation() {
   return (
     <>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild size="default" link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
             <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
@@ -175,7 +175,7 @@ export function SettingsNavigation() {
       </MainSidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon>
               <Search aria-hidden="true" />
             </InputGroupAddon>
@@ -206,7 +206,6 @@ export function SettingsNavigation() {
                     <MainSidebar.NavLink
                       key={id}
                       asChild
-                      size="default"
                       isActive={isActive}
                       link={{ name: label, url: '#', icon: <Icon /> }}
                     >
@@ -227,7 +226,7 @@ export function SettingsNavigation() {
           );
         })
       ) : (
-        <Txt as="p" variant="ui-sm" role="status" className="px-3 py-2">
+        <Txt as="p" variant="caption" role="status" className="px-3 py-2">
           No settings found.
         </Txt>
       )}

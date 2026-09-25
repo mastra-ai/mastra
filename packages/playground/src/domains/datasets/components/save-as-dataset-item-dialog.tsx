@@ -239,7 +239,7 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No datasets available</div>
+                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -287,7 +287,7 @@ export function SaveAsDatasetItemDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button icon={<X />} type="button" variant="outline" onClick={handleCancel}>
+            <Button icon={<X />} type="button" onClick={handleCancel}>
               Cancel
             </Button>
             <Button

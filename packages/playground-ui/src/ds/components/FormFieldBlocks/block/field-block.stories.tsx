@@ -59,7 +59,7 @@ export const WithErrorMsg: StoryObj = {
           Password
         </FieldBlock.Label>
         <Input id="input-password" type="password" error aria-describedby="error-password" />
-        <FieldBlock.ErrorMsg name="password">Password must be at least 8 characters.</FieldBlock.ErrorMsg>
+        <FieldBlock.Message name="password" errorMsg="Password must be at least 8 characters." />
       </FieldBlock.Column>
     </FieldBlock.Layout>
   ),
@@ -97,8 +97,11 @@ export const AllParts: StoryObj = {
           Username
         </FieldBlock.Label>
         <Input id="input-username" defaultValue="ab" error aria-describedby="error-username" />
-        <FieldBlock.HelpText>Must be 3-20 characters long.</FieldBlock.HelpText>
-        <FieldBlock.ErrorMsg name="username">Username is too short.</FieldBlock.ErrorMsg>
+        <FieldBlock.Message
+          name="username"
+          helpText="Must be 3-20 characters long."
+          errorMsg="Username is too short."
+        />
       </FieldBlock.Column>
     </FieldBlock.Layout>
   ),

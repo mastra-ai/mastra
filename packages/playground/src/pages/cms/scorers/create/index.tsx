@@ -1,14 +1,19 @@
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
-import { useLinkComponent } from '@/lib/framework';
+
+const crumbs = [navCrumb('/scorers'), { id: 'create-scorer', label: 'Create scorer' }];
 
 function CmsScorersCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <MainContentLayout className="grid-rows-[1fr]">
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Create scorer</h1>
       <ScorerCreateContent onSuccess={scorer => navigate(paths.scorerLink(scorer.id))} />
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

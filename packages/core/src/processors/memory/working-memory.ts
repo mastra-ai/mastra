@@ -207,7 +207,7 @@ ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:
@@ -243,7 +243,7 @@ ${typeof template.content === 'string' ? template.content : JSON.stringify(templ
 </working_memory_template>
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:

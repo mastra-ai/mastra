@@ -1,28 +1,26 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 
 export const NoWorkspacesInfo = () => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<CircleSlashIcon />}
-      titleSlot="No Workspaces yet"
-      descriptionSlot={
-        <>
-          Add a workspace to your Mastra configuration to <br />
-          manage files, skills, and enable semantic search.
-        </>
-      }
-      actionSlot={
-        <Button
-          variant="ghost"
-          render={<a href="https://mastra.ai/en/docs/workspace/overview" target="_blank" rel="noopener noreferrer" />}
+  <EmptyState
+    titleSlot="No Workspaces yet"
+    descriptionSlot={
+      <>
+        Add a workspace to your Mastra configuration to <br />
+        manage files, skills, and enable semantic search.
+      </>
+    }
+    actionSlot={
+      <Button
+        variant="ghost"
+        render={<a href="https://mastra.ai/en/docs/workspace/overview" target="_blank" rel="noopener noreferrer" />}
 
-          icon={<ExternalLinkIcon />}
-        >
-          Workspaces Documentation
-        </Button>
-      }
-    />
-  </div>
+        icon={<ExternalLinkIcon />}
+      >
+        Workspaces Documentation
+      </Button>
+    }
+    variant="fill"
+  />
 );

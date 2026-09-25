@@ -1,7 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
-import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
@@ -49,7 +50,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <EntityList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
       </EntityList.Cell>
-      <EntityList.TextCell>{formatExperimentDate(exp.createdAt)}</EntityList.TextCell>
+      <EntityList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</EntityList.TextCell>
     </>
   );
 }
@@ -63,19 +64,19 @@ function ExperimentTargetCell({ experiment }: { experiment: DatasetExperiment })
   return (
     <span className="flex min-w-0 items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0">
       {TargetIcon && (
-        <span className="text-neutral3 flex" role="img" aria-label={TARGET_LABEL[targetType!]}>
+        <span className="flex text-muted-foreground" role="img" aria-label={TARGET_LABEL[targetType!]}>
           <TargetIcon />
         </span>
       )}
-      <span className={targetType ? 'truncate' : 'text-neutral2 truncate'}>{name}</span>
+      <span className={targetType ? 'truncate' : 'truncate text-placeholder'}>{name}</span>
     </span>
   );
 }
 
 function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) {
-  if (!review) return <span className="text-neutral2">—</span>;
+  if (!review) return <span className="text-placeholder">—</span>;
   const inPipeline = review.needsReview + review.complete;
-  if (inPipeline === 0) return <span className="text-neutral2">—</span>;
+  if (inPipeline === 0) return <span className="text-placeholder">—</span>;
   if (review.needsReview > 0) {
     return (
       <Badge size="xs" variant="yellow">

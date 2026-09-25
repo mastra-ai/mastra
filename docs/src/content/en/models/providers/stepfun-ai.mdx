@@ -7,7 +7,7 @@ description: "Browse StepFun (Global) model IDs, capabilities, context windows, 
 
 # <img src="https://models.dev/logos/stepfun-ai.svg" alt="StepFun (Global) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />StepFun (Global)
 
-Access 8 StepFun (Global) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
+Access 9 StepFun (Global) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
 
 Learn more in the [StepFun (Global) documentation](https://platform.stepfun.ai/docs/en/overview/concept).
 
@@ -104,6 +104,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": 0.185,
     "outputCost": 1.11
+  },
+  {
+    "model": "stepfun-ai/step-5-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1024000,
+    "maxOutput": 65536,
+    "inputCost": 1,
+    "outputCost": 2.7
   },
   {
     "model": "stepfun-ai/step-tts-2",

@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentView from '../view';
 import { authDisabledCapabilities, builderSettingsDisabled, currentUser } from './fixtures/auth';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 vi.mock('@mastra/playground-ui/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),

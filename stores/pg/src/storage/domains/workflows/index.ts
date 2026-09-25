@@ -20,15 +20,13 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
-import { sanitizeJsonForPg } from '../../db/sanitize-json';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
-
-export { sanitizeJsonForPg };
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -175,7 +173,7 @@ export class WorkflowsPG extends WorkflowsStorage {
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
@@ -204,7 +202,7 @@ export class WorkflowsPG extends WorkflowsStorage {
    * Returns default index definitions for the workflows domain tables.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return WorkflowsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -268,7 +266,7 @@ export class WorkflowsPG extends WorkflowsStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema && this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(WorkflowsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -370,7 +368,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
-        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+        const sanitizedSnapshot = toPgJson(snapshot);
         await t.none(
           `INSERT INTO ${tableName}
            (workflow_name, run_id, snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
@@ -442,7 +440,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         const updatedSnapshot = { ...snapshot, ...state };
 
         // Update the snapshot within the same transaction
-        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        const sanitizedSnapshot = toPgJson(updatedSnapshot);
         const now = new Date();
         await t.none(
           `UPDATE ${tableName}
@@ -489,7 +487,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
-      const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+      const sanitizedSnapshot = toPgJson(snapshot);
       await this.#db.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")

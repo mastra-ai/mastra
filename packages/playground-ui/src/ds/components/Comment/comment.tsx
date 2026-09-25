@@ -6,13 +6,14 @@ import { CommentContext, useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
 import { Txt } from '@/ds/components/Txt';
 import type { TxtProps } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 const commentVariants = cva('flex flex-col', {
   variants: {
     variant: {
       default: 'gap-2',
-      embed: 'gap-1 rounded-xl border border-border1 bg-surface3 p-3',
+      embed: cn(raisedSurfaceStyle, 'gap-1 rounded-xl p-3'),
       thread: '',
     },
   },
@@ -63,7 +64,7 @@ CommentList.displayName = 'CommentList';
 const commentItemLayout: Record<CommentVariant, string> = {
   default: 'flex flex-col gap-1',
   embed: 'flex flex-col gap-1',
-  thread: 'relative flex gap-2 rounded-lg px-2 hover:bg-surface3/60',
+  thread: 'relative flex gap-2 rounded-lg px-2 hover:bg-fill-subtle',
 };
 
 export interface CommentItemProps extends HTMLAttributes<HTMLElement> {
@@ -139,15 +140,15 @@ export const CommentItemHeader = forwardRef<HTMLDivElement, CommentItemHeaderPro
 CommentItemHeader.displayName = 'CommentItemHeader';
 
 const commentItemAuthorSize: Record<CommentVariant, TxtProps['variant']> = {
-  default: 'ui-md',
-  embed: 'ui-md',
-  thread: 'ui-sm',
+  default: 'subheading',
+  embed: 'subheading',
+  thread: 'column',
 };
 
 const commentItemAuthorTone: Record<CommentVariant, string> = {
-  default: 'font-medium text-neutral6',
-  embed: 'font-medium text-neutral6',
-  thread: 'truncate font-medium text-neutral6',
+  default: 'text-foreground',
+  embed: 'text-foreground',
+  thread: 'truncate text-foreground',
 };
 
 export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
@@ -169,9 +170,9 @@ export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>
 CommentItemAuthor.displayName = 'CommentItemAuthor';
 
 const commentItemTimestampTone: Record<CommentVariant, string> = {
-  default: 'text-ui-sm leading-ui-sm text-neutral3',
-  embed: 'text-ui-sm leading-ui-sm text-neutral3',
-  thread: 'text-ui-xs leading-ui-xs text-neutral2 shrink-0',
+  default: 'text-caption text-muted-foreground',
+  embed: 'text-caption text-muted-foreground',
+  thread: 'text-meta text-placeholder shrink-0',
 };
 
 export type CommentItemTimestampProps = ComponentPropsWithoutRef<'time'>;
@@ -193,14 +194,14 @@ export const CommentItemTimestamp = forwardRef<HTMLTimeElement, CommentItemTimes
 CommentItemTimestamp.displayName = 'CommentItemTimestamp';
 
 const commentItemBodySize: Record<CommentVariant, TxtProps['variant']> = {
-  default: 'ui-md',
-  embed: 'ui-md',
-  thread: 'ui-sm',
+  default: 'body',
+  embed: 'body',
+  thread: 'caption',
 };
 
 const commentItemBodyTone: Record<CommentVariant, string> = {
-  default: 'whitespace-pre-wrap text-neutral6 border-l border-border1 pl-3',
-  embed: 'whitespace-pre-wrap text-neutral6',
+  default: 'whitespace-pre-wrap text-foreground border-l border-border pl-3',
+  embed: 'whitespace-pre-wrap text-foreground',
   thread: '',
 };
 

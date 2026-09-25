@@ -290,6 +290,47 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+### Route with a classifier
+
+A configured classifier can produce typed answers before `.branch()`. Route on the answer field that matches each question type: `choice`, `score`, or `probability`.
+
+```typescript title="src/mastra/workflows/ticket-triage.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const router = new Classifier({
+  id: 'ticket-router',
+  model,
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: {
+        billing: 'Billing, invoices, refunds, and payments',
+        support: 'Account access and product help',
+        other: 'Anything else',
+      },
+    },
+  },
+})
+
+export const ticketTriage = createWorkflow({
+  id: 'ticket-triage',
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.any(),
+})
+  .map({ message: { initData: true, path: 'message' } })
+  .classifier(router)
+  .branch([
+    [async ({ inputData }) => inputData.answers.route.choice === 'billing', billingStep],
+    [async ({ inputData }) => inputData.answers.route.choice === 'support', supportStep],
+    [async ({ inputData }) => inputData.answers.route.choice === 'other', fallbackStep],
+  ])
+  .commit()
+```
+
+The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other'`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+
 ### Output structure
 
 When using conditional branching, only one branch executes based on which condition evaluates to `true` first. The output structure is similar to `.parallel()`, where the result is keyed by the executed step's `id`.

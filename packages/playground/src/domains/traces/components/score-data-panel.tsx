@@ -2,12 +2,12 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { format } from 'date-fns/format';
+import { formatTimestampPrecise } from '@mastra/playground-ui/utils/date-format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
-import { useLinkComponent } from '@/lib/framework';
 
 function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
   if (!score) return false;
@@ -20,12 +20,12 @@ function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
   return (
     <>
-      <span className="text-neutral2 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
+      <span className="flex items-center gap-1.5 tracking-widest text-placeholder uppercase [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
       </span>
       <span>
-        › Score <b className="text-neutral3">#{score.id}</b>
+        › Score <b className="text-muted-foreground">#{score.id}</b>
       </span>
     </>
   );
@@ -78,9 +78,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.createdAt && (
                   <>
                     <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-                    <DataKeysAndValues.Value>
-                      {format(new Date(score.createdAt), 'MMM dd, HH:mm:ss.SSS')}
-                    </DataKeysAndValues.Value>
+                    <DataKeysAndValues.Value>{formatTimestampPrecise(score.createdAt)}</DataKeysAndValues.Value>
                   </>
                 )}
                 {score.traceId && (
@@ -113,18 +111,18 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 </Button>
               </div>
 
-              <div className="text-neutral4 mb-6">
+              <div className="mb-6 text-muted-foreground">
                 <div
                   className={cn(
-                    'text-neutral2 text-ui-md flex gap-2 items-baseline',
-                    '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
+                    'flex items-baseline gap-2 text-body text-placeholder',
+                    '[&>svg]:h-5 [&>svg]:w-5 [&>svg]:translate-y-1',
                   )}
                 >
                   <GaugeIcon />
                   <span className="">Score:</span>
-                  <b className="text-neutral3 font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+                  <b className="text-muted-foreground tabular-nums">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
                 </div>
-                <div className="text-ui-smd mt-2 font-mono">
+                <div className="mt-2 text-body-sm">
                   {score.reason ||
                     (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
                 </div>

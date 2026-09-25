@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type {
   Agent,
@@ -18,6 +17,7 @@ import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
+import { snapshotRequestContextForScore } from '../request-context-snapshot';
 import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from '../thresholds';
 import type {
   ScorerEntry as ThresholdScorerEntry,
@@ -1089,7 +1089,7 @@ async function runAgentTurns(
 ): Promise<{ allOutputMessages: any[]; perTurn: PerTurnRecord[]; lastResult: any }> {
   const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
-  const threadId = randomUUID();
+  const threadId = globalThis.crypto.randomUUID();
   const supported = isSupportedLanguageModel(model);
 
   // Multi-turn recall requires a configured memory store: the shared threadId is
@@ -1674,7 +1674,7 @@ async function saveSingleScore({
         name: (target as any).name || target.id,
       },
       // Include requestContext from item
-      requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
+      requestContext: item.requestContext ? snapshotRequestContextForScore(item.requestContext) : undefined,
       // Include additionalContext with groundTruth
       additionalContext: Object.keys(additionalContext).length > 0 ? additionalContext : undefined,
       // Per-turn scores carry their turn index in metadata for UI grouping/labeling.

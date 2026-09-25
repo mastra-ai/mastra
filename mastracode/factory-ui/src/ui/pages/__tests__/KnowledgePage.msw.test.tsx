@@ -530,9 +530,9 @@ describe('KnowledgePage', () => {
     // Scope selections get a filled active pill matching aria-current.
     const root = within(scopes).getByRole('button', { name: 'Acme Factory' });
     await waitFor(() => expect(root).toHaveAttribute('aria-current', 'page'));
-    expect(root).toHaveClass('bg-surface4');
+    expect(root).toHaveClass('bg-fill');
     expect(root).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: 'Payments' })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: 'Payments' })).not.toHaveClass('bg-fill');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('create')).toBeInTheDocument();

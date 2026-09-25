@@ -191,7 +191,7 @@ export const MessageRow = memo(function MessageRow({
                         <ToolCard {...member} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
                       </div>
                       {incomplete && (
-                        <Txt as="span" variant="ui-xs" className="mt-1 shrink-0">
+                        <Txt as="span" variant="meta" className="mt-1 shrink-0">
                           Incomplete
                         </Txt>
                       )}

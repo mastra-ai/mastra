@@ -27,6 +27,7 @@ export {
   type DrilldownScope,
   type DrilldownWindow,
 } from '../drilldown';
+export { chooseMetricsInterval, formatMetricsBucketLabel, type MetricsInterval } from '../metrics-interval';
 export {
   applyMetricsPropertyFilterTokens,
   buildMetricsDimensionalFilter,

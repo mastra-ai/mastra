@@ -31,6 +31,7 @@ import type {
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { getChunkProducedAt, stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
@@ -58,7 +59,17 @@ export function createDestructurableOutput<OUTPUT = undefined>(
   }) as MastraModelOutput<OUTPUT>;
 }
 
-function persistProcessorDataChunk(
+/**
+ * Persist a non-transient `data-*` chunk emitted by an output processor's
+ * `writer.custom()` onto the assistant message, so the chunk survives in
+ * thread history instead of being stream-only (#19375). Transient chunks
+ * and non-data chunks are left untouched.
+ *
+ * Exported for the durable engine, whose producer-side processor writers
+ * persist into the workflow-side MessageList (the one serialized into
+ * `messageListState` and flushed to memory at finalize).
+ */
+export function persistProcessorDataChunk(
   messageList: MessageList,
   messageId: string,
   chunk: { type: string; data?: unknown; transient?: boolean },
@@ -261,6 +272,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       providerExecuted?: boolean;
       providerMetadata?: ProviderMetadata;
       dynamic?: boolean;
+      title?: string;
       observability?: ToolCallChunk['payload']['observability'];
     }
   > = {};
@@ -625,6 +637,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
                 dynamic: chunk.payload.dynamic,
+                ...(chunk.payload.title ? { title: chunk.payload.title } : {}),
                 ...(chunk.payload.observability ? { observability: chunk.payload.observability } : {}),
               };
               break;
@@ -656,6 +669,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                     dynamic: meta.dynamic,
+                    ...(meta.title ? { title: meta.title } : {}),
                     ...(meta.observability ? { observability: meta.observability } : {}),
                   },
                 };
@@ -2048,6 +2062,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {
+    if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
   }

@@ -57,6 +57,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
+  ThreadHistoryChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -200,6 +201,13 @@ export type AgentUpdateThreadPeerOptions = {
 export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
   sourceId: string;
   discoveredAt: Date;
+  /**
+   * True when the agent that ran this discovery published the advertisement
+   * itself, so it names one of that agent's own threads rather than a peer's.
+   * Discovery answers with the caller's own advertisements alongside peer
+   * responses; callers listing peers for a human use this to exclude their own.
+   */
+  selfAdvertised?: boolean;
 };
 
 export type DiscoverAgentThreadPeersOptions = {
@@ -334,7 +342,9 @@ export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type CancelQueuedAgentMessagesOptions =
-  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel selected pending input across all Agents sharing this runtime and thread. */
+  | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel only the calling Agent's queued messages in this owner group. */
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 /**
@@ -442,25 +452,49 @@ export interface AgentThreadIdentityOptions {
 
 /** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
+  clearPendingSignals?: boolean;
   /** Abort only if this run is still the thread's active run. */
   expectedRunId?: string;
+  /**
+   * Abort only what this process owns. When the active run belongs to a remote
+   * thread owner, an ordinary abort asks that owner to stop the run; a local-only
+   * abort leaves it running and reports `false` instead. Thread lifecycle
+   * transitions (detaching, switching threads) use this so unbinding a thread
+   * never kills another instance's run.
+   */
+  localOnly?: boolean;
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
+  /**
+   * Start the stream with one `thread-history` chunk holding the thread's stored
+   * messages (newest `perPage`, default 40, oldest first), then emit only parts
+   * newer than that history, then live parts. Pending approval and suspension
+   * chunks are always emitted.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
+  /** Request context used to resolve the agent's memory when loading initial history. */
+  requestContext?: RequestContext;
 }
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentThreadSubscription<OUTPUT = unknown> {
-  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+  /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
+  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  abort: () => boolean;
+  /**
+   * Abort the active run. Pass `localOnly` to leave a remote owner's run alone,
+   * or `clearPendingSignals` to also drop input queued behind it.
+   */
+  abort: (options?: Pick<AgentAbortThreadOptions, 'clearPendingSignals' | 'localOnly'>) => boolean;
   unsubscribe: () => void;
 }
 

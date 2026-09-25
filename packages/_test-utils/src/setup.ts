@@ -22,37 +22,24 @@ import { vi, beforeEach } from 'vitest';
 // ---------------------------------------------------------------------------
 // Deterministic crypto.randomUUID — each test gets its own counter via
 // AsyncLocalStorage so concurrent tests within a file stay isolated.
-// Covers both global `crypto.randomUUID()` and
-// `import { randomUUID } from 'node:crypto'` / `'crypto'`.
+// Covers both `globalThis.crypto.randomUUID()` and packages that have not yet
+// migrated their `node:crypto` or `crypto` imports.
 // ---------------------------------------------------------------------------
 const uuidStore = new AsyncLocalStorage<{ counter: number }>();
 let fallbackCounter = 0;
 
-function deterministicUUID() {
+function deterministicUUID(): `${string}-${string}-${string}-${string}-${string}` {
   const ctx = uuidStore.getStore();
   const count = ctx ? ++ctx.counter : ++fallbackCounter;
   const hex = count.toString(16).padStart(12, '0');
   return `00000000-0000-4000-8000-${hex}`;
 }
 
-// Global crypto object
-vi.stubGlobal(
-  'crypto',
-  new Proxy(crypto, {
-    get(target, prop, receiver) {
-      if (prop === 'randomUUID') return deterministicUUID;
-      return Reflect.get(target, prop, receiver);
-    },
-  }),
-);
-
-// Module imports: `import { randomUUID } from 'node:crypto'`
 vi.mock('node:crypto', async importOriginal => {
   const original: any = await importOriginal();
   return { ...original, randomUUID: deterministicUUID };
 });
 
-// Module imports: `import { randomUUID } from 'crypto'`
 vi.mock('crypto', async importOriginal => {
   const original: any = await importOriginal();
   return { ...original, randomUUID: deterministicUUID };
@@ -62,6 +49,7 @@ vi.mock('crypto', async importOriginal => {
 // vitest runs beforeEach in the same async context as the test,
 // so each test (including concurrent ones) gets its own counter.
 beforeEach(() => {
+  vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(deterministicUUID);
   uuidStore.enterWith({ counter: 0 });
 });
 

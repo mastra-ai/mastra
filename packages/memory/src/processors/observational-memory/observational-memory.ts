@@ -20,7 +20,7 @@ import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
-  OBSERVATION_CONTEXT_PROMPT,
+  getObservationContextPrompt,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
   getRetrievalInstructions,
 } from './constants';
@@ -274,6 +274,8 @@ import type {
   ObservationMarkerConfig,
   ObservationModelContext,
 } from './types';
+
+let hasWarnedResourceScopeDeprecation = false;
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -739,6 +741,16 @@ export class ObservationalMemory {
 
     // Validate buffer configuration
     this.validateBufferConfig();
+
+    if (this.scope === 'resource' && !hasWarnedResourceScopeDeprecation) {
+      hasWarnedResourceScopeDeprecation = true;
+      console.warn(
+        "[Mastra] Observational memory `scope: 'resource'` is deprecated and will be removed in a future release " +
+          'because it works much worse than thread scope for prompt caching and agent understanding. ' +
+          'Remove `scope` to use the default thread scope, and enable `retrieval` for cross-thread recall. ' +
+          'See https://mastra.ai/docs/memory/observational-memory#resource-scope-deprecated',
+      );
+    }
 
     omDebug(
       `[OM:init] new ObservationalMemory instance created — scope=${this.scope}, messageTokens=${JSON.stringify(this.observationConfig.messageTokens)}, obsAsyncEnabled=${this.buffering.isAsyncObservationEnabled()}, bufferTokens=${this.observationConfig.bufferTokens}, bufferActivation=${this.observationConfig.bufferActivation}, blockAfter=${this.observationConfig.blockAfter}, reflectionTokens=${this.reflectionConfig.observationTokens}, refAsyncEnabled=${this.buffering.isAsyncReflectionEnabled()}, refAsyncActivation=${this.reflectionConfig.bufferActivation}, refBlockAfter=${this.reflectionConfig.blockAfter}`,
@@ -1769,7 +1781,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
+      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)

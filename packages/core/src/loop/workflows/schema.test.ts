@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { toolCallOutputSchema } from './schema';
 
-// Guards the `aborted` field on toolCallOutputSchema (#17995). The evented engine validates
-// step outputs against this schema, and Zod strips undeclared keys — so without the field,
-// `{ aborted: true }` would be dropped before llm-mapping-step sees it, defeating the fix.
-// Pins that it survives both the single-object and array boundaries the engine uses.
+// Guards the `aborted` field on toolCallOutputSchema (#17995). Note: no engine actually
+// validates step outputs against this schema today — the workflows engine has no
+// output-side validation, and input validation is disabled (`validateInputs: false`) in
+// both loop builders — so the schema exists for type/schema honesty. Zod strips
+// undeclared keys on parse, so if validation is ever (re-)enabled, an undeclared field
+// would silently drop `{ aborted: true }` before llm-mapping-step sees it, defeating the
+// fix. Pins that the declared field survives both the single-object and array shapes.
 describe('toolCallOutputSchema aborted field survival', () => {
   const aborted = {
     toolCallId: 'srv-1',

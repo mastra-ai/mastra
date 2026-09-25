@@ -4,6 +4,8 @@ import { SpanRows } from './span-rows';
 import { SpanTimelineRow } from './span-timeline-row';
 import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeLoading } from './trace-span-tree';
+import { cn } from '@/lib/utils';
+import { formatDurationPrecise } from '@/utils/duration';
 
 export type TraceSpanTimelineProps = {
   hierarchicalSpans: UISpan[];
@@ -21,10 +23,6 @@ export type TraceSpanTimelineProps = {
 };
 
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
-
-function formatTick(ms: number) {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
-}
 
 /**
  * Gantt-style view of a trace: the same hierarchy and expansion state as `TraceSpanTree`,
@@ -55,9 +53,14 @@ export function TraceSpanTimeline({
         {/* Header row: empty name cell, then the axis aligned with the bars (same horizontal padding, minus the duration label). */}
         <div />
         <div aria-label="Trace time axis" className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-2 pb-1">
-          <div className="text-ui-xs text-neutral3 flex justify-between tabular-nums">
-            {TICKS.map(tick => (
-              <span key={tick}>{formatTick(overallLatency * tick)}</span>
+          <div className="flex justify-between text-meta text-muted-foreground tabular-nums">
+            {TICKS.map((tick, index) => (
+              <span
+                key={tick}
+                className={cn('whitespace-nowrap', index > 0 && index < TICKS.length - 1 && 'hidden sm:inline')}
+              >
+                {formatDurationPrecise(overallLatency * tick)}
+              </span>
             ))}
           </div>
           <div className="w-12" />

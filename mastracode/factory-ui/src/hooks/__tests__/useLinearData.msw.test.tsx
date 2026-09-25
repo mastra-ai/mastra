@@ -12,12 +12,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
-import type { LinearIssue, LinearProject, LinearStatus } from '../../ui/domains/factory/services/linear';
+import type {
+  LinearIssue,
+  LinearIssueDetail,
+  LinearProject,
+  LinearStatus,
+} from '../../ui/domains/factory/services/linear';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../useIntakeConfig';
-import { useLinearIssuesQuery, useLinearProjectsQuery, useLinearStatusQuery } from '../useLinearData';
+import {
+  useLinearIssueDetail,
+  useLinearIssuesQuery,
+  useLinearProjectsQuery,
+  useLinearStatusQuery,
+} from '../useLinearData';
 
 const STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const ISSUES_URL = `${TEST_BASE_URL}/web/linear/issues`;
+const ISSUE_DETAIL_URL = `${TEST_BASE_URL}/web/linear/issues/:identifier`;
 const PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 
@@ -39,6 +50,13 @@ const issue: LinearIssue = {
 const projects: LinearProject[] = [
   { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
 ];
+
+const issueDetail: LinearIssueDetail = {
+  identifier: 'ENG-42',
+  title: 'Fix intake sync',
+  url: 'https://linear.app/acme/issue/ENG-42',
+  description: 'Keep the board in sync.',
+};
 
 const connectedStatus: LinearStatus = {
   enabled: true,
@@ -65,6 +83,23 @@ describe('useLinearStatusQuery', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.isError).toBe(false);
     expect(result.current.data).toMatchObject({ enabled: false, connected: false });
+  });
+});
+
+describe('useLinearIssueDetail', () => {
+  it('does not retry a missing issue', async () => {
+    const hit = vi.fn();
+    server.use(
+      http.get(ISSUE_DETAIL_URL, () => {
+        hit();
+        return HttpResponse.json({ error: 'issue_not_found' }, { status: 404 });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useLinearIssueDetail('project-1', 'ENG-42', 'issue-1'));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(hit).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -138,6 +173,7 @@ describe('useLinearProjectsQuery', () => {
 describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
+    gitlab: { enabled: false, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
     jira: { enabled: false, sourceIds: null },
     incidentio: { enabled: false, sourceIds: null },
@@ -155,6 +191,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   it('given a save, when it succeeds, then the config cache updates and linear issues invalidate', async () => {
     const updated: IntakeConfig = {
       github: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       linear: { enabled: true, sourceIds: ['proj-1'] },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },

@@ -92,7 +92,7 @@ describe('ActivityLine', () => {
       event: { type: 'text-delta', delta: 'Auth starts at the composer' },
     });
 
-    // The reveal draws at most one word per frame; allow loaded workers to finish the paced reply.
+    // Streamed prose is split into per-word spans to fade in, so match the rendered text as a whole.
     await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
     await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
   });

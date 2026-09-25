@@ -9,7 +9,6 @@ export const GlobalShortcuts = () => {
   const navigate = useNavigate();
 
   useKeydown({
-    'g$+i': () => navigate('/inbox'),
     'g$+a': () => navigate('/agents'),
     'g$+p': () => navigate('/prompts'),
     'g$+w': () => navigate('/workflows'),
@@ -18,7 +17,6 @@ export const GlobalShortcuts = () => {
     'g$+o': () => navigate('/tools'),
     'g$+k': () => navigate('/workspaces'),
     'g$+r': () => navigate('/request-context'),
-    'g$+e': () => navigate('/evaluation'),
     'g$+s': () => navigate('/scorers'),
     'g$+d': () => navigate('/datasets'),
     'g$+x': () => navigate('/experiments'),

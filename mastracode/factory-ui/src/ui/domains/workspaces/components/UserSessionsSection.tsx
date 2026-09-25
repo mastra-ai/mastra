@@ -19,7 +19,11 @@ import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWo
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { EMPTY_USER_SESSION_FILTERS, filterUserSessions } from '../services/sessionFilters';
+import {
+  activeUserSessionFilterCount,
+  defaultUserSessionFilters,
+  filterUserSessions,
+} from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
@@ -34,7 +38,8 @@ export function UserSessionsSection() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  const [filters, setFilters] = useState<UserSessionFiltersState>(EMPTY_USER_SESSION_FILTERS);
+  // Only the controls the viewer changed, so untouched ones follow the defaults once auth resolves.
+  const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
@@ -42,6 +47,8 @@ export function UserSessionsSection() {
   const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
+  const defaultFilters = defaultUserSessionFilters(viewerUserId);
+  const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   // Pinned rows stay on top; within each pin group the viewer's own sessions
   // sort before sessions started by other org members.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
@@ -128,8 +135,8 @@ export function UserSessionsSection() {
               filters={filters}
               owners={owners}
               viewerUserId={viewerUserId}
-              onChange={setFilters}
-              onClear={() => setFilters(EMPTY_USER_SESSION_FILTERS)}
+              onChange={changes => setFilterChanges(current => ({ ...current, ...changes }))}
+              onReset={() => setFilterChanges({})}
             />
             <Button
               variant="ghost"
@@ -188,17 +195,21 @@ export function UserSessionsSection() {
         </MainSidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="ui-xs" className="text-error m-0">
+            <Txt as="p" variant="meta" className="text-error m-0">
               Couldn’t load sessions
             </Txt>
-            <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
+            <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
               Retry
             </Button>
           </div>
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
-            {allSessions.length === 0 ? 'No sessions yet' : 'No sessions match these filters'}
+          <Txt as="p" variant="meta" role="status" className="text-muted-foreground m-0 px-2 py-1">
+            {allSessions.length === 0
+              ? 'No sessions yet'
+              : activeUserSessionFilterCount(filters, defaultFilters) === 0 && viewerUserId
+                ? 'No sessions of your own.'
+                : 'No sessions match these filters'}
           </Txt>
         )}
       </div>
@@ -210,9 +221,9 @@ export function UserSessionsSection() {
               <DialogTitle>Delete session?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session and
-                its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
+              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+                This deletes the <span className="text-foreground">{getUserSessionLabel(confirmDelete)}</span> session
+                and its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>

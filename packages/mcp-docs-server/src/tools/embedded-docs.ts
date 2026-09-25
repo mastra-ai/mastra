@@ -29,6 +29,17 @@ const packageCache = new Map<string, string[]>();
 const sourceMapCache = new Map<string, SourceMap | null>();
 const packageInfoCache = new Map<string, { rootPath: string; version: string } | null>();
 
+const projectPathSchema = z
+  .string()
+  .superRefine((projectPath, context) => {
+    if (projectPath.length === 0) {
+      context.addIssue({ code: 'custom', message: 'Project path cannot be empty' });
+    } else if (!path.isAbsolute(projectPath)) {
+      context.addIssue({ code: 'custom', message: 'Project path must be absolute' });
+    }
+  })
+  .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)');
+
 // List of known @mastra packages to check for
 const KNOWN_MASTRA_PACKAGES = [
   '@mastra/core',
@@ -198,9 +209,7 @@ export const getMastraHelpTool = {
 
     This tool shows you which packages are installed and provides detailed guidance on using all available documentation tools.`,
   parameters: z.object({
-    projectPath: z
-      .string()
-      .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)'),
+    projectPath: projectPathSchema,
   }),
   execute: async (args: { projectPath: string }) => {
     void logger.debug('Executing getMastraHelp tool', { projectPath: args.projectPath });
@@ -324,9 +333,7 @@ export const listInstalledPackagesTool = {
     Returns: List of @mastra/* packages (core, memory, rag, etc.) with embedded docs.
     Next step: Use getMastraExports to explore a specific package's API.`,
   parameters: z.object({
-    projectPath: z
-      .string()
-      .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)'),
+    projectPath: projectPathSchema,
   }),
   execute: async (args: { projectPath: string }) => {
     void logger.debug('Executing listInstalledMastraPackages tool', {
@@ -382,7 +389,7 @@ export const readSourceMapTool = {
     Next step: Use getMastraExportDetails to get full type definitions and code for a specific export.`,
   parameters: z.object({
     package: z.string().describe('Package name to explore (e.g., "@mastra/core", "@mastra/memory", "@mastra/rag")'),
-    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
+    projectPath: projectPathSchema,
     filter: z
       .string()
       .optional()
@@ -462,7 +469,7 @@ export const findExportTool = {
       .optional()
       .default(50)
       .describe('Number of lines of implementation code to show (default: 50)'),
-    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
+    projectPath: projectPathSchema,
   }),
   execute: async (args: {
     package: string;
@@ -585,7 +592,7 @@ export const readEmbeddedDocsTool = {
       .string()
       .optional()
       .describe('Optional: specific documentation file within the topic (e.g., "01-overview.md")'),
-    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
+    projectPath: projectPathSchema,
   }),
   execute: async (args: { package: string; projectPath: string; topic?: string; file?: string }) => {
     void logger.debug('Executing readMastraEmbeddedDocs tool', { args });
@@ -715,7 +722,7 @@ export const searchEmbeddedDocsTool = {
       .optional()
       .default(10)
       .describe('Optional: maximum number of results to return (default: 10)'),
-    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
+    projectPath: projectPathSchema,
   }),
   execute: async (args: { query: string; projectPath: string; package?: string; maxResults?: number }) => {
     void logger.debug('Executing searchMastraEmbeddedDocs tool', { args });
