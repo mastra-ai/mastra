@@ -57,29 +57,12 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.68.0-0 <2.0.0-0",
-    "@mastra/discord": ">=1.0.0-0 <2.0.0-0",
-    "@mastra/slack": ">=1.0.0-0 <2.0.0-0",
-    "@mastra/telegram": ">=0.1.0-0 <1.0.0-0",
     "zod": ">=3.0.0 || >=4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@mastra/discord": {
-      "optional": true
-    },
-    "@mastra/slack": {
-      "optional": true
-    },
-    "@mastra/telegram": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/discord": "workspace:*",
-    "@mastra/slack": "workspace:*",
-    "@mastra/telegram": "workspace:*",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",
@@ -89,6 +72,9 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@mastra/mcp": "workspace:^"
+    "@mastra/discord": "workspace:^",
+    "@mastra/mcp": "workspace:^",
+    "@mastra/slack": "workspace:^",
+    "@mastra/telegram": "workspace:^"
   }
 }

@@ -328,7 +328,7 @@ describe('channels()', () => {
     }
   });
 
-  it('skips a channel when its @mastra/* peer package is not installed', async () => {
+  it('warns and skips a channel when its provider module fails to load', async () => {
     vi.doMock('@mastra/slack', () => {
       throw new Error("Cannot find module '@mastra/slack'");
     });
@@ -339,7 +339,7 @@ describe('channels()', () => {
     const { channels: channelsFn } = await import('../channels.js');
     const providers = await channelsFn(options(fetchMock));
     expect(providers.slack).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/@mastra\/slack/));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/Skipping slack channel/));
   });
 
   it('skips channels marked disabled via per-integration overrides', async () => {

@@ -129,7 +129,7 @@ const FAILURE_COOLDOWN_MS = 30_000;
  *
  * Configuration errors (missing project id, bad ttlMs, malformed integration
  * id) throw at call time so they surface at startup. Actionable per-integration
- * problems during resolution (needs re-auth, ambiguity, missing peer package)
+ * problems during resolution (needs re-auth, ambiguity, provider build failure)
  * are downgraded to warn-and-skip so one bad integration never takes down the
  * whole map.
  *

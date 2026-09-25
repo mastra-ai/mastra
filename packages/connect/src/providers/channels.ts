@@ -5,20 +5,11 @@ import type { ChannelProvider } from '@mastra/core/channels';
 
 import type { ConnectionCredential } from '../client.js';
 import { getCredential } from '../client.js';
-import { MastraConnectError } from '../errors.js';
 
 import type { ChannelProviderRegistration } from './channel-provider.js';
 
 function credentialToken(credential: ConnectionCredential): string {
   return credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
-}
-
-function missingPeerError(integrationId: string, packageName: string, error: unknown): MastraConnectError {
-  const reason = error instanceof Error ? error.message : String(error);
-  return new MastraConnectError(
-    'invalid_options',
-    `channels() cannot build '${integrationId}' provider: install '${packageName}' as a dependency of your app (${reason}).`,
-  );
 }
 
 /**
@@ -101,14 +92,9 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
 const slackChannel: ChannelProviderRegistration = {
   integrationId: 'slack',
   async build(credential, options, context) {
-    let mod: { SlackProvider: new (config: Record<string, unknown>) => ChannelProvider };
-    try {
-      mod = (await import('@mastra/slack')) as {
-        SlackProvider: new (config: Record<string, unknown>) => ChannelProvider;
-      };
-    } catch (error) {
-      throw missingPeerError('slack', '@mastra/slack', error);
-    }
+    const mod = (await import('@mastra/slack')) as {
+      SlackProvider: new (config: Record<string, unknown>) => ChannelProvider;
+    };
     const safeOptions = stripReservedOptions('slack', options);
     if (context) {
       const { client, connectionId } = context;
@@ -142,14 +128,9 @@ const telegramChannel: ChannelProviderRegistration = {
   integrationId: 'telegram',
   async build(credential, options) {
     const botToken = credentialToken(credential);
-    let mod: { TelegramProvider: new (config: Record<string, unknown>) => ChannelProvider };
-    try {
-      mod = (await import('@mastra/telegram')) as {
-        TelegramProvider: new (config: Record<string, unknown>) => ChannelProvider;
-      };
-    } catch (error) {
-      throw missingPeerError('telegram', '@mastra/telegram', error);
-    }
+    const mod = (await import('@mastra/telegram')) as {
+      TelegramProvider: new (config: Record<string, unknown>) => ChannelProvider;
+    };
     const safeOptions = stripReservedOptions('telegram', options);
     return new mod.TelegramProvider({ botToken, ...(safeOptions ?? {}) });
   },
@@ -190,14 +171,9 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
       options?.publicKey ??
       (typeof metadata.publicKey === 'string' ? metadata.publicKey : undefined) ??
       (typeof metadata.public_key === 'string' ? metadata.public_key : undefined);
-    let mod: { DiscordProvider: new (config: Record<string, unknown>) => ChannelProvider };
-    try {
-      mod = (await import('@mastra/discord')) as {
-        DiscordProvider: new (config: Record<string, unknown>) => ChannelProvider;
-      };
-    } catch (error) {
-      throw missingPeerError('discord', '@mastra/discord', error);
-    }
+    const mod = (await import('@mastra/discord')) as {
+      DiscordProvider: new (config: Record<string, unknown>) => ChannelProvider;
+    };
     // `applicationId` and `publicKey` live on the connection's non-secret
     // metadata (or in `providerOptions`). If both are missing DiscordProvider
     // will still construct — its `#suppliedAppConfig()` falls back to

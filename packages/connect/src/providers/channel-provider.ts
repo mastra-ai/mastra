@@ -26,9 +26,9 @@ export interface ChannelProviderRegistration<Options = Record<string, unknown>> 
   /** Platform catalog id used to match project connections (e.g. 'slack', 'telegram', 'discord'). */
   integrationId: string;
   /**
-   * Build a Mastra `ChannelProvider` from a resolved credential. Peer packages
-   * are imported inside `build()` with `await import()` so they stay optional
-   * at install time.
+   * Build a Mastra `ChannelProvider` from a resolved credential. Channel
+   * packages are imported inside `build()` with `await import()` so only the
+   * integrations with an active connection pay the module-load cost.
    */
   build(credential: ConnectionCredential, options?: Options, context?: ChannelBuildContext): Promise<ChannelProvider>;
 }
