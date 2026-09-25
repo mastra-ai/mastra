@@ -49,12 +49,14 @@ function isActive(member: GitLabMember): boolean {
 
 /**
  * Derive the distinct top-level namespaces from the projects the client can
- * see, keeping one representative project per namespace for the personal-
- * namespace fallback.
+ * see, keeping every discovered project per namespace: group rosters miss
+ * users added directly to a single project, so each project's own roster is
+ * also walked (within the request budget).
  */
-async function discoverNamespaces(api: GitLabApiClient): Promise<Map<string, GitLabProject>> {
-  const namespaces = new Map<string, GitLabProject>();
+async function discoverNamespaces(api: GitLabApiClient, signal?: AbortSignal): Promise<Map<string, GitLabProject[]>> {
+  const namespaces = new Map<string, GitLabProject[]>();
   for (let projectPage = 1; projectPage <= MAX_PROJECT_PAGES; projectPage++) {
+    if (signal?.aborted) break;
     let projects: GitLabProject[];
     try {
       projects = await api.listProjects({ page: projectPage });
@@ -63,7 +65,10 @@ async function discoverNamespaces(api: GitLabApiClient): Promise<Map<string, Git
     }
     for (const project of projects) {
       const topLevel = project.path_with_namespace.split('/')[0];
-      if (topLevel && !namespaces.has(topLevel)) namespaces.set(topLevel, project);
+      if (!topLevel) continue;
+      const existing = namespaces.get(topLevel);
+      if (existing) existing.push(project);
+      else namespaces.set(topLevel, [project]);
     }
     if (projects.length < MEMBER_PAGE_SIZE) break;
   }
@@ -71,11 +76,14 @@ async function discoverNamespaces(api: GitLabApiClient): Promise<Map<string, Git
 }
 
 /**
- * Resolve the member roster per top-level namespace: group `members/all`
- * covers every project under a group in one call, and personal namespaces
- * (which have no group) fall back to a representative project's members.
+ * Resolve the member roster per top-level namespace. The group `members/all`
+ * walk covers everyone who inherits access under a group (sub-groups
+ * included) in one paged source, but not users granted access on a single
+ * project only — so each discovered project's `members/all` is walked too,
+ * spending the remaining request budget. Personal namespaces have no group,
+ * so their project walks are the only source.
  */
-async function collectFromContext(api: GitLabApiClient, host: string, query: string | undefined) {
+async function collectFromContext(api: GitLabApiClient, host: string, query: string | undefined, signal?: AbortSignal) {
   const accounts = new Map<string, IntegrationCandidateAccount>();
   const addMembers = (members: GitLabMember[]) => {
     for (const member of members) {
@@ -91,41 +99,36 @@ async function collectFromContext(api: GitLabApiClient, host: string, query: str
     }
   };
 
-  const namespaces = await discoverNamespaces(api);
+  const namespaces = await discoverNamespaces(api, signal);
   let requestBudget = MAX_MEMBER_REQUESTS;
-  for (const [topLevel, project] of namespaces) {
-    if (requestBudget <= 0) break;
-    // Prefer the group roster — one paged walk covers every project under
-    // the group, including sub-groups.
-    let groupSucceeded = false;
+  // Failures degrade per source: a 403/404 on one roster walk drops that
+  // source and moves on.
+  const walkSource = async (fetchPage: (page: number) => Promise<GitLabMember[]>) => {
     for (let page = 1; page <= MAX_MEMBER_PAGES_PER_SOURCE && requestBudget > 0; page++) {
+      if (signal?.aborted) return;
       requestBudget--;
       let members: GitLabMember[];
       try {
-        members = await api.listGroupMembers(topLevel, { page, ...(query ? { query } : {}) });
+        members = await fetchPage(page);
       } catch {
-        break;
+        return;
       }
-      groupSucceeded = true;
       addMembers(members);
       if (members.length < MEMBER_PAGE_SIZE) break;
     }
-    if (groupSucceeded) continue;
-    // Personal namespace (or group endpoint denied): fall back to one
-    // representative project's inherited members.
-    for (let page = 1; page <= MAX_MEMBER_PAGES_PER_SOURCE && requestBudget > 0; page++) {
-      requestBudget--;
-      let members: GitLabMember[];
-      try {
-        members = await api.listProjectMembers(String(project.id), {
-          page,
-          ...(query ? { query } : {}),
-        });
-      } catch {
-        break;
-      }
-      addMembers(members);
-      if (members.length < MEMBER_PAGE_SIZE) break;
+  };
+
+  for (const [topLevel, projects] of namespaces) {
+    if (requestBudget <= 0 || signal?.aborted) break;
+    // Group roster first — one paged walk covers everyone who inherits
+    // access anywhere under the group, including sub-groups.
+    await walkSource(page => api.listGroupMembers(topLevel, { page, ...(query ? { query } : {}) }));
+    // Then each discovered project's roster: users added directly to a
+    // project don't appear in the group roster, and personal namespaces
+    // have no group at all. The shared budget keeps huge orgs bounded.
+    for (const project of projects) {
+      if (requestBudget <= 0 || signal?.aborted) break;
+      await walkSource(page => api.listProjectMembers(String(project.id), { page, ...(query ? { query } : {}) }));
     }
   }
   return [...accounts.values()];
@@ -133,7 +136,7 @@ async function collectFromContext(api: GitLabApiClient, host: string, query: str
 
 export function buildGitlabIdentity(host: GitLabIdentityHost): IntegrationIdentityCapability {
   return {
-    async listCandidateAccounts(_ctx, { orgId: _orgId, query }) {
+    async listCandidateAccounts(_ctx, { orgId: _orgId, query, signal }) {
       let contexts;
       try {
         contexts = await host.activeContexts();
@@ -142,7 +145,8 @@ export function buildGitlabIdentity(host: GitLabIdentityHost): IntegrationIdenti
       }
       const collected = new Map<string, IntegrationCandidateAccount>();
       for (const ctx of contexts) {
-        const members = await collectFromContext(ctx.api, ctx.host, query);
+        if (signal?.aborted) break;
+        const members = await collectFromContext(ctx.api, ctx.host, query, signal);
         for (const member of members) {
           // Dedupe cross-context by (installation, externalUserId).
           const key = `${member.installation ?? ''}:${member.externalUserId}`;

@@ -7,7 +7,7 @@ Added an Identity capability to integrations. On the Connections settings page, 
 
 Once claimed, a global `@me` filter is available on the board filter chip and in the Cmd+K search palette. It resolves against every claimed external identity across every integration and matches records whose author, assignee, requester, or comment-author field matches any claimed id.
 
-Candidate accounts are discovered from each provider's member APIs (org members, workspace users, site rosters) as well as external comment authors already observed on your work items. If you know an external user id that hasn't been discovered yet, you can type it into the panel and save — no need to wait for background ingestion.
+Candidate accounts are discovered from each provider's member APIs (org members, workspace users, site rosters) as well as external comment authors already observed on your work items.
 
 Claims are managed through the Factory web API:
 

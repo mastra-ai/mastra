@@ -35,7 +35,7 @@ function makeApi(pages: {
 }
 
 describe('buildGitlabIdentity', () => {
-  it('reads the group roster once per top-level namespace instead of walking every project', async () => {
+  it('reads the group roster once per top-level namespace and adds project-only members', async () => {
     const { api, listGroupMembers, listProjectMembers } = makeApi({
       projects: [
         [
@@ -52,6 +52,10 @@ describe('buildGitlabIdentity', () => {
           ],
         ],
       },
+      membersByProjectId: {
+        // dave has access to acme/web only — never appears in the group roster.
+        '2': [[{ id: 13, username: 'dave', name: 'Dave', state: 'active' }]],
+      },
     });
     const identity = buildGitlabIdentity({
       activeContexts: async () => [{ api, host: 'gitlab.com' }],
@@ -63,14 +67,17 @@ describe('buildGitlabIdentity', () => {
       { id: 'octocat', host: 'gitlab.com' },
       { id: 'bob', host: 'gitlab.com' },
       { id: 'carol', host: 'gitlab.com' },
+      { id: 'dave', host: 'gitlab.com' },
     ]);
-    // Two projects under one group: one group roster call, no per-project walk.
+    // One group roster call, plus each project's roster for direct-only members.
     expect(listGroupMembers).toHaveBeenCalledTimes(1);
     expect(listGroupMembers).toHaveBeenCalledWith('acme', expect.objectContaining({ page: 1 }));
-    expect(listProjectMembers).not.toHaveBeenCalled();
+    expect(listProjectMembers).toHaveBeenCalledTimes(2);
+    expect(listProjectMembers).toHaveBeenCalledWith('1', expect.objectContaining({ page: 1 }));
+    expect(listProjectMembers).toHaveBeenCalledWith('2', expect.objectContaining({ page: 1 }));
   });
 
-  it('falls back to a representative project roster for personal namespaces', async () => {
+  it('walks every project roster for personal namespaces (no group endpoint)', async () => {
     const { api, listGroupMembers, listProjectMembers } = makeApi({
       projects: [
         [
@@ -80,6 +87,7 @@ describe('buildGitlabIdentity', () => {
       ],
       membersByProjectId: {
         '1': [[{ id: 10, username: 'mona', name: 'Mona', state: 'active' }]],
+        '2': [[{ id: 11, username: 'guest', name: 'Guest', state: 'active' }]],
       },
     });
     const identity = buildGitlabIdentity({
@@ -88,11 +96,34 @@ describe('buildGitlabIdentity', () => {
 
     const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1' });
 
-    expect(accounts.map(a => a.externalUserId)).toEqual(['mona']);
-    // Group lookup 404s (personal namespace) → one representative project only.
+    expect(accounts.map(a => a.externalUserId)).toEqual(['mona', 'guest']);
+    // Group lookup 404s (personal namespace) → both project rosters walked.
     expect(listGroupMembers).toHaveBeenCalledTimes(1);
-    expect(listProjectMembers).toHaveBeenCalledTimes(1);
+    expect(listProjectMembers).toHaveBeenCalledTimes(2);
     expect(listProjectMembers).toHaveBeenCalledWith('1', expect.objectContaining({ page: 1 }));
+    expect(listProjectMembers).toHaveBeenCalledWith('2', expect.objectContaining({ page: 1 }));
+  });
+
+  it('stops issuing provider requests once the abort signal fires', async () => {
+    const { api, listGroupMembers, listProjectMembers } = makeApi({
+      projects: [
+        [{ id: 1, name: 'Api', path_with_namespace: 'acme/api', web_url: '' } as GitLabProject],
+      ],
+      membersByGroup: {
+        acme: [[{ id: 10, username: 'octocat', name: 'The Octocat', state: 'active' }]],
+      },
+    });
+    const identity = buildGitlabIdentity({
+      activeContexts: async () => [{ api, host: 'gitlab.com' }],
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    const accounts = await identity.listCandidateAccounts(ctx, { orgId: 'org-1', signal: controller.signal });
+
+    expect(accounts).toEqual([]);
+    expect(listGroupMembers).not.toHaveBeenCalled();
+    expect(listProjectMembers).not.toHaveBeenCalled();
   });
 
   it('drops inactive members', async () => {

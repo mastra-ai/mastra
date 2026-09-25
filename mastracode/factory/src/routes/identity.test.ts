@@ -139,8 +139,14 @@ describe('IdentityRoutes', () => {
       });
       const response = await app.request('/web/identity?query=octo');
       expect(response.status).toBe(200);
-      expect(githubList).toHaveBeenCalledWith(expect.anything(), { orgId: 'org-1', query: 'octo' });
-      expect(linearList).toHaveBeenCalledWith(expect.anything(), { orgId: 'org-1', query: 'octo' });
+      expect(githubList).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ orgId: 'org-1', query: 'octo', signal: expect.any(AbortSignal) }),
+      );
+      expect(linearList).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ orgId: 'org-1', query: 'octo', signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('rejects an over-long query with 400', async () => {

@@ -231,7 +231,16 @@ export interface IntegrationCandidateAccount {
 export interface IntegrationIdentityCapability {
   listCandidateAccounts(
     ctx: IntegrationContext,
-    args: { orgId: string; query?: string },
+    args: {
+      orgId: string;
+      query?: string;
+      /**
+       * Aborted when the caller's per-provider time budget expires. Paged
+       * discovery loops should stop issuing new provider requests once set —
+       * the caller has already dropped this roster from its response.
+       */
+      signal?: AbortSignal;
+    },
   ): Promise<IntegrationCandidateAccount[]>;
 }
 

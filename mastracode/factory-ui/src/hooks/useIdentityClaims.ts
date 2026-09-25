@@ -22,9 +22,11 @@ export function useIdentityQuery() {
 
 /**
  * Shared mutation key for claim/unclaim so each mutation can see whether a
- * sibling is still in flight before it refetches the shared index.
+ * sibling is still in flight before it refetches the shared index. Scoped by
+ * `baseUrl` — a mutation against endpoint A must not defer to a pending
+ * mutation against endpoint B, or A's index never reconciles.
  */
-const IDENTITY_MUTATION_KEY = ['identity-claims'] as const;
+const identityMutationKey = (baseUrl: string) => ['identity-claims', baseUrl] as const;
 
 /** Toggle `claimed` on the row matching (integrationId, externalUserId); no-op if absent. */
 function setClaimed(index: IdentityIndex | undefined, key: ClaimKey, claimed: boolean): IdentityIndex | undefined {
@@ -72,8 +74,9 @@ export function useClaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const identityKey = queryKeys.identity(baseUrl);
+  const mutationKey = identityMutationKey(baseUrl);
   return useMutation({
-    mutationKey: IDENTITY_MUTATION_KEY,
+    mutationKey,
     mutationFn: (input: ClaimInput) => claimIdentity(baseUrl, input),
     onMutate: async input => {
       await queryClient.cancelQueries({ queryKey: identityKey });
@@ -103,7 +106,7 @@ export function useClaimIdentityMutation() {
     onSettled: () => {
       // Refetching while a sibling identity mutation is still pending would
       // clobber its optimistic row; reconcile once the last one settles.
-      if (queryClient.isMutating({ mutationKey: IDENTITY_MUTATION_KEY }) === 1) {
+      if (queryClient.isMutating({ mutationKey }) === 1) {
         void queryClient.invalidateQueries({ queryKey: identityKey });
       }
     },
@@ -119,8 +122,9 @@ export function useUnclaimIdentityMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const identityKey = queryKeys.identity(baseUrl);
+  const mutationKey = identityMutationKey(baseUrl);
   return useMutation({
-    mutationKey: IDENTITY_MUTATION_KEY,
+    mutationKey,
     mutationFn: (key: ClaimKey) => unclaimIdentity(baseUrl, key),
     onMutate: async key => {
       await queryClient.cancelQueries({ queryKey: identityKey });
@@ -138,7 +142,7 @@ export function useUnclaimIdentityMutation() {
       );
     },
     onSettled: () => {
-      if (queryClient.isMutating({ mutationKey: IDENTITY_MUTATION_KEY }) === 1) {
+      if (queryClient.isMutating({ mutationKey }) === 1) {
         void queryClient.invalidateQueries({ queryKey: identityKey });
       }
     },

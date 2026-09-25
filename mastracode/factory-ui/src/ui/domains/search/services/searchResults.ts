@@ -154,6 +154,14 @@ export function createSessionSearchGroups(input: {
   };
 }
 
+/**
+ * Providers whose external user ids are case-insensitive by contract
+ * (GitHub logins, GitLab usernames). Everything else (Linear/Jira/incident.io)
+ * uses opaque ids that must be compared verbatim — `abc` and `AbC` are
+ * different users there.
+ */
+const CASE_INSENSITIVE_ID_PROVIDERS = new Set(['github', 'gitlab']);
+
 /** Every external-user field the search should treat as a `@me` match target for a card. */
 function externalActorIdsForCard(card: Pick<WorkItem, 'source' | 'metadata'>): {
   integrationId: string;
@@ -162,7 +170,7 @@ function externalActorIdsForCard(card: Pick<WorkItem, 'source' | 'metadata'>): {
   const authors: string[] = [];
   const meta = card.metadata;
   const pushString = (value: unknown) => {
-    if (typeof value === 'string' && value.trim().length > 0) authors.push(value.trim().toLowerCase());
+    if (typeof value === 'string' && value.trim().length > 0) authors.push(value.trim());
   };
   const pushList = (value: unknown) => {
     if (Array.isArray(value)) for (const entry of value) pushString(entry);
@@ -194,7 +202,8 @@ function externalActorIdsForCard(card: Pick<WorkItem, 'source' | 'metadata'>): {
     pushString(meta.creator ?? meta.reporter);
   }
   if (!integrationId) return null;
-  return { integrationId, externalUserIds: [...new Set(authors)] };
+  const ids = CASE_INSENSITIVE_ID_PROVIDERS.has(integrationId) ? authors.map(id => id.toLowerCase()) : authors;
+  return { integrationId, externalUserIds: [...new Set(ids)] };
 }
 
 /**
@@ -213,11 +222,13 @@ function meTokenForCard(
   if (!actors) return undefined;
   const claims = resolvedMe.get(actors.integrationId);
   if (!claims || claims.size === 0) return undefined;
-  // Card actor ids are lowercased above; lower the claims at comparison time
-  // too so `Octocat` claims match `octocat` actors. Stored claims keep their
-  // original form — only this membership check is case-insensitive.
-  const loweredClaims = new Set([...claims].map(id => id.toLowerCase()));
-  return actors.externalUserIds.some(id => loweredClaims.has(id)) ? '@me' : undefined;
+  // Case-insensitive comparison only where the provider contract permits it
+  // (GitHub/GitLab usernames); other providers' ids are opaque and compared
+  // verbatim. Stored claims always keep their original form.
+  const claimSet = CASE_INSENSITIVE_ID_PROVIDERS.has(actors.integrationId)
+    ? new Set([...claims].map(id => id.toLowerCase()))
+    : claims;
+  return actors.externalUserIds.some(id => claimSet.has(id)) ? '@me' : undefined;
 }
 
 function createWorkItemResult(

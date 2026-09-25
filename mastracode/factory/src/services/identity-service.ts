@@ -72,12 +72,22 @@ export type ResolvedMe = Map<string, Set<string>>;
  */
 const CANDIDATE_LOOKUP_TIMEOUT_MS = 10_000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+/**
+ * Race `run(signal)` against a timeout. `Promise.race` alone would leave the
+ * loser running — a stalled provider walk would keep issuing roster requests
+ * after its results were dropped — so the signal is aborted on expiry and
+ * providers stop paging when they observe it.
+ */
+function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number, fallback: T): Promise<T> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout>;
   const expiry = new Promise<T>(resolve => {
-    timer = setTimeout(() => resolve(fallback), ms);
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(fallback);
+    }, ms);
   });
-  return Promise.race([promise, expiry]).finally(() => clearTimeout(timer));
+  return Promise.race([run(controller.signal), expiry]).finally(() => clearTimeout(timer));
 }
 
 export class IdentityService {
@@ -123,10 +133,12 @@ export class IdentityService {
             // A provider that stalls (rather than throws) gets the same
             // fail-soft treatment: drop its roster and keep the rest.
             const accounts = await withTimeout(
-              registration.integration.identity!.listCandidateAccounts(registration.context, {
-                orgId,
-                ...(query !== undefined ? { query } : {}),
-              }),
+              signal =>
+                registration.integration.identity!.listCandidateAccounts(registration.context, {
+                  orgId,
+                  signal,
+                  ...(query !== undefined ? { query } : {}),
+                }),
               CANDIDATE_LOOKUP_TIMEOUT_MS,
               null,
             );
