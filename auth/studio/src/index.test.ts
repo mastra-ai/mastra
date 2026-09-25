@@ -115,6 +115,29 @@ describe('MastraAuthStudio', () => {
   // -------------------------------------------------------------------------
 
   describe('authenticateToken', () => {
+    it('forwards the dedicated Studio auth token when observability is disabled', async () => {
+      process.env.MASTRA_STUDIO_AUTH_TOKEN = 'studio-auth-token';
+      try {
+        fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+        await auth.authenticateToken('sealed-session', mockRequest({ cookie: 'wos-session=sealed-session' }));
+        const [, options] = fetchSpy.mock.calls[0]!;
+        expect(new Headers(options?.headers).get('x-mastra-studio-token')).toBe('studio-auth-token');
+      } finally {
+        delete process.env.MASTRA_STUDIO_AUTH_TOKEN;
+      }
+    });
+
+    it('forwards the server-only platform token when validating a session cookie', async () => {
+      process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'project-token';
+      try {
+        fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+        await auth.authenticateToken('sealed-session', mockRequest({ cookie: 'wos-session=sealed-session' }));
+        const [, options] = fetchSpy.mock.calls[0]!;
+        expect(new Headers(options?.headers).get('x-mastra-studio-token')).toBe('project-token');
+      } finally {
+        delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+      }
+    });
     it('should authenticate via session cookie when present', async () => {
       fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
 

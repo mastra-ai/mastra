@@ -60,8 +60,8 @@ const VERIFY_CACHE_TTL_MS = 30_000;
  * Auth provider for Mastra Studio deployed instances.
  *
  * Proxies all authentication through the shared API, keeping the
- * WorkOS API key safely in the shared API. Deployed instances only
- * need the shared API URL — no secrets required.
+ * WorkOS API key safely in the shared API. Managed deployments also forward
+ * their server-only platform token to authenticate clockless session checks.
  *
  * The shared API's sealed session cookie (`wos-session`) is set with
  * `Domain=.mastra.ai` in production, so it's included in requests
@@ -96,6 +96,14 @@ export class MastraAuthStudio
    */
   private verifiedCredentials = new Map<string, { user: StudioUser; expiresAt: number }>();
   private readonly maxCachedVerifications = 1000;
+
+  private platformTokenHeaders(): Record<string, string> {
+    const token =
+      process.env.MASTRA_STUDIO_AUTH_TOKEN ||
+      process.env.MASTRA_PLATFORM_ACCESS_TOKEN ||
+      process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+    return token ? { 'X-Mastra-Studio-Token': token } : {};
+  }
 
   /**
    * In-flight `ensureOrganization` promises keyed by userId. Concurrent calls
@@ -275,6 +283,7 @@ export class MastraAuthStudio
         headers: {
           'Content-Type': 'application/json',
           Cookie: `${COOKIE_NAME}=${sessionCookie}`,
+          ...this.platformTokenHeaders(),
         },
       });
 
@@ -323,6 +332,7 @@ export class MastraAuthStudio
         method: 'POST',
         headers: {
           Cookie: `${COOKIE_NAME}=${sessionId}`,
+          ...this.platformTokenHeaders(),
         },
       });
     } catch {
@@ -337,6 +347,7 @@ export class MastraAuthStudio
         method: 'GET',
         headers: {
           Cookie: `${COOKIE_NAME}=${sessionId}`,
+          ...this.platformTokenHeaders(),
         },
       });
 
@@ -487,6 +498,7 @@ export class MastraAuthStudio
         headers: {
           'Content-Type': 'application/json',
           Cookie: `${COOKIE_NAME}=${sessionCookie}`,
+          ...this.platformTokenHeaders(),
         },
         body: JSON.stringify({ name: orgName }),
       });
@@ -537,7 +549,7 @@ export class MastraAuthStudio
 
   private async fetchMembershipRole(sessionCookie: string, organizationId: string): Promise<string | undefined> {
     const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
-      headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+      headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}`, ...this.platformTokenHeaders() },
       signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return undefined;
@@ -617,7 +629,7 @@ export class MastraAuthStudio
   } | null> {
     try {
       const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
-        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}`, ...this.platformTokenHeaders() },
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) return null;
@@ -649,6 +661,7 @@ export class MastraAuthStudio
       const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
         headers: {
           Cookie: `${COOKIE_NAME}=${sessionCookie}`,
+          ...this.platformTokenHeaders(),
         },
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
