@@ -142,6 +142,11 @@ export function pipeAgentReplyToWriter(
  * but silently drops tool calls, so {@link WorkflowReplyGeneratorOptions.toolFeedback} and
  * {@link WorkflowReplyGeneratorOptions.onTurnComplete}'s `result.toolCalls` stay empty.
  */
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new Error(error === undefined ? 'workflow run failed' : String(error));
+}
+
 export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOptions): VoiceReplyGenerator {
   const { workflow, workflowInput, replyStep, resultText, toolFeedback, onTurnComplete } = options;
   return async ctx => {
@@ -179,6 +184,13 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
         try {
           for await (const chunk of output.fullStream) {
             if (cancelled) break;
+            // Step failures don't throw into fullStream; they surface as a failed finish status.
+            if (
+              chunk.type === 'workflow-finish' &&
+              (chunk.payload as { workflowStatus?: unknown } | undefined)?.workflowStatus === 'failed'
+            ) {
+              throw toError(undefined);
+            }
             if (chunk.type !== 'workflow-step-output') continue;
             const payload = chunk.payload as { output?: unknown; stepName?: unknown };
             if (replyStep && payload.stepName !== replyStep) continue;
@@ -200,11 +212,17 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
               }
             }
           }
-          if (!cancelled && !streamedAny && resultText) {
-            const finalText = resultText(await output.result);
-            if (finalText) {
-              replyText += finalText;
-              controller.enqueue(finalText);
+          if (!cancelled) {
+            // A failed run resolves (not rejects) output.result, so check its status explicitly.
+            const result = await output.result;
+            const failed = result as { status?: unknown; error?: unknown } | undefined;
+            if (failed?.status === 'failed') throw toError(failed.error);
+            if (!streamedAny && resultText) {
+              const finalText = resultText(result);
+              if (finalText) {
+                replyText += finalText;
+                controller.enqueue(finalText);
+              }
             }
           }
           if (!cancelled) controller.close();
