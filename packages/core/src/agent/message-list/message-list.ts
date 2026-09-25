@@ -1044,7 +1044,7 @@ export class MessageList {
                     if (unsendable) {
                       const shown = data.startsWith('data:')
                         ? `${data.slice(0, data.indexOf(',') + 1)}<${data.length} chars>`
-                        : data.slice(0, 100);
+                        : `${part.mediaType ?? part.type} <${data.length} chars>`;
                       this.logger?.warn(`Skipping an attachment that is not a URL or valid file content: ${shown}`);
                     }
                     if (unsendable || (assetUrl && unavailableUrls.has(assetUrl))) {
