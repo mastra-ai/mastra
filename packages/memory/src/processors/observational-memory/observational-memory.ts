@@ -14,6 +14,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import { neutralizePromptTags } from '../../neutralize-prompt-tags';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -1997,7 +1998,7 @@ export class ObservationalMemory {
       if (formattedMessages) {
         const obscuredId = await this.representThreadIDInContext(threadId);
         blocks.push(`<other-conversation id="${obscuredId}">
-${formattedMessages}
+${neutralizePromptTags(formattedMessages, ['other-conversation'])}
 </other-conversation>`);
       }
     }
