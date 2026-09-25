@@ -3416,6 +3416,12 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /**
+     * Live pending message token count (e.g. from `getStatus()`), used to size the
+     * activation. Falls back to the persisted pending count, which can lag behind
+     * messages added since it was last written.
+     */
+    pendingTokens?: number;
     /** Pre-loaded record to skip the initial storage read. */
     record?: ObservationalMemoryRecord;
     /** Current actor model for provider-change activation checks. */
@@ -3465,6 +3471,7 @@ ${formattedMessages}
     let activateAfterIdleExpiredMs: number | undefined;
     let previousModel: string | undefined;
     let currentModel: string | undefined;
+    let livePendingTokens = opts.pendingTokens;
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
@@ -3501,6 +3508,7 @@ ${formattedMessages}
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }
+        livePendingTokens ??= status.pendingTokens;
       }
     }
 
@@ -3539,9 +3547,10 @@ ${formattedMessages}
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-    // Estimate current pending tokens from chunks
+    // Prefer the live pending count; the persisted one is written at the end of the
+    // previous step and misses anything added since (e.g. a large tool-result batch).
     const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-    const currentPendingTokens = freshRecord.pendingMessageTokens || totalChunkMessageTokens;
+    const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
 
     const forceMaxActivation = !!(
       this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter

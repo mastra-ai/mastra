@@ -199,8 +199,8 @@ export interface ObservationConfig {
   /**
    * Token threshold above which buffered activation is allowed to overshoot the
    * retention target. Crossing `blockAfter` does not trigger a blocking observation;
-   * a synchronous observation runs when `messageTokens` is reached and buffered
-   * activation did not happen.
+   * a synchronous observation runs when `messageTokens` is reached and activating
+   * buffered chunks does not bring pending tokens back under it.
    *
    * Accepts either:
    * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
