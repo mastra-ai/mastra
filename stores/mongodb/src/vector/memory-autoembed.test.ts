@@ -100,6 +100,24 @@ describeAutoEmbed('Memory semantic recall on a server-embedding store (live)', (
     throw new Error(`recall returned nothing within the timeout for "${search}"`);
   };
 
+  /** Polls recall until the expected message surfaces, so re-embedding has time to land. */
+  const recallUntilMatches = async (search: string, expectedId: string) => {
+    const deadline = Date.now() + 300000;
+    let ids: string[] = [];
+    while (Date.now() < deadline) {
+      try {
+        const result = await memory.recall({ threadId, resourceId, vectorSearchString: search });
+        ids = result.messages.map(m => m.id);
+        if (ids.includes(expectedId)) return ids;
+      } catch (error: any) {
+        const text = String(error?.message ?? '') + String(error?.cause?.message ?? '');
+        if (!/rate limit|index not found|not ready|INITIAL_SYNC|cannot query vector index/i.test(text)) throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    throw new Error(`recall never returned ${expectedId} for "${search}", last saw [${ids.join(', ')}]`);
+  };
+
   beforeAll(async () => {
     vector = new MongoDBVector({
       id: 'memory-autoembed-vector',
@@ -159,11 +177,33 @@ describeAutoEmbed('Memory semantic recall on a server-embedding store (live)', (
     expect(ids).toEqual(['msg-deadline']);
   }, 420000);
 
-  it('recalls through the SemanticRecall processor, the path an agent turn takes', async () => {
-    // Prove the index is queryable before asserting on the processor, so a failure here is
-    // about the processor rather than about embeddings not being ready yet.
-    await recallUntilPopulated('when is the migration due?');
+  it('re-embeds an edited message and drops the text it replaced', async () => {
+    const edited = 'The onboarding session moved to the second week of June.';
+    const replaced = 'The hosting budget was raised to cover the new analytics cluster.';
 
+    await memory.updateMessages({
+      messages: [
+        {
+          id: 'msg-budget',
+          content: { format: 2, parts: [{ type: 'text', text: edited }], content: edited },
+        } as any,
+      ],
+    });
+
+    // The edited text is searchable under its new meaning.
+    const ids = await recallUntilMatches('when is the onboarding session?', 'msg-budget');
+    expect(ids).toEqual(['msg-budget']);
+
+    // And the text it replaced is gone from the index rather than lingering as a second row.
+    // Asserted on the stored documents, since a ranking assertion cannot tell a deleted vector
+    // from one that simply ranked lower.
+    const stored = await (vector as any).db.collection(INDEX_NAME).find({}).toArray();
+    const texts = stored.map((row: any) => row.document);
+    expect(texts).toContain(edited);
+    expect(texts).not.toContain(replaced);
+  }, 420000);
+
+  it('recalls through the SemanticRecall processor, the path an agent turn takes', async () => {
     const inputProcessors = await memory.getInputProcessors();
     const semanticRecall = inputProcessors.find(p => p.id === 'semantic-recall');
     expect(semanticRecall).toBeDefined();
