@@ -263,7 +263,27 @@ describe('Intake candidate paging', () => {
     expect(requestedPages).toEqual(['1', '2', '3']);
   });
 
-  it('scroll-loads a feed attached to a non-Intake column and shows card skeletons while it loads', async () => {
+  it('shows one shimmering card skeleton while a populated column scroll-loads', async () => {
+    const { scrollSentinel } = stubIntersectionObserver(false);
+    const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
+    const { client } = renderWorkBoard();
+
+    const triage = await screen.findByTestId('board-column-triage');
+    expect(await within(triage).findByText('Triage login')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(requestedTriagePages).toEqual(['1']);
+
+    scrollSentinel(true);
+    const skeleton = await within(triage).findByRole('status', { name: 'Loading more candidates' });
+    expect(skeleton.children).toHaveLength(1);
+    expect(skeleton.firstElementChild).toHaveClass('before:animate-[shimmer_2s_infinite]', 'before:bg-linear-to-r');
+    releaseSecondPage();
+
+    await waitFor(() => expect(within(triage).getByText('Triage signup')).toBeInTheDocument());
+    expect(requestedTriagePages).toEqual(['1', '2']);
+  });
+
+  it('does not show a card skeleton while an empty visible column scroll-loads', async () => {
     const { scrollSentinel } = stubIntersectionObserver(false);
     const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
     const { client } = renderWorkBoard('?q=signup');
@@ -275,7 +295,8 @@ describe('Intake candidate paging', () => {
     expect(requestedTriagePages).toEqual(['1']);
 
     scrollSentinel(true);
-    expect(await within(triage).findByRole('status', { name: 'Loading more candidates' })).toBeInTheDocument();
+    await waitFor(() => expect(requestedTriagePages).toEqual(['1', '2']));
+    expect(within(triage).queryByRole('status', { name: 'Loading more candidates' })).not.toBeInTheDocument();
     releaseSecondPage();
 
     await waitFor(() => expect(within(triage).getByText('Triage signup')).toBeInTheDocument());

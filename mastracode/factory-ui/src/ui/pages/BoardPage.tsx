@@ -453,7 +453,7 @@ function BoardContent({
                       />
                     )}
                     {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
-                    {columnFeed && <IntakeColumnExtras feed={columnFeed} />}
+                    {columnFeed && <IntakeColumnExtras feed={columnFeed} currentColumnLength={taskCount} />}
                   </BoardColumn>
                 ),
               )}

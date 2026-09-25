@@ -10,7 +10,7 @@ interface LoadMoreSentinelProps {
   onLoadMore: () => void;
   /** Accessible label, e.g. "Load more issues". */
   label: string;
-  /** Optional list-shaped placeholder for surfaces where a spinner would shift the layout. */
+  /** Optional list-shaped placeholder for surfaces where a spinner would shift the layout. Pass null to hide it. */
   loadingIndicator?: ReactNode;
 }
 
@@ -39,11 +39,13 @@ export function LoadMoreSentinel({
   return (
     <div ref={setRef} className="py-2">
       {isFetchingNextPage ? (
-        (loadingIndicator ?? (
+        loadingIndicator === undefined ? (
           <div className="flex justify-center">
             <Spinner size="sm" aria-label="Loading more" />
           </div>
-        ))
+        ) : (
+          loadingIndicator
+        )
       ) : (
         <div className="flex justify-center">
           <Button variant="ghost" size="sm" onClick={() => onLoadMore()}>
