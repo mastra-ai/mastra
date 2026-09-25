@@ -393,9 +393,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 }
 
                 const branch = { type } as JSONSchema7;
+                // A string format (e.g. date-time) belongs to the string branch when one exists.
+                const formatOwner = types.includes('string') ? type === 'string' : isNumericType(type);
                 for (const keyword of [
                   ...typeSpecificKeywords(type),
-                  ...(isNumericType(type) ? numericKeywords : []),
+                  ...(isNumericType(type) ? numericKeywords.filter(k => k !== 'format') : []),
+                  ...(formatOwner ? ['format'] : []),
                 ]) {
                   if (keyword in prop) {
                     // @ts-expect-error - keyword is a valid property for JSON Schema
