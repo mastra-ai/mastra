@@ -44,12 +44,12 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
 describe('JiraRules', () => {
   it.each([
     { name: 'the bound custom board initial phase', sourceId: '10001', board: 'release', stage: 'queued' },
-    { name: 'Work triage when the source is unbound', sourceId: '10002', board: 'work', stage: 'triage' },
+    { name: 'Work Intake when the source is unbound', sourceId: '10002', board: 'work', stage: 'intake' },
     {
-      name: 'Work triage when the bound board is not installed',
+      name: 'Work Intake when the bound board is not installed',
       sourceId: '10003',
       board: 'work',
-      stage: 'triage',
+      stage: 'intake',
     },
   ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
     const { project, service, workItems } = await setup(

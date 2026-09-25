@@ -6,8 +6,13 @@
  * the same workflow infrastructure with complete Inngest integration.
  */
 
-import { Agent } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, globalRunRegistry } from '@mastra/core/agent/durable';
+import { Agent, isDurableAgentLike } from '@mastra/core/agent';
+import {
+  AGENT_CONTROL_TOPIC,
+  AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
+  globalRunRegistry,
+} from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
@@ -18,6 +23,7 @@ import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
+import { InngestExecutionEngine } from '../execution-engine';
 import { createInngestAgent, isInngestAgent } from '../index';
 
 // Mock model for testing
@@ -106,6 +112,23 @@ describe('createInngestAgent factory function', () => {
     expect(Array.isArray(workflows)).toBe(true);
     expect(workflows.length).toBe(1);
     expect(workflows[0].id).toBe(InngestDurableStepIds.AGENTIC_LOOP);
+  });
+
+  // Issue #25154: server approval guards and suspended-run discovery look up
+  // snapshots under this name, so it must match the registered loop workflow.
+  it('advertises its namespaced loop workflow name', () => {
+    const agent = new Agent({
+      id: 'loop-name-test',
+      name: 'Loop Name Test',
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    expect(durableAgent.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    expect(durableAgent.durableLoopWorkflowName).toBe(durableAgent.getDurableWorkflows()[0].id);
+    expect(isDurableAgentLike(durableAgent)).toBe(true);
   });
 
   it('should prepare for durable execution', async () => {
@@ -234,47 +257,80 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
   });
 
-  it("wraps each workflow's local pubsub in a cache-sharing CachingPubSub", async () => {
-    // Regression: previously the InngestWorkflow function constructed its own bare
-    // `new InngestPubSub(...)` inside the durable handler, so workflow steps published
-    // chunk events to a pubsub instance the agent's `observe()` never sees.
-    //
-    // The fix is an `__setPubsubFactory` override that wraps each workflow's *own*
-    // workflow-local default InngestPubSub with a CachingPubSub backed by the same
-    // cache as the agent's pubsub. This preserves per-workflow event channels
-    // (workflow-events on `workflow:<workflowId>:<runId>` must stay workflow-local,
-    // otherwise nested-workflow watch isolation breaks) while still routing all
-    // publishes through the cache that observe() reads from.
-    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-factory'), inngest });
-    swapInnerToInProcess(durableAgent);
+  it('routes workflow agent topics through the configured pubsub exactly once', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-custom-pubsub-routing'),
+      inngest,
+      pubsub: customPubsub,
+    });
 
-    const workflows = durableAgent.getDurableWorkflows();
-    const workflow = workflows.find((w: any) => w.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
     expect(workflow).toBeDefined();
+    expect(workflow.__getEmitWorkflowEvents()).toBe(false);
 
     const factory = workflow.__getPubsubFactory?.();
     expect(typeof factory).toBe('function');
 
-    // Simulate what the workflow function does at runtime: pass in a workflow-local
-    // InngestPubSub default. The factory must wrap it (not substitute it) so the
-    // workflow-id-scoped channels survive.
-    const parentDefault = new EventEmitterPubSub(); // stand-in for the workflow's default InngestPubSub
-    const wrapped = factory(parentDefault);
-    expect(wrapped).toBeInstanceOf(CachingPubSub);
-    expect((wrapped as any).inner).toBe(parentDefault);
-    // Must reuse the same backing cache as the agent's pubsub so observe() sees workflow writes.
-    expect((wrapped as any).cache).toBe(durableAgent.cache);
+    const workflowDefault = new EventEmitterPubSub();
+    const defaultPublish = vi.spyOn(workflowDefault, 'publish');
+    const routed = factory(workflowDefault);
+    const runId = 'inngest-custom-pubsub-run';
+    const streamTopic = AGENT_STREAM_TOPIC(runId);
+    const controlTopic = AGENT_CONTROL_TOPIC(runId);
 
-    // Nested InngestWorkflows (e.g. the single-iteration loop body) run as their
-    // own Inngest functions and resolve their own pubsub at runtime. Each must
-    // get its own workflow-local CachingPubSub - same cache, different inner -
-    // otherwise chunk events emitted by tool/llm steps inside the inner loop
-    // bypass the cache and `observe()` can never replay them.
+    await routed.publish(streamTopic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'from-workflow' },
+    } as any);
+    await routed.publish(controlTopic, {
+      type: 'agent-control-abort-request',
+      runId,
+      data: {},
+    } as any);
+
+    expect(customPublish).toHaveBeenCalledTimes(2);
+    expect(customPublish).toHaveBeenNthCalledWith(1, streamTopic, expect.any(Object), undefined);
+    expect(customPublish).toHaveBeenNthCalledWith(2, controlTopic, expect.any(Object), undefined);
+    expect(defaultPublish).not.toHaveBeenCalled();
+
+    const replayed: any[] = [];
+    await durableAgent.pubsub.subscribeWithReplay(streamTopic, event => {
+      replayed.push(event);
+    });
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0].data).toEqual({ chunk: 'from-workflow' });
+
+    const workflowTopic = `workflow.events.v2.${runId}`;
+    await routed.publish(workflowTopic, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-step-result' },
+    } as any);
+    expect(defaultPublish).toHaveBeenCalledOnce();
+    expect(defaultPublish).toHaveBeenCalledWith(workflowTopic, expect.any(Object), undefined);
+    expect(customPublish).toHaveBeenCalledTimes(2);
+
+    const customClearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+    const defaultClearTopic = vi.spyOn(workflowDefault, 'clearTopic');
+    await routed.clearTopic(streamTopic);
+    await routed.clearTopic(workflowTopic);
+    expect(customClearTopic).toHaveBeenCalledOnce();
+    expect(customClearTopic).toHaveBeenCalledWith(streamTopic);
+    expect(defaultClearTopic).toHaveBeenCalledOnce();
+    expect(defaultClearTopic).toHaveBeenCalledWith(workflowTopic);
+
+    expect(routed.supportedModes).toEqual(['pull']);
+    expect(routed.supportsNativeBatching).toBe(true);
+    expect(routed.supportsOffsets).toBe(false);
+
     const collectNested = (steps: any[]): any[] => {
       const found: any[] = [];
       for (const step of steps ?? []) {
-        // `type: 'step'` holds the workflow directly; loop/foreach wrap their
-        // body in a `SingleStepEntry`, so the workflow lives at `step.step.step`.
         const inner = step.type === 'step' ? step.step : (step.step?.step ?? step.step);
         if ((step.type === 'step' || step.type === 'loop' || step.type === 'foreach') && inner?.executionGraph) {
           found.push(inner);
@@ -288,48 +344,60 @@ describe('createInngestAgent observe-replay wiring', () => {
     const nested = collectNested(workflow.executionGraph.steps);
     expect(nested.length).toBeGreaterThan(0);
     for (const inner of nested) {
-      const innerFactory = inner.__getPubsubFactory?.();
-      expect(typeof innerFactory).toBe('function');
-      const nestedDefault = new EventEmitterPubSub();
-      const nestedWrapped = innerFactory(nestedDefault);
-      expect(nestedWrapped).toBeInstanceOf(CachingPubSub);
-      // Each nested workflow keeps its own workflow-local inner...
-      expect((nestedWrapped as any).inner).toBe(nestedDefault);
-      // ...but shares the cache, so writes from any workflow show up on observe().
-      expect((nestedWrapped as any).cache).toBe(durableAgent.cache);
+      expect(inner.__getPubsubFactory()).toBe(factory);
+      expect(inner.__getEmitWorkflowEvents()).toBe(false);
+    }
+  });
+
+  it('routes runtime workflow error events through the configured pubsub exactly once', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-custom-pubsub-routing'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: new Error('runtime failure'),
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-custom-pubsub-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow('Workflow failed');
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
     }
 
-    // Internal workflow watch events must remain live but stay out of replay history.
-    const watchTopic = 'workflow.events.v2.inngest-observe-factory-run';
-    const watchEvents: any[] = [];
-    await wrapped.subscribe(watchTopic, event => {
-      watchEvents.push(event);
-    });
-    await wrapped.publish(watchTopic, {
-      type: 'watch',
-      runId: 'inngest-observe-factory-run',
-      data: { type: 'workflow-step-result', payload: { large: 'payload' } },
-    } as any);
-    expect(watchEvents).toHaveLength(1);
-    expect(await wrapped.getHistory(watchTopic)).toEqual([]);
-
-    // Agent stream publishes from factory-produced pubsubs still become replayable
-    // via the agent's pubsub because they share a cache.
-    const runId = 'inngest-observe-factory-run';
-    const topic = AGENT_STREAM_TOPIC(runId);
-    await wrapped.publish(topic, {
-      type: AgentStreamEventTypes.CHUNK,
-      runId,
-      data: { chunk: 'from-workflow' },
-    } as any);
-    await new Promise(resolve => setTimeout(resolve, 20));
-
-    const replayed: any[] = [];
-    await durableAgent.pubsub.subscribeWithReplay(topic, event => {
-      replayed.push(event);
-    });
-    expect(replayed).toHaveLength(1);
-    expect(replayed[0].data).toEqual({ chunk: 'from-workflow' });
+    expect(customPublish).toHaveBeenCalledOnce();
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
+      undefined,
+    );
   });
 
   it('should receive both cached and live events', async () => {
@@ -528,6 +596,7 @@ describe('InngestAgent parity surface', () => {
           loadWorkflowSnapshot: vi.fn().mockResolvedValue({
             value: {},
             context: {},
+            status: 'suspended',
             suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
           }),
         }),
@@ -1126,6 +1195,34 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('rejects resume() on a finished run without re-running the suspended tool', async () => {
+      // #24796: finished runs used to keep their stale suspended snapshot, so a
+      // second resume re-executed the (previously declined) tool.
+      vi.useFakeTimers();
+      const durableAgent = makeAgentWithSnapshot('resume-finished', {
+        value: {},
+        context: {},
+        status: 'success',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-finished-run';
+
+      try {
+        const pending = durableAgent.resume(runId, { approved: true });
+        const assertion = expect(pending).rejects.toThrow(
+          `Cannot resume run ${runId}: it is not suspended (status: success).`,
+        );
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
       const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
         value: {},
@@ -1450,11 +1547,12 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
 
-      // The option must not leak into the workflows: the pinned suspended-only
-      // policy stays in effect on every durable workflow (Inngest's replay
-      // owns durability; Mastra snapshots exist purely for HITL resume).
-      // Probe the complete WorkflowRunStatus matrix so no status can silently
-      // start persisting.
+      // The option must not leak into the workflows: the pinned policy stays in
+      // effect on every durable workflow (Inngest's replay owns durability;
+      // Mastra persists suspended snapshots for HITL resume and terminal ones so
+      // finished runs are not resumable — #24796). Probe the complete
+      // WorkflowRunStatus matrix so no status can silently start persisting.
+      const persisted = new Set(['suspended', 'success', 'failed', 'canceled', 'bailed', 'tripwire']);
       const allStatuses = [
         'running',
         'success',
@@ -1473,7 +1571,7 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
       for (const workflow of workflows) {
         const predicate = (workflow as any).options.shouldPersistSnapshot;
         for (const workflowStatus of allStatuses) {
-          expect(predicate({ stepResults: {}, workflowStatus })).toBe(workflowStatus === 'suspended');
+          expect(predicate({ stepResults: {}, workflowStatus })).toBe(persisted.has(workflowStatus));
         }
       }
     } finally {
@@ -1518,9 +1616,7 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
   }
 
   function closeOnSuspendSet(options: object) {
-    return Object.getOwnPropertySymbols(options).some(
-      sym => sym.description === 'mastra.durable.inngest.closeOnSuspend' && (options as any)[sym] === true,
-    );
+    return (options as any).closeOnSuspend === true;
   }
 
   it('resumeStream routes through resume() with close-on-suspend', async () => {

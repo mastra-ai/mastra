@@ -85,6 +85,17 @@ export class ObservabilityOracle extends ObservabilityStorage {
     this.indexes = filterIndexesForTables(config.indexes, ObservabilityOracle.MANAGED_TABLES);
   }
 
+  override getFeatures() {
+    return [
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+    ] as const;
+  }
+
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const targets = resolveRetentionTargets({
       policies,

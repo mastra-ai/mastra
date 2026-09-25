@@ -13,12 +13,11 @@ export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
   title: string;
   placeholder: string;
-  searchLabel: string;
   /** The name step types into the field instead of searching it. */
   searchable?: boolean;
   value: string;
   onValueChange: (value: string) => void;
-  /** Absent once the commit started: what the earlier steps picked is already on the server. */
+  /** Back navigation to the previous step. Omitted on the first step. */
   onBack?: () => void;
   /** Steps that can be left out show it as chrome, so it never scrolls away with the rows. */
   onSkip?: () => void;
@@ -35,7 +34,6 @@ export function CreateFactoryPalette({
   step,
   title,
   placeholder,
-  searchLabel,
   searchable = true,
   value,
   onValueChange,
@@ -49,39 +47,37 @@ export function CreateFactoryPalette({
     <Command
       loop
       shouldFilter={false}
-      label={searchLabel}
-      className="mx-auto flex h-[min(34rem,100%)] w-full max-w-2xl flex-col gap-2 overflow-visible bg-transparent"
+      label={title}
+      className="flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent"
     >
-      <div className="flex min-h-8 shrink-0 items-center">
+      <div className="flex shrink-0 items-center gap-3">
         {onBack && (
-          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onBack}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onMouseDown={event => event.preventDefault()}
+            onClick={onBack}
+            aria-label="Go back to previous step"
+          >
             <ArrowLeft aria-hidden="true" />
             Back
           </Button>
         )}
-        {onSkip && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onMouseDown={event => event.preventDefault()}
-            onClick={onSkip}
-          >
-            Skip
-            <ArrowRight aria-hidden="true" />
-          </Button>
-        )}
-      </div>
-
-      <div className="flex shrink-0 items-center gap-3 px-1">
         <Txt
           key={step}
-          as="h1"
+          as="p"
+          aria-hidden="true"
           variant="body"
           className={cn('text-foreground min-w-0 flex-1 truncate', stepTransition)}
         >
           {title}
         </Txt>
+        {onSkip && (
+          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
+            Skip
+            <ArrowRight aria-hidden="true" />
+          </Button>
+        )}
         <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
           {CREATE_FACTORY_STEPS.map((item, index) => (
             <li
@@ -95,7 +91,6 @@ export function CreateFactoryPalette({
 
       <CommandPaletteInput
         autoFocus
-        aria-label={searchLabel}
         placeholder={placeholder}
         value={value}
         onValueChange={onValueChange}

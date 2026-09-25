@@ -50,6 +50,23 @@ function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
 }
 
+const FEEDBACK_REVIEW_STATUS_CONFLICT_CODE = 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT';
+
+function isFeedbackReviewStatusConflictError(error: unknown): error is Error {
+  return error instanceof Error && (error as { id?: unknown }).id === FEEDBACK_REVIEW_STATUS_CONFLICT_CODE;
+}
+
+/**
+ * Matches the `OBSERVABILITY_STORAGE_*_NOT_IMPLEMENTED` MastraError the base
+ * observability store throws for every optional method a store doesn't
+ * implement. Checked by id (not `instanceof`) so it holds across duplicated
+ * `@mastra/core` installs.
+ */
+function isObservabilityStorageNotImplementedError(error: unknown): error is Error {
+  const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
+  return typeof id === 'string' && id.startsWith('OBSERVABILITY_STORAGE_') && id.endsWith('_NOT_IMPLEMENTED');
+}
+
 /**
  * Structural check for ZodError instances.
  *
@@ -121,8 +138,32 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
+  // The feedback row changed under a review-status update, so the caller re-reads and retries;
+  // that is a conflict, not a broken store.
+  if (isFeedbackReviewStatusConflictError(error)) {
+    throw new HTTPException(409, {
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
   if (isWorkflowSchemaValidationError(error)) {
     throw new HTTPException(400, {
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
+  // Optional observability APIs (feedback, metrics, logs, scores, ...) throw
+  // `*_NOT_IMPLEMENTED` on stores that don't support them. That's a missing
+  // capability, not a server fault, so it maps to 501 — which server adapters
+  // log as a warning instead of an error. The message is preserved because
+  // clients match on it to detect unsupported operations. Clients should check
+  // `GET /observability/capabilities` before calling optional routes.
+  if (isObservabilityStorageNotImplementedError(error)) {
+    throw new HTTPException(501, {
       message: error.message,
       stack: error.stack,
       cause: error,

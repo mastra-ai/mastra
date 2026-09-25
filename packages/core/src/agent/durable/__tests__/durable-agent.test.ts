@@ -864,6 +864,37 @@ describe('createDurableAgentStream', () => {
 
     cleanup();
   });
+
+  it('fires onFinish once when FINISH is published twice', async () => {
+    // A recovered run can publish FINISH while an observer that replays the
+    // topic has already seen the pre-crash one.
+    const { createDurableAgentStream, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-duplicate-finish';
+    const onFinish = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-duplicate-finish',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onFinish,
+    });
+    await ready;
+
+    const finishData = {
+      output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'stop' as const, warnings: [], isContinued: false },
+    };
+    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, runId, finishData);
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
 });
 
 // ============================================================================

@@ -7,7 +7,7 @@ description: "Browse above.dev model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/above.svg" alt="above.dev logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />above.dev
 
-Access 8 above.dev models through Mastra's model router. Authentication is handled automatically using the `ABOVE_API_KEY` environment variable.
+Access 10 above.dev models through Mastra's model router. Authentication is handled automatically using the `ABOVE_API_KEY` environment variable.
 
 Learn more in the [above.dev documentation](https://above.dev/docs).
 
@@ -46,30 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "above/deepseek-v4-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.165,
-    "outputCost": 0.66
-  },
-  {
-    "model": "above/deepseek-v4-flash-vision-exp",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.242,
-    "outputCost": 0.726
-  },
-  {
     "model": "above/deepseek-v4-pro",
     "imageInput": false,
     "audioInput": false,
@@ -80,6 +56,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.726,
     "outputCost": 2.178
+  },
+  {
+    "model": "above/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.165,
+    "outputCost": 0.66
   },
   {
     "model": "above/glm-5.2",
@@ -118,16 +106,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.55
   },
   {
-    "model": "above/mimo-v2.5-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
+    "model": "above/mimo-v2.6-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.1692,
+    "outputCost": 0.3385
+  },
+  {
+    "model": "above/mimo-v2.6-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 0.5077,
     "outputCost": 1.0154
+  },
+  {
+    "model": "above/mimo-v2.6-pro-ultraspeed",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 5.0769,
+    "outputCost": 10.1538
   },
   {
     "model": "above/qwen3.8-max",

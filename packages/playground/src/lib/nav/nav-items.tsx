@@ -1,7 +1,6 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
-import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
 import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
@@ -14,7 +13,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, ClipboardCheck, Inbox, LayoutGrid } from 'lucide-react';
+import { BookIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -56,18 +55,6 @@ const signalsNavItem: NavItem = {
 };
 
 export const mainNav: NavSection[] = [
-  {
-    key: 'inbox',
-    title: '',
-    items: [
-      {
-        name: 'Inbox',
-        url: '/inbox',
-        Icon: Inbox,
-        isOnMastraPlatform: true,
-      },
-    ],
-  },
   {
     key: 'primitives',
     title: 'Primitives',
@@ -130,12 +117,6 @@ export const mainNav: NavSection[] = [
     key: 'evaluation',
     title: 'Evaluation',
     items: [
-      {
-        name: 'Overview',
-        url: '/evaluation',
-        Icon: HomeIcon,
-        isOnMastraPlatform: true,
-      },
       {
         name: 'Scorers',
         url: '/scorers',

@@ -1,10 +1,10 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { SpanScoring } from '@mastra/playground-ui/domains/scores';
 import {
   TraceDataPanelView,
   type TraceSideView,
 } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useState, type ComponentProps } from 'react';
-import { SpanScoring } from './span-scoring';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type TraceDataPanelProps = Omit<

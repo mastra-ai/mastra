@@ -38,6 +38,7 @@ import {
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
+  handleCommandExit,
   handleShellOutput,
   handleToolInputStart,
   handleToolInputDelta,
@@ -238,6 +239,10 @@ export async function dispatchEvent(
     case 'shell_output':
       state.agentRunLastStreamPartAt = Date.now();
       handleShellOutput(ectx, event.toolCallId, event.output, event.stream);
+      break;
+
+    case 'command_exit':
+      handleCommandExit(ectx, event.toolCallId, event.exitCode, event.success);
       break;
 
     case 'tool_input_start':

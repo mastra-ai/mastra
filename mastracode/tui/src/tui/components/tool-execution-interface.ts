@@ -17,10 +17,20 @@ export interface ToolResult {
   isError: boolean;
 }
 
+/** The sandbox's exit record for a shell call (`data-sandbox-exit`). */
+export interface CommandExitRecord {
+  exitCode: number;
+  success: boolean;
+  executionTimeMs?: number;
+}
+
 export interface IToolExecutionComponent {
   updateArgs(args: unknown, rebuild?: boolean): void;
+  setArgsStreaming?(streaming: boolean): void;
+  stopLiveUpdates?(): void;
   refresh?(): void;
   updateResult(result: ToolResult, isPartial?: boolean): void;
+  setCommandExit?(exit: CommandExitRecord): void;
   setBackgroundTaskId?(taskId: string): void;
   getBackgroundTaskId?(): string | undefined;
   cancelBackground?(): void;

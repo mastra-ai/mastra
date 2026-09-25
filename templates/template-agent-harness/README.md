@@ -6,7 +6,7 @@ This starter provides you with a general-purpose Mastra agent that can research 
 
 ## Features
 
-- A project-level `workspace/` for files and command execution
+- A local `workspace/` for files and command execution (created under `src/mastra/public/workspace/` when running `mastra dev`)
 - Approval gates for file changes, deletions, and shell commands
 - Conversation memory, generated thread titles, and task tracking
 - Built-in web search and direct web page fetching
@@ -34,7 +34,7 @@ The agent asks for approval before it changes files or runs commands. When it cr
 
 ## Workspace safety
 
-The local filesystem tools stay inside the project-level `workspace/` directory. Shell commands start in that directory, but `LocalSandbox` does not provide operating-system isolation by default. Review command approvals carefully, and do not expose this template through an unauthenticated public server.
+The local filesystem tools stay inside the `workspace/` directory, which resolves relative to the server's working directory (`src/mastra/public/workspace/` during `mastra dev`). Shell commands start in that directory, but `LocalSandbox` does not provide operating-system isolation by default. Review command approvals carefully, and do not expose this template through an unauthenticated public server.
 
 ## Storage
 
@@ -47,7 +47,7 @@ Recurring schedules continue to use model tokens until you pause them. Ask the a
 - Edit `src/mastra/agents/agent.ts` to change the model, instructions, memory, workspace, or approval policy.
 - Edit `src/mastra/tools/` to customize scheduling.
 - Edit `src/mastra/index.ts` to change storage and observability.
-- Add files or reusable skills under `workspace/` for the agent to use.
+- Add files or reusable skills under `src/mastra/public/workspace/` for the agent to use during `mastra dev`.
 
 ## Learn more
 

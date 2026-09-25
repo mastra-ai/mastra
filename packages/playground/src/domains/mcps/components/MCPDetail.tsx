@@ -102,11 +102,11 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           </CardHeader>
 
           {endpoints.map(endpoint => (
-            <TabContent key={endpoint.value} value={endpoint.value}>
+            <TabContent key={endpoint.value} value={endpoint.value} flush>
               <CardContent className="flex flex-col gap-3">
                 <Txt tone="muted">{endpoint.description}</Txt>
                 <div className="flex items-center justify-between gap-3 rounded-lg bg-muted py-2 pr-2 pl-3">
-                  <Txt as="span" className="min-w-0 font-mono break-all">
+                  <Txt as="span" font="mono" className="min-w-0 break-all">
                     {endpoint.content}
                   </Txt>
                   <CopyButton tooltip={endpoint.tooltip} content={endpoint.content} />

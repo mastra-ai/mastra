@@ -40,6 +40,7 @@ type StreamObjectChunk<TType extends string> = StreamChunkBase<TType> & { object
 type StreamDataChunk<TType extends `data-${string}`> = StreamChunkBase<TType> & { data?: unknown };
 type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
+  | StreamPayloadChunk<'thread-history'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
   | StreamPayloadChunk<'reasoning-signature'>
@@ -774,10 +775,12 @@ export class SessionRunEngine {
         // be re-scoped to another resource while this run is still streaming,
         // and the agent looks up the suspended run by `threadId`/`resourceId`
         // — resolving with the newly-bound identity would fail to find this
-        // run, or resume it against the wrong thread.
+        // run, or resume it against the wrong thread. `chunk.runId` names the run
+        // that emitted the approval, so a newer run on the session cannot
+        // redirect the resume.
         const binding = {
           threadId: state.threadId,
-          runId: this.#session.run.getRunId() ?? undefined,
+          runId: chunk.runId ?? this.#session.run.getRunId() ?? undefined,
           resourceId: this.#session.identity.getResourceId(),
           // Pinned for the same reason: a mode switch swaps `getAgent()` and a
           // successor run replaces the session's abort controller, so both must
@@ -787,12 +790,12 @@ export class SessionRunEngine {
         };
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext, binding });
+          await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext, binding });
+          await this.#session.declineToolCall({ toolCallId, requestContext, ...binding });
           break;
         }
 
@@ -838,13 +841,13 @@ export class SessionRunEngine {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            binding,
+            ...binding,
           });
         } else {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            binding,
+            ...binding,
             declineContext: deferredAbort
               ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
               : approval.declineContext,
@@ -1528,7 +1531,7 @@ export class SessionRunEngine {
     this.#session.run.reset();
   }
 
-  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
+  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
     const threadId = this.#session.thread.getId() ?? undefined;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
@@ -1543,6 +1546,8 @@ export class SessionRunEngine {
           subscription.unsubscribe();
           break;
         }
+
+        if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
         if (runId && runId === abortedRunId) continue;

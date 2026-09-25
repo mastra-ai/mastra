@@ -39,6 +39,7 @@ import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-syn
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -119,6 +120,12 @@ export interface IntegrationContext {
      * adopts the same memory configuration the web kickoff applies.
      */
     memorySettings: MemorySettingsStorage;
+    /**
+     * Saved model packs and their per-user active selection. A channel
+     * integration reads the linked sender's active pack to start a session on
+     * the model that user chose rather than the factory's shared default.
+     */
+    modelPacks: ModelPacksStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
     /**

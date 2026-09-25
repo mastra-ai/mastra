@@ -57,6 +57,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
+  ThreadHistoryChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -341,7 +342,9 @@ export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type CancelQueuedAgentMessagesOptions =
-  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel selected pending input across all Agents sharing this runtime and thread. */
+  | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel only the calling Agent's queued messages in this owner group. */
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 /**
@@ -449,6 +452,8 @@ export interface AgentThreadIdentityOptions {
 
 /** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
+  clearPendingSignals?: boolean;
   /** Abort only if this run is still the thread's active run. */
   expectedRunId?: string;
   /**
@@ -465,18 +470,31 @@ export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
+  /**
+   * Start the stream with one `thread-history` chunk holding the thread's stored
+   * messages (newest `perPage`, default 40, oldest first), then emit only parts
+   * newer than that history, then live parts. Pending approval and suspension
+   * chunks are always emitted.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
+  /** Request context used to resolve the agent's memory when loading initial history. */
+  requestContext?: RequestContext;
 }
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentThreadSubscription<OUTPUT = unknown> {
-  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+  /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
+  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  /** Abort the active run. Pass `localOnly` to leave a remote owner's run alone. */
-  abort: (options?: { localOnly?: boolean }) => boolean;
+  /**
+   * Abort the active run. Pass `localOnly` to leave a remote owner's run alone,
+   * or `clearPendingSignals` to also drop input queued behind it.
+   */
+  abort: (options?: Pick<AgentAbortThreadOptions, 'clearPendingSignals' | 'localOnly'>) => boolean;
   unsubscribe: () => void;
 }
 
@@ -1338,6 +1356,13 @@ export interface DurableAgentLike {
   readonly id: string;
   /** Agent name */
   readonly name: string;
+  /**
+   * Storage workflow name of this agent's outer agentic-loop snapshot.
+   * Defaults to `DurableStepIds.AGENTIC_LOOP` when omitted; engines that
+   * namespace their workflow ids (e.g. Inngest) must set it so server
+   * handlers and suspended-run discovery can find their runs.
+   */
+  readonly durableLoopWorkflowName?: string;
   /** The underlying Mastra Agent */
   readonly agent: Agent<any, any, any>;
   /**

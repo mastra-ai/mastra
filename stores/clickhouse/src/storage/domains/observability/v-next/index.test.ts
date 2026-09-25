@@ -677,11 +677,19 @@ LIMIT 1`,
       expect(storage.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ]);
     });
 
@@ -692,10 +700,18 @@ LIMIT 1`,
         expect(storage.getFeatures()).toEqual([
           'metrics',
           'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
+          'feedback',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -3100,18 +3116,22 @@ LIMIT 1`,
         await scopedClient.command({
           query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, key2, value)`,
         });
-        // Legacy views without APPEND, as created by older releases.
+        // Legacy views without APPEND, as created by older releases. A
+        // non-APPEND refresh swaps the target table, so a refresh running
+        // while the test inserts or checks the marker row would replace the
+        // table under it. EMPTY skips the refresh at creation and STOP VIEW
+        // disables the scheduled ones.
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
         });
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
         });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_VALUES}` });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_PAIRS}` });
 
         // Marker row proving the table (and its data) survives init()'s view
-        // migration. Inserted after the legacy views because a non-APPEND
-        // view's initial refresh atomically swaps the target table — the very
-        // behavior this fix removes.
+        // migration.
         await scopedClient.command({
           query: `INSERT INTO ${TABLE_DISCOVERY_VALUES} VALUES ('entityType', '', 'marker-survivor')`,
         });
@@ -5135,8 +5155,10 @@ LIMIT 1`,
         expect((await storage.listScores({})).scores).toEqual([]);
         expect((await storage.listFeedback({})).feedback).toEqual([]);
 
+        // Each request is upserted once more when marked applied, so count
+        // distinct requests under FINAL rather than raw row versions.
         const requestCountResult = await client.query({
-          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS}`,
+          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS} FINAL`,
           format: 'JSONEachRow',
         });
         const [requestCountRow] = (await requestCountResult.json()) as Array<{ count: string }>;
@@ -5226,6 +5248,7 @@ LIMIT 1`,
             WHERE signal = 'feedback'
               AND predicateType = 'itemIds'
               AND has(predicateValues, {feedbackId:String})
+              AND lastAppliedAt > toDateTime64(0, 3)
               AND (organizationId = '' OR organizationId = {organizationId:String})
               AND (resourceId = '' OR resourceId = {resourceId:String})
             LIMIT 1`,
@@ -5242,6 +5265,229 @@ LIMIT 1`,
         ).resolves.toMatchObject({ feedbackId: 'index-feedback-kept', reviewStatus: 'reviewed' });
         expect((await storage.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['index-feedback-kept']);
       } finally {
+        await client.close();
+      }
+    });
+
+    it('ignores unapplied requests after a failed delete and converges on retry', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const requestsFor = async (id: string) => {
+        const result = await client.query({
+          query: `SELECT signal, lastAppliedAt > toDateTime64(0, 3) AS applied
+                  FROM ${TABLE_DELETION_REQUESTS} FINAL
+                  WHERE has(predicateValues, {id:String}) ORDER BY requestedAt`,
+          query_params: { id },
+          format: 'JSONEachRow',
+        });
+        return (await result.json()) as Array<{ signal: string; applied: number }>;
+      };
+
+      try {
+        const flaky = new ObservabilityStorageClickhouseVNext({ client });
+        await flaky.init();
+        await flaky.createFeedback({
+          feedback: {
+            feedbackId: 'unapplied-feedback-1',
+            timestamp: new Date('2026-09-01T12:00:01Z'),
+            traceId: 'unapplied-trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 1,
+            comment: 'still visible',
+            experimentId: null,
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            metadata: null,
+          },
+        });
+
+        // Request insert succeeds, lightweight DELETE fails.
+        const originalCommand = client.command.bind(client);
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          const query = (args as { query: string }).query;
+          if (/^\s*DELETE FROM/i.test(query)) throw new Error('simulated delete failure');
+          return originalCommand(args);
+        });
+        try {
+          await expect(
+            flaky.deleteFeedback({
+              feedbackIds: ['unapplied-feedback-1'],
+              organizationId: 'org-1',
+              resourceId: 'resource-1',
+            }),
+          ).rejects.toThrow('simulated delete failure');
+        } finally {
+          spy.mockRestore();
+        }
+
+        expect(await requestsFor('unapplied-feedback-1')).toEqual([{ signal: 'feedback', applied: 0 }]);
+        expect((await flaky.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['unapplied-feedback-1']);
+
+        // The failed request does not block the update up front. The update's
+        // post-write check finds it and retries the delete, which now succeeds.
+        await expect(
+          flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+        expect((await flaky.listFeedback({})).feedback).toEqual([]);
+        expect((await requestsFor('unapplied-feedback-1')).map(r => r.applied)).toEqual([0, 1]);
+        await expect(
+          flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+
+        // Scores and traces mark their requests applied too.
+        await flaky.deleteScores({ scoreIds: ['applied-score-1'], organizationId: 'org-1', resourceId: 'resource-1' });
+        await flaky.batchDeleteTraces({ traceIds: ['applied-trace-1'] });
+        expect(await requestsFor('applied-score-1')).toEqual([{ signal: 'scores', applied: 1 }]);
+        expect(await requestsFor('applied-trace-1')).toEqual([{ signal: 'traces', applied: 1 }]);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('does not recreate feedback when a review update lands between the delete and the applied mark', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const gate = () => {
+        let open!: () => void;
+        const opened = new Promise<void>(resolve => (open = resolve));
+        return { open, opened };
+      };
+      // Update pauses at its pre-write guard until the first DELETE has run;
+      // the delete pauses before its applied mark until the update has returned.
+      const updateGuard = gate();
+      const appliedMark = gate();
+      const originalQuery = client.query.bind(client);
+      const originalInsert = client.insert.bind(client);
+      let guardCalls = 0;
+      let appliedMarks = 0;
+      const querySpy = vi.spyOn(client, 'query').mockImplementation(async args => {
+        const query = (args as { query: string }).query;
+        if (query.includes('has(predicateValues') && guardCalls++ === 0) await updateGuard.opened;
+        return originalQuery(args);
+      });
+      const insertSpy = vi.spyOn(client, 'insert').mockImplementation(async args => {
+        const row = (args as { table: string; values: Array<{ lastAppliedAt?: string }> }).values[0];
+        if (
+          (args as { table: string }).table === TABLE_DELETION_REQUESTS &&
+          row?.lastAppliedAt !== '1970-01-01T00:00:00.000Z' &&
+          appliedMarks++ === 0
+        ) {
+          await appliedMark.opened;
+        }
+        return originalInsert(args);
+      });
+
+      try {
+        const racing = new ObservabilityStorageClickhouseVNext({ client });
+        await racing.init();
+        await racing.createFeedback({
+          feedback: {
+            feedbackId: 'race-feedback-1',
+            timestamp: new Date('2026-09-01T12:00:01Z'),
+            traceId: 'race-trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 1,
+            comment: 'racing',
+            experimentId: null,
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            metadata: null,
+          },
+        });
+
+        const update = racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' });
+        await vi.waitFor(() => expect(guardCalls).toBe(1));
+        const deletion = racing.deleteFeedback({
+          feedbackIds: ['race-feedback-1'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+        await vi.waitFor(async () => {
+          const rows = (await originalQuery({
+            query: `SELECT count() AS c FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId = 'race-feedback-1'`,
+            format: 'JSONEachRow',
+          }).then(r => r.json())) as Array<{ c: number | string }>;
+          expect(Number(rows[0]?.c)).toBe(0);
+        });
+
+        updateGuard.open();
+        await expect(update).rejects.toThrow('Feedback record not found');
+        // The first request is still pending. The update's replacement row was
+        // written after the DELETE, so its post-write check re-ran the delete.
+        expect((await racing.listFeedback({})).feedback).toEqual([]);
+
+        appliedMark.open();
+        await deletion;
+        expect((await racing.listFeedback({})).feedback).toEqual([]);
+        await expect(
+          racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+      } finally {
+        updateGuard.open();
+        appliedMark.open();
+        querySpy.mockRestore();
+        insertSpy.mockRestore();
+        await client.close();
+      }
+    });
+
+    it('publishes review updates through the delta cursor', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const feedback = {
+        feedbackId: 'delta-wiring-feedback-1',
+        timestamp: new Date('2026-09-01T12:00:03Z'),
+        traceId: 'delta-wiring-trace-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+        metadata: null,
+      } as const;
+      const publishedRows = async () => {
+        const result = await client.query({
+          query: `SELECT count() AS rows FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE feedbackId = {feedbackId:String}`,
+          query_params: { feedbackId: feedback.feedbackId },
+          format: 'JSONEachRow',
+        });
+        return Number(((await result.json()) as Array<{ rows: string }>)[0]?.rows);
+      };
+      const enabled = coreFeatures.has('observability-delta-polling');
+
+      try {
+        coreFeatures.add('observability-delta-polling');
+        const store = new ObservabilityStorageClickhouseVNext({ client });
+        await store.init();
+        await store.createFeedback({ feedback });
+        const cursor = (await store.listFeedback({ mode: 'delta' })).deltaCursor!;
+
+        await store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' });
+
+        expect((await store.listFeedback({ mode: 'delta', after: cursor })).feedback).toMatchObject([
+          { feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' },
+        ]);
+        // The insert materialized view publishes the replacement row.
+        expect(await publishedRows()).toBe(2);
+      } finally {
+        if (enabled) coreFeatures.add('observability-delta-polling');
+        else coreFeatures.delete('observability-delta-polling');
         await client.close();
       }
     });

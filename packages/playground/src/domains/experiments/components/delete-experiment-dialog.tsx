@@ -2,9 +2,9 @@
 
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Trash2 } from 'lucide-react';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 export interface DeleteExperimentDialogProps {
   open: boolean;

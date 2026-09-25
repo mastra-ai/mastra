@@ -138,6 +138,10 @@
   --surface-rim: oklch(100% 0 0deg / 5%);
   --surface-rim-focus: oklch(100% 0 0deg / 14%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 22%), 0 2px 3px -2px oklch(0% 0 0deg / 14%);
+  --dialog: var(--card);
+  --field-on-surface: var(--gray-1);
+  --field-rim-on-surface: oklch(100% 0 0deg / 5%);
+  --field-rim-focus-on-surface: oklch(100% 0 0deg / 14%);
   --elevation-overlay:
     0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%), 0 8px 8px oklch(0% 0 0deg / 10%);
 }
@@ -164,6 +168,10 @@ html.light {
   --surface-rim: oklch(0% 0 0deg / 8%);
   --surface-rim-focus: oklch(0% 0 0deg / 18%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 5%), 0 1px 3px -2px oklch(0% 0 0deg / 4%);
+  --dialog: var(--background);
+  --field-on-surface: var(--background-3);
+  --field-rim-on-surface: oklch(0% 0 0deg / 14%);
+  --field-rim-focus-on-surface: oklch(0% 0 0deg / 32%);
   --elevation-overlay:
     0 2px 4px -1px oklch(0% 0 0deg / 8%), 0 4px 8px -2px oklch(0% 0 0deg / 6%), 0 8px 16px -4px oklch(0% 0 0deg / 6%);
 }

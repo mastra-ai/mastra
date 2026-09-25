@@ -53,8 +53,8 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
-import { CachingPubSub } from '@mastra/core/events';
-import type { Event, PubSub } from '@mastra/core/events';
+import { CachingPubSub, PubSub } from '@mastra/core/events';
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
@@ -71,30 +71,66 @@ import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
-class InngestWorkflowCachingPubSub extends CachingPubSub {
-  override publish(
-    topic: string,
-    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
-    options?: { localOnly?: boolean },
-  ): Promise<void> {
-    if (topic.startsWith('workflow.events.v2.')) {
-      return super.publish(topic, event, { ...options, localOnly: true });
-    }
+class InngestAgentPubSubRouter extends PubSub {
+  constructor(
+    private readonly defaultPubsub: PubSub,
+    private readonly getAgentPubsub: () => PubSub,
+  ) {
+    super();
+  }
 
-    return super.publish(topic, event, options);
+  private resolve(topic: string): PubSub {
+    if (topic.startsWith('agent.stream.') || topic.startsWith('agent.control.')) {
+      return this.getAgentPubsub();
+    }
+    return this.defaultPubsub;
+  }
+
+  publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
+    return this.resolve(topic).publish(topic, event, options);
+  }
+
+  subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    return this.resolve(topic).subscribe(topic, cb, options);
+  }
+
+  unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).unsubscribe(topic, cb);
+  }
+
+  flush(): Promise<void> {
+    return Promise.all([this.defaultPubsub.flush(), this.getAgentPubsub().flush()]).then(() => undefined);
+  }
+
+  clearTopic(topic: string): Promise<void> {
+    return this.resolve(topic).clearTopic(topic);
+  }
+
+  get supportedModes() {
+    const agentModes = this.getAgentPubsub().supportedModes;
+    return this.defaultPubsub.supportedModes.filter(mode => agentModes.includes(mode));
+  }
+
+  get supportsNativeBatching(): boolean {
+    return this.defaultPubsub.supportsNativeBatching && this.getAgentPubsub().supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
+  }
+
+  getHistory(topic: string, offset?: number): Promise<Event[]> {
+    return this.resolve(topic).getHistory(topic, offset);
+  }
+
+  subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).subscribeWithReplay(topic, cb);
+  }
+
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).subscribeFromOffset(topic, offset, cb);
   }
 }
-
-/**
- * Internal sentinel used by {@link InngestAgent.generate} and
- * {@link InngestAgent.resumeGenerate} to ask the underlying `stream()` /
- * `resume()` implementation to close the consumer stream on a SUSPENDED
- * event, so `getFullOutput()` resolves promptly with `finishReason:
- * 'suspended'` instead of waiting for FINISH/ERROR.
- *
- * Modelled on `CLOSE_ON_SUSPEND` in core `DurableAgent`.
- */
-const CLOSE_ON_SUSPEND = Symbol('mastra.durable.inngest.closeOnSuspend');
 
 /**
  * Internal symbol used by `generate()` / `resumeGenerate()` to tear down the
@@ -139,7 +175,7 @@ export interface CreateInngestAgentOptions {
   /**
    * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
    * InngestAgent (a warning is logged if set). Inngest's step memoization and
-   * replay own durability, so InngestAgent pins a `suspended`-only snapshot
+   * replay own durability, so InngestAgent pins a suspended-and-terminal snapshot
    * policy — Mastra snapshots exist purely for human-in-the-loop resume.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
@@ -147,6 +183,9 @@ export interface CreateInngestAgentOptions {
    * Inngest function-level retries for the durable agent loop function. Inngest
    * re-invokes the function when an SDK request fails (e.g. the process restarts
    * mid-run), replaying memoized steps. Defaults to 0.
+   *
+   * All durable agents share the same loop functions, so the value from the first
+   * agent registered with Mastra applies to every durable agent.
    */
   retries?: InngestFlowControlConfig['retries'];
 }
@@ -266,6 +305,16 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
    * customise.
    */
   untilIdle?: boolean | { maxIdleMs?: number };
+  /**
+   * Whether this caller's stream closes when the run suspends (e.g. for tool
+   * approval). Defaults to `false`: the stream stays open across suspension for
+   * a same-reader resume.
+   *
+   * Set to `true` so `fullStream` / `getFullOutput()` resolve at the suspension
+   * boundary instead of hanging. `resumeStream()` / `resume()` always return a
+   * fresh stream.
+   */
+  closeOnSuspend?: boolean;
   /** @internal */
   _skipBgTaskWait?: boolean;
 }
@@ -313,6 +362,8 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
    * tool call is suspended concurrently.
    */
   toolCallId?: string;
+  /** See `InngestAgentStreamOptions.closeOnSuspend`. Defaults to `false`. */
+  closeOnSuspend?: boolean;
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   /**
    * Per-call actor signal forwarded to FGA checks and tool execution. Must be
@@ -430,6 +481,12 @@ export interface InngestAgent<TOutput = undefined> {
    * @internal
    */
   getDurableWorkflows(): Workflow<any, any, any, any, any, any, any>[];
+
+  /**
+   * Storage workflow name of the agentic-loop snapshot (`inngest:durable-agentic-loop`).
+   * Server handlers and suspended-run discovery use it to locate this agent's runs.
+   */
+  readonly durableLoopWorkflowName: string;
 
   /**
    * Set the Mastra instance for observability.
@@ -599,7 +656,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     console.warn(
       `InngestAgent '${idOverride ?? agent.id}': ignoring the shouldPersistSnapshot option. ` +
         `Inngest's step memoization/replay owns durability, so InngestAgent always persists ` +
-        `'suspended' snapshots only (for human-in-the-loop resume).`,
+        `only 'suspended' and terminal snapshots (for human-in-the-loop resume).`,
     );
   }
 
@@ -667,21 +724,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     return history.length;
   }
 
-  // Route workflow event publishes through a CachingPubSub backed by the same cache
-  // as the agent's pubsub. Each InngestWorkflow function (including nested ones)
-  // passes its own workflow-local InngestPubSub as `defaultPubsub`, which we wrap.
-  // This keeps per-workflow event channels (`workflow:<workflowId>:<runId>`)
-  // workflow-local while sharing the cache that `observe()` reads from for
-  // agent-stream replay.
+  // Route agent stream and control events through the exact PubSub exposed to
+  // durable-agent consumers. All other topics keep using each workflow's local
+  // InngestPubSub so ordinary workflow channel isolation is preserved.
   // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
-  (workflow as unknown as InngestWorkflow).__setPubsubFactory(defaultPubsub => {
-    // If the caller already supplied a CachingPubSub upstream, defer to it.
-    if (defaultPubsub instanceof CachingPubSub) return defaultPubsub;
-    // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
-    // events and agent.stream events share the same history backend.
-    getPubsub();
-    return new InngestWorkflowCachingPubSub(defaultPubsub, resolveCache());
-  });
+  const inngestWorkflow = workflow as unknown as InngestWorkflow;
+  inngestWorkflow.__setPubsubFactory(defaultPubsub => new InngestAgentPubSubRouter(defaultPubsub, getPubsub));
+  inngestWorkflow.__setEmitWorkflowEvents(false);
 
   // Lazily resolve cache
   function getCache(): MastraServerCache | undefined {
@@ -780,11 +829,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | '__fork'
     | 'getDurableWorkflows'
+    | 'durableLoopWorkflowName'
     | '__setMastra'
   > = {
     get id() {
       return agentId;
     },
+
+    durableLoopWorkflowName: InngestDurableStepIds.AGENTIC_LOOP,
 
     get name() {
       return agentName;
@@ -923,7 +975,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               await (streamOptions.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
             }
           : undefined,
-        closeOnSuspend: (streamOptions as any)?.[CLOSE_ON_SUSPEND] === true,
+        closeOnSuspend: streamOptions?.closeOnSuspend ?? false,
       });
 
       // 3. Wait for subscription to be established, then trigger workflow
@@ -1111,7 +1163,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeResumeRegistry();
           }
         },
-        closeOnSuspend: (resumeOptions as any)?.[CLOSE_ON_SUSPEND] === true,
+        closeOnSuspend: resumeOptions?.closeOnSuspend ?? false,
       });
 
       // Load the workflow snapshot to build proper resume data
@@ -1345,7 +1397,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       void untilIdle;
       const streamOpts = {
         ...rest,
-        [CLOSE_ON_SUSPEND]: true,
+        closeOnSuspend: true,
         __methodType: 'generate',
       } as InngestAgentStreamOptions<TOutput>;
       const result = await proxyRef!.stream(messages, streamOpts);
@@ -1388,7 +1440,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       void untilIdle;
       const result = await proxyRef!.resume(runId, resumeData, {
         ...rest,
-        [CLOSE_ON_SUSPEND]: true,
+        closeOnSuspend: true,
       } as InngestAgentResumeOptions<TOutput>);
 
       let suspended = false;
@@ -1424,7 +1476,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const result = await proxyRef!.resume(runId, resumeData, {
         ...resumeOptions,
         // Close the stream when the run re-suspends so callers' loops terminate.
-        [CLOSE_ON_SUSPEND]: true,
+        closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
       } as InngestAgentResumeOptions<TOutput>);
       return result.output;
     },

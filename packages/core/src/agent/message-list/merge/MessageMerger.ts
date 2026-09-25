@@ -1,6 +1,6 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
-import { stampPart } from '../utils/stamp-part';
+import { stampPart, stampToolPartUpdate } from '../utils/stamp-part';
 
 /**
  * MessageMerger - Handles complex logic for merging assistant messages
@@ -120,6 +120,7 @@ export class MessageMerger {
         const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
 
         if (existingCallToolInvocation) {
+          const before = existingCallPart.toolInvocation;
           if (part.toolInvocation.state === 'result') {
             // Update the existing tool-call part with the result
             existingCallPart.toolInvocation = {
@@ -132,6 +133,7 @@ export class MessageMerger {
                 ...part.toolInvocation.args,
               },
             };
+            stampToolPartUpdate(existingCallPart, before, part.updatedAt);
             // Preserve providerMetadata from the result part (e.g. toModelOutput stored at mastra.modelOutput)
             if (part.providerMetadata) {
               existingCallPart.providerMetadata = {
@@ -170,6 +172,7 @@ export class MessageMerger {
                 ...part.toolInvocation.args,
               },
             };
+            stampToolPartUpdate(existingCallPart, before, part.updatedAt);
 
             if (part.providerMetadata) {
               existingCallPart.providerMetadata = {

@@ -297,7 +297,7 @@ export interface SessionMachinery {
     agent?: Agent;
     resourceId: string;
     threadId: string;
-  }): Promise<AgentThreadSubscription<any>>;
+  }): Promise<AgentThreadSubscription<any, true>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
     requestContext?: RequestContext;
@@ -1039,7 +1039,7 @@ export class SessionThread {
  */
 export class SessionStream {
   /** The live subscription to the active thread, or null when none is open. */
-  #subscription: AgentThreadSubscription<any> | null = null;
+  #subscription: AgentThreadSubscription<any, true> | null = null;
   /** Agent that created the live subscription, or null when none is open. */
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
@@ -1084,7 +1084,7 @@ export class SessionStream {
     agent,
     key,
   }: {
-    subscription: AgentThreadSubscription<any>;
+    subscription: AgentThreadSubscription<any, true>;
     agent?: Agent;
     key: string;
   }): void {
@@ -1094,7 +1094,7 @@ export class SessionStream {
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
-  getAgent({ subscription }: { subscription: AgentThreadSubscription<any> }): Agent | null {
+  getAgent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): Agent | null {
     return this.#subscription === subscription ? this.#agent : null;
   }
 
@@ -1104,7 +1104,7 @@ export class SessionStream {
   }
 
   /** Whether `subscription` is the one currently adopted (identity check). */
-  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any> }): boolean {
+  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): boolean {
     return this.#subscription === subscription;
   }
 
@@ -3408,7 +3408,7 @@ export class Session<TState = unknown> {
    * Drive the run loop for a subscribed thread stream: process each run's chunks
    * and finalize it. Delegates to the per-session run engine.
    */
-  processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
+  processSubscribedThreadStream(subscription: AgentThreadSubscription<any, true>): Promise<void> {
     return this.runEngine.processSubscribedThreadStream(subscription);
   }
 
@@ -3638,6 +3638,34 @@ export class Session<TState = unknown> {
     } = {},
   ): void {
     this.displayState.clearPendingApprovals(this.approval.cancel(filter));
+  }
+
+  /**
+   * Answer an approval that is stored with a suspended run but not parked on this
+   * session's gate, e.g. a card rebuilt from thread history after a restart.
+   * Resolves the run that owns `toolCallId` and resumes it by run id. Throws when
+   * no suspended run on the current thread is waiting on that tool call.
+   */
+  async respondToPersistedToolApproval({
+    toolCallId,
+    approved,
+    requestContext,
+  }: {
+    toolCallId: string;
+    approved: boolean;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const threadId = this.thread.getId();
+    const resourceId = this.identity.getResourceId();
+    if (!threadId) throw new Error('Cannot answer a tool approval without a current thread');
+    const { runs } = await this.machinery.getAgent().listSuspendedRuns({ threadId, resourceId });
+    const run = runs.find(candidate =>
+      candidate.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId),
+    );
+    if (!run) throw new Error(`No suspended run is waiting on tool call ${toolCallId}`);
+    const identity = { toolCallId, requestContext, runId: run.runId, threadId, resourceId };
+    if (approved) await this.approveToolCall(identity);
+    else await this.declineToolCall(identity);
   }
 
   // ===========================================================================
@@ -4379,48 +4407,50 @@ export class Session<TState = unknown> {
    * Approve a parked tool call: drive the agent to execute it. Throws when there
    * is no active run.
    *
-   * `binding` resolves the call against the run that parked it rather than the
-   * session's current thread/run/resource. The run engine passes its stream
-   * state's own binding because the session can switch thread (or be re-scoped
-   * to another resource) while a run is still in flight, and the agent locates
-   * the suspended run by `threadId`/`resourceId` — resolving with the
-   * newly-bound identity would throw or land on the wrong thread.
+   * `runId`/`threadId`/`resourceId` resolve the call against the run that
+   * parked it rather than the session's current thread/run/resource. The run
+   * engine passes its stream state's own binding because the session can switch
+   * thread (or be re-scoped to another resource) while a run is still in
+   * flight, and the agent locates the suspended run by `threadId`/`resourceId`
+   * — resolving with the newly-bound identity would throw or land on the wrong
+   * thread.
    *
    * The owning agent is read from the run scope first (the
    * {@link SUSPENDED_RUN_AGENT_KEY} invariant the resume path uses), then
-   * `binding.agent` for callers that hold no run scope, then the session's
-   * current agent. `binding.abortSignal` pins the run's own signal, because a
-   * successor run replaces the session's abort controller.
+   * `agent` for callers that hold no run scope, then the session's current
+   * agent. `abortSignal` pins the run's own signal, because a successor run
+   * replaces the session's abort controller.
    */
   async approveToolCall({
     toolCallId,
     requestContext: requestContextInput,
-    binding,
+    runId: inputRunId,
+    threadId: inputThreadId,
+    resourceId = this.identity.getResourceId(),
+    agent: inputAgent,
+    abortSignal: inputAbortSignal,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
-    binding?: {
-      threadId?: string;
-      runId?: string;
-      resourceId?: string;
-      agent?: Agent;
-      abortSignal?: AbortSignal;
-    };
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    agent?: Agent;
+    abortSignal?: AbortSignal;
   }): Promise<void> {
-    const runId = binding?.runId ?? this.run.getRunId();
+    const runId = inputRunId ?? this.run.getRunId();
+    const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
 
     const agent =
-      this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? binding?.agent ?? this.machinery.getAgent();
+      this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = binding?.threadId ?? this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
-    const resourceId = binding?.resourceId ?? this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -4429,7 +4459,7 @@ export class Session<TState = unknown> {
       approved: true,
       requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
-      abortSignal: binding?.abortSignal ?? this.run.ensureAbortController().signal,
+      abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
     });
@@ -4439,41 +4469,43 @@ export class Session<TState = unknown> {
    * Decline a parked tool call: drive the agent to reject it. Throws when there
    * is no active run.
    *
-   * `binding` follows the same contract as {@link approveToolCall}: the run
-   * engine resolves declined calls against the run that parked them, so a
-   * thread switch mid-run cannot redirect the decline to another thread.
+   * `runId`/`threadId`/`resourceId` follow the same contract as
+   * {@link approveToolCall}: the run engine resolves declined calls against the
+   * run that parked them, so a thread switch mid-run cannot redirect the
+   * decline to another thread.
    */
   async declineToolCall({
     toolCallId,
     requestContext: requestContextInput,
     declineContext,
-    binding,
+    runId: inputRunId,
+    threadId: inputThreadId,
+    resourceId = this.identity.getResourceId(),
+    agent: inputAgent,
+    abortSignal: inputAbortSignal,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
-    binding?: {
-      threadId?: string;
-      runId?: string;
-      resourceId?: string;
-      agent?: Agent;
-      abortSignal?: AbortSignal;
-    };
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    agent?: Agent;
+    abortSignal?: AbortSignal;
   }): Promise<void> {
-    const runId = binding?.runId ?? this.run.getRunId();
+    const runId = inputRunId ?? this.run.getRunId();
+    const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
 
     const agent =
-      this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? binding?.agent ?? this.machinery.getAgent();
+      this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = binding?.threadId ?? this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
-    const resourceId = binding?.resourceId ?? this.identity.getResourceId();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -4483,7 +4515,7 @@ export class Session<TState = unknown> {
       declineContext,
       requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
-      abortSignal: binding?.abortSignal ?? this.run.ensureAbortController().signal,
+      abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
     });

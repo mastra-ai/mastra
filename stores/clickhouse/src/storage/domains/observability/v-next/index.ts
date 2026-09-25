@@ -132,7 +132,7 @@ import {
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export { TABLE_DELETION_REQUESTS } from './ddl';
-export { recordDeletionRequest } from './deletion-requests';
+export { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
@@ -938,21 +938,37 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       return [
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
       ] as const;
     }
 
     return [
       'metrics',
       'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
       'delta-polling',
       'trace-query',
+      'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
+      'feedback',
     ] as const;
   }
 
