@@ -35,6 +35,8 @@ describe('MessageList input file data', () => {
       const list = addUserFile(part);
 
       expect(storedFileData(list)).toBe(expected);
+      const uiFile = list.get.all.aiV5.ui()[0]!.parts.find(p => p.type === 'file') as { url: string } | undefined;
+      expect(uiFile?.url).toBe(expected);
     },
   );
 
