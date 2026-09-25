@@ -1,5 +1,53 @@
 # @mastra/core
 
+## 1.72.0-alpha.2
+
+### Minor Changes
+
+- Added support for resolving channel providers dynamically. The `channels` option on the `Mastra` constructor now also accepts a resolver function, so channel connections added on the Mastra platform show up on a running server without a redeploy. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { channels } from '@mastra/connect';
+
+  export const mastra = new Mastra({
+    channels: await channels({ projectId: 'my-project' }),
+  });
+  ```
+
+  A resolver exposes its webhook and OAuth routes up front through `getRoutes()`, and the providers themselves are resolved at runtime. Use the new `mastra.resolveChannels()` method to get the current provider map; `getChannelProviders()` keeps returning the latest resolved snapshot. Static `channels` records keep working unchanged.
+
+- Added an opt-in `summary` flag to `listWorkflowRuns`. When set, storage adapters may return only `{ status, timestamp }` for each run snapshot instead of the full snapshot. ([#25135](https://github.com/mastra-ai/mastra/pull/25135))
+
+  ```ts
+  const { runs } = await workflow.listWorkflowRuns({ perPage: 20, page: 0, summary: true });
+  ```
+
+- Storage adapters that support the new `trace-aggregate` capability can return aggregated trace results through `ObservabilityStorage.aggregateTraces()`, which executes a `TrustedTraceAggregatePlan` and returns a `TraceAggregateResponse`. The capability is declared alongside `trace-query`. Adapters that do not support it reject the call with a `MastraError` whose id is `OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED`. ([#25124](https://github.com/mastra-ai/mastra/pull/25124))
+
+  ```ts
+  import { parseTraceAggregateRequest, planTraceAggregate } from '@mastra/core/storage';
+
+  const plan = planTraceAggregate(
+    parseTraceAggregateRequest({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      measures: ['count'],
+    }),
+  );
+
+  const response = await storage.aggregateTraces(plan);
+  ```
+
+### Patch Changes
+
+- Fixed saved dynamic workflows losing `.map()` entries that use `initData: true`. These mappings now keep reading from the workflow's initial input after the workflow is saved and loaded again, the same as they do in memory. Workflows saved before this fix need to be saved again. ([#25152](https://github.com/mastra-ai/mastra/pull/25152))
+
+- Stored agents backed by FilesystemStore now retain durable execution settings. ([#25123](https://github.com/mastra-ai/mastra/pull/25123))
+
+- Documented two `aggregateTraces()` result rules: null dimension values sort last in both sort directions, and a time range with no matching traces returns `rows: []` rather than a single zero-valued row. ([#25016](https://github.com/mastra-ai/mastra/pull/25016))
+
+- Fixed suspended tool calls losing their suspension details when stored messages are converted to AI SDK v6 or v7 UI messages. `toAISdkMessages(messages, { version: 'v6' })` and `{ version: 'v7' }` now include the `data-tool-call-suspended` part (with the suspend payload and resume schema), matching the v5 output, so suspended tools stay resumable after a page reload. ([#25134](https://github.com/mastra-ai/mastra/pull/25134))
+
 ## 1.72.0-alpha.1
 
 ### Minor Changes

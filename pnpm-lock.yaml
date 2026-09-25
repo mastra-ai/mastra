@@ -4611,9 +4611,18 @@ importers:
 
   packages/connect:
     dependencies:
+      '@mastra/discord':
+        specifier: workspace:^
+        version: link:../../channels/discord
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
+      '@mastra/slack':
+        specifier: workspace:^
+        version: link:../../channels/slack
+      '@mastra/telegram':
+        specifier: workspace:^
+        version: link:../../channels/telegram
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4624,15 +4633,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/discord':
-        specifier: workspace:*
-        version: link:../../channels/discord
-      '@mastra/slack':
-        specifier: workspace:*
-        version: link:../../channels/slack
-      '@mastra/telegram':
-        specifier: workspace:*
-        version: link:../../channels/telegram
       prettier:
         specifier: 3.9.5
         version: 3.9.5

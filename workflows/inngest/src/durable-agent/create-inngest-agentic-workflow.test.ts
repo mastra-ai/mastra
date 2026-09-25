@@ -324,3 +324,21 @@ describe('createInngestDurableAgenticWorkflow bookkeeping (#24731)', () => {
     expect(iterationWorkflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
   });
 });
+
+describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
+  it('persists suspended and terminal snapshots so finished runs are not resumable', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-snapshot-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    for (const wf of [workflow, iterationWorkflow]) {
+      const persist = (workflowStatus: string) => wf.options.shouldPersistSnapshot({ workflowStatus, stepResults: {} });
+      for (const status of ['suspended', 'success', 'failed', 'canceled', 'bailed', 'tripwire']) {
+        expect(persist(status)).toBe(true);
+      }
+      for (const status of ['running', 'waiting', 'pending']) {
+        expect(persist(status)).toBe(false);
+      }
+    }
+  });
+});

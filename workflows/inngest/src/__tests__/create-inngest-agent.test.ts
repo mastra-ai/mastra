@@ -6,7 +6,7 @@
  * the same workflow infrastructure with complete Inngest integration.
  */
 
-import { Agent } from '@mastra/core/agent';
+import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import {
   AGENT_CONTROL_TOPIC,
   AGENT_STREAM_TOPIC,
@@ -112,6 +112,23 @@ describe('createInngestAgent factory function', () => {
     expect(Array.isArray(workflows)).toBe(true);
     expect(workflows.length).toBe(1);
     expect(workflows[0].id).toBe(InngestDurableStepIds.AGENTIC_LOOP);
+  });
+
+  // Issue #25154: server approval guards and suspended-run discovery look up
+  // snapshots under this name, so it must match the registered loop workflow.
+  it('advertises its namespaced loop workflow name', () => {
+    const agent = new Agent({
+      id: 'loop-name-test',
+      name: 'Loop Name Test',
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    expect(durableAgent.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    expect(durableAgent.durableLoopWorkflowName).toBe(durableAgent.getDurableWorkflows()[0].id);
+    expect(isDurableAgentLike(durableAgent)).toBe(true);
   });
 
   it('should prepare for durable execution', async () => {
@@ -1178,6 +1195,34 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('rejects resume() on a finished run without re-running the suspended tool', async () => {
+      // #24796: finished runs used to keep their stale suspended snapshot, so a
+      // second resume re-executed the (previously declined) tool.
+      vi.useFakeTimers();
+      const durableAgent = makeAgentWithSnapshot('resume-finished', {
+        value: {},
+        context: {},
+        status: 'success',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-finished-run';
+
+      try {
+        const pending = durableAgent.resume(runId, { approved: true });
+        const assertion = expect(pending).rejects.toThrow(
+          `Cannot resume run ${runId}: it is not suspended (status: success).`,
+        );
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
       const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
         value: {},
@@ -1502,11 +1547,12 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
 
-      // The option must not leak into the workflows: the pinned suspended-only
-      // policy stays in effect on every durable workflow (Inngest's replay
-      // owns durability; Mastra snapshots exist purely for HITL resume).
-      // Probe the complete WorkflowRunStatus matrix so no status can silently
-      // start persisting.
+      // The option must not leak into the workflows: the pinned policy stays in
+      // effect on every durable workflow (Inngest's replay owns durability;
+      // Mastra persists suspended snapshots for HITL resume and terminal ones so
+      // finished runs are not resumable — #24796). Probe the complete
+      // WorkflowRunStatus matrix so no status can silently start persisting.
+      const persisted = new Set(['suspended', 'success', 'failed', 'canceled', 'bailed', 'tripwire']);
       const allStatuses = [
         'running',
         'success',
@@ -1525,7 +1571,7 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
       for (const workflow of workflows) {
         const predicate = (workflow as any).options.shouldPersistSnapshot;
         for (const workflowStatus of allStatuses) {
-          expect(predicate({ stepResults: {}, workflowStatus })).toBe(workflowStatus === 'suspended');
+          expect(predicate({ stepResults: {}, workflowStatus })).toBe(persisted.has(workflowStatus));
         }
       }
     } finally {

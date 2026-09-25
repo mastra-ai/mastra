@@ -32,9 +32,11 @@ describe('FilesystemAgentsStorage', () => {
         name: 'Stored Agent',
         instructions: 'Help users.',
         model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+        durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
       },
     });
     const version = await storage.getLatestVersion('stored-agent');
+    expect(version?.durable).toEqual({ maxSteps: 25, cleanupTimeoutMs: 0 });
 
     await storage.update({ id: 'stored-agent', status: 'published', activeVersionId: version?.id });
 
@@ -43,6 +45,7 @@ describe('FilesystemAgentsStorage', () => {
       name: 'Stored Agent',
       instructions: 'Help users.',
       model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+      durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
     });
     expect(existsSync(join(storageDir, 'agents', 'stored-agent.json'))).toBe(false);
   });

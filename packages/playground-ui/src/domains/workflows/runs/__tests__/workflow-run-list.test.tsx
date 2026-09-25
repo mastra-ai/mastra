@@ -10,7 +10,13 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRecentRuns } from '../workflow-run-list';
-import { emptyWorkflowRuns, oneSuccessfulRun, runsWithInput, runsWithResource } from './fixtures/workflow-runs';
+import {
+  emptyWorkflowRuns,
+  oneSuccessfulRun,
+  runWithInputById,
+  runsWithInput,
+  runsWithResource,
+} from './fixtures/workflow-runs';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -82,7 +88,22 @@ function renderRunList(runId?: string) {
 }
 
 function stubRuns(response: ListWorkflowRunsResponse) {
-  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json(response)));
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, ({ request }) => {
+      if (new URL(request.url).searchParams.get('summary') !== 'true') {
+        return HttpResponse.json({ error: 'expected summary=true' }, { status: 400 });
+      }
+      return HttpResponse.json(response);
+    }),
+  );
+}
+
+function stubRunById() {
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runWithInputById.runId}`, () =>
+      HttpResponse.json(runWithInputById),
+    ),
+  );
 }
 
 afterEach(cleanup);
@@ -156,12 +177,13 @@ describe('WorkflowRecentRuns', () => {
 
   it('shows the input preview only for the active run', async () => {
     stubRuns(runsWithInput);
+    stubRunById();
 
     renderRunList('run-with-input');
 
     const link = await screen.findByRole('link', { name: /run-with-input/ });
     expect(within(link).getByTitle('run-with-input')).not.toBeNull();
-    expect(within(link).getByText('{"city":"Paris"}')).not.toBeNull();
+    expect(await within(link).findByText('{"city":"Paris"}')).not.toBeNull();
   });
 
   it('does not show an input preview for inactive runs', async () => {

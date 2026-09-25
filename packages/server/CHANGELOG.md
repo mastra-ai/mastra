@@ -1,5 +1,26 @@
 # @mastra/server
 
+## 1.72.0-alpha.2
+
+### Minor Changes
+
+- Added a `summary` query parameter to `GET /workflows/:workflowId/runs`. With `summary=true`, each run snapshot is reduced to `{ status, timestamp }`, keeping run lists small when snapshots are large. ([#25135](https://github.com/mastra-ai/mastra/pull/25135))
+
+  ```
+  GET /api/workflows/my-workflow/runs?summary=true
+  ```
+
+### Patch Changes
+
+- Fixed concurrent A2A `message/stream` follow-ups to a task waiting for input starting duplicate agent runs. Only one follow-up now resumes the suspended run; the others wait and receive the final task, so task state and history are no longer overwritten. ([#25162](https://github.com/mastra-ai/mastra/pull/25162))
+
+- Stored agents now retain durable execution settings, and changing durability creates a new agent version. ([#25123](https://github.com/mastra-ai/mastra/pull/25123))
+
+- Channel API routes now resolve providers at request time when the Mastra instance is configured with a channel resolver, so platform connections added after boot are usable immediately. Static channel configurations behave as before. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+- Updated dependencies [[`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e)]:
+  - @mastra/core@1.72.0-alpha.2
+
 ## 1.72.0-alpha.1
 
 ### Patch Changes

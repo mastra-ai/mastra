@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { getRunResourceId, getRunTimestamp } from '../utils';
-import { useDeleteWorkflowRun, useWorkflowRuns } from '@/domains/workflows/hooks/use-workflow-runs';
+import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@/domains/workflows/hooks/use-workflow-runs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -25,7 +25,6 @@ export interface WorkflowRecentRunsProps {
 const runSnapshotSchema = z.object({
   status: z.enum(['running', 'failed', 'canceled', 'pending', 'waiting', 'paused', 'suspended', 'success']),
   timestamp: z.number().optional(),
-  context: z.object({ input: z.unknown() }),
 });
 const wrappedRunInputSchema = z.object({ output: z.unknown() });
 type RunSnapshot = z.infer<typeof runSnapshotSchema>;
@@ -37,10 +36,9 @@ function parseRunSnapshot(snapshot: WorkflowRunSnapshot): RunSnapshot | undefine
   return result.success ? result.data : undefined;
 }
 
-function formatRunInput(snapshot: RunSnapshot | undefined): string | null {
-  if (!snapshot || snapshot.context.input == null) return null;
+function formatRunInput(input: unknown): string | null {
+  if (input == null) return null;
 
-  const input = snapshot.context.input;
   const parsedString = z.string().safeParse(input);
   if (parsedString.success) return parsedString.data;
 
@@ -85,7 +83,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useWorkflowRuns(workflowId);
+  } = useWorkflowRuns(workflowId, { summary: true });
+  // The list only carries summary snapshots; the active run's input comes from the full run.
+  const { data: activeRun } = useWorkflowRun(workflowId, runId ?? '');
+  const activeRunInput = formatRunInput(activeRun?.payload);
   const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
 
   const handleDelete = async (runId: string) => {
@@ -132,7 +133,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                     {runList.map(run => {
                       const isActiveRun = run.runId === runId;
                       const snapshot = parseRunSnapshot(run.snapshot);
-                      const runInput = isActiveRun ? formatRunInput(snapshot) : null;
+                      const runInput = isActiveRun ? activeRunInput : null;
 
                       return (
                         <ThreadListItem
