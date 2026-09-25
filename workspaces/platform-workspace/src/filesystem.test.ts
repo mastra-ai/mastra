@@ -79,7 +79,7 @@ describe('PlatformFilesystem', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain('/fs/dev-bucket/a.txt?op=copy');
     expect(fetchMock.mock.calls[0]![1].body).toBe(JSON.stringify({ destination: 'b.txt' }));
     expect(String(fetchMock.mock.calls[1]![0])).toContain('/fs/dev-bucket/b.txt?op=rename');
-    expect(String(fetchMock.mock.calls[2]![0])).toContain('/fs/dev-bucket/dir/?op=mkdir');
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/fs/dev-bucket/dir?op=mkdir');
   });
 
   it('percent-encodes reserved URL characters in object key segments', async () => {
@@ -152,15 +152,33 @@ describe('PlatformFilesystem', () => {
   });
 
   it('reports prefix-only paths as directories so nested folders can be opened', async () => {
-    const fetchMock = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
-      if (init?.method === 'HEAD') return response('not found', { status: 404 });
-      const u = new URL(String(url));
-      if (u.searchParams.get('prefix') === 'foo/') {
-        return response(JSON.stringify({ contents: [{ key: 'foo/bar.md', size: 3 }], commonPrefixes: [] }), {
-          status: 200,
-        });
+    // Emulates the workspace proxy's GET dispatch (servers/workspace-proxy
+    // fs-routes): a GET only reaches the list handler when the URL path key is
+    // empty or ends with `/`. Any other key is a GetObject and 404s unless
+    // that exact object exists — folders exist only as key prefixes.
+    const objects: Record<string, string> = { 'foo/bar.md': 'abc' };
+    const list = (prefix: string) => {
+      const contents: Array<{ key: string; size: number }> = [];
+      const commonPrefixes = new Set<string>();
+      for (const [key, body] of Object.entries(objects)) {
+        if (!key.startsWith(prefix)) continue;
+        const rest = key.slice(prefix.length);
+        const slash = rest.indexOf('/');
+        if (slash === -1) contents.push({ key, size: body.length });
+        else commonPrefixes.add(`${prefix}${rest.slice(0, slash + 1)}`);
       }
-      return response(JSON.stringify({ contents: [], commonPrefixes: ['foo/'] }), { status: 200 });
+      return response(JSON.stringify({ contents, commonPrefixes: [...commonPrefixes] }), { status: 200 });
+    };
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const u = new URL(String(url));
+      const key = decodeURIComponent(u.pathname.split('/fs/dev-bucket/')[1] ?? '');
+      if (init?.method === 'HEAD') {
+        return key in objects
+          ? response(null, { status: 200, headers: { 'content-length': String(objects[key]!.length) } })
+          : response('not found', { status: 404 });
+      }
+      if (!key || key.endsWith('/')) return list(u.searchParams.get('prefix') ?? key);
+      return key in objects ? response(objects[key], { status: 200 }) : response('not found', { status: 404 });
     });
     const fs = new PlatformFilesystem({
       accessToken: 'sk_test',

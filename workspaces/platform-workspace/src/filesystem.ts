@@ -216,7 +216,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('mkdir');
-    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(`${keyFromPath(path).replace(/\/$/, '')}/`)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`, {
       method: 'POST',
       query: { op: 'mkdir' },
     });
@@ -247,15 +247,18 @@ export class PlatformFilesystem extends MastraFilesystem {
   }
 
   private async listPrefix(prefix: string, recursive?: boolean): Promise<ProxyListResponse> {
-    const response = await this._client.request(
-      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(prefix)}`,
-      {
-        query: {
-          delimiter: recursive ? undefined : '/',
-          prefix: prefix ? `${prefix.replace(/\/$/, '')}/` : undefined,
-        },
+    // The proxy only routes a GET to its list handler when the URL path key is
+    // empty or ends with `/`; a bare key like `foo` is treated as a GetObject
+    // and 404s for prefix-only folders. Always request the bucket root and
+    // pass the prefix as a query param, matching the platform API's own
+    // workspace-proxy client.
+    const normalized = prefix.replace(/\/$/, '');
+    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/`, {
+      query: {
+        delimiter: recursive ? undefined : '/',
+        prefix: normalized ? `${normalized}/` : undefined,
       },
-    );
+    });
     return (await response.json()) as ProxyListResponse;
   }
 
