@@ -393,8 +393,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 }
 
                 const branch = { type } as JSONSchema7;
-                // A string format (e.g. date-time) belongs to the string branch when one exists.
-                const formatOwner = types.includes('string') ? type === 'string' : isNumericType(type);
+                // Numeric formats (int32, double, ...) belong to numeric branches; any other format
+                // (e.g. date-time) belongs to the string branch when one exists.
+                const numericFormat =
+                  typeof prop.format === 'string' && ['int32', 'int64', 'float', 'double'].includes(prop.format);
+                const formatOwner =
+                  types.includes('string') && !numericFormat ? type === 'string' : isNumericType(type);
                 for (const keyword of [
                   ...typeSpecificKeywords(type),
                   ...(isNumericType(type) ? numericKeywords.filter(k => k !== 'format') : []),

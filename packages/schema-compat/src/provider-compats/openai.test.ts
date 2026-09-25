@@ -124,6 +124,18 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(stringBranch.format ?? stringBranch.description).toContain('date-time');
     });
 
+    it('keeps a numeric format on the integer branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { size: { type: ['string', 'integer'], format: 'int32' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { size } = result.properties;
+
+      expect(size).not.toHaveProperty('format');
+      expect(size.anyOf).toEqual([{ type: 'string' }, { type: 'integer', format: 'int32' }, { type: 'null' }]);
+    });
+
     it('still accepts an object, a string, and null through the compat validation path', async () => {
       const compatSchema = compat.processToCompatSchema(structuredClone(searchToolSchema) as any);
 
