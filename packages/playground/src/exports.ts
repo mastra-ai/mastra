@@ -7,7 +7,7 @@ export {
   type LinkComponentProps,
   type LinkComponent,
   type LinkComponentProviderProps,
-} from './lib/framework';
+} from '@mastra/playground-ui/lib/framework';
 
 export { PlaygroundQueryClient } from './lib/tanstack-query';
 export { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';

@@ -23,7 +23,7 @@ type CodeEditorProps = {
 // thin seam so this suite can focus on score-to-dataset payload preparation.
 // The dataset hooks are driven through the real @mastra/client-js + React
 // Query stack via MSW.
-vi.mock('@mastra/playground-ui/components/Select', () => ({
+vi.mock('@/ds/components/Select', () => ({
   Select: ({ children }: PropsWithChildren<SelectHTMLAttributes<HTMLSelectElement>>) => <div>{children}</div>,
   SelectTrigger: ({ children }: PropsWithChildren<HTMLAttributes<HTMLButtonElement>>) => (
     <button type="button">{children}</button>
@@ -33,11 +33,11 @@ vi.mock('@mastra/playground-ui/components/Select', () => ({
   SelectItem: ({ children }: PropsWithChildren<{ value: string }>) => <div>{children}</div>,
 }));
 
-vi.mock('@mastra/playground-ui/utils/toast', () => ({
+vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('@mastra/playground-ui/components/SideDialog', () => ({
+vi.mock('@/ds/components/SideDialog', () => ({
   SideDialog: Object.assign(
     ({ isOpen, children }: PropsWithChildren<{ isOpen: boolean }>) => (isOpen ? <div>{children}</div> : null),
     {
@@ -49,7 +49,7 @@ vi.mock('@mastra/playground-ui/components/SideDialog', () => ({
   ),
 }));
 
-vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
+vi.mock('@/ds/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: CodeEditorProps) => (
     <textarea
       value={value ?? ''}
@@ -58,7 +58,7 @@ vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   ),
 }));
 
-vi.mock('@mastra/playground-ui/components/Text', () => ({
+vi.mock('@/ds/components/Text', () => ({
   TextAndIcon: ({ children }: PropsWithChildren) => <span>{children}</span>,
   getShortId: (id?: string) => id ?? '',
 }));

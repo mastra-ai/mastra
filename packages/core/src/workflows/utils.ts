@@ -651,13 +651,22 @@ export function getRestartStartIndex(steps: StepFlowEntry[], restart: RestartExe
   }
 
   const results = getStepIds(entry).map(id => restart.stepResults[id]);
-  const finished =
-    entry.type === 'conditional'
-      ? // Arms that were not selected have no result.
-        results.every(result => !result || result.status === 'success')
-      : results.length > 0 && results.every(result => result?.status === 'success');
+  return isEntryFinished(entry.type, results) ? startIdx + 1 : startIdx;
+}
 
-  return finished ? startIdx + 1 : startIdx;
+/**
+ * Whether a top-level entry saved only successful results, given its results
+ * in `getStepIds` order. Agent-loop snapshot pruning makes the same decision to
+ * keep the output a restart that skips the entry reads.
+ */
+export function isEntryFinished(
+  entryType: string,
+  results: ReadonlyArray<{ status: string } | null | undefined>,
+): boolean {
+  return entryType === 'conditional'
+    ? // Arms that were not selected have no result.
+      results.every(result => !result || result.status === 'success')
+    : results.length > 0 && results.every(result => result?.status === 'success');
 }
 
 /**
