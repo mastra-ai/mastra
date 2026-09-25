@@ -11,7 +11,9 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
+import { Extractor } from '../extractor';
 import { ObserverRunner } from '../observer-runner';
 import { ReflectorRunner } from '../reflector-runner';
 import { RETRY_CONFIG } from '../retry';
@@ -20,12 +22,18 @@ type Reply = { text: string; finishReason: 'stop' | 'other' | 'unknown' };
 
 function createScriptedModel(replies: Reply[]) {
   const prompts: string[][] = [];
+  const assistantTexts: string[][] = [];
   const model = new MockLanguageModelV2({
     provider: 'google.vertex.chat',
     modelId: 'gemini-3.5-flash-lite',
     doStream: async ({ prompt }: any) => {
       const reply = replies[Math.min(prompts.length, replies.length - 1)]!;
       prompts.push(prompt.map((message: any) => message.role));
+      assistantTexts.push(
+        prompt
+          .filter((message: any) => message.role === 'assistant')
+          .flatMap((message: any) => message.content.map((part: any) => part.text ?? '')),
+      );
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         stream: new ReadableStream({
@@ -48,7 +56,7 @@ function createScriptedModel(replies: Reply[]) {
       };
     },
   });
-  return { model, prompts };
+  return { model, prompts, assistantTexts };
 }
 
 function createMessage(text: string, role: 'user' | 'assistant', threadId = 'thread-1'): MastraDBMessage {
@@ -63,7 +71,7 @@ function createMessage(text: string, role: 'user' | 'assistant', threadId = 'thr
   };
 }
 
-function createObserverRunner(model: MockLanguageModelV2) {
+function createObserverRunner(model: MockLanguageModelV2, extractors: Extractor<any>[] = []) {
   return new ObserverRunner({
     observationConfig: {
       model: 'mock/model',
@@ -71,7 +79,7 @@ function createObserverRunner(model: MockLanguageModelV2) {
       bufferTokens: false,
       previousObserverTokens: 1000,
       observeAttachments: false,
-      extractors: [],
+      extractors,
     } as any,
     observedMessageIds: new Set(),
     resolveModel: () => ({ model: model as any }),
@@ -79,9 +87,9 @@ function createObserverRunner(model: MockLanguageModelV2) {
   });
 }
 
-function createReflectorRunner(model: MockLanguageModelV2) {
+function createReflectorRunner(model: MockLanguageModelV2, extractors: Extractor<any>[] = []) {
   return new ReflectorRunner({
-    reflectionConfig: { model: 'mock/model', observationTokens: 1000, extractors: [] } as any,
+    reflectionConfig: { model: 'mock/model', observationTokens: 1000, extractors } as any,
     observationConfig: { model: 'mock/model', messageTokens: 1000 } as any,
     tokenCounter: { countObservations: (text: string) => text?.length ?? 0 } as any,
     storage: {} as any,
@@ -179,5 +187,52 @@ describe('OM retries replies that end without a stop reason', () => {
     expect(prompts).toHaveLength(2);
     expect(prompts.flat()).not.toContain('assistant');
     expect(result.observations.trim()).toBe(FULL_OBSERVATION);
+  });
+
+  describe('with a structured extractor', () => {
+    const moodExtractor = () =>
+      new Extractor({
+        name: 'mood',
+        instructions: 'The user mood.',
+        schema: z.object({ mood: z.string() }),
+        metadataKeyPath: false,
+      });
+    const EXTRACTION_REPLY: Reply = { text: JSON.stringify({ mood: { mood: 'calm' } }), finishReason: 'stop' };
+
+    it('observer retry starts from an empty thread and extraction sees only the complete reply', async () => {
+      const { model, prompts, assistantTexts } = createScriptedModel([
+        { text: PARTIAL_REPLY, finishReason: 'other' },
+        { text: FULL_REPLY, finishReason: 'stop' },
+        EXTRACTION_REPLY,
+      ]);
+      const runner = createObserverRunner(model, [moodExtractor()]);
+
+      const result = await runner.call(undefined, [createMessage('Add the pile plan.', 'user')]);
+
+      expect(prompts).toHaveLength(3);
+      expect(prompts[1]).toEqual(prompts[0]);
+      expect(assistantTexts[1]).toEqual([]);
+      expect(assistantTexts[2]).toEqual([FULL_REPLY]);
+      expect(result.observations.trim()).toBe(FULL_OBSERVATION);
+      expect(result.extractedValues).toMatchObject({ mood: { mood: 'calm' } });
+    });
+
+    it('reflector retry starts from an empty thread and extraction sees only the complete reply', async () => {
+      const { model, prompts, assistantTexts } = createScriptedModel([
+        { text: PARTIAL_REPLY, finishReason: 'other' },
+        { text: FULL_REPLY, finishReason: 'stop' },
+        EXTRACTION_REPLY,
+      ]);
+      const runner = createReflectorRunner(model, [moodExtractor()]);
+
+      const result = await runner.call(`${FULL_OBSERVATION}\n* Older detail that can be dropped.`);
+
+      expect(prompts).toHaveLength(3);
+      expect(prompts[1]).toEqual(prompts[0]);
+      expect(assistantTexts[1]).toEqual([]);
+      expect(assistantTexts[2]).toEqual([FULL_REPLY]);
+      expect(result.observations.trim()).toBe(FULL_OBSERVATION);
+      expect(result.extractedValues).toMatchObject({ mood: { mood: 'calm' } });
+    });
   });
 });
