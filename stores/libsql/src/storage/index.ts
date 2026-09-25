@@ -23,6 +23,7 @@ import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
+import { SignalSubscriptionsLibSQL } from './domains/signal-subscriptions';
 import { SkillsLibSQL } from './domains/skills';
 import { ThreadStateLibSQL } from './domains/thread-state';
 import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
@@ -51,6 +52,7 @@ export {
   ScoresLibSQL,
   SkillsLibSQL,
   FavoritesLibSQL,
+  SignalSubscriptionsLibSQL,
   ThreadStateLibSQL,
   ToolProviderConnectionsLibSQL,
   WorkflowDefinitionsLibSQL,
@@ -266,6 +268,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
     const notifications = new NotificationsLibSQL(domainConfig);
     const threadState = new ThreadStateLibSQL(domainConfig);
+    const signalSubscriptions = new SignalSubscriptionsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -292,6 +295,7 @@ export class LibSQLStore extends MastraCompositeStore {
       toolProviderConnections,
       notifications,
       threadState,
+      signalSubscriptions,
     };
   }
 
