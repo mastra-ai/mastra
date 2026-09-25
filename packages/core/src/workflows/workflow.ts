@@ -1376,8 +1376,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
-                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
-                | undefined;
+                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -3268,6 +3267,20 @@ export class Workflow<
     }
 
     return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+  }
+
+  async listWorkflowRunSummaries(args?: StorageListWorkflowRunsInput) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run summaries. Mastra storage is not initialized');
+      return { runs: [], total: 0 };
+    }
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow run summaries. Workflows storage domain is not available');
+      return { runs: [], total: 0 };
+    }
+    return workflowsStore.listWorkflowRunSummaries({ workflowName: this.id, ...(args ?? {}) });
   }
 
   public async listActiveWorkflowRuns() {

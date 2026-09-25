@@ -32,6 +32,7 @@ import {
   workflowInfoSchema,
   workflowRunPathParams,
   workflowRunsResponseSchema,
+  workflowRunSummariesResponseSchema,
   workflowRunResultQuerySchema,
   workflowRunResultSchema,
   observeWorkflowQuerySchema,
@@ -336,6 +337,64 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
       return handleError(error, 'Error getting workflow');
     }
   }) as any,
+});
+
+export const LIST_WORKFLOW_RUN_SUMMARIES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workflows/:workflowId/run-summaries',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: listWorkflowRunsQuerySchema,
+  responseSchema: workflowRunSummariesResponseSchema,
+  summary: 'List workflow run summaries',
+  description: 'Returns paginated run metadata without full workflow snapshots',
+  tags: ['Workflows'],
+  requiresAuth: true,
+  handler: async ({
+    mastra,
+    workflowId,
+    fromDate,
+    toDate,
+    page,
+    perPage,
+    limit,
+    offset,
+    resourceId,
+    status,
+    requestContext,
+  }) => {
+    try {
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      if (!workflowId) throw new HTTPException(400, { message: 'Workflow ID is required' });
+      let finalPerPage = perPage;
+      if (finalPerPage === undefined && limit !== undefined) finalPerPage = limit;
+      let finalPage = page;
+      if (finalPage === undefined && offset !== undefined && finalPerPage !== undefined && finalPerPage > 0) {
+        finalPage = Math.floor(offset / finalPerPage);
+      }
+      if (
+        finalPerPage !== undefined &&
+        (typeof finalPerPage !== 'number' || !Number.isInteger(finalPerPage) || finalPerPage <= 0)
+      ) {
+        throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+      }
+      if (finalPage !== undefined && (!Number.isInteger(finalPage) || finalPage < 0)) {
+        throw new HTTPException(400, { message: 'page must be a non-negative integer' });
+      }
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      if (!workflow) throw new HTTPException(404, { message: 'Workflow not found' });
+      return workflow.listWorkflowRunSummaries({
+        fromDate: fromDate ? (typeof fromDate === 'string' ? new Date(fromDate) : fromDate) : undefined,
+        toDate: toDate ? (typeof toDate === 'string' ? new Date(toDate) : toDate) : undefined,
+        perPage: finalPerPage,
+        page: finalPage,
+        resourceId: effectiveResourceId,
+        status,
+      });
+    } catch (error) {
+      return handleError(error, 'Error getting workflow run summaries');
+    }
+  },
 });
 
 export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({

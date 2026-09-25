@@ -1,4 +1,4 @@
-import type { ListWorkflowRunsResponse } from '@mastra/client-js';
+import type { ListWorkflowRunsResponse, ListWorkflowRunSummariesResponse } from '@mastra/client-js';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -84,7 +84,31 @@ function stubCapabilities() {
 }
 
 function stubRuns(response: ListWorkflowRunsResponse) {
-  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json(response)));
+  const summaries: ListWorkflowRunSummariesResponse = {
+    runs: response.runs.map(({ snapshot, ...run }) => ({
+      ...run,
+      status: typeof snapshot === 'string' ? JSON.parse(snapshot).status : snapshot.status,
+      timestamp: typeof snapshot === 'string' ? JSON.parse(snapshot).timestamp : snapshot.timestamp,
+    })),
+    total: response.total,
+  };
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/run-summaries`, () => HttpResponse.json(summaries)),
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/:runId`, ({ params }) => {
+      const run = response.runs.find(item => item.runId === params.runId);
+      return run
+        ? HttpResponse.json({
+            runId: run.runId,
+            workflowName: run.workflowName,
+            createdAt: run.createdAt,
+            updatedAt: run.updatedAt,
+            status: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot).status : run.snapshot.status,
+            payload:
+              typeof run.snapshot === 'string' ? JSON.parse(run.snapshot).context?.input : run.snapshot.context?.input,
+          })
+        : new HttpResponse(null, { status: 404 });
+    }),
+  );
 }
 
 afterEach(cleanup);
@@ -94,7 +118,7 @@ describe('WorkflowRecentRuns', () => {
     it('reports the failure instead of claiming there are no runs', async () => {
       stubCapabilities();
       server.use(
-        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () =>
+        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/run-summaries`, () =>
           HttpResponse.json({ error: 'Storage unavailable' }, { status: 403 }),
         ),
       );
@@ -171,6 +195,31 @@ describe('WorkflowRecentRuns', () => {
     const link = await screen.findByRole('link', { name: /run-with-input/ });
     expect(within(link).getByTitle('run-with-input')).not.toBeNull();
     expect(within(link).getByText('{"city":"Paris"}')).not.toBeNull();
+  });
+
+  it('loads summaries rather than the full run list and only fetches the active input', async () => {
+    stubCapabilities();
+    let fullListRequests = 0;
+    let runDetailRequests = 0;
+    stubRuns(runsWithInput);
+    server.use(
+      http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => {
+        fullListRequests++;
+        return HttpResponse.json({ error: 'Unexpected full run list' }, { status: 500 });
+      }),
+      http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/:runId`, () => {
+        runDetailRequests++;
+        return HttpResponse.json({
+          runId: 'run-with-input',
+          status: 'success',
+          payload: { output: { city: 'Paris' } },
+        });
+      }),
+    );
+    renderRunList('run-with-input');
+    expect(await screen.findByText('{"city":"Paris"}')).not.toBeNull();
+    expect(fullListRequests).toBe(0);
+    expect(runDetailRequests).toBe(1);
   });
 
   it('does not show an input preview for inactive runs', async () => {

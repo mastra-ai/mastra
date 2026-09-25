@@ -217,12 +217,12 @@ type InputShared_Auxiliary_741 = {
   children?: InputShared_Auxiliary_741[] | undefined;
 };
 
-type Shared_Auxiliary_750 = {
+type Shared_Auxiliary_752 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_750[] | undefined;
+  children?: Shared_Auxiliary_752[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4115,7 +4115,7 @@ type Shared_Type_81 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_750[] | undefined;
+  files?: Shared_Auxiliary_752[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -6839,6 +6839,58 @@ export interface GetWorkflowsWorkflowIdRuns_RouteContract {
   body: never;
   request: GetWorkflowsWorkflowIdRuns_Request;
   response: GetWorkflowsWorkflowIdRuns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /workflows/:workflowId/run-summaries
+// ============================================================================
+export type GetWorkflowsWorkflowIdRunSummaries_PathParams = GetWorkflowsWorkflowId_PathParams;
+
+export type GetWorkflowsWorkflowIdRunSummaries_QueryParams = GetWorkflowsWorkflowIdRuns_QueryParams;
+
+export type GetWorkflowsWorkflowIdRunSummaries_Response = {
+  runs: {
+    workflowName: string;
+    runId: string;
+    createdAt: Date;
+    updatedAt: Date;
+    resourceId?: string | undefined;
+    status:
+      | 'running'
+      | 'waiting'
+      | 'suspended'
+      | 'success'
+      | 'failed'
+      | 'canceled'
+      | 'pending'
+      | 'bailed'
+      | 'tripwire'
+      | 'paused'
+      | 'skipped';
+    timestamp: number;
+  }[];
+  total: number;
+};
+
+export type GetWorkflowsWorkflowIdRunSummaries_Request = Simplify<
+  (GetWorkflowsWorkflowIdRunSummaries_PathParams extends never
+    ? {}
+    : { params: GetWorkflowsWorkflowIdRunSummaries_PathParams }) &
+    (GetWorkflowsWorkflowIdRunSummaries_QueryParams extends never
+      ? {}
+      : {} extends GetWorkflowsWorkflowIdRunSummaries_QueryParams
+        ? { query?: GetWorkflowsWorkflowIdRunSummaries_QueryParams }
+        : { query: GetWorkflowsWorkflowIdRunSummaries_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetWorkflowsWorkflowIdRunSummaries_RouteContract {
+  pathParams: GetWorkflowsWorkflowIdRunSummaries_PathParams;
+  queryParams: GetWorkflowsWorkflowIdRunSummaries_QueryParams;
+  body: never;
+  request: GetWorkflowsWorkflowIdRunSummaries_Request;
+  response: GetWorkflowsWorkflowIdRunSummaries_Response;
   responseType: 'json';
 }
 
@@ -23659,6 +23711,7 @@ export interface RouteTypes {
   'GET /workflows/run-counts': GetWorkflowsRunCounts_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
+  'GET /workflows/:workflowId/run-summaries': GetWorkflowsWorkflowIdRunSummaries_RouteContract;
   'GET /workflows/:workflowId/runs/:runId': GetWorkflowsWorkflowIdRunsRunId_RouteContract;
   'DELETE /workflows/:workflowId/runs/:runId': DeleteWorkflowsWorkflowIdRunsRunId_RouteContract;
   'POST /workflows/:workflowId/create-run': PostWorkflowsWorkflowIdCreateRun_RouteContract;
@@ -25050,6 +25103,9 @@ export interface Client {
   };
   '/workflows/:workflowId/resume-stream': {
     POST: PostWorkflowsWorkflowIdResumeStream_RouteContract;
+  };
+  '/workflows/:workflowId/run-summaries': {
+    GET: GetWorkflowsWorkflowIdRunSummaries_RouteContract;
   };
   '/workflows/:workflowId/runs': {
     GET: GetWorkflowsWorkflowIdRuns_RouteContract;

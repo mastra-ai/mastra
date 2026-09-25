@@ -107,6 +107,17 @@ const workflowRunSchema = z.object({
   resourceId: z.string().optional(),
 });
 
+/** Small run-list response; full snapshots stay available on the existing endpoint. */
+export const workflowRunSummariesResponseSchema = z.object({
+  runs: z.array(
+    workflowRunSchema.omit({ snapshot: true }).extend({
+      status: workflowRunStatusSchema,
+      timestamp: z.number(),
+    }),
+  ),
+  total: z.number(),
+});
+
 /**
  * Schema for workflow runs response (paginated)
  * Includes runs array and total count

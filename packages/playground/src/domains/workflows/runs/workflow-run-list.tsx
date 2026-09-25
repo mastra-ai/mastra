@@ -1,4 +1,3 @@
-import type { MastraClient } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -19,43 +18,33 @@ import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { getRunResourceId, getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { useDeleteWorkflowRun, useWorkflowRunInput, useWorkflowRunSummaries } from '@/hooks/use-workflow-runs';
 
 export interface WorkflowRecentRunsProps {
   workflowId: string;
   runId?: string;
 }
 
-const runSnapshotSchema = z.object({
-  status: z.enum(['running', 'failed', 'canceled', 'pending', 'waiting', 'paused', 'suspended', 'success']),
-  timestamp: z.number().optional(),
-  context: z.object({ input: z.unknown() }),
-});
 const wrappedRunInputSchema = z.object({ output: z.unknown() });
-type RunSnapshot = z.infer<typeof runSnapshotSchema>;
-type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
-type WorkflowRunSnapshot = WorkflowRuns['runs'][number]['snapshot'];
 
-function parseRunSnapshot(snapshot: WorkflowRunSnapshot): RunSnapshot | undefined {
-  const result = runSnapshotSchema.safeParse(snapshot);
-  return result.success ? result.data : undefined;
-}
-
-function formatRunInput(snapshot: RunSnapshot | undefined): string | null {
-  if (!snapshot || snapshot.context.input == null) return null;
-
-  const input = snapshot.context.input;
+function formatRunInput(input: unknown): string | null {
+  if (input == null) return null;
   const parsedString = z.string().safeParse(input);
   if (parsedString.success) return parsedString.data;
-
   const parsedWrappedInput = wrappedRunInputSchema.safeParse(input);
   const inputValue = parsedWrappedInput.success ? parsedWrappedInput.data.output : input;
-
   try {
     return JSON.stringify(inputValue);
   } catch {
     return null;
   }
+}
+
+function ActiveRunInput({ workflowId, runId }: { workflowId: string; runId: string }) {
+  const { data } = useWorkflowRunInput(workflowId, runId);
+  const input = formatRunInput(data?.payload);
+  if (!input) return null;
+  return <span className="block w-full min-w-0 truncate text-caption text-muted-foreground">{input}</span>;
 }
 
 function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resourceId?: string }) {
@@ -92,7 +81,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useWorkflowRuns(workflowId);
+  } = useWorkflowRunSummaries(workflowId);
   const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
 
   const handleDelete = async (runId: string) => {
@@ -138,8 +127,6 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                   <ThreadListItems>
                     {runList.map(run => {
                       const isActiveRun = run.runId === runId;
-                      const snapshot = parseRunSnapshot(run.snapshot);
-                      const runInput = isActiveRun ? formatRunInput(snapshot) : null;
 
                       return (
                         <ThreadListItem
@@ -152,9 +139,9 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                           className="h-auto min-h-0 items-stretch py-1"
                         >
                           <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
-                            {snapshot && (
+                            {run.status && (
                               <span className="shrink-0">
-                                <WorkflowRunStatusIcon status={snapshot.status} />
+                                <WorkflowRunStatusIcon status={run.status} />
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
@@ -164,14 +151,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                                 </span>
                               </span>
                               <WorkflowRunMeta
-                                timestamp={getRunTimestamp(snapshot?.timestamp)}
+                                timestamp={getRunTimestamp(run.timestamp)}
                                 resourceId={getRunResourceId(run)}
                               />
-                              {runInput && (
-                                <span className="block w-full min-w-0 truncate text-caption text-muted-foreground">
-                                  {runInput}
-                                </span>
-                              )}
+                              {isActiveRun && <ActiveRunInput workflowId={workflowId} runId={run.runId} />}
                             </span>
                           </span>
                         </ThreadListItem>

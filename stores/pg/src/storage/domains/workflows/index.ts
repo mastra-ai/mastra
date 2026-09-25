@@ -13,6 +13,7 @@ import type {
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
+  WorkflowRunSummaries,
   CreateIndexOptions,
   TABLE_NAMES,
   PruneOptions,
@@ -620,6 +621,83 @@ export class WorkflowsPG extends WorkflowsStorage {
         error,
       );
     }
+  }
+
+  async listWorkflowRunSummaries({
+    workflowName,
+    fromDate,
+    toDate,
+    perPage,
+    page,
+    resourceId,
+    status,
+    threadId,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRunSummaries> {
+    // A threadId requires the canonical snapshot-aware filter from listWorkflowRuns.
+    if (threadId)
+      return super.listWorkflowRunSummaries({
+        workflowName,
+        fromDate,
+        toDate,
+        perPage,
+        page,
+        resourceId,
+        status,
+        threadId,
+      });
+    const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+    // Legacy text/json columns can contain malformed escapes and need the existing sanitizer.
+    if (snapshotType !== 'jsonb')
+      return super.listWorkflowRunSummaries({ workflowName, fromDate, toDate, perPage, page, resourceId, status });
+
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    const addCondition = (expression: string, value: unknown) => {
+      values.push(value);
+      conditions.push(`${expression} = $${values.length}`);
+    };
+    if (workflowName) addCondition('workflow_name', workflowName);
+    if (status) addCondition(`snapshot ->> 'status'`, status);
+    if (resourceId) {
+      if (await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId')) {
+        addCondition('"resourceId"', resourceId);
+      } else {
+        this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+      }
+    }
+    if (fromDate) {
+      values.push(fromDate);
+      conditions.push(`"createdAt" >= $${values.length}`);
+    }
+    if (toDate) {
+      values.push(toDate);
+      conditions.push(`"createdAt" <= $${values.length}`);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+    const usePagination = typeof perPage === 'number' && typeof page === 'number';
+    const count = usePagination
+      ? Number((await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`, values)).count)
+      : undefined;
+    const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+    const queryValues = usePagination ? [...values, normalizedPerPage, page! * normalizedPerPage] : values;
+    const rows = await this.#db.client.manyOrNone(
+      `SELECT workflow_name, run_id, "resourceId", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ",
+        snapshot ->> 'status' AS status, (snapshot ->> 'timestamp')::double precision AS timestamp
+       FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC
+       ${usePagination ? `LIMIT $${values.length + 1} OFFSET $${values.length + 2}` : ''}`,
+      queryValues,
+    );
+    const runs = rows.map(row => ({
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      resourceId: row.resourceId as string | undefined,
+      status: row.status as WorkflowRunSummaries['runs'][number]['status'],
+      timestamp: Number(row.timestamp),
+      createdAt: new Date(row.createdAtZ || row.createdAt),
+      updatedAt: new Date(row.updatedAtZ || row.updatedAt),
+    }));
+    return { runs, total: count ?? runs.length };
   }
 
   async listWorkflowRuns({

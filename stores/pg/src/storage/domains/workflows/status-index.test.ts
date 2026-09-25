@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PostgresStore } from '../../index';
 
 const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
@@ -66,6 +66,29 @@ describe('workflow snapshot status index', () => {
 
     expect(runs.total).toBe(25);
     expect(runs.runs.every(run => (run.snapshot as any).status === 'failed')).toBe(true);
+  });
+
+  it('lists bounded run summaries without selecting snapshot payloads', async () => {
+    const client = store.db;
+    const originalManyOrNone = client.manyOrNone.bind(client);
+    const queries: string[] = [];
+    const spy = vi.spyOn(client, 'manyOrNone').mockImplementation(((query: string, values: unknown[]) => {
+      queries.push(query);
+      return originalManyOrNone(query, values);
+    }) as typeof client.manyOrNone);
+    try {
+      const result = await workflows.listWorkflowRunSummaries({ workflowName, status: 'failed', page: 0, perPage: 2 });
+      expect(result.total).toBe(25);
+      expect(result.runs).toHaveLength(2);
+      expect(result.runs[0]).toMatchObject({ workflowName, status: 'failed' });
+      expect(typeof result.runs[0].timestamp).toBe('number');
+      expect(result.runs[0].createdAt).toBeInstanceOf(Date);
+      expect(result.runs[0]).not.toHaveProperty('snapshot');
+      expect(JSON.stringify(result)).not.toContain('serializedStepGraph');
+      expect(queries.some(query => /SELECT workflow_name, run_id/.test(query) && !/SELECT \*/.test(query))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('persists a snapshot with a real backslash before an unpaired surrogate without losing literal escapes', async () => {

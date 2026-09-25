@@ -473,6 +473,7 @@ export type ListWorkflowRunsParams = Omit<GeneratedRequest<QueryParams<'GET /wor
 };
 type WorkflowRunsRouteResponse = SerializedRouteResponse<'GET /workflows/:workflowId/runs'>;
 type WorkflowRunSnapshot = WorkflowRuns['runs'][number]['snapshot'];
+export type ListWorkflowRunSummariesResponse = SerializedRouteResponse<'GET /workflows/:workflowId/run-summaries'>;
 export type ListWorkflowRunsResponse = Omit<WorkflowRunsRouteResponse, 'runs'> & {
   runs: Array<Omit<WorkflowRunsRouteResponse['runs'][number], 'snapshot'> & { snapshot: WorkflowRunSnapshot }>;
 };

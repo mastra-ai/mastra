@@ -10,14 +10,18 @@ type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['
 
 export const PER_PAGE = 20;
 
-export function getWorkflowRunsNextPageParam(lastPage: WorkflowRuns, _allPages: unknown, lastPageParam: number) {
+export function getWorkflowRunsNextPageParam(
+  lastPage: { runs: Array<{ runId: string }> },
+  _allPages: unknown,
+  lastPageParam: number,
+) {
   if (lastPage.runs.length < PER_PAGE) {
     return undefined;
   }
   return lastPageParam + 1;
 }
 
-export function selectUniqueRuns(data: { pages: WorkflowRuns[] }) {
+export function selectUniqueRuns<T extends { runId: string }>(data: { pages: Array<{ runs: T[] }> }): T[] {
   const seen = new Set<string>();
   return data.pages
     .flatMap(page => page.runs)
@@ -53,6 +57,35 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
   return { ...query, setEndOfListElement };
 };
 
+export const useWorkflowRunSummaries = (workflowId: string) => {
+  const client = useMastraClient();
+  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+  const query = useInfiniteQuery({
+    queryKey: ['workflow-run-summaries', workflowId],
+    queryFn: ({ pageParam }) =>
+      client.getWorkflow(workflowId).runSummaries({ limit: PER_PAGE, offset: pageParam * PER_PAGE }),
+    initialPageParam: 0,
+    getNextPageParam: getWorkflowRunsNextPageParam,
+    select: selectUniqueRuns,
+    retry: false,
+    refetchInterval: 5000,
+  });
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  useEffect(() => {
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  return { ...query, setEndOfListElement };
+};
+
+export const useWorkflowRunInput = (workflowId: string, runId: string) => {
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['workflow-run-input', workflowId, runId],
+    queryFn: () => client.getWorkflow(workflowId).runById(runId, { fields: ['payload'], withNestedWorkflows: false }),
+    enabled: Boolean(workflowId && runId),
+  });
+};
+
 export const workflowRunQueryKey = (workflowId: string, runId: string) => ['workflow-run', workflowId, runId] as const;
 
 export const useWorkflowRun = (
@@ -78,6 +111,7 @@ export const useDeleteWorkflowRun = (workflowId: string) => {
     mutationFn: ({ runId }: { runId: string }) => client.getWorkflow(workflowId).deleteRunById(runId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
+      void queryClient.invalidateQueries({ queryKey: ['workflow-run-summaries', workflowId] });
       toast.success('Workflow run deleted successfully');
     },
     onError: () => {

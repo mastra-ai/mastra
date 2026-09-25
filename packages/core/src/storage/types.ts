@@ -33,6 +33,22 @@ export interface WorkflowRuns {
   total: number;
 }
 
+/** A bounded projection for workflow run lists that does not hydrate step outputs. */
+export interface WorkflowRunSummary {
+  workflowName: string;
+  runId: string;
+  status: WorkflowRunStatus;
+  timestamp: number;
+  createdAt: Date;
+  updatedAt: Date;
+  resourceId?: string;
+}
+
+export interface WorkflowRunSummaries {
+  runs: WorkflowRunSummary[];
+  total: number;
+}
+
 export interface StorageWorkflowRun {
   workflow_name: string;
   run_id: string;

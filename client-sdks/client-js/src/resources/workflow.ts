@@ -4,6 +4,7 @@ import type {
   ClientOptions,
   GetWorkflowResponse,
   ListWorkflowRunsResponse,
+  ListWorkflowRunSummariesResponse,
   ListWorkflowRunsParams,
   GetWorkflowRunByIdResponse,
 } from '../types';
@@ -89,6 +90,27 @@ export class Workflow extends BaseResource {
     } else {
       return this.request(`/workflows/${this.workflowId}/runs`);
     }
+  }
+
+  /** Lists bounded workflow run metadata without downloading snapshots. */
+  runSummaries(
+    params?: ListWorkflowRunsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListWorkflowRunSummariesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params?.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (typeof params?.limit === 'number' && params.limit > 0 && Number.isInteger(params.limit))
+      searchParams.set('limit', String(params.limit));
+    if (params?.offset !== undefined) searchParams.set('offset', String(params.offset));
+    if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params?.status) searchParams.set('status', params.status);
+    const context = base64RequestContext(parseClientRequestContext(requestContext));
+    if (context) searchParams.set('requestContext', context);
+    const queryString = searchParams.size ? `?${searchParams}` : '';
+    return this.request(`/workflows/${this.workflowId}/run-summaries${queryString}`);
   }
 
   /**

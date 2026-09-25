@@ -28,6 +28,7 @@ import {
   OBSERVE_STREAM_WORKFLOW_ROUTE,
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
+  LIST_WORKFLOW_RUN_SUMMARIES_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
 } from './workflows';
@@ -1224,6 +1225,41 @@ describe('vNext Workflow Handlers', () => {
       // resourceId should be preserved after resume
       const runAfterResume = await freshWorkflow.getWorkflowRunById('test-run-stream-resume');
       expect(runAfterResume?.resourceId).toBe(resourceId);
+    });
+  });
+
+  describe('LIST_WORKFLOW_RUN_SUMMARIES_ROUTE', () => {
+    it('returns summary metadata and keeps the old endpoint unchanged', async () => {
+      const run = await mockWorkflow.createRun({ runId: 'summary-run' });
+      await run.start({ inputData: {} });
+      const summaries = {
+        runs: [
+          {
+            workflowName: 'test-workflow',
+            runId: 'summary-run',
+            status: 'success',
+            timestamp: Date.now(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        total: 1,
+      };
+      // This suite imports a prebuilt @mastra/core; verify handler delegation separately from the new core method.
+      const listSummaries = vi.fn().mockResolvedValue(summaries);
+      (mockWorkflow as any).listWorkflowRunSummaries = listSummaries;
+      const context = {
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        limit: 1,
+        offset: 0,
+      } as any;
+      const result = await LIST_WORKFLOW_RUN_SUMMARIES_ROUTE.handler(context);
+      const full = await LIST_WORKFLOW_RUNS_ROUTE.handler(context);
+      expect(listSummaries).toHaveBeenCalledWith(expect.objectContaining({ page: 0, perPage: 1 }));
+      expect(result).toEqual(summaries);
+      expect(result.runs[0]).not.toHaveProperty('snapshot');
+      expect(full.runs[0]).toHaveProperty('snapshot');
     });
   });
 
