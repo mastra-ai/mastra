@@ -165,7 +165,9 @@ describe('LinearRouting board target', () => {
       const { rerender } = renderMany();
 
       await user.type(screen.getByRole('textbox', { name: 'Search Linear routing' }), 'release');
-      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument(),
+      );
 
       const remainingProjects = manyProjects.slice(0, 5);
       rerender(
@@ -195,9 +197,7 @@ describe('LinearRouting board target', () => {
       await user.click(await screen.findByRole('option', { name: 'Acme' }));
 
       await waitFor(() =>
-        expect(saved).toEqual([
-          { integrationId: 'linear', sourceId: 'proj-8', factoryProjectId: 'fp-1', board: null },
-        ]),
+        expect(saved).toEqual([{ integrationId: 'linear', sourceId: 'proj-8', factoryProjectId: 'fp-1', board: null }]),
       );
     });
   });
