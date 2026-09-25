@@ -101,7 +101,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
   onStreamFinished?: () => void | Promise<void>;
   /** Callback on error */
-  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /**
+   * Callback on error. `runDead` is only set for idle-timeout terminations:
+   * `true` when `isAlive` confirmed the run is dead, `false` when the stream
+   * went quiet but the run may still be alive (bare timeout).
+   */
+  onError?: ({ error, runDead }: { error: Error | string; runDead?: boolean }) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -150,6 +155,11 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   output: MastraModelOutput<OUTPUT>;
   /** Cleanup function to unsubscribe from pubsub */
   cleanup: () => void;
+  /**
+   * Stop consuming: close the stream (pending reads resolve as done) and
+   * unsubscribe. Idempotent. Does not affect the run itself.
+   */
+  detach: () => void;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -287,6 +297,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const onIdleTimeout = async (generation: number) => {
     idleTimer = undefined;
     if (cancelled || !controller || generation !== idleGeneration) return;
+    let runDead = false;
     if (isAlive) {
       let alive = true;
       try {
@@ -301,12 +312,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         armIdleTimer(); // still driving ⇒ keep waiting
         return;
       }
+      runDead = true;
     }
     // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
     // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Fire onError — for
-    // observe() that schedules registry + pubsub-topic cleanup, so an
-    // idle-terminated run doesn't retain state — then unsubscribe in finally.
+    // controller.error which MastraModelOutput swallows). Fire onError with
+    // `runDead` — observe() schedules registry + pubsub-topic cleanup only when
+    // isAlive confirmed the run is dead; a bare timeout just means this observer
+    // stopped hearing from the run — then unsubscribe in finally.
     const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
     safeEnqueue(controller, {
       type: 'error',
@@ -315,7 +328,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     safeClose(controller);
     markTerminated(); // block any re-arm while we await onError below
     try {
-      await onError?.({ error });
+      await onError?.({ error, runDead });
     } catch (callbackError) {
       logError(`[DurableAgentStream] onError callback error:`, callbackError);
     } finally {
@@ -602,7 +615,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         });
     },
     cancel() {
-      cleanup();
+      detach();
     },
   });
 
@@ -620,6 +633,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       });
     }
     controller = null;
+  };
+
+  // Observer-only teardown: end this consumer's stream and unsubscribe. Closing
+  // the controller (rather than just nulling it in cleanup) makes a pending
+  // read resolve as done instead of hanging. Never touches run state.
+  const detach = () => {
+    if (controller) safeClose(controller);
+    cleanup();
   };
 
   // Create the MastraModelOutput.
@@ -662,6 +683,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   return {
     output,
     cleanup,
+    detach,
     ready,
   };
 }

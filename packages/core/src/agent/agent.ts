@@ -8543,6 +8543,16 @@ export class Agent<
       | AgentExecutionOptions<OUTPUT>
       | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
+    /**
+     * Called when another process asks to claim this thread. Return `true` to
+     * transfer the claim to that requester when leasing is available, or release
+     * it on lease-less transports.
+     */
+    yieldOwnership?: () => boolean;
+    /** Called after this claim has been transferred or released for the requester. */
+    onOwnershipYielded?: () => void;
+    /** Called when lease renewal proves that another live owner has taken this claim. */
+    onOwnershipLost?: () => void;
   }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
     return agentThreadStreamRuntime.claimThreadOwnership(
       this.#getThreadRuntimeAgent(),
