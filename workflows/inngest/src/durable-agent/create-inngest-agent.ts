@@ -53,6 +53,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
@@ -476,6 +477,28 @@ export interface InngestAgent<TOutput = undefined> {
   ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
 
   /**
+   * Not supported. Inngest owns durability for this agent: it retries and
+   * replays failed steps itself, so Mastra never re-drives Inngest runs.
+   * Use {@link InngestAgent.observe} to reconnect to a running run's stream.
+   *
+   * @throws MastraError `INNGEST_AGENT_RECOVER_NOT_SUPPORTED` (HTTP 400)
+   */
+  recover(runId: string, options?: unknown): Promise<never>;
+
+  /**
+   * Not supported, for the same reason as {@link InngestAgent.recover}.
+   *
+   * @throws MastraError `INNGEST_AGENT_RECOVER_NOT_SUPPORTED` (HTTP 400)
+   */
+  listActiveRuns(options?: unknown): Promise<never>;
+
+  /**
+   * No-op. Inngest retries and replays its own runs, so boot-time durable
+   * agent recovery has nothing to re-drive and skips Inngest agents.
+   */
+  recoverActiveRuns(options?: unknown): Promise<{ recovered: never[]; succeeded: number; failed: number }>;
+
+  /**
    * Get the durable workflows required by this agent.
    * Called by Mastra during agent registration.
    * @internal
@@ -807,6 +830,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
   }
 
+  // Recovery re-drives a run from Mastra's persisted snapshot. Inngest already
+  // retries and replays its own runs, so doing it here would race Inngest.
+  const recoverNotSupportedError = (method: 'recover' | 'listActiveRuns') =>
+    new MastraError({
+      id: 'INNGEST_AGENT_RECOVER_NOT_SUPPORTED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `InngestAgent.${method}() is not supported. Inngest owns durability for this agent: failed steps are retried and replayed by Inngest. Use observe(runId) to reconnect to a running run's stream.`,
+      details: { status: 400, agentId, method },
+    });
+
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
   const inngestAgent: Pick<
     InngestAgent<TOutput>,
@@ -820,6 +854,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'resume'
     | 'prepare'
     | 'observe'
+    | 'recover'
+    | 'listActiveRuns'
+    | 'recoverActiveRuns'
     | 'generate'
     | 'resumeGenerate'
     | 'resumeStream'
@@ -1342,6 +1379,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId: preparation.threadId,
         resourceId: preparation.resourceId,
       };
+    },
+
+    async recover() {
+      throw recoverNotSupportedError('recover');
+    },
+
+    async listActiveRuns() {
+      throw recoverNotSupportedError('listActiveRuns');
+    },
+
+    async recoverActiveRuns() {
+      return { recovered: [], succeeded: 0, failed: 0 };
     },
 
     async observe(runId, observeOptions) {

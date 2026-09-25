@@ -14,6 +14,7 @@ import {
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
+import { MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -161,6 +162,60 @@ describe('createInngestAgent factory function', () => {
 
     // Verify observe method exists and is a function
     expect(typeof durableAgent.observe).toBe('function');
+  });
+
+  describe('recovery (owned by Inngest, not Mastra)', () => {
+    function createRecoveryTestAgent(id: string) {
+      const agent = new Agent({
+        id,
+        name: id,
+        instructions: 'Test',
+        model: createMockModel() as any,
+      });
+      return createInngestAgent({ agent, inngest });
+    }
+
+    it.each(['recover', 'listActiveRuns'] as const)(
+      '%s() rejects with a typed 400 "not supported" error instead of the base Agent durable error',
+      async method => {
+        const durableAgent = createRecoveryTestAgent(`recover-${method}`);
+        new Mastra({ agents: { a: durableAgent as any }, storage: new InMemoryStore(), logger: false });
+
+        const call = method === 'recover' ? durableAgent.recover('run-1') : durableAgent.listActiveRuns();
+        const error = await call.catch(e => e);
+
+        expect(error).toBeInstanceOf(MastraError);
+        expect(error.id).toBe('INNGEST_AGENT_RECOVER_NOT_SUPPORTED');
+        expect(error.details).toMatchObject({ status: 400, agentId: `recover-${method}`, method });
+        expect(error.message).toContain(`InngestAgent.${method}() is not supported`);
+        expect(error.message).not.toContain('durable: true');
+      },
+    );
+
+    it('recoverActiveRuns() is a no-op', async () => {
+      const durableAgent = createRecoveryTestAgent('recover-active-runs');
+
+      await expect(durableAgent.recoverActiveRuns()).resolves.toEqual({ recovered: [], succeeded: 0, failed: 0 });
+    });
+
+    it('still satisfies isDurableAgentLike', () => {
+      expect(isDurableAgentLike(createRecoveryTestAgent('recover-duck-type'))).toBe(true);
+    });
+
+    it('is skipped quietly by Mastra.recoverAllDurableAgents()', async () => {
+      const durableAgent = createRecoveryTestAgent('recover-all');
+      const mastra = new Mastra({
+        agents: { recoverAll: durableAgent as any },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+      const errorSpy = vi.spyOn(mastra.getLogger(), 'error');
+
+      const result = await mastra.recoverAllDurableAgents();
+
+      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0 });
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
   });
 });
 
