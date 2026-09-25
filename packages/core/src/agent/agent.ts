@@ -3397,6 +3397,30 @@ export class Agent<
     return modelConfig;
   }
 
+  private resolveModelFromSelection(
+    resolved: ResolvedModelSelection,
+    requestContext: RequestContext,
+  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+    if (!Array.isArray(resolved)) {
+      return this.resolveModelConfig(resolved, requestContext);
+    }
+
+    const enabledModel = resolved.find(entry => entry.enabled);
+    if (!enabledModel) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: this.name },
+        text: `[Agent:${this.name}] - No enabled models found in model list`,
+      });
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
+
+    return this.resolveModelConfig(enabledModel.model, requestContext);
+  }
+
   /**
    * Gets the model instance, resolving it if it's a function or model configuration.
    * When the agent has multiple models configured, returns the first enabled model.
@@ -3417,26 +3441,9 @@ export class Agent<
     requestContext?: RequestContext;
     modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   } = {}): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
-    return this.resolveModelSelection(modelConfig, requestContext).then(resolved => {
-      if (!Array.isArray(resolved)) {
-        return this.resolveModelConfig(resolved, requestContext);
-      }
-
-      const enabledModel = resolved.find(entry => entry.enabled);
-      if (!enabledModel) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: { agentName: this.name },
-          text: `[Agent:${this.name}] - No enabled models found in model list`,
-        });
-        this.logger.trackException(mastraError);
-        throw mastraError;
-      }
-
-      return this.resolveModelConfig(enabledModel.model, requestContext);
-    });
+    return this.resolveModelSelection(modelConfig, requestContext).then(resolved =>
+      this.resolveModelFromSelection(resolved, requestContext),
+    );
   }
 
   /**
@@ -3473,6 +3480,26 @@ export class Agent<
     }
 
     return models.map(({ maxRetriesConfigured: _, ...model }) => model);
+  }
+
+  /** @internal */
+  public async __getModelAndModelList({
+    requestContext = new RequestContext(),
+  }: {
+    requestContext?: RequestContext;
+  } = {}): Promise<{
+    model: MastraLanguageModel | MastraLegacyLanguageModel;
+    modelList: Array<AgentModelManagerConfig> | null;
+  }> {
+    const resolvedSelection = await this.resolveModelSelection(this.model, requestContext);
+    const model = await this.resolveModelFromSelection(resolvedSelection, requestContext);
+    const modelList = Array.isArray(resolvedSelection)
+      ? (await this.prepareModels(requestContext, resolvedSelection)).map(
+          ({ maxRetriesConfigured: _, ...preparedModel }) => preparedModel,
+        )
+      : null;
+
+    return { model, modelList };
   }
 
   /**

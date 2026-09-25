@@ -136,8 +136,10 @@ interface DurablePreparationAgent {
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
-  getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
-  getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
+  __getModelAndModelList(opts: { requestContext: RequestContext }): Promise<{
+    model: MastraLanguageModel;
+    modelList: AgentModelManagerConfig[] | null;
+  }>;
   getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   getWorkspace(opts: { requestContext: RequestContext }): Promise<Workspace | undefined>;
   listScorers(opts: {
@@ -324,6 +326,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
   if (mergedVersions) {
     requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+  }
+
+  // Resolve and validate the complete model selection before durable preparation
+  // can persist a thread or run user-defined processors, tools, or hooks.
+  const { model, modelList } = await typedAgent.__getModelAndModelList({ requestContext });
+  if (!model) {
+    throw new Error('Agent model not available');
+  }
+  for (const modelConfig of modelList ?? []) {
+    validateModelTimeoutSettings(modelConfig.modelSettings?.timeout);
   }
 
   // 4. Resolve thread/memory context
@@ -588,12 +600,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
   }
 
-  // 8. Get model (and model list if configured)
-  const model = await typedAgent.getModel({ requestContext });
-  if (!model) {
-    throw new Error('Agent model not available');
-  }
-
   // Client-executed results fire only after processors accept the request and
   // the required runtime model has resolved.
   if (!tripwireData) {
@@ -610,11 +616,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       tools,
       logger,
     });
-  }
-
-  const modelList = await typedAgent.getModelList(requestContext);
-  for (const modelConfig of modelList ?? []) {
-    validateModelTimeoutSettings(modelConfig.modelSettings?.timeout);
   }
 
   // 8b. Get scorers configuration
