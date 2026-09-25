@@ -6,6 +6,10 @@ export type PageHeaderActionProps = ComponentPropsWithoutRef<'div'>;
 
 export function PageHeaderAction({ className, ...props }: PageHeaderActionProps) {
   return (
-    <div data-slot="page-header-action" className={cn('ml-auto shrink-0 self-start pt-0.5', className)} {...props} />
+    <div
+      data-slot="page-header-action"
+      className={cn('-my-1 ml-auto flex min-h-control-lg shrink-0 items-center self-start', className)}
+      {...props}
+    />
   );
 }

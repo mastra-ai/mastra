@@ -1,0 +1,19 @@
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  [data-slot='page-header-title'] > svg {
+    width: var(--spacing-icon-lg);
+    height: var(--spacing-icon-lg);
+    opacity: 0.5;
+  }
+
+  [data-slot='page-header-icon'] > svg {
+    width: var(--spacing-icon-lg);
+    height: var(--spacing-icon-lg);
+  }
+
+  [data-slot='page-header-eyebrow'] svg {
+    width: var(--spacing-icon-sm);
+    height: var(--spacing-icon-sm);
+  }
+}

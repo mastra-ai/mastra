@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef } from 'react';
 
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface PageHeaderMetaProps extends ComponentPropsWithoutRef<'div'> {
@@ -8,14 +9,13 @@ export interface PageHeaderMetaProps extends ComponentPropsWithoutRef<'div'> {
 
 export function PageHeaderMeta({ beside = false, className, ...props }: PageHeaderMetaProps) {
   return (
-    <div
+    <Txt
+      as="div"
+      variant="meta"
+      tone="muted"
       data-slot="page-header-meta"
       data-placement={beside ? 'beside' : 'below'}
-      className={cn(
-        'flex min-w-0 flex-wrap items-center gap-2 text-meta text-muted-foreground',
-        beside ? 'col-start-[meta] row-start-1 self-baseline justify-self-start' : 'col-[title/end]',
-        className,
-      )}
+      className={cn('flex min-w-0 flex-wrap items-center gap-2', className)}
       {...props}
     />
   );

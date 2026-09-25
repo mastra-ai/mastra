@@ -1,3 +1,5 @@
+import './page-header.css';
+
 import { PageHeaderAction } from './page-header-action';
 import { PageHeaderDescription } from './page-header-description';
 import { PageHeaderEyebrow } from './page-header-eyebrow';

@@ -5,6 +5,8 @@ import { PageHeaderAction } from './page-header-action';
 import { PageHeaderDescription } from './page-header-description';
 import { PageHeaderEyebrow } from './page-header-eyebrow';
 import { PageHeaderIcon } from './page-header-icon';
+import { PageHeaderMeta } from './page-header-meta';
+import type { PageHeaderMetaProps } from './page-header-meta';
 import { PageHeaderTitle } from './page-header-title';
 import { cn } from '@/lib/utils';
 
@@ -25,35 +27,41 @@ export function PageHeaderRoot({
   ...props
 }: PageHeaderRootProps) {
   const useLegacyApi = children === undefined && title !== undefined;
+  const items = useLegacyApi
+    ? [
+        !isLoading && icon !== undefined && <PageHeaderIcon key="icon">{icon}</PageHeaderIcon>,
+        <PageHeaderTitle key="title" isLoading={isLoading}>
+          {title}
+        </PageHeaderTitle>,
+        description !== undefined && (
+          <PageHeaderDescription key="description" isLoading={isLoading}>
+            {description}
+          </PageHeaderDescription>
+        ),
+      ]
+    : Children.toArray(children);
 
-  // Actions sit outside the title grid so their height never affects title/meta/description alignment.
-  const items = Children.toArray(children);
+  // Actions sit outside the title column so their height never affects title/meta/description alignment.
   const actions = items.filter(child => isValidElement(child) && child.type === PageHeaderAction);
   const eyebrows = items.filter(child => isValidElement(child) && child.type === PageHeaderEyebrow);
-  const content = items.filter(child => !actions.includes(child) && !eyebrows.includes(child));
+  const icons = items.filter(child => isValidElement(child) && child.type === PageHeaderIcon);
+  const headline = items.filter(
+    child =>
+      isValidElement<PageHeaderMetaProps>(child) &&
+      (child.type === PageHeaderTitle || (child.type === PageHeaderMeta && child.props.beside)),
+  );
+  const below = items.filter(
+    child => child !== false && ![...actions, ...eyebrows, ...icons, ...headline].includes(child),
+  );
 
   return (
     <header className={cn('relative flex w-full flex-col gap-2', className)} {...props}>
       {eyebrows}
       <div className="flex w-full items-start gap-3">
-        <div
-          data-slot="page-header-grid"
-          className={cn(
-            'grid min-w-0 flex-1 grid-cols-[[title]_auto_[meta]_minmax(0,1fr)_[end]] gap-x-3 gap-y-1',
-            'has-[>[data-slot=page-header-icon]]:grid-cols-[[icon]_auto_[title]_auto_[meta]_minmax(0,1fr)_[end]]',
-          )}
-        >
-          {useLegacyApi ? (
-            <>
-              {!isLoading && icon !== undefined && <PageHeaderIcon>{icon}</PageHeaderIcon>}
-              <PageHeaderTitle isLoading={isLoading}>{title}</PageHeaderTitle>
-              {description !== undefined && (
-                <PageHeaderDescription isLoading={isLoading}>{description}</PageHeaderDescription>
-              )}
-            </>
-          ) : (
-            content
-          )}
+        {icons}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          {headline.length > 0 && <div className="flex min-w-0 items-center gap-3">{headline}</div>}
+          {below}
         </div>
         {actions}
       </div>

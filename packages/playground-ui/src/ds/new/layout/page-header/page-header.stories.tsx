@@ -241,6 +241,21 @@ export const ActionOnly: Story = {
   ),
 };
 
+export const LargeAction: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>API Keys</PageHeader.Title>
+        <PageHeader.Action>
+          <Button variant="primary" size="lg">
+            Create API key
+          </Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
 export const TallAction: Story = {
   render: () => (
     <div className="grid w-[min(42rem,calc(100vw-7rem))] gap-6 py-10">
