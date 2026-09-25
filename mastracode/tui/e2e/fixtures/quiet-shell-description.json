@@ -1,0 +1,39 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Run the described shell command.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_quiet_shell_description",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'quiet-description-output\\n'",
+              "description": "Printing the quiet description marker",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_quiet_shell_description"
+      },
+      "response": {
+        "content": "Quiet shell description complete."
+      }
+    }
+  ]
+}

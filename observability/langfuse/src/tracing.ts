@@ -20,6 +20,7 @@ import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
+import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
 const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
@@ -56,6 +57,8 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   environment?: string;
   /** Langfuse release tag for traces */
   release?: string;
+  /** Override OpenTelemetry resource attributes, including service.version. */
+  resourceAttributes?: OtelExporterConfig['resourceAttributes'];
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -66,6 +69,7 @@ export class LangfuseExporter extends BaseExporter {
   #realtime: boolean;
   #environment: string | undefined;
   #release: string | undefined;
+  #resourceAttributes: OtelExporterConfig['resourceAttributes'];
 
   constructor(config: LangfuseExporterConfig = {}) {
     super(config);
@@ -74,6 +78,7 @@ export class LangfuseExporter extends BaseExporter {
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
     const baseUrl = stripTrailingSlashes(config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL);
     this.#realtime = config.realtime ?? false;
+    this.#resourceAttributes = config.resourceAttributes;
 
     if (!publicKey || !secretKey) {
       const publicKeySource = config.publicKey
@@ -123,6 +128,7 @@ export class LangfuseExporter extends BaseExporter {
     this.#spanConverter = new SpanConverter({
       packageName: '@mastra/langfuse',
       serviceName: options.config?.serviceName,
+      config: { resourceAttributes: this.#resourceAttributes },
       format: 'GenAI_v1_38_0',
     });
   }
@@ -140,6 +146,7 @@ export class LangfuseExporter extends BaseExporter {
       this.#spanConverter = new SpanConverter({
         packageName: '@mastra/langfuse',
         serviceName: 'mastra-service',
+        config: { resourceAttributes: this.#resourceAttributes },
         format: 'GenAI_v1_38_0',
       });
     }
@@ -405,9 +412,9 @@ function mapMastraToLangfuseAttributes(
     delete attributes['mastra.metadata.traceName'];
   }
 
-  // Trace version: mastra.metadata.version → langfuse.trace.version
+  // Version: mastra.metadata.version → langfuse.version
   if (attributes['mastra.metadata.version']) {
-    attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
+    attributes['langfuse.version'] = attributes['mastra.metadata.version'];
     delete attributes['mastra.metadata.version'];
   }
 
