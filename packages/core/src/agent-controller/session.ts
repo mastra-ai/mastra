@@ -632,7 +632,11 @@ export class SessionThread {
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */
-  async create({ title, id }: { title?: string; id?: string } = {}): Promise<AgentControllerThread> {
+  async create({
+    title,
+    id,
+    requestContext,
+  }: { title?: string; id?: string; requestContext?: RequestContext } = {}): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     this.cleanupSubscription();
@@ -729,7 +733,7 @@ export class SessionThread {
 
     session.resetTokenUsage();
     session.emit({ type: 'thread_created', thread });
-    await this.ensureCurrentSubscription();
+    await this.ensureCurrentSubscription(requestContext);
 
     return thread;
   }
@@ -838,7 +842,15 @@ export class SessionThread {
   }
 
   /** Switch the session to an existing thread, hydrating its persisted settings and rebinding the stream. */
-  async switch({ threadId, emitEvent = true }: { threadId: string; emitEvent?: boolean }): Promise<void> {
+  async switch({
+    threadId,
+    emitEvent = true,
+    requestContext,
+  }: {
+    threadId: string;
+    emitEvent?: boolean;
+    requestContext?: RequestContext;
+  }): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
     session.abort({ localOnly: true });
@@ -878,7 +890,7 @@ export class SessionThread {
     if (emitEvent) {
       session.emit({ type: 'thread_changed', threadId, previousThreadId });
     }
-    await this.ensureCurrentSubscription();
+    await this.ensureCurrentSubscription(requestContext);
   }
 
   /** Delete a thread; when it's the active thread, clear the binding and tear down the run. */
@@ -4018,13 +4030,13 @@ export class Session<TState = unknown> {
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
-        const thread = await this.thread.create();
+        const thread = await this.thread.create({ requestContext: requestContextInput });
         this.thread.set({ threadId: thread.id });
       }
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
-      await this.thread.ensureSubscription(threadId, agent);
+      await this.thread.ensureSubscription(threadId, agent, requestContextInput);
       assertNotCancelled();
 
       // A deferred abort (parked approval gate) leaves the AbortController
@@ -4109,7 +4121,7 @@ export class Session<TState = unknown> {
           // never reach the session, leaving `run.isRunning()` stuck true.
           this.thread.cleanupSubscription();
         }
-        await this.thread.ensureSubscription(threadId, agent);
+        await this.thread.ensureSubscription(threadId, agent, requestContextInput);
         assertNotCancelled();
       } else if (abortedStreamTeardown) {
         // Stop on a run parked on a tool suspension leaves no run id behind,
@@ -4125,7 +4137,7 @@ export class Session<TState = unknown> {
           this.thread.cleanupSubscription();
           this.run.reset();
         }
-        await this.thread.ensureSubscription(threadId, agent);
+        await this.thread.ensureSubscription(threadId, agent, requestContextInput);
         assertNotCancelled();
       }
       abortedStreamTeardown?.cancel();
@@ -4181,13 +4193,13 @@ export class Session<TState = unknown> {
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
     if (!this.thread.getId()) {
-      const thread = await this.thread.create();
+      const thread = await this.thread.create({ requestContext: requestContextInput });
       this.thread.set({ threadId: thread.id });
     }
     const threadId = this.thread.getId()!;
 
     const agent = this.machinery.getAgent();
-    await this.thread.ensureSubscription(threadId);
+    await this.thread.ensureSubscription(threadId, agent, requestContextInput);
 
     if (this.run.getRunId() && this.stream.activeRunId()) {
       return agent.sendNotificationSignal(input, {
@@ -4226,11 +4238,11 @@ export class Session<TState = unknown> {
     includeStreamOptions?: boolean;
   }) {
     if (!this.thread.getId()) {
-      const thread = await this.thread.create();
+      const thread = await this.thread.create({ requestContext });
       this.thread.set({ threadId: thread.id });
     }
     const threadId = this.thread.getId()!;
-    await this.thread.ensureSubscription(threadId);
+    await this.thread.ensureSubscription(threadId, undefined, requestContext);
 
     if (!includeStreamOptions) {
       return { resourceId: this.identity.getResourceId(), threadId };
@@ -4703,7 +4715,7 @@ export class Session<TState = unknown> {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
-    await this.thread.ensureSubscription(threadId, agent);
+    await this.thread.ensureSubscription(threadId, agent, requestContext);
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
 
     try {
@@ -4734,7 +4746,7 @@ export class Session<TState = unknown> {
       await resumedSubscriptionBoundary.promise;
     } finally {
       resumedSubscriptionBoundary.cancel();
-      await this.thread.ensureSubscription(threadId);
+      await this.thread.ensureSubscription(threadId, undefined, requestContext);
     }
   }
 
