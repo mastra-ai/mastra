@@ -228,6 +228,14 @@ Not every topic reaches a `clearTopic` call. Topics without a defined end of lif
 await pubsub.clearTopic('workflow.events.run-123')
 ```
 
+### `trimTopic(topic, { runId, producedBefore? })`
+
+Pages through the stream with `XRANGE` and runs `XDEL` for every entry published with `runId`. With `producedBefore`, only entries produced at or before that time are deleted, skipping approval and suspension prompts. Mastra uses this to trim a long run each time its messages are saved. Mastra calls this once a thread run's messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Because entries are matched by `runId`, a run resumed after a restart also removes the entries it published before the restart. Entries from other runs, including those from other processes, are never touched. Best-effort. Failures are logged at warn level.
+
+```typescript
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123' })
+```
+
 ### `close()`
 
 Closes the Redis connections and stops all subscriptions. Call this during graceful shutdown.

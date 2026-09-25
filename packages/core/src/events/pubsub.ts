@@ -56,6 +56,25 @@ export abstract class PubSub {
   }
 
   /**
+   * Delete a single run's retained entries from a topic: every entry published
+   * with `runId`. Used to drop a thread run's entries once storage holds it, so
+   * retained transports (e.g. Redis Streams) stay bounded without touching
+   * entries of other runs.
+   *
+   * Default implementation is a no-op: transports that don't retain anything
+   * per topic have nothing to trim. Same best-effort contract as `clearTopic`.
+   *
+   * @param topic - The topic to trim
+   * @param options.runId - The run whose entries to delete
+   * @param options.producedBefore - Only delete entries whose `data.producedAt`
+   *   is at or before this epoch ms and that aren't `data.pinned`. Used to drop
+   *   the parts of a run that storage already holds while the run continues.
+   */
+  trimTopic(_topic: string, _options: { runId: string; producedBefore?: number }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
    * Delivery modes this PubSub implementation supports.
    *
    * Defaults to `['pull']` for backward compatibility — third-party

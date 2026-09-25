@@ -542,6 +542,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolName: approvalToolName,
                 args: approvalArgs,
                 resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                updatedAt: Date.now(),
               },
             });
             if (outputWriter) {
@@ -676,6 +677,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolName: inputData.toolName,
                 args: inputData.args,
                 resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                updatedAt: Date.now(),
               },
             });
             if (outputWriter) {

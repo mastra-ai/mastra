@@ -535,6 +535,8 @@ export interface AgentStreamEvent<T = unknown> {
   runId: string;
   /** Event payload */
   data: T;
+  /** Epoch ms at which a `chunk` event's chunk was produced. */
+  producedAt?: number;
 }
 
 /**

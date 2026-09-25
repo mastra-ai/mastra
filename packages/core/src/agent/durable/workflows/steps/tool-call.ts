@@ -779,7 +779,7 @@ export function createDurableToolCallStep() {
               type: 'tool-call-approval' as const,
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, resumeSchema },
+              payload: { toolCallId, toolName, args, resumeSchema, updatedAt: Date.now() },
             },
             {
               policy: registryEntry?.toolPayloadTransform,
@@ -1080,6 +1080,7 @@ export function createDurableToolCallStep() {
                     toolName: approvalToolName,
                     args: approvalArgs,
                     resumeSchema: approvalResumeSchema,
+                    updatedAt: Date.now(),
                   },
                 },
                 {

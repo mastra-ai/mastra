@@ -248,6 +248,224 @@ describe('Memory', () => {
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Hello  world' });
     });
 
+    describe('signed reasoning around updateWorkingMemory calls (#22798)', () => {
+      const reasoning = (signature: string) => ({
+        type: 'reasoning' as const,
+        reasoning: '',
+        details: [{ type: 'text' as const, text: `thinking ${signature}`, signature }],
+        providerMetadata: { anthropic: { signature } },
+      });
+      const toolInvocation = (toolCallId: string, toolName: string) => ({
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result: { success: true } },
+      });
+      const assistantMessage = (parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01Z'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts,
+          toolInvocations: parts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation] : [])),
+        },
+      });
+
+      it('drops a step left with only reasoning once its working-memory call is removed', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            toolInvocation('wm-1', 'updateWorkingMemory'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+            toolInvocation('call-1', 'lookupWeather'),
+          ]),
+        );
+
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          reasoning('SIG_B'),
+          { type: 'text', text: 'Done' },
+          toolInvocation('call-1', 'lookupWeather'),
+        ]);
+        expect(result?.content.toolInvocations?.map(invocation => invocation.toolName)).toEqual(['lookupWeather']);
+      });
+
+      it('drops a step left with only reasoning and whitespace text', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '\n\n' },
+            toolInvocation('wm-1', 'updateWorkingMemory'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        );
+
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          reasoning('SIG_B'),
+          { type: 'text', text: 'Done' },
+        ]);
+      });
+
+      it('drops a step left with only reasoning and working-memory tags', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '<working_memory># User\n- Name: Jim</working_memory>' },
+            toolInvocation('wm-1', 'updateWorkingMemory'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        );
+
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          reasoning('SIG_B'),
+          { type: 'text', text: 'Done' },
+        ]);
+      });
+
+      it('keeps reasoning when the step has other content besides the working-memory call', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: 'Saving that.' },
+            toolInvocation('wm-1', 'updateWorkingMemory'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        );
+
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          reasoning('SIG_A'),
+          { type: 'text', text: 'Saving that.' },
+          { type: 'step-start' },
+          reasoning('SIG_B'),
+          { type: 'text', text: 'Done' },
+        ]);
+        expect(result?.content.toolInvocations).toBeUndefined();
+      });
+
+      it('drops a message that only held a reasoning + working-memory step', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          assistantMessage([{ type: 'step-start' }, reasoning('SIG_A'), toolInvocation('wm-1', 'updateWorkingMemory')]),
+        );
+
+        expect(result).toBeNull();
+      });
+
+      it('saved history replays without a reasoning-only assistant message next to another assistant message', async () => {
+        const store = new InMemoryStore();
+        const saveMemory = new Memory({ storage: store });
+        const thread = await saveMemory.createThread({ threadId: 'thread-1', resourceId: 'resource-1' });
+        const user: MastraDBMessage = {
+          id: 'user-1',
+          role: 'user',
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          threadId: thread.id,
+          resourceId: 'resource-1',
+          content: { format: 2, parts: [{ type: 'text', text: 'Remember I live in Paris' }] },
+        };
+
+        await saveMemory.saveMessages({
+          messages: [
+            user,
+            assistantMessage([
+              { type: 'step-start' },
+              reasoning('SIG_A'),
+              toolInvocation('wm-1', 'updateWorkingMemory'),
+              { type: 'step-start' },
+              reasoning('SIG_B'),
+              { type: 'text', text: 'Noted.' },
+            ]),
+          ],
+        });
+
+        const { messages } = await saveMemory.recall({ threadId: thread.id, resourceId: 'resource-1' });
+        const prompt = new MessageList().add(messages, 'memory').get.all.aiV5.prompt();
+
+        expect(prompt.map(message => message.role)).toEqual(['user', 'assistant']);
+        const assistant = prompt[1]!;
+        expect(Array.isArray(assistant.content) && assistant.content.map(part => part.type)).toEqual([
+          'reasoning',
+          'text',
+        ]);
+        expect(JSON.stringify(prompt)).not.toContain('SIG_A');
+        expect(JSON.stringify(prompt)).not.toContain('updateWorkingMemory');
+      });
+
+      it.each([true, false])(
+        'long interleaved history replays one thinking block per assistant message (step-start markers: %s)',
+        async withStepStarts => {
+          const store = new InMemoryStore();
+          const saveMemory = new Memory({ storage: store });
+          const thread = await saveMemory.createThread({ threadId: 'thread-1', resourceId: 'resource-1' });
+          const parts: MastraDBMessage['content']['parts'] = [];
+          for (let i = 0; i < 30; i++) {
+            if (withStepStarts) parts.push({ type: 'step-start' });
+            parts.push(reasoning(`SIG_${i}`));
+            if (i % 3 === 0) {
+              parts.push(toolInvocation(`wm-${i}`, 'updateWorkingMemory'));
+            } else if (i % 3 === 1) {
+              parts.push({ type: 'text', text: `Step ${i}` }, toolInvocation(`call-${i}`, 'lookupWeather'));
+            } else {
+              parts.push(
+                toolInvocation(`wm-${i}`, 'updateWorkingMemory'),
+                toolInvocation(`call-${i}`, 'lookupWeather'),
+              );
+            }
+          }
+          if (withStepStarts) parts.push({ type: 'step-start' });
+          parts.push(reasoning('SIG_FINAL'), { type: 'text', text: 'Done' });
+
+          await saveMemory.saveMessages({
+            messages: [
+              {
+                id: 'user-1',
+                role: 'user',
+                createdAt: new Date('2026-01-01T00:00:00Z'),
+                threadId: thread.id,
+                resourceId: 'resource-1',
+                content: { format: 2, parts: [{ type: 'text', text: 'Plan my week' }] },
+              },
+              assistantMessage(parts),
+            ],
+          });
+
+          const { messages } = await saveMemory.recall({ threadId: thread.id, resourceId: 'resource-1' });
+          const prompt = new MessageList().add(messages, 'memory').get.all.aiV5.prompt();
+          const assistants = prompt.filter(message => message.role === 'assistant');
+
+          expect(JSON.stringify(prompt)).not.toContain('updateWorkingMemory');
+          for (let i = 0; i < 30; i += 3) {
+            expect(JSON.stringify(prompt)).not.toContain(`"SIG_${i}"`);
+          }
+          expect(assistants).toHaveLength(21);
+          for (const assistant of assistants) {
+            const reasoningParts = Array.isArray(assistant.content)
+              ? assistant.content.filter(part => part.type === 'reasoning')
+              : [];
+            expect(reasoningParts).toHaveLength(1);
+          }
+          prompt.slice(1).forEach((message, i) => {
+            expect(message.role === 'assistant' && prompt[i]!.role === 'assistant').toBe(false);
+          });
+        },
+      );
+    });
+
     it('should not crash when content is undefined', () => {
       const message = {
         id: 'test-3',
