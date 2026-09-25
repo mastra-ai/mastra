@@ -47,12 +47,18 @@ const issue = (number: number, labels: string[], author: string): GithubIssue =>
   createdAt: now,
   updatedAt: now,
 });
-const pull = (number: number, author: string, requestedReviewers: string[]): GithubPullRequest => ({
+const pull = (
+  number: number,
+  author: string,
+  requestedReviewers: string[],
+  labels: string[] = [],
+): GithubPullRequest => ({
   number,
   title: `Pull ${number}`,
   url: `https://github.com/acme/app/pull/${number}`,
   author,
   requestedReviewers,
+  labels,
   baseBranch: 'main',
   headBranch: 'feature',
   createdAt: now,
@@ -131,7 +137,10 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({ pullRequests: [pull(20, 'alice', []), pull(21, 'bob', ['alice'])], nextPage: null }),
+      HttpResponse.json({
+        pullRequests: [pull(20, 'alice', [], ['needs-review']), pull(21, 'bob', ['alice'])],
+        nextPage: null,
+      }),
     ),
   );
   return renderWithProviders(
@@ -177,6 +186,17 @@ async function selectMany(name: string, options: RegExp[]) {
 }
 
 describe('BoardPage filters', () => {
+  it('offers pull request labels on the review board and filters candidates by them', async () => {
+    const { client } = renderBoard('review');
+    expect(await screen.findByText('Card authored')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(candidateTitles()).toEqual(expect.arrayContaining(['Pull 20', 'Pull 21'])));
+    await selectMany('Label', [/^needs-review$/]);
+    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('label=needs-review'));
+    expect(candidateTitles()).toContain('Pull 20');
+    expect(candidateTitles()).not.toContain('Pull 21');
+  });
+
   it('requires every selected label on work cards, then restores cards when removed', async () => {
     const { client } = renderBoard('work');
     expect(await screen.findByText('Card bug')).toBeInTheDocument();

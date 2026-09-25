@@ -67,6 +67,7 @@ export interface GitLabMergeRequest {
   author: string | null;
   assignees: string[];
   requestedReviewers: string[];
+  labels?: string[];
   baseBranch: string;
   headBranch: string;
   createdAt: string;
