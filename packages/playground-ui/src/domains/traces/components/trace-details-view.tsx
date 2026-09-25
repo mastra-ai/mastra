@@ -56,7 +56,7 @@ export function TraceDetailsView({
       </DataDetailsPanel.Header>
 
       {isLoading ? (
-        <DataDetailsPanel.LoadingData>Loading trace...</DataDetailsPanel.LoadingData>
+        <DataDetailsPanel.LoadingData>Loading trace</DataDetailsPanel.LoadingData>
       ) : hierarchicalSpans.length === 0 ? (
         <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>
       ) : (

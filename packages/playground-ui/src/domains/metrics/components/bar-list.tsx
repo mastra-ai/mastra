@@ -1,5 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { CHART_COLORS } from './metrics-utils';
+import { formatCompactNumber, formatFullNumber } from '@/lib/cost';
 
 export function BarListContent({
   data,
@@ -84,19 +85,19 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                   <TooltipTrigger asChild>
                     <div
                       role="img"
-                      aria-label={`${d.completed.toLocaleString()} completed`}
+                      aria-label={`${formatFullNumber(d.completed)} completed`}
                       tabIndex={0}
                       className="absolute inset-y-0 left-0 cursor-default rounded-l"
                       style={{ width: `${completedWidth}%`, backgroundColor: CHART_COLORS.blue }}
                     />
                   </TooltipTrigger>
-                  <TooltipContent side="top">{d.completed.toLocaleString()} completed</TooltipContent>
+                  <TooltipContent side="top">{formatFullNumber(d.completed)} completed</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
                       role="img"
-                      aria-label={`${d.errors.toLocaleString()} errors`}
+                      aria-label={`${formatFullNumber(d.errors)} errors`}
                       tabIndex={0}
                       className="absolute inset-y-0 cursor-default rounded-r"
                       style={{
@@ -106,14 +107,14 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                       }}
                     />
                   </TooltipTrigger>
-                  <TooltipContent side="top">{d.errors.toLocaleString()} errors</TooltipContent>
+                  <TooltipContent side="top">{formatFullNumber(d.errors)} errors</TooltipContent>
                 </Tooltip>
                 <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-caption whitespace-nowrap text-white">
                   {d.name}
                 </span>
               </div>
               <span className="shrink-0 text-caption text-foreground tabular-nums">
-                {total.toLocaleString()} ({successPct}%)
+                {formatCompactNumber(total)} ({successPct}%)
               </span>
             </div>
           );

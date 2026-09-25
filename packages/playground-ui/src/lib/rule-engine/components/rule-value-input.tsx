@@ -131,7 +131,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
         <Hash />
       </Icon>
       <Input
-        type="number"
+        inputMode="decimal"
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter number'}

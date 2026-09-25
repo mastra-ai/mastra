@@ -15,7 +15,7 @@ describe('SessionExpired', () => {
   describe('when variant is not set', () => {
     it('renders in place without a fill wrapper', () => {
       render(withClient(<SessionExpired />));
-      expect(screen.getByRole('heading', { name: 'Session Expired' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Session expired' })).toBeTruthy();
       expect(document.querySelector('[data-slot="empty-state-fill"]')).toBeNull();
     });
   });
@@ -25,7 +25,7 @@ describe('SessionExpired', () => {
       render(withClient(<SessionExpired variant="fill" />));
       const wrapper = document.querySelector('[data-slot="empty-state-fill"]');
       expect(wrapper?.className).toContain('h-full');
-      expect(wrapper?.contains(screen.getByRole('heading', { name: 'Session Expired' }))).toBe(true);
+      expect(wrapper?.contains(screen.getByRole('heading', { name: 'Session expired' }))).toBe(true);
     });
   });
 });

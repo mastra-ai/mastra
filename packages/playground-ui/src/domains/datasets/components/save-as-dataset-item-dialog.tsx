@@ -128,7 +128,7 @@ export function SaveAsDatasetItemDialog({
     e.preventDefault();
 
     if (!selectedDatasetId) {
-      toast.error('Please select a dataset');
+      toast.error('Select a dataset');
       return;
     }
 

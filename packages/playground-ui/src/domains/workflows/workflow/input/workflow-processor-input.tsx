@@ -92,7 +92,7 @@ export const WorkflowProcessorInput = ({
           setErrors([]);
           onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
         }}
-        placeholder="Enter a test message..."
+        placeholder="What’s the status of order 4821?"
         rows={4}
         disabled={isSubmitLoading}
         aria-invalid={errors.length > 0 ? true : undefined}
