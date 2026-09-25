@@ -466,8 +466,49 @@ describe('compact() (#21657)', () => {
     const result = await om.compact({ threadId, resourceId, messageList });
 
     expect(result.compacted).toBe(true);
+    expect(result.pendingTokens).toBe(0);
     expect(await om.getOtherThreadsContext(resourceId, threadId)).toBeUndefined();
     expect(await om.loadUnobservedMessages({ threadId: otherThreadId, resourceId })).toEqual([]);
+  });
+
+  it('reports pending tokens across the resource, not just the live thread', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { model: createObserverModel(), messageTokens: 100_000, bufferTokens: false },
+      reflection: { model: createObserverModel(), observationTokens: 50_000 },
+    });
+    const otherThreadId = 'compact-other-thread';
+    await storage.saveThread({
+      thread: {
+        id: otherThreadId,
+        resourceId,
+        title: 'other thread',
+        createdAt: new Date(baseTime),
+        updatedAt: new Date(baseTime),
+      },
+    });
+    await storage.saveMessages({ messages: conversation(2) });
+    await om.compact({ threadId, resourceId });
+    const other = conversation(8).map((message, index) => ({
+      ...message,
+      id: `other-${index}`,
+      threadId: otherThreadId,
+      createdAt: new Date(baseTime + 60_000 + index * 1000),
+    }));
+    await storage.saveMessages({ messages: other });
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add((await storage.listMessages({ threadId, perPage: false })).messages, 'memory');
+    const liveListPending = (await om.getStatus({ threadId, resourceId, messages: messageList.get.all.db() }))
+      .pendingTokens;
+    const resourcePending = (await om.getStatus({ threadId, resourceId })).pendingTokens;
+    expect(resourcePending).toBeGreaterThan(liveListPending);
+
+    // No passes run, so the result reports the pending context the caller still has to deal with.
+    const result = await om.compact({ threadId, resourceId, messageList, maxIterations: 0 });
+
+    expect(result.pendingTokens).toBe(resourcePending);
   });
 });
 
