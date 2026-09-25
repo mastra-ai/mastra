@@ -58,6 +58,13 @@ import type {
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
 
 /**
+ * Bucket key for grants that apply to every thread. Grant calls that name no
+ * thread (an embedder granting up front) land here; grants made from an
+ * approval prompt are filed under the thread that owns the gate instead.
+ */
+const SESSION_WIDE_GRANT_BUCKET = '\u0000session-wide';
+
+/**
  * Memory the suspended run persisted its messages under, resolved with the
  * run's own RequestContext while the stream was live. Abort settlement cannot
  * rebuild that context later (dynamic `memory: ({ requestContext }) => …`
@@ -1436,8 +1443,9 @@ export class SessionApproval {
    * Apply a user's {@link ApprovalResponse} to the gate named by `toolCallId`.
    * A no-op for an id that is not parked, so a missing *or* stale id can never
    * resolve a different pending gate. `always_allow_category` runs
-   * `onAlwaysAllow` with the gated tool name (so the caller can grant the tool's
-   * category — a lookup that needs AgentController config) and then approves;
+   * `onAlwaysAllow` with the gated tool name and the gate's thread (so the
+   * caller can grant the tool's category to the thread that owns the gate — a
+   * lookup that needs AgentController config) and then approves;
    * `approve`/`decline` resolve as-is.
    */
   respond({
@@ -1446,12 +1454,15 @@ export class SessionApproval {
     requestContext,
     declineContext,
     onAlwaysAllow,
-  }: ApprovalResponse & { toolCallId: string; onAlwaysAllow?: (toolName: string) => void }): void {
+  }: ApprovalResponse & {
+    toolCallId: string;
+    onAlwaysAllow?: (toolName: string, threadId?: string) => void;
+  }): void {
     const gate = this.#gates.get(toolCallId);
     if (!gate) return;
 
     if (decision === 'always_allow_category') {
-      onAlwaysAllow?.(gate.toolName);
+      onAlwaysAllow?.(gate.toolName, gate.threadId);
     }
 
     this.#gates.delete(toolCallId);
@@ -3102,10 +3113,10 @@ export class Session<TState = unknown> {
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
   readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
-  /** Tool categories the user has granted "allow" for the lifetime of this session. */
-  readonly #grantedCategories = new Set<string>();
-  /** Individual tool names the user has granted "allow" for the lifetime of this session. */
-  readonly #grantedTools = new Set<string>();
+  /** Tool categories granted "allow", bucketed by thread id (or the session-wide bucket). */
+  readonly #grantedCategories = new Map<string, Set<string>>();
+  /** Individual tool names granted "allow", bucketed by thread id (or the session-wide bucket). */
+  readonly #grantedTools = new Map<string, Set<string>>();
   /** Running token-usage tally for the active thread. */
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Whether the in-flight abort teardown must stay local to this process. */
@@ -3537,10 +3548,14 @@ export class Session<TState = unknown> {
   /**
    * Resolve the effective approval policy for a tool: explicit per-tool deny
    * wins, then session-wide yolo, then an explicit per-tool policy, then a
-   * session-scoped grant, then the tool's category grant/policy, falling back to
-   * "ask". Pure session state plus the injected category resolver.
+   * grant, then the tool's category grant/policy, falling back to "ask". Pure
+   * session state plus the injected category resolver.
+   *
+   * Grants are checked against `threadId` (default: the current thread) plus the
+   * session-wide bucket, so a grant made from one thread's approval prompt is
+   * not inherited by every other thread in the session.
    */
-  resolveToolApproval(toolName: string): PermissionPolicy {
+  resolveToolApproval(toolName: string, threadId?: string): PermissionPolicy {
     const state = this.state.get() as Record<string, unknown>;
     const rules = this.permissions.getRules();
 
@@ -3551,11 +3566,11 @@ export class Session<TState = unknown> {
 
     if (toolPolicy) return toolPolicy;
 
-    if (this.hasToolGrant(toolName)) return 'allow';
+    if (this.hasToolGrant(toolName, threadId)) return 'allow';
 
     const category = this.#resolveCategory?.(toolName);
     if (category) {
-      if (this.hasCategoryGrant(category)) return 'allow';
+      if (this.hasCategoryGrant(category, threadId)) return 'allow';
       const categoryPolicy = rules.categories[category];
       if (categoryPolicy) return categoryPolicy;
     }
@@ -3569,8 +3584,8 @@ export class Session<TState = unknown> {
    * names, so a stale or id-less response can never resolve a different pending
    * gate. A no-op when that gate is not parked, or when the run is aborting and
    * the gate belongs to the aborting thread.
-   * "always_allow_category" grants the gated tool's category for the rest of the
-   * session (resolved via the injected {@link setCategoryResolver}) and then
+   * "always_allow_category" grants the gated tool's category to the thread that
+   * owns the gate (resolved via the injected {@link setCategoryResolver}) and then
    * approves; "approve"/"decline" release the run as-is.
    */
   respondToToolApproval({
@@ -3599,9 +3614,9 @@ export class Session<TState = unknown> {
       toolCallId,
       requestContext,
       declineContext,
-      onAlwaysAllow: toolName => {
+      onAlwaysAllow: (toolName, threadId) => {
         const category = this.#resolveCategory?.(toolName);
-        if (category) this.grantCategory(category);
+        if (category) this.grantCategory(category, threadId);
       },
     });
     // The gate is gone; drop its display-state entry so the UI stops rendering it.
@@ -4371,10 +4386,11 @@ export class Session<TState = unknown> {
    * the suspended run by `threadId`/`resourceId` — resolving with the
    * newly-bound identity would throw or land on the wrong thread.
    *
-   * `binding.agent` pins the agent that owns the run: a mid-run mode switch
-   * changes `machinery.getAgent()`, and a suspended run is only reclaimable by
-   * the agent whose snapshot holds it. `binding.abortSignal` pins the run's own
-   * signal, because a successor run replaces the session's abort controller.
+   * The owning agent is read from the run scope first (the
+   * {@link SUSPENDED_RUN_AGENT_KEY} invariant the resume path uses), then
+   * `binding.agent` for callers that hold no run scope, then the session's
+   * current agent. `binding.abortSignal` pins the run's own signal, because a
+   * successor run replaces the session's abort controller.
    */
   async approveToolCall({
     toolCallId,
@@ -4396,7 +4412,8 @@ export class Session<TState = unknown> {
       throw new Error('No active run to approve tool call for');
     }
 
-    const agent = binding?.agent ?? this.machinery.getAgent();
+    const agent =
+      this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? binding?.agent ?? this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = binding?.threadId ?? this.thread.getId();
@@ -4448,7 +4465,8 @@ export class Session<TState = unknown> {
       throw new Error('No active run to decline tool call for');
     }
 
-    const agent = binding?.agent ?? this.machinery.getAgent();
+    const agent =
+      this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? binding?.agent ?? this.machinery.getAgent();
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = binding?.threadId ?? this.thread.getId();
@@ -4576,32 +4594,70 @@ export class Session<TState = unknown> {
     }
   }
 
-  /** Grant a tool category "allow" for the remainder of the session. */
-  grantCategory(category: ToolCategory): void {
-    this.#grantedCategories.add(category);
+  /**
+   * Grant a tool category "allow". Scoped to `threadId` when given; a call that
+   * names no thread grants session-wide (every thread).
+   */
+  grantCategory(category: ToolCategory, threadId?: string): void {
+    this.#grantBucket(this.#grantedCategories, threadId).add(category);
   }
 
-  /** Grant an individual tool "allow" for the remainder of the session. */
-  grantTool(toolName: string): void {
-    this.#grantedTools.add(toolName);
+  /**
+   * Grant an individual tool "allow". Scoped to `threadId` when given; a call
+   * that names no thread grants session-wide (every thread).
+   */
+  grantTool(toolName: string, threadId?: string): void {
+    this.#grantBucket(this.#grantedTools, threadId).add(toolName);
   }
 
-  /** Whether the given tool category has been granted for the session. */
-  hasCategoryGrant(category: ToolCategory): boolean {
-    return this.#grantedCategories.has(category);
+  /**
+   * Whether the given tool category has been granted session-wide or for
+   * `threadId` (default: the current thread).
+   */
+  hasCategoryGrant(category: ToolCategory, threadId?: string): boolean {
+    return this.#hasGrant(this.#grantedCategories, category, threadId);
   }
 
-  /** Whether the given tool has been granted for the session. */
-  hasToolGrant(toolName: string): boolean {
-    return this.#grantedTools.has(toolName);
+  /**
+   * Whether the given tool has been granted session-wide or for `threadId`
+   * (default: the current thread).
+   */
+  hasToolGrant(toolName: string, threadId?: string): boolean {
+    return this.#hasGrant(this.#grantedTools, toolName, threadId);
   }
 
-  /** Snapshot of all session-scoped grants. */
-  getGrants(): { categories: ToolCategory[]; tools: string[] } {
+  /**
+   * Snapshot of the grants that apply to `threadId` (default: the current
+   * thread): session-wide grants plus that thread's own.
+   */
+  getGrants(threadId?: string): { categories: ToolCategory[]; tools: string[] } {
     return {
-      categories: [...this.#grantedCategories] as ToolCategory[],
-      tools: [...this.#grantedTools],
+      categories: [...this.#applicableGrants(this.#grantedCategories, threadId)] as ToolCategory[],
+      tools: [...this.#applicableGrants(this.#grantedTools, threadId)],
     };
+  }
+
+  #grantBucket(store: Map<string, Set<string>>, threadId?: string): Set<string> {
+    const key = threadId ?? SESSION_WIDE_GRANT_BUCKET;
+    let bucket = store.get(key);
+    if (!bucket) {
+      bucket = new Set<string>();
+      store.set(key, bucket);
+    }
+    return bucket;
+  }
+
+  #hasGrant(store: Map<string, Set<string>>, value: string, threadId?: string): boolean {
+    if (store.get(SESSION_WIDE_GRANT_BUCKET)?.has(value)) return true;
+    const thread = threadId ?? this.thread.getId();
+    return thread ? (store.get(thread)?.has(value) ?? false) : false;
+  }
+
+  #applicableGrants(store: Map<string, Set<string>>, threadId?: string): Set<string> {
+    const merged = new Set(store.get(SESSION_WIDE_GRANT_BUCKET) ?? []);
+    const thread = threadId ?? this.thread.getId();
+    if (thread) for (const value of store.get(thread) ?? []) merged.add(value);
+    return merged;
   }
 
   /** A copy of the running token-usage tally for the active thread. */

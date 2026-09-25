@@ -767,7 +767,7 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName);
+        const policy = this.#session.resolveToolApproval(toolName, state.threadId);
 
         // Resolve the call against the run that raised it, not the session's
         // currently-bound thread/run/resource. The session can switch thread or
@@ -796,6 +796,17 @@ export class SessionRunEngine {
           break;
         }
 
+        // Record the owning agent under the same run-scope key the suspension
+        // path uses, so approval-gated calls (which never emit a
+        // `tool-call-suspended` chunk) are covered by the invariant that a run
+        // is only resumed by the agent that parked it.
+        if (binding.runId) {
+          const approvalRunScope = this.#machinery.getRunScope(binding.runId);
+          if (!approvalRunScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
+            approvalRunScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
+          }
+        }
+
         const approvalPromise = this.#session.approval.arm({
           toolName,
           toolCallId,
@@ -812,13 +823,16 @@ export class SessionRunEngine {
 
         const approval = await approvalPromise;
 
-        // `session.abort()` releases a parked gate as a decline and defers the
-        // stream/signal teardown to us, so the decline can still be driven
-        // through the (live) agent run and persist an `output-denied` result.
-        // Once it lands we finish the teardown, which stops the run rather than
-        // letting the model continue past the denied call.
-        const deferredAbort = this.#session.run.isAbortRequested();
-        const deferredAbortOrigin = deferredAbort ? this.#session.takeDeferredAbortOrigin() : undefined;
+        // A gated `session.abort()` releases a parked gate as a decline and
+        // defers the stream/signal teardown to us, so the decline can still be
+        // driven through the (live) agent run and persist an `output-denied`
+        // result. Claim that captured origin to detect it: the session's abort
+        // flag is not a usable proxy for "this run was aborted while parked",
+        // because it is shared across run generations and threads — a successor
+        // run's abort (or one scoped to another thread) would otherwise cancel
+        // this parked gate's continuation.
+        const deferredAbortOrigin = this.#session.takeDeferredAbortOrigin();
+        const deferredAbort = deferredAbortOrigin !== undefined;
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({

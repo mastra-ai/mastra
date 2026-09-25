@@ -19,7 +19,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
-import type { Session } from '../session';
+import { SUSPENDED_RUN_AGENT_KEY, type Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
 
 function createController() {
@@ -268,5 +268,155 @@ describe('tool approvals resolve against the run that raised them', () => {
     // ...but the parked run is resumed with its own.
     expect(sendToolApproval).toHaveBeenCalledTimes(1);
     expect(sendToolApproval.mock.calls[0]?.[0].abortSignal).toBe(parkedSignal);
+  });
+
+  it('resumes a parked gate through the agent recorded on the run scope', async () => {
+    const { controller, buildAgent, planAgent } = createControllerWithPlanMode();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+
+    // The run scope is the ownership record the suspension/resume path reads. Seed
+    // it with the plan agent while the session's current mode stays on the build
+    // agent, so the two disagree and only the scope's record can win.
+    const mastra = controller.getMastra();
+    expect(mastra).toBeDefined();
+    mastra!.__createRunScope('run-a').set(SUSPENDED_RUN_AGENT_KEY, planAgent);
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    const buildApproval = vi
+      .spyOn(buildAgent, 'sendToolApproval')
+      .mockResolvedValue({ accepted: true, runId: 'run-a' });
+    const planApproval = vi.spyOn(planAgent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    let responded = false;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || responded) return;
+      responded = true;
+      session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+    });
+
+    await processSubscribedChunks(session, [{ type: 'start', runId: 'run-a' }, toolCallApprovalChunk(), finishChunk()]);
+
+    expect(responded).toBe(true);
+    // The run scope — not the session's current mode — decides the owning agent.
+    expect(planApproval).toHaveBeenCalledTimes(1);
+    expect(buildApproval).not.toHaveBeenCalled();
+  });
+
+  it('records the owning agent on the run scope when an approval gate is armed', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+
+    const mastra = controller.getMastra();
+    expect(mastra).toBeDefined();
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    let responded = false;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || responded) return;
+      responded = true;
+      session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+    });
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-a' },
+      // The scope exists before the gate arms, so the arm-time record has
+      // somewhere to land.
+      { __effect: () => void mastra!.__createRunScope('run-a') },
+      toolCallApprovalChunk(),
+      finishChunk(),
+    ]);
+
+    expect(responded).toBe(true);
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    // Approval-gated calls never emit `tool-call-suspended`, so the ownership
+    // invariant must be recorded when the gate is armed — that is what a resume
+    // reads back.
+    expect(mastra!.__getRunScope('run-a')?.get(SUSPENDED_RUN_AGENT_KEY)).toBe(agent);
+  });
+
+  it('does not let a successor run cancel a parked continuation', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    let parkedSignal: AbortSignal | undefined;
+    let successorSignal: AbortSignal | undefined;
+    let responded = false;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || responded) return;
+      responded = true;
+      // A successor run takes over the session's tracker and is aborted. The
+      // session has also moved to another thread, so the parked gate (owned by
+      // thread-a) must neither block the response nor follow the successor's
+      // abort signal.
+      session.run.reset();
+      successorSignal = session.run.ensureAbortController().signal;
+      session.thread.set({ threadId: 'thread-b' });
+      session.abort();
+      session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+    });
+
+    await processSubscribedChunks(session, [
+      { type: 'start', runId: 'run-a' },
+      { __effect: () => void (parkedSignal = session.run.ensureAbortController().signal) },
+      toolCallApprovalChunk(),
+      finishChunk(),
+    ]);
+
+    expect(responded).toBe(true);
+    expect(parkedSignal).toBeDefined();
+    expect(successorSignal).toBeDefined();
+    // The successor's abort really fired...
+    expect(successorSignal?.aborted).toBe(true);
+    // ...yet the parked gate still resolves — approved, not cancelled — and keeps
+    // its own signal.
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    expect(sendToolApproval.mock.calls[0]?.[0].approved).toBe(true);
+    expect(sendToolApproval.mock.calls[0]?.[0].abortSignal).toBe(parkedSignal);
+  });
+});
+
+describe('prompt-derived authority is scoped to the gate owner', () => {
+  it('grants an always_allow_category to the gate thread, not the current one', async () => {
+    const { controller } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.setCategoryResolver(() => 'execute');
+    // The user is on thread B...
+    session.thread.set({ threadId: 'thread-b' });
+
+    // ...while a gate owned by thread A is parked, and the answer arrives here.
+    void session.approval.arm({ toolName: 'execute_command', toolCallId: 'call-a', threadId: 'thread-a' });
+    session.respondToToolApproval({ decision: 'always_allow_category', toolCallId: 'call-a' });
+
+    // The grant belongs to the gate's thread...
+    expect(session.hasCategoryGrant('execute', 'thread-a')).toBe(true);
+    // ...and must not widen the thread the user is actually on.
+    expect(session.hasCategoryGrant('execute')).toBe(false);
+    expect(session.resolveToolApproval('execute_command')).toBe('ask');
+  });
+
+  it('keeps a thread-less grant session-wide', async () => {
+    const { controller } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+
+    // An embedder grant made without a thread context still applies everywhere.
+    session.grantTool('read_file');
+
+    expect(session.hasToolGrant('read_file')).toBe(true);
+    expect(session.hasToolGrant('read_file', 'thread-b')).toBe(true);
+    expect(session.resolveToolApproval('read_file', 'thread-b')).toBe('allow');
   });
 });
