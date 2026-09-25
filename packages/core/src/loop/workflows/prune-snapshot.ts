@@ -317,10 +317,11 @@ function stripRunningHistoryFields<T>(value: T): T {
  * curve behind 135 MB on disk for a 57-step run.
  *
  * Live execution never reads historical copies back. Recovery does need the
- * active step's payload, including after that step has reached a terminal state
- * but before the next step starts, because `restart()` uses it as `prevResult`.
- * Keep that one active-path copy and remove conversation state from every older
- * terminal step, bounding duplication independently of run length.
+ * active step's payload, because `restart()` re-runs that step with it. Once
+ * the pointed-at entry has finished and nothing is running, `restart()` skips
+ * to the next entry, which reads the finished entry's `output` instead. Keep
+ * that one copy and remove conversation state from every older terminal step,
+ * bounding duplication independently of run length.
  *
  * Suspended/paused snapshots are untouched — they are the resume path and keep
  * exactly the bytes they keep today.
@@ -337,14 +338,40 @@ function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
   );
 }
 
-function pruneRunningHistory(context: WorkflowRunState['context'], activeStepIds: ReadonlySet<string>): void {
+/**
+ * Step ids of the top-level entry a checkpoint points to while nothing is
+ * running. The default engine writes that checkpoint when the entry finishes,
+ * before the next entry starts. `restart()` resumes at the next entry, which
+ * reads this entry's saved `output` as its input (issue #24615).
+ */
+function getFinishedEntryStepIds(snapshot: WorkflowRunState): Set<string> {
+  const ids = new Set<string>();
+  if (snapshot.activePaths?.length !== 1 || Object.keys(snapshot.activeStepsPath ?? {}).length > 0) return ids;
+
+  const entry = snapshot.serializedStepGraph?.[snapshot.activePaths[0]!];
+  if (!entry) return ids;
+  const leaves =
+    entry.type === 'parallel' || entry.type === 'conditional'
+      ? entry.steps
+      : entry.type === 'loop' || entry.type === 'foreach'
+        ? [entry.step]
+        : [entry];
+  for (const leaf of leaves) ids.add(leaf.type === 'step' ? leaf.step.id : leaf.id);
+  return ids;
+}
+
+function pruneRunningHistory(
+  context: WorkflowRunState['context'],
+  activeStepIds: ReadonlySet<string>,
+  finishedEntryStepIds: ReadonlySet<string>,
+): void {
   for (const [key, value] of Object.entries(context ?? {})) {
     if (key === 'input' || activeStepIds.has(key) || !isPlainObject(value)) continue;
     if (!TERMINAL_STEP_STATUSES.has((value as any).status)) continue;
 
     const pruned: Record<string, any> = { ...value };
     pruned.payload = stripRunningHistoryFields(pruned.payload);
-    if ('output' in pruned) pruned.output = stripRunningHistoryFields(pruned.output);
+    if ('output' in pruned && !finishedEntryStepIds.has(key)) pruned.output = stripRunningHistoryFields(pruned.output);
     if ('prevOutput' in pruned) pruned.prevOutput = stripRunningHistoryFields(pruned.prevOutput);
     context[key] = pruned as any;
   }
@@ -409,7 +436,9 @@ export function pruneAgentLoopSnapshot({
   // respect to the caller's snapshot. The active-step terminal-payload
   // preservation above applies regardless of `retainRunningHistory` — only
   // the historical-copy strip is engine-dependent.
-  if (isRunning && !retainRunningHistory) pruneRunningHistory(context, activeStepIds);
+  if (isRunning && !retainRunningHistory) {
+    pruneRunningHistory(context, activeStepIds, getFinishedEntryStepIds(snapshot));
+  }
 
   const result =
     isPlainObject(snapshot.result) && typeof snapshot.result.status === 'string'
