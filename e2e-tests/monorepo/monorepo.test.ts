@@ -705,10 +705,11 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     it('should exclude imports from dead NODE_ENV branches', async () => {
-      const indexPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
-      const index = await readFile(indexPath, 'utf-8');
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const bundleFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
 
-      expect(index).not.toMatch(/import\(["']date-fns["']\)/);
+      expect(output).not.toMatch(/import\(["']date-fns["']\)/);
     });
 
     it('should update the source pnpm lockfile while installing output dependencies', async () => {
