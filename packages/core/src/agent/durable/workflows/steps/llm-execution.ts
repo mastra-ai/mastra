@@ -1547,18 +1547,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   });
                 }
 
-                // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
-                // Skip 'error' chunks — they are handled internally by the retry/fallback
-                // logic and must not be emitted to the client stream. When all models are
-                // exhausted the fatal error is propagated via emitError (mirrors the regular
-                // agent's deferredErrorChunk pattern).
+                // Forward client-visible chunks ('finish' was rewritten to 'step-finish' above).
+                // Skip 'response-metadata' to match the regular agent, which consumes it
+                // internally without exposing it on fullStream. Skip 'error' chunks because
+                // retry/fallback handles them internally; when all models are exhausted the
+                // fatal error is propagated via emitError (mirrors the regular agent's
+                // deferredErrorChunk pattern).
                 //
                 // Defer 'step-finish': for intermediate steps (hasToolCalls) we save it
                 // on the output so llm-mapping can emit it AFTER tool-result chunks,
                 // matching the regular agent's ordering (tool-result → step-finish).
                 // For final steps (no tool calls) we emit it after the assistant message
                 // is added to messageList.
-                if (pubsub && rawChunk.type !== 'error') {
+                if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
                   } else {

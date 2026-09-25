@@ -397,6 +397,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Enqueue finish chunk and close stream even if callback throws
           const finishChunk = {
             type: 'finish' as const,
+            runId,
+            from: ChunkFrom.AGENT,
             payload: {
               output: data.output,
               stepResult: data.stepResult,
