@@ -3,7 +3,6 @@ import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useFactoryAttentionReceiptAction } from '../../../../hooks/useFactoryAttention';
 import { useFactoryDecisionAction } from '../../../../hooks/useFactoryDecisions';
 import { updateWorkItem } from '../services/workItems';
@@ -23,7 +22,6 @@ export function useAttentionItemActions(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const factory = useFactoryQuery(factoryId);
   const [repositorySelection, setRepositorySelection] = useState<{ decisionId: string; workItemId: string }>();
-  const workItems = useWorkItemsQuery(repositorySelection ? factoryId : undefined);
   const retryDecision = useFactoryDecisionAction(factoryId, 'retry');
   const approveDecision = useFactoryDecisionAction(factoryId, 'approve');
   const dismissDecision = useFactoryDecisionAction(factoryId, 'dismiss');
@@ -33,13 +31,8 @@ export function useAttentionItemActions(factoryId: string | undefined) {
 
   const selectRepository = async (repository: LinkedRepositoryPayload) => {
     if (!repositorySelection) return;
-    const item = workItems.data?.find(candidate => candidate.id === repositorySelection.workItemId);
-    if (!item) {
-      toast.error('Unable to find this work item. Refresh the board and try again.');
-      return;
-    }
     try {
-      await updateWorkItem(baseUrl, item.id, { metadata: { ...item.metadata, repository: repository.slug } });
+      await updateWorkItem(baseUrl, repositorySelection.workItemId, { metadata: { repository: repository.slug } });
       await retryDecision.mutateAsync(repositorySelection.decisionId);
       setRepositorySelection(undefined);
     } catch (error) {

@@ -97,6 +97,55 @@ function activityItem(workItemId: string, title: string): FactoryActivityAttenti
 }
 
 describe('AttentionPage', () => {
+  it('saves repository choice by work-item ID before retrying without loading the board', async () => {
+    const events: string[] = [];
+    const failure = {
+      ...item('decision-1', 'Fix the loader', false),
+      failureCode: 'source_repository_ambiguous' as const,
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'connection-1',
+              installationId: 'installation-1',
+              repositories: [{ id: 'repo-1', branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } }],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({ items: [failure], kinds: attentionKindSummaries([failure]), hasMore: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
+        events.push('board-fetch');
+        return HttpResponse.json({ workItems: [] });
+      }),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/item-decision-1`, async ({ request }) => {
+        events.push(`patch:${JSON.stringify(await request.json())}`);
+        return HttpResponse.json({ workItem: { id: 'item-decision-1' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/decision-1/retry`, () => {
+        events.push('retry');
+        return HttpResponse.json({ decision: { id: 'decision-1' } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Choose repository for Fix the loader' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    await user.click(within(dialog).getByRole('button', { name: /acme\/app/ }));
+    await waitFor(() => expect(events).toEqual(['patch:{"metadata":{"repository":"acme/app"}}', 'retry']));
+  });
+
   it('filters, marks read, archives, and restores attention items', async () => {
     let items = [item('decision-1', 'Fix the loader', false), item('decision-2', 'Repair auth', true)];
     let markAllRequests = 0;
