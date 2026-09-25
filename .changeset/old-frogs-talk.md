@@ -4,6 +4,24 @@
 
 Semantic recall now works with a vector store that generates embeddings itself, so a self-embedding store needs no client-side `embedder`.
 
-`MastraVector` gains `isSelfEmbedding`, a getter defaulting to false. Stores that expect the caller to supply vectors are unaffected. When a store reports true and no embedder is configured, `Memory` sends text rather than vectors: the index is created without a dimension, writes carry `documents`, and queries carry `queryText`. The index is named `memory_messages_selfembed` so it cannot collide with one holding client-supplied vectors.
+Added `isSelfEmbedding` to `MastraVector`. It defaults to false, so every existing store is unaffected. A store that embeds text itself reports true:
+
+```ts
+class MyVector extends MastraVector {
+  override get isSelfEmbedding() {
+    return true;
+  }
+}
+
+const memory = new Memory({
+  storage,
+  vector: new MyVector(),
+  options: { semanticRecall: true },
+});
+```
+
+A configured `embedder` still takes precedence, so adding one to the example above returns to client-side embedding.
+
+Messages embedded by the store are kept in an index named `memory_messages_selfembed`, separate from the indexes holding client-supplied vectors.
 
 Configuring semantic recall with neither an embedder nor a self-embedding store now says so, naming both options.

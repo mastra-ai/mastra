@@ -548,12 +548,13 @@ describe('semantic recall against a store that embeds server-side', () => {
     expect(createArgs).toEqual({ indexName: 'memory_messages_selfembed' });
   });
 
-  it('never calls an embedder on the write path', async () => {
+  it('embeds client-side when an embedder is configured alongside a self-embedding store', async () => {
     const vector = makeServerVector();
     const embedder = makeEmbedder(1024);
     const memory = new Memory({
       storage: new InMemoryStore(),
       vector,
+      embedder,
       options: {
         semanticRecall: { topK: 2, messageRange: 0, scope: 'thread' },
         lastMessages: 10,
@@ -563,7 +564,11 @@ describe('semantic recall against a store that embeds server-side', () => {
 
     await runTurn(memory, 'thread-1', 'Remember the deadline');
 
-    expect(embedder.doEmbed).not.toHaveBeenCalled();
+    expect(embedder.doEmbed).toHaveBeenCalled();
+    const [upsertArgs] = vi.mocked(vector.upsert).mock.calls[0]! as any[];
+    expect(upsertArgs.vectors).toHaveLength(1);
+    expect(upsertArgs.documents).toBeUndefined();
+    expect(upsertArgs.indexName).toBe('memory_messages_1024');
   });
 });
 
