@@ -3920,7 +3920,7 @@ export class AgentThreadStreamRuntime {
         // (record cleaned up, lease released) where deferral would strand the
         // run because its terminal event was already processed.
         const live =
-          local ||
+          (localRecord !== undefined && this.#isThreadBlockingRun(state, localRecord)) ||
           (!backlog && data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
           (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
         if (live) {
@@ -4620,7 +4620,13 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
-        if (state.threadKeysByRunId.get(activeRunId) === key) {
+        if (
+          state.threadKeysByRunId.get(activeRunId) === key ||
+          // Remote runs are tracked only while a subscription observes the thread;
+          // without one, their terminal events go unseen and the id may be stale.
+          (state.remoteThreadKeysByRunId.get(activeRunId) === key &&
+            !!state.threadControlSubscriptions.get(key)?.observers)
+        ) {
           // A run can be reserved before its stream record is registered. Keep the reserved
           // id so early follow-ups still attach to the run that is starting.
           runId = activeRunId;
