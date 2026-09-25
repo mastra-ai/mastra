@@ -122,6 +122,18 @@ describe('WorkflowsRedis resourceId keying', () => {
     expect(await runKeys(runId)).toHaveLength(0);
   });
 
+  it('keeps createdAt when re-persisting a legacy run with its resourceId', async () => {
+    const runId = randomUUID();
+    const createdAt = new Date('2025-01-01T00:00:00Z');
+    await writeLegacy(runId, 'r1', createdAt);
+
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+    await store.persistWorkflowSnapshot({ workflowName, runId, resourceId: 'r1', snapshot: snapshot! });
+
+    const run = await store.getWorkflowRunById({ workflowName, runId });
+    expect(run?.createdAt.toISOString()).toBe(createdAt.toISOString());
+  });
+
   it('filters listWorkflowRuns by resourceId on the record', async () => {
     const [a, b, c, legacy] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
     await store.persistWorkflowSnapshot({ workflowName, runId: a, resourceId: 'r1', snapshot: snapshot(a) });

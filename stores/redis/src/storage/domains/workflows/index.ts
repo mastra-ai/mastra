@@ -237,8 +237,11 @@ export class WorkflowsRedis extends WorkflowsStorage {
       let finalCreatedAt = createdAt;
       let finalResourceId = resourceId;
       if (!finalCreatedAt || !finalResourceId) {
-        // Canonical key only: a legacy-key fallback here would SCAN the keyspace on every new run.
-        const existingData = await this.client.get(snapshotKey(namespace, workflowName, runId));
+        // No SCAN here (it would run on every new run); a legacy key is only reachable when resourceId is known.
+        const canonicalKey = snapshotKey(namespace, workflowName, runId);
+        const existingData =
+          (await this.client.get(canonicalKey)) ??
+          (resourceId ? await this.client.get(`${canonicalKey}:resourceId:${resourceId}`) : null);
         const existing = existingData ? (JSON.parse(existingData) as SnapshotRecord) : null;
         finalCreatedAt ??= existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
         finalResourceId ??= existing?.resourceId;
