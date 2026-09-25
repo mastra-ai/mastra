@@ -6,6 +6,7 @@ import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
+import { useIntakeConfigQuery } from './useIntakeConfig';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
 
@@ -35,6 +36,7 @@ export interface StartFactoryRunInput {
 export function useStartFactoryRun() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
+  const intakeConfig = useIntakeConfigQuery();
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const repositories = factoryQuery.data?.repositories ?? [];
@@ -42,10 +44,21 @@ export function useStartFactoryRun() {
   const mutation = useMutation({
     mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
-      const targetSlug = repositorySlug ?? (typeof workItem.metadata?.repository === 'string' ? workItem.metadata.repository : undefined);
+      const linearProjectId =
+        workItem.source === 'linear-issue' && typeof workItem.metadata?.linearProjectId === 'string'
+          ? workItem.metadata.linearProjectId
+          : undefined;
+      const config = linearProjectId && !intakeConfig.data ? (await intakeConfig.refetch()).data : intakeConfig.data;
+      const mappedSlug = linearProjectId ? config?.linear.repositoryByLinearProject?.[linearProjectId] : undefined;
+      const targetSlug =
+        repositorySlug ??
+        (typeof workItem.metadata?.repository === 'string' ? workItem.metadata.repository : undefined) ??
+        mappedSlug;
       const repository = targetSlug
         ? repositories.find(candidate => candidate.slug === targetSlug)
-        : repositories.length === 1 ? repositories[0] : undefined;
+        : repositories.length === 1
+          ? repositories[0]
+          : undefined;
       if (!repository) throw new Error('Choose a repository before starting this Factory run');
       const metadata = { ...workItem.metadata, repository: repository.slug };
       if (workItem.metadata?.repository !== repository.slug) {

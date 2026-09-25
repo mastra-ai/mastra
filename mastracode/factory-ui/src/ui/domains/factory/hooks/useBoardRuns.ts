@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
+import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -17,6 +18,7 @@ export function useBoardRuns({
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, enabled, repositories } = useStartFactoryRun();
+  const intakeConfig = useIntakeConfigQuery();
   const navigate = useNavigate();
   const [repositorySelection, setRepositorySelection] = useState<{
     item: WorkItem;
@@ -80,7 +82,14 @@ export function useBoardRuns({
         return;
       }
       const spec = itemSessionSpec(refreshed);
-      const targetSlug = typeof refreshed.metadata.repository === 'string' ? refreshed.metadata.repository : undefined;
+      const linearProjectId =
+        refreshed.source === 'linear-issue' && typeof refreshed.metadata.linearProjectId === 'string'
+          ? refreshed.metadata.linearProjectId
+          : undefined;
+      const config = linearProjectId && !intakeConfig.data ? (await intakeConfig.refetch()).data : intakeConfig.data;
+      const mappedSlug = linearProjectId ? config?.linear.repositoryByLinearProject?.[linearProjectId] : undefined;
+      const targetSlug =
+        (typeof refreshed.metadata.repository === 'string' ? refreshed.metadata.repository : undefined) ?? mappedSlug;
       const hasLinkedTarget = targetSlug ? repositories.some(repository => repository.slug === targetSlug) : false;
       if (!targetSlug && repositories.length > 1) {
         setRepositorySelection({ item: refreshed, ...spec });
