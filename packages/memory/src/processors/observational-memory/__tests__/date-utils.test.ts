@@ -222,16 +222,25 @@ describe('parseDateSpan', () => {
     ['approx. 2022–2023 or 2023–2024', '2022-01-01', '2024-12-31'],
     ['mid-to-late May 2023', '2023-05-15', '2023-05-23'],
     ['2024-01-10', '2024-01-10', '2024-01-10'],
+    ['Dec 27 – Jan 3, 2025', '2024-12-27', '2025-01-03'],
+    ['Dec – Jan 2025', '2024-12-01', '2025-01-31'],
+    ['Dec 27, 2024 – Jan 3', '2024-12-27', '2025-01-03'],
   ])('parses "%s" as %s to %s', (text, start, end) => {
     expect(span(text)).toEqual([start, end]);
   });
 
-  it.each(['Oct 19', 'Nov 2 20:36', 'Jan 22 - Jan 31', 'late May', 'Feb 30, 2023', 'next week', ''])(
-    'returns null for "%s", which has no known year or is not a real date',
-    text => {
-      expect(parseDateSpan(text)).toBeNull();
-    },
-  );
+  it.each([
+    'Oct 19',
+    'Nov 2 20:36',
+    'Jan 22 - Jan 31',
+    'late May',
+    'Feb 30, 2023',
+    'Mar 5 - Mar 1, 2025',
+    'next week',
+    '',
+  ])('returns null for "%s", which has no known year or is not a real date', text => {
+    expect(parseDateSpan(text)).toBeNull();
+  });
 });
 
 describe('formatRelativeSpan', () => {
@@ -272,6 +281,12 @@ describe('annotateObservationTextDates', () => {
   it('annotates month-year dates and ranges that state their year', () => {
     expect(annotateObservationTextDates('EduCon Apr 2020; Phase 1 (Mar 1–15, 2025)', now)).toBe(
       'EduCon Apr 2020 (4 years ago); Phase 1 (Mar 1–15, 2025 - 3 weeks ago to 1 week ago)',
+    );
+  });
+
+  it('annotates a range that crosses New Year with one stated year', () => {
+    expect(annotateObservationTextDates('* Trip Dec 27 – Jan 3, 2025.', now)).toBe(
+      '* Trip Dec 27 – Jan 3, 2025 (2 months ago).',
     );
   });
 

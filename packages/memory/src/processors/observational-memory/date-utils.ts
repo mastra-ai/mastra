@@ -168,12 +168,20 @@ function parseSpanAlternative(text: string): DateSpan | null {
   const from = { ...first! };
   const to = { ...second };
 
+  const fromYearInferred = from.year === undefined;
+  const toYearInferred = to.year === undefined;
   from.year ??= to.year;
   to.year ??= from.year;
   if (from.month === undefined && (from.day !== undefined || from.qualifier) && to.month !== undefined) {
     from.month = to.month;
   }
   if (to.month === undefined && to.day !== undefined && from.month !== undefined) to.month = from.month;
+
+  // A range that crosses New Year with one stated year ("Dec 27 – Jan 3, 2025") puts the other end in the adjacent year.
+  if (from.month !== undefined && to.month !== undefined && from.month > to.month && from.year === to.year) {
+    if (fromYearInferred) from.year! -= 1;
+    else if (toYearInferred) to.year! += 1;
+  }
 
   const fromBounds = endpointBounds(from);
   const toBounds = endpointBounds(to);
