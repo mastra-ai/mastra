@@ -1238,6 +1238,21 @@ export class MessageList {
           this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
           this.messages,
         ).filter(m => m.role === `tool` || m.role === `assistant`),
+      /**
+       * Model content parts grouped by the response message that produced them, in bucket order.
+       * Lets callers tell which parts belong to messages they already saw, even after memory
+       * processors remove some response messages from the bucket.
+       */
+      modelContentByMessage: (): Array<{ id: string; content: AIV5Type.StepResult<any>['content'] }> =>
+        this.response.db().map(message => ({
+          id: message.id,
+          content: convertAIV5UIToModelMessages(
+            this.toAIV5UIMessages([message], { transformToolPayloads: false }),
+            this.messages,
+          )
+            .filter(m => m.role === `tool` || m.role === `assistant`)
+            .flatMap(m => m.content as unknown as AIV5Type.StepResult<any>['content']),
+        })),
       modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
         if (typeof stepNumber === 'number') {
           // Delegate to StepContentExtractor for step-specific content extraction
