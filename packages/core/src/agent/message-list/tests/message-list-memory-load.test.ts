@@ -89,7 +89,7 @@ describe('MessageList memory loads', () => {
     const stored = list.get.all.db();
     expect(stored).toHaveLength(1);
     expect(list.get.input.db()).toEqual(stored);
-    expect(texts(list)).toEqual([['hello']]);
+    expect(texts(list)).toEqual([['hello (stored again)']]);
   });
 
   it('adds a stored message again after it was removed from the list', () => {
