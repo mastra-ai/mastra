@@ -371,7 +371,7 @@ describe('DurableAgent tool approval workflow execution', () => {
       inputSchema: z.object({ input: z.string() }),
       requireApproval: true,
       execute: async (_inputData: { input: string }, context?: any) => {
-        receivedResumeData.push(context?.agent?.resumeData ?? context?.resumeData);
+        receivedResumeData.push(context?.agent?.resumeData);
         return { result: 'completed' };
       },
     });
