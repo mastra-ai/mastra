@@ -3255,7 +3255,7 @@ Notes:
     }
 
     // Batches through the new thread so large threads are embedded without loading every payload at once.
-    if (this.vector && this.embedder && config.semanticRecall) {
+    if (this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall) {
       try {
         await this.embedCopiedMessagesInBatches(memoryStore, result, config);
       } catch (error) {
@@ -3367,7 +3367,7 @@ Notes:
     const memoryStore = await this.getMemoryStore();
 
     const config = this.getMergedThreadConfig(memoryConfig);
-    const migratesVectors = Boolean(this.vector && this.embedder && config.semanticRecall);
+    const migratesVectors = Boolean(this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall);
 
     // Preserve the storage no-op contract when there is no vector migration to worry about:
     // if the thread already belongs to the target resource there is nothing to move, so return

@@ -195,6 +195,80 @@ describe('message updates on a self-embedding store', () => {
   });
 });
 
+describe('thread copies on a self-embedding store', () => {
+  const makeServerVector = (indexes: string[] = []) => {
+    const vector = makeVector(1024);
+    (vector as any).isSelfEmbedding = true;
+    vi.mocked(vector.listIndexes).mockResolvedValue(indexes);
+    return vector;
+  };
+
+  const makeServerMemory = (vector: MastraVector) =>
+    new Memory({
+      storage: new InMemoryStore(),
+      vector,
+      options: {
+        semanticRecall: { topK: 2, messageRange: 0, scope: 'resource' },
+        lastMessages: false,
+        generateTitle: false,
+      },
+    });
+
+  const seed = async (memory: Memory) => {
+    await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'T',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'the original text' }], content: 'the original text' },
+          createdAt: new Date(),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+        } as MastraDBMessage,
+      ],
+    });
+  };
+
+  it('embeds the messages a cloned thread copied', async () => {
+    const vector = makeServerVector();
+    const memory = makeServerMemory(vector);
+    await seed(memory);
+    vi.mocked(vector.upsert).mockClear();
+
+    const { thread } = await memory.cloneThread({ sourceThreadId: 'thread-1' });
+
+    const [args] = vi.mocked(vector.upsert).mock.calls.at(-1)! as any[];
+    expect(args.documents).toEqual(['the original text']);
+    expect(args.vectors).toBeUndefined();
+    expect(args.metadata[0].thread_id).toBe(thread.id);
+  });
+
+  it('moves message vectors to the resource a thread was transferred to', async () => {
+    const vector = makeServerVector(['memory_messages_selfembed']);
+    const memory = makeServerMemory(vector);
+    await seed(memory);
+    vi.mocked(vector.upsert).mockClear();
+
+    await memory.updateThreadResourceId({ threadId: 'thread-1', resourceId: 'resource-2' });
+
+    const cleared = vi.mocked(vector.deleteVectors).mock.calls.map(([args]: any[]) => args.indexName);
+    expect(cleared).toContain('memory_messages_selfembed');
+
+    const [args] = vi.mocked(vector.upsert).mock.calls.at(-1)! as any[];
+    expect(args.documents).toEqual(['the original text']);
+    expect(args.metadata[0].resource_id).toBe('resource-2');
+  });
+});
+
 describe('vector cleanup on a self-embedding store', () => {
   it('finds message indexes written under any embedding configuration', async () => {
     const vector = makeVector(1024);
