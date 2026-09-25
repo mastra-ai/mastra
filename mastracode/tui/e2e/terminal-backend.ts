@@ -338,7 +338,11 @@ async function startMastraCodeApp(
   terminal: Terminal,
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
-  const [{ createMastraCode }, { MastraTUI }, { createBrowserFromSettings, loadSettings }] = await Promise.all([
+  const [
+    { createMastraCode },
+    { MastraTUI },
+    { createBrowserFromSettings, loadSettings, resolveStagehandModel, toActiveBrowserSettings },
+  ] = await Promise.all([
     import('@mastra/code-sdk'),
     import('../src/tui/index.js'),
     import('@mastra/code-sdk/onboarding/settings'),
@@ -396,11 +400,16 @@ async function startMastraCodeApp(
     process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
   });
 
+  // Mirrors main.ts: snapshot credential-free settings plus the launch-time model.
   if (settings.browser.enabled) {
-    const browser = await createBrowserFromSettings(settings.browser);
+    const chatModelId = result.session.model.get();
+    const browser = await createBrowserFromSettings(settings.browser, { chatModelId });
     if (browser) {
       result.controller.setBrowser(browser);
-      await result.session.state.set({ activeBrowserSettings: settings.browser });
+      await result.session.state.set({
+        activeBrowserSettings: toActiveBrowserSettings(settings.browser),
+        activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
+      });
     }
   }
 

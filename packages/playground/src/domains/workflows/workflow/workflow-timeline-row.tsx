@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import {
@@ -116,10 +117,16 @@ export function WorkflowTimelineRow({
         )}
       </div>
       <span
-        className="text-right text-meta whitespace-nowrap text-muted-foreground tabular-nums"
+        className="text-right text-meta whitespace-nowrap text-muted-foreground"
         title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
       >
-        {row.timing ? formatDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
+        {row.timing ? (
+          <Txt as="span" variant="meta" font="mono">
+            {formatDuration(row.timing.durationMs)}
+          </Txt>
+        ) : (
+          <span aria-label="Timing unavailable">—</span>
+        )}
       </span>
       <div className="flex items-center">
         <Button

@@ -31,6 +31,12 @@ import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/gith
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
+  normalizeAnthropicModelId,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
+import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
   createReasoningEffortMiddleware,
@@ -43,17 +49,14 @@ import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
-export const OPENAI_PREFIX = 'openai/';
-export const MASTRA_GATEWAY_PREFIX = 'mastra/';
-export const MASTRACODE_GATEWAY_ID = 'mastracode';
+export {
+  MASTRA_GATEWAY_PREFIX,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
 
-const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
-  'gpt-5.3': 'gpt-5.3-codex',
-  'gpt-5.2': 'gpt-5.2-codex',
-  'gpt-5.1': 'gpt-5.1-codex',
-  'gpt-5.1-mini': 'gpt-5.1-codex-mini',
-  'gpt-5': 'gpt-5-codex',
-};
+export const MASTRACODE_GATEWAY_ID = 'mastracode';
 
 type ModelRequestHeaders = Record<string, string>;
 
@@ -100,36 +103,6 @@ export function getGlobalAuthStorage(): AuthStorage {
 
 export function reloadAuthStorage() {
   getGlobalAuthStorage().reload();
-}
-
-export function stripMastraGatewayPrefix(modelId: string): string {
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
-}
-
-function normalizeAnthropicModelId(modelId: string): string {
-  return modelId.replace(/\.(?=\d)/g, '-');
-}
-
-export function remapOpenAIModelForCodexOAuth(modelId: string): string {
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
-
-  if (!normalizedModelId.startsWith(OPENAI_PREFIX)) {
-    return modelId;
-  }
-
-  const openaiModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
-
-  if (openaiModelId.includes('-codex')) {
-    return modelId;
-  }
-
-  const codexModelId = CODEX_OPENAI_MODEL_REMAPS[openaiModelId];
-  if (!codexModelId) {
-    return modelId;
-  }
-
-  const remappedModelId = `${OPENAI_PREFIX}${codexModelId}`;
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? `${MASTRA_GATEWAY_PREFIX}${remappedModelId}` : remappedModelId;
 }
 
 /**

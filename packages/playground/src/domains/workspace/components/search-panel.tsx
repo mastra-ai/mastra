@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -186,7 +187,9 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-body text-foreground">{fileId}</span>
+            <Txt as="span" variant="body" tone="ink" font="mono" className="truncate">
+              {fileId}
+            </Txt>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="h-1 w-12 overflow-hidden rounded-full bg-background">
                 <div className="h-full rounded-full bg-accent1" style={{ width: `${scorePercent}%` }} />

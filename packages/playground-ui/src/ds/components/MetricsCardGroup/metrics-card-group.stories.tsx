@@ -13,7 +13,6 @@ const meta: Meta<typeof MetricsCardGroup> = {
   },
   argTypes: {
     variant: { control: 'inline-radio', options: ['default', 'inset'] },
-    minItemWidth: { control: 'text' },
   },
 };
 

@@ -3,9 +3,18 @@ import { describe, it, expect } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
+import { ProcessorRunner } from '../runner';
 
 import { TokenLimiterProcessor } from './token-limiter';
 import { ToolCallFilter } from './tool-call-filter';
+
+const mockLogger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  trackException: () => {},
+} as any;
 
 /**
  * ToolCallFilter rewrites the model prompt only, so these helpers build the real prompt
@@ -488,56 +497,38 @@ describe('Processors Integration Tests', () => {
 
     // Test 2: Apply token limiting with a low limit to force truncation
     // The limiter uses ~24 tokens for conversation overhead + ~3.8 per message
-    // With 6 messages, we need a limit that keeps some but not all messages
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
+    const prompt = await messageList.get.all.aiV5.llmPrompt();
 
-    // Create a separate MessageList for token limiting (processInputStep mutates in-place)
-    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
-    for (const msg of messageList.get.all.db()) {
-      limiterMessageList.add(msg, 'memory');
-    }
-
-    await tokenLimiter.processInputStep({
-      messageList: limiterMessageList,
-      messages: limiterMessageList.get.all.db(),
-      abort: mockAbort,
+    const limited = await tokenLimiter.processLLMRequest({
+      prompt,
+      model: { modelId: 'test-model' } as any,
       stepNumber: 0,
       steps: [],
       state: {},
-      systemMessages: [],
-      model: { modelId: 'test-model' } as any,
-      retryCount: 0,
     });
 
-    const tokenLimitedResult = limiterMessageList.get.all.db();
+    const tokenLimitedPrompt = limited?.prompt ?? prompt;
 
     // Should have fewer messages due to token limit (prioritizes recent messages)
-    expect(tokenLimitedResult.length).toBeLessThan(messages.length);
-    expect(tokenLimitedResult.length).toBeGreaterThan(0);
+    expect(tokenLimitedPrompt.length).toBeLessThan(prompt.length);
+    expect(tokenLimitedPrompt.length).toBeGreaterThan(0);
 
-    // Test 3: Combine both processors
+    // Limiting is transient: storage keeps every message
+    expect(messageList.get.all.db().length).toBe(6);
+
+    // Test 3: Combine both processors — filter the prompt first, then limit it
     const combinedFilter = new ToolCallFilter({ exclude: ['get_weather', 'calculator'] });
     const combinedFilteredPrompt = await filterPrompt(combinedFilter, messageList);
 
-    // Then apply token limiter
-    const finalMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
-    for (const msg of messageList.get.all.db()) {
-      finalMessageList.add(msg, 'memory');
-    }
-
-    await tokenLimiter.processInputStep({
-      messageList: finalMessageList,
-      messages: finalMessageList.get.all.db(),
-      abort: mockAbort,
+    const limitedCombined = await tokenLimiter.processLLMRequest({
+      prompt: combinedFilteredPrompt,
+      model: { modelId: 'test-model' } as any,
       stepNumber: 0,
       steps: [],
       state: {},
-      systemMessages: [],
-      model: { modelId: 'test-model' } as any,
-      retryCount: 0,
     });
-
-    const finalResult = finalMessageList.get.all.db();
+    const finalPrompt = limitedCombined?.prompt ?? combinedFilteredPrompt;
 
     // The prompt should have no tool parts at all, while keeping the conversation text
     expect(toolPartsIn(combinedFilteredPrompt)).toHaveLength(0);
@@ -549,7 +540,113 @@ describe('Processors Integration Tests', () => {
     expect(messageList.get.all.db().some(m => m.id === 'msg-4')).toBe(true);
 
     // Final result should be further limited by tokens
-    expect(finalResult.length).toBeGreaterThan(0);
-    expect(finalResult.length).toBeLessThanOrEqual(messageList.get.all.db().length);
+    expect(finalPrompt.length).toBeGreaterThan(0);
+    expect(finalPrompt.length).toBeLessThanOrEqual(combinedFilteredPrompt.length);
+  });
+
+  /**
+   * Regression for #24111.
+   *
+   * `TokenLimiterProcessor` budgets the prompt the model actually receives, so a
+   * tool result that `ToolCallFilter` strips no longer counts against the limit.
+   * Before this, the limiter counted stored messages during the input stage and
+   * dropped the whole message — answer text included.
+   */
+  it('budgets the prompt after earlier prompt filters have run', async () => {
+    const listRulesResult = `House rule: stay off the grass. ${'Registered guests only. '.repeat(2500)}`;
+
+    const messageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    messageList.add(
+      {
+        id: 'history-user',
+        role: 'user',
+        content: { format: 2, content: 'What are the house rules?', parts: [] },
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      },
+      'input',
+    );
+    messageList.add(
+      {
+        id: 'history-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Pets are allowed on weekdays.',
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'call' as const,
+                toolCallId: 'call-rules',
+                toolName: 'listRules',
+                args: {},
+              },
+            },
+            { type: 'text' as const, text: 'Pets are allowed on weekdays.' },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-rules',
+                toolName: 'listRules',
+                args: {},
+                result: listRulesResult,
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:01:00Z'),
+      },
+      'response',
+    );
+    messageList.add(
+      {
+        id: 'current-user',
+        role: 'user',
+        content: { format: 2, content: 'Can I bring my dog?', parts: [] },
+        createdAt: new Date('2024-01-01T00:02:00Z'),
+      },
+      'input',
+    );
+
+    const prompt = await messageList.get.all.aiV5.llmPrompt();
+
+    const run = async (processors: any[]) =>
+      new ProcessorRunner({
+        inputProcessors: processors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      }).runProcessLLMRequest({
+        prompt,
+        model: { modelId: 'test-model' } as any,
+        stepNumber: 0,
+        steps: [],
+      });
+
+    // Filter first: the excluded rule payload is gone before the budget is applied,
+    // so the assistant answer fits and survives.
+    const filtered = await run([
+      new ToolCallFilter({ exclude: ['listRules'] }),
+      new TokenLimiterProcessor({ limit: 8000 }),
+    ]);
+
+    expect(filtered.prompt.length).toBeLessThan(prompt.length);
+    expect(toolPartsIn(filtered.prompt, 'listRules')).toHaveLength(0);
+    expect(filtered.prompt.map(m => m.role)).toContain('assistant');
+    expect(textsIn(filtered.prompt)).toContain('Pets are allowed on weekdays.');
+
+    // Reversed order: the limiter measures the unfiltered prompt, the whole message
+    // is over budget, and the answer is dropped along with the tool payload.
+    const reversed = await run([
+      new TokenLimiterProcessor({ limit: 8000 }),
+      new ToolCallFilter({ exclude: ['listRules'] }),
+    ]);
+
+    expect(textsIn(reversed.prompt)).not.toContain('Pets are allowed on weekdays.');
+    // The whole assistant message went over budget, so the limiter evicted it
+    expect(reversed.prompt.map(m => m.role)).not.toContain('assistant');
+
+    // Neither composition touches stored messages
+    expect(messageList.get.all.db().map(m => m.id)).toEqual(['history-user', 'history-assistant', 'current-user']);
   });
 });

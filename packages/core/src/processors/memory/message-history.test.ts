@@ -312,11 +312,14 @@ describe('MessageHistory', () => {
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
-      // msg-1 from history, msg-2 from new (duplicate filtered), msg-3 from new
+      // msg-1 from history, msg-2 once (stored copy is the base), msg-3 from new
       expect(resultMessages).toHaveLength(3);
       expect(resultMessages[0].id).toBe('msg-1');
       expect(resultMessages[1].id).toBe('msg-2');
-      expect(resultMessages[1].content.content).toBe('Message 2 (new)'); // New version kept
+      // An input copy of a stored assistant message only fills in pending tool calls; its text
+      // doesn't replace or add to the stored text.
+      expect(resultMessages[1].content.content).toBe('Message 2');
+      expect(resultMessages[1].content.parts).toEqual([{ type: 'text', text: 'Message 2' }]);
       expect(resultMessages[2].id).toBe('msg-3');
     });
 
@@ -909,6 +912,59 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).toHaveBeenCalledWith({
         messages: [expect.objectContaining({ id: 'msg-user', role: 'user' })],
       });
+    });
+
+    it('should drop a step left with only signed reasoning when its updateWorkingMemory call is stripped (#22798)', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', title: 'Test Thread', metadata: {} }),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+
+      const reasoning = (signature: string) => ({
+        type: 'reasoning' as const,
+        reasoning: '',
+        details: [{ type: 'text' as const, text: `thinking ${signature}`, signature }],
+        providerMetadata: { anthropic: { signature } },
+      });
+      const workingMemoryCall = {
+        state: 'result' as const,
+        toolCallId: 'wm-1',
+        toolName: 'updateWorkingMemory',
+        args: { memory: '# User\n- Lives in Paris' },
+        result: { success: true },
+      };
+
+      await processor.persistMessages({
+        threadId: 'thread-1',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'step-start' },
+                reasoning('SIG_A'),
+                { type: 'tool-invocation', toolInvocation: workingMemoryCall },
+                { type: 'step-start' },
+                reasoning('SIG_B'),
+                { type: 'text', text: 'Noted.' },
+              ],
+              toolInvocations: [workingMemoryCall],
+            },
+          },
+        ],
+      });
+
+      const [saved] = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(saved!.content.parts).toEqual([
+        { type: 'step-start' },
+        reasoning('SIG_B'),
+        { type: 'text', text: 'Noted.' },
+      ]);
+      expect(saved!.content.toolInvocations).toBeUndefined();
     });
 
     it('should drop transient signals but keep normal signals when persisting', async () => {

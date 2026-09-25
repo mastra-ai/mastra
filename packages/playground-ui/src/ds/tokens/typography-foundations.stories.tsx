@@ -17,6 +17,7 @@ type Story = StoryObj;
 
 const headingRoles: TextRole[] = ['display', 'title', 'heading', 'subheading'];
 const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'column', 'caption', 'meta'];
+const monoRoles: TextRole[] = ['body', 'body-sm', 'caption', 'meta'];
 
 const families: { token: string; use: string; className: string; sample: string }[] = [
   {
@@ -52,10 +53,17 @@ const samples: Record<TextRole, string> = {
   meta: 'METADATA · 12:42 PM',
 };
 
+const monoSamples: Partial<Record<TextRole, string>> = {
+  body: '12:42:07.114 INFO agent finished in 412ms',
+  'body-sm': 'run_01JQX8K2M4',
+  caption: 'gpt-5.1 · 3f9a2c1e',
+  meta: 'v2.1.0 · 3f9a2c1',
+};
+
 // The numbers are read off the rendered element rather than mirrored from a TypeScript
 // copy of the tokens: the row then reports what the browser actually applied, and cannot
 // drift from theme/typography.css.
-const RoleRow = ({ role }: { role: TextRole }) => {
+const RoleRow = ({ role, font = 'body' }: { role: TextRole; font?: 'body' | 'mono' }) => {
   const [applied, setApplied] = useState('');
 
   const measure = useCallback((element: HTMLElement | null) => {
@@ -74,8 +82,8 @@ const RoleRow = ({ role }: { role: TextRole }) => {
       <Txt variant="meta" font="mono" tone="faint">
         {applied}
       </Txt>
-      <Txt ref={measure} variant={role} className="min-w-0 truncate">
-        {samples[role]}
+      <Txt ref={measure} variant={role} font={font} className="min-w-0 truncate">
+        {font === 'mono' ? monoSamples[role] : samples[role]}
       </Txt>
     </div>
   );
@@ -147,6 +155,17 @@ export const TypographyFoundations: Story = {
         <div className="min-w-0">
           {textRoles.map(role => (
             <RoleRow key={role} role={role} />
+          ))}
+        </div>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Monospace"
+        description={`Mono is a face, not a role: font="mono" on Txt swaps the family and keeps the role's size, line height and weight. Use it for identifiers a machine wrote (model and resource ids, hashes, log lines), timestamps, and durations. Other numbers, such as token counts, stay in the body face with tabular-nums. Code goes in InlineCode or a highlighted CodeBlock. Labels, headings, status and prose stay proportional, even beside a mono value.`}
+      >
+        <div className="min-w-0">
+          {monoRoles.map(role => (
+            <RoleRow key={role} role={role} font="mono" />
           ))}
         </div>
       </FoundationSection>

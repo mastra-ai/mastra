@@ -106,7 +106,16 @@ Creates a new vector index (collection) in MongoDB.
   {
     name: 'dimension',
     type: 'number',
-    description: 'Vector dimension (must match your embedding model)',
+    isOptional: true,
+    description:
+      'Vector dimension (must match your embedding model). Required unless `autoEmbed` is set, where the embedding model determines the dimension. Passing both is an error.',
+  },
+  {
+    name: 'autoEmbed',
+    type: 'MongoDBAutoEmbedConfig',
+    isOptional: true,
+    description:
+      'Generate the embeddings in MongoDB instead of supplying vectors. See [Automated Embedding](#automated-embedding) for the supported fields.',
   },
   {
     name: 'metric',
@@ -189,7 +198,9 @@ Adds or updates vectors and their metadata in the collection. On a bring-your-ow
   {
     name: 'vectors',
     type: 'number[][]',
-    description: 'Array of embedding vectors',
+    isOptional: true,
+    description:
+      'Array of embedding vectors. Required unless the index was created with `autoEmbed`, where MongoDB generates them from `documents` and supplying vectors is an error.',
   },
   {
     name: 'metadata',
@@ -207,7 +218,8 @@ Adds or updates vectors and their metadata in the collection. On a bring-your-ow
     name: 'documents',
     type: 'string[]',
     isOptional: true,
-    description: 'Optional document text content to store alongside vectors',
+    description:
+      'Document text content to store alongside vectors. On an `autoEmbed` index this is the text MongoDB embeds, and it is required.',
   },
 ]}
 />
@@ -226,7 +238,22 @@ Searches for similar vectors with optional metadata filtering.
   {
     name: 'queryVector',
     type: 'number[]',
-    description: 'Query vector to find similar vectors for',
+    isOptional: true,
+    description: 'Query vector to find similar vectors for. Supply this or `queryText`, not both.',
+  },
+  {
+    name: 'queryText',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Text for MongoDB to embed at query time. `autoEmbed` indexes only, and mutually exclusive with `queryVector`. For full-text matching use `textQuery()` instead.',
+  },
+  {
+    name: 'model',
+    type: 'string',
+    isOptional: true,
+    description:
+      "Embedding model for this query, overriding the index's. Requires `queryText`, and must be compatible with the index's model.",
   },
   {
     name: 'topK',
@@ -445,7 +472,21 @@ Runs a hybrid search that fuses vector similarity with full-text results through
   {
     name: 'queryVector',
     type: 'number[]',
-    description: 'Query vector for similarity search',
+    isOptional: true,
+    description: 'Query vector for the vector branch. Supply this or `queryText`, not both.',
+  },
+  {
+    name: 'queryText',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Text for MongoDB to embed for the vector branch. `autoEmbed` indexes only. Independent of `query`, so each branch can search for something different.',
+  },
+  {
+    name: 'model',
+    type: 'string',
+    isOptional: true,
+    description: "Embedding model for the vector branch, overriding the index's. Requires `queryText`.",
   },
   {
     name: 'query',
@@ -537,6 +578,8 @@ interface IndexStats {
   metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
+
+On an `autoEmbed` index, `dimension` is read from the index definition and reports MongoDB's default of `1024` when the index doesn't pin one. `count` counts documents that carry the embedded text field, since the generated vectors aren't stored on your documents.
 
 ### `deleteIndex()`
 
@@ -693,6 +736,117 @@ try {
   }
 }
 ```
+
+## Automated Embedding
+
+MongoDB can generate the embeddings for you. Create the index with `autoEmbed` and a Voyage AI model, write plain text through `documents`, and search with `queryText`. No embedding provider runs in your application, and no vectors travel through it.
+
+```typescript
+import { MongoDBVector } from '@mastra/mongodb'
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+})
+
+// No `dimension`: the embedding model determines it.
+await store.createIndex({
+  indexName: 'movies',
+  autoEmbed: { model: 'voyage-4' },
+  filterFields: ['year'],
+})
+
+// Automated Embedding indexes build slower than client-embedded ones.
+await store.waitForIndexReady({ indexName: 'movies', timeoutMs: 300000 })
+
+// No `vectors`: MongoDB embeds the text as documents are written.
+await store.upsert({
+  indexName: 'movies',
+  documents: [
+    'A lonely astronaut adrift near a strange ocean planet.',
+    'A heist crew robs a bank vault in Paris.',
+  ],
+  metadata: [{ year: 1972 }, { year: 2001 }],
+})
+
+// No `queryVector`: MongoDB embeds the query string with the same model.
+const results = await store.query({
+  indexName: 'movies',
+  queryText: 'space opera about isolation',
+  topK: 5,
+  filter: { year: { $gt: 1970 } },
+})
+```
+
+### `autoEmbed` options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description:
+      'Voyage AI model to embed with, for example `voyage-4`. MongoDB rejects a name it does not support and lists the ones it does.',
+  },
+  {
+    name: 'path',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'document',
+    description:
+      'Text field to embed. Defaults to the managed `document` field that `upsert({ documents })` writes. Point it at a field of your own to index an existing collection in place.',
+  },
+  {
+    name: 'similarity',
+    type: "'cosine' | 'dotProduct' | 'euclidean'",
+    isOptional: true,
+    description: "Vector similarity function. Defaults to MongoDB's own default when omitted.",
+  },
+  {
+    name: 'numDimensions',
+    type: '256 | 512 | 1024 | 2048',
+    isOptional: true,
+    defaultValue: '1024',
+    description: 'Length of the generated embeddings.',
+  },
+  {
+    name: 'quantization',
+    type: "'float' | 'scalar' | 'binary' | 'binaryNoRescore'",
+    isOptional: true,
+    defaultValue: 'scalar',
+    description: 'Storage format for the generated vectors.',
+  },
+  {
+    name: 'indexingMethod',
+    type: "'hnsw' | 'flat'",
+    isOptional: true,
+    defaultValue: 'hnsw',
+    description: 'Index structure for the vector field.',
+  },
+  {
+    name: 'hnswOptions',
+    type: '{ maxEdges?: number; numEdgeCandidates?: number }',
+    isOptional: true,
+    description: "Tuning for the HNSW graph. MongoDB's defaults suit most workloads.",
+  },
+]}
+/>
+
+Any other field the `autoEmbed` index definition accepts is forwarded to MongoDB as given, so options added after this release work without a package update. Anything omitted keeps MongoDB's default.
+
+**Important notes:**
+
+- Automated Embedding is a **MongoDB Preview feature**. It requires an Atlas cluster with Automated Embedding available, or the `mongodb/mongodb-atlas-local:preview` image for local development. Self-managed deployments need `mongot` configured with a Voyage AI API key.
+- The Voyage AI API key must be provisioned through the Atlas UI. A key issued directly by Voyage AI is rejected by the default embedding endpoint.
+- **MongoDB stores the generated vectors outside your collection**, so documents carry text only. `includeVector: true` isn't supported on an `autoEmbed` index and throws.
+- Embeddings are generated asynchronously. A query can legitimately return no results for a short time after a write, even once the index reports ready.
+- An index declares either a vector field or an `autoEmbed` field, never both. Omit `autoEmbed` to keep supplying your own vectors. The client-side path is unchanged.
+- Passing `vectors` to an `autoEmbed` index is an error, since they would be written to a field no index reads.
+- When `document` is the embedded field it's no longer a declared filter field, so `documentFilter` uses the `$match` pre-filter automatically. Metadata filters declared through `filterFields` still push into `$vectorSearch`.
+- `updateVector()` rejects a vector update on an `autoEmbed` index. Upsert the document with new text instead, and MongoDB re-embeds it.
+- `queryVector` still works against an `autoEmbed` index, but the vector must come from a compatible model and match the index `quantization`. MongoDB rejects a mismatch.
+- Embedding generation is billed per token, for both documents and queries.
 
 ## Indexing an existing collection
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import type { ActorSignal } from '../../auth/ee';
 import { MastraError } from '../../error';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
@@ -12,6 +13,7 @@ interface SleepFnContext {
   runId: string;
   mastra: Mastra;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   inputData: any;
   retryCount: number;
   resumeData: any;
@@ -110,6 +112,7 @@ describe('StepExecutor', () => {
     const resumeData = { state: 'resumed' };
     const retryCount = 2;
     const requestContext = new RequestContext();
+    const actor: ActorSignal = { actorKind: 'system', sourceWorkflow: 'test-workflow' };
 
     const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
       id: 'sleep-1',
@@ -146,6 +149,7 @@ describe('StepExecutor', () => {
       resumeData,
       stepResults,
       requestContext,
+      actor,
       retryCount,
     });
 
@@ -157,6 +161,7 @@ describe('StepExecutor', () => {
     expect(capturedContext.runId).toBe(runId);
     expect(capturedContext.mastra).toBe(mastra);
     expect(capturedContext.requestContext).toBe(requestContext);
+    expect(capturedContext.actor).toBe(actor);
     expect(capturedContext.inputData).toBe(inputData);
     expect(capturedContext.retryCount).toBe(retryCount);
     expect(capturedContext.resumeData).toBe(resumeData);
@@ -340,13 +345,16 @@ describe('StepExecutor', () => {
     it('should propagate parent abortController to resolveSleepUntil fn context', async () => {
       // Arrange: Create a parent abort controller and track what abortSignal the fn receives
       const parentAbortController = new AbortController();
+      const actor: ActorSignal = { actorKind: 'system', sourceWorkflow: 'test-workflow' };
       let receivedAbortSignal: AbortSignal | undefined;
+      let receivedActor: ActorSignal | undefined;
 
       const step: Extract<StepFlowEntry, { type: 'sleepUntil' }> = {
         type: 'sleepUntil',
         id: 'sleep-until-abort-propagation',
         fn: async context => {
           receivedAbortSignal = context.abortSignal;
+          receivedActor = context.actor;
           return new Date(Date.now() + 1000);
         },
       };
@@ -358,11 +366,13 @@ describe('StepExecutor', () => {
         runId: 'test-run',
         requestContext,
         stepResults: {},
+        actor,
         abortController: parentAbortController,
       });
 
-      // Assert: The fn should receive the parent's abort signal
+      // Assert: The fn should receive the parent's abort signal and actor
       expect(receivedAbortSignal).toBe(parentAbortController.signal);
+      expect(receivedActor).toBe(actor);
     });
 
     it('should propagate parent abortController to evaluateConditions condition fn context', async () => {

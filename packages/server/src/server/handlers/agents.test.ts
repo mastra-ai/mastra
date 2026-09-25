@@ -2784,6 +2784,68 @@ describe('Agent Routes Authorization', () => {
       }
     });
 
+    it('should forward withInitialHistory with the server request context', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-history',
+        resourceId: 'user-a',
+        title: 'Subscribe History',
+      });
+      const subscribeToThread = vi.fn(async () => ({
+        activeRunId: () => null,
+        abort: vi.fn(),
+        unsubscribe: vi.fn(),
+        stream: (async function* () {})(),
+      }));
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+      } as any)) as ReadableStream;
+      await stream.cancel();
+
+      expect(subscribeToThread).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+        requestContext,
+      });
+    });
+
+    it('checks thread read access before sending initial history', async () => {
+      await mockMemory.createThread({ threadId: 'fga-history', resourceId: 'user-a', title: 'Private' });
+      const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const subscribeToThread = vi.fn();
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      const user = { id: 'user-a' };
+      requestContext.set('user', user);
+
+      await expect(
+        SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          threadId: 'fga-history',
+          withInitialHistory: true,
+        } as any),
+      ).rejects.toThrow('FGA denied');
+      expect(subscribeToThread).not.toHaveBeenCalled();
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'fga-history' },
+        permission: 'memory:read',
+        context: expect.objectContaining({ resourceId: 'user-a' }),
+      });
+    });
+
     it('should clear heartbeat timers when an idle subscription stream is aborted', async () => {
       vi.useFakeTimers();
       try {

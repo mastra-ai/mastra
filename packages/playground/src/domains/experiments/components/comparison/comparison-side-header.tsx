@@ -4,7 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
@@ -93,7 +93,7 @@ export function ComparisonSideHeader({
           </span>
           {createdAt && (
             <TextAndIcon>
-              <CalendarIcon /> {format(createdAt, 'MMM d, yyyy HH:mm')}
+              <CalendarIcon /> {formatDate(createdAt, 'date-time')}
             </TextAndIcon>
           )}
         </div>

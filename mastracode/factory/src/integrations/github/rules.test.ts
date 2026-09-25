@@ -733,6 +733,39 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
   });
 
+  it('keeps a trusted post-Factory issue in Intake without queueing a run', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const configVersion = 'trusted-arrival-intake';
+    const boards = createBoardRegistry();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      configVersion,
+      boards,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
+      storage: workItems,
+      boards,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-guard',
+    });
+
+    await service.ingest(issueOpened('trusted-arrival'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ stages: ['intake'], metadata: { authorTrusted: true, autoStartCandidate: true } });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision.type).toBe('upsertLinkedWorkItem');
+    expect(decisions.some(({ decision }) => decision.type === 'invokeSkill')).toBe(false);
+  });
+
   it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
@@ -846,7 +879,21 @@ describe('GithubRules', () => {
 
     await service.ingest(issueOpened('delivery-full-flow'));
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    const [arrived] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(arrived).toMatchObject({ stages: ['intake'] });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: arrived!.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: arrived!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'human-start-issue-42' },
+      cause: 'board_drag',
+    });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
@@ -885,7 +932,21 @@ describe('GithubRules', () => {
     ]);
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+    const [rematerializedArrival] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(rematerializedArrival).toMatchObject({ stages: ['intake'] });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: rematerializedArrival!.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: rematerializedArrival!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'human-restart-issue-42' },
+      cause: 'board_drag',
+    });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:04Z'));
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
@@ -1049,7 +1110,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['intake'],
+      stages: ['review'],
       metadata: {
         author: 'pr-author',
         authorTrusted: true,
@@ -1106,7 +1167,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['intake'],
+      stages: ['review'],
       metadata: { author: 'pr-author', authorTrusted: true, factoryAuthored: false, autoStartCandidate: true },
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
