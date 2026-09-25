@@ -18,6 +18,19 @@ const JIRA_ISSUE_URL_RE = /^https:\/\/[^/]+\.atlassian\.net\/browse\/[A-Z][A-Z0-
 export interface ReviewSourceOutput {
   sessionUrl: string;
   triggeredBy: string | null;
+  /**
+   * The change request this review session is bound to, straight from the
+   * work item's `externalSource`. Review skills compare this identity (the
+   * canonical URL when present, otherwise provider + external id) against the
+   * PR/MR they fetched in Phase 1 so that two requests by the same author can
+   * never be conflated. `null` when the bound item records no external source.
+   */
+  reviewTarget: {
+    integrationId: string;
+    type: string;
+    externalId: string;
+    url: string | null;
+  } | null;
   linkedIssues: { source: 'linear' | 'jira'; url: string }[];
 }
 
@@ -71,6 +84,7 @@ export async function createReviewSourceTool(options: {
     threadId: binding.threadId,
   });
   const triggeredBy = readPullRequestAuthor(item);
+  const reviewTarget = readReviewTarget(item);
 
   // The parent walk runs inside `execute` so a `storage.get` failure surfaces
   // on the tool call the agent made, not on tool registration (which would
@@ -84,11 +98,11 @@ export async function createReviewSourceTool(options: {
     factory_review_source: createTool({
       id: 'factory_review_source',
       description:
-        'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the GitHub author of the pull request under review (when known), and any Linear or Jira issue linked as the source of this work. Include the session URL in every review comment or verdict you publish so misattributed reviews can be traced back to their originating session.',
+        'Read the routing facts behind this review session: a deep-link back to the Factory session that produced the review, the author of the change request under review (when known), the bound change-request identity (provider, external id, canonical URL), and any Linear or Jira issue linked as the source of this work. Compare the bound identity against the PR/MR you are reviewing, and include the session URL in every review comment or verdict you publish so misattributed reviews can be traced back to their originating session.',
       inputSchema: z.object({}),
       execute: async (): Promise<ReviewSourceOutput> => {
         const linkedIssues = await collectLinkedIssues(item, storage);
-        return { sessionUrl, triggeredBy, linkedIssues };
+        return { sessionUrl, triggeredBy, reviewTarget, linkedIssues };
       },
     }),
   };
@@ -102,6 +116,17 @@ function buildSessionUrl(input: {
 }): string {
   const origin = input.uiOrigin.replace(/\/+$/, '');
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
+}
+
+function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget'] {
+  const source = item.externalSource;
+  if (!source) return null;
+  return {
+    integrationId: source.integrationId,
+    type: source.type,
+    externalId: source.externalId,
+    url: typeof source.url === 'string' && source.url ? source.url : null,
+  };
 }
 
 function readPullRequestAuthor(item: WorkItemRow): string | null {

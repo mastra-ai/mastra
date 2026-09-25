@@ -121,6 +121,12 @@ describe('factory_review_source', () => {
     expect(output).toEqual({
       sessionUrl: `${PUBLIC_ORIGIN}/factories/${encodeURIComponent(PROJECT_ID)}/workspaces/resource-1/threads/thread-1`,
       triggeredBy: 'octocat',
+      reviewTarget: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: 'github-pr:42',
+        url: null,
+      },
       linkedIssues: [{ source: 'linear', url: 'https://linear.app/acme/issue/ACME-42/build-a-thing' }],
     });
   });

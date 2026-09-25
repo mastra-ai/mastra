@@ -1050,7 +1050,8 @@ export class MastraFactory {
                   // is the API host; the UI lives at `MASTRACODE_PUBLIC_URL`,
                   // the same origin Slack session deep-links resolve against.
                   // Fall back to `publicOrigin` only when the two coincide.
-                  const reviewSourceUiOrigin = (process.env.MASTRACODE_PUBLIC_URL ?? publicOrigin).replace(/\/+$/, '');
+                  const uiOriginEnv = process.env.MASTRACODE_PUBLIC_URL?.trim();
+                  const reviewSourceUiOrigin = (uiOriginEnv || publicOrigin).replace(/\/+$/, '');
                   mergeTools(
                     'factory-review-source',
                     await createReviewSourceTool({
