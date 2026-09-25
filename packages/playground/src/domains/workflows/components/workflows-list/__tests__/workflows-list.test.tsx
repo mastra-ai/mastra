@@ -1,3 +1,5 @@
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
@@ -6,8 +8,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { WorkflowsList } from '../workflows-list';
 import { originWorkflowsFixture, runCountsFixture, workflowsFixture } from './fixtures/workflows';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 

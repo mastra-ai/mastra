@@ -1,7 +1,11 @@
-import { visibleWidth } from '@earendil-works/pi-tui';
+import { homedir } from 'node:os';
+import { dirname } from 'node:path';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { reconcileChatBoundarySpacers } from '../../chat-boundary-reconciliation.js';
 import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
+import { getSpacingBetweenComponents } from '../chat-spacing.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
 const ui = { requestRender() {} } as any;
@@ -11,6 +15,16 @@ function stripAnsi(text: string): string {
     .replace(/\u001b\[[0-9;]*m/g, '')
     .replace(/\u001b\]8;;[^\u0007]*\u0007/g, '')
     .replace(/\u001b\]8;;\u0007/g, '');
+}
+
+/** Renders components as the chat does, so quiet shell calls get their shared box state. */
+function renderInChat(components: ToolExecutionComponentEnhanced[], width = 80): string[] {
+  const container = new Container();
+  components.forEach(component => container.addChild(component));
+  reconcileChatBoundarySpacers(container);
+  return stripAnsi(container.render(width).join('\n'))
+    .split('\n')
+    .map(line => line.trimEnd());
 }
 
 describe('completed shell/process background status', () => {
@@ -28,15 +42,23 @@ describe('completed shell/process background status', () => {
     },
   );
 
-  it('preserves inferred shell errors with and without background identity', () => {
+  it('marks nonzero shell exits as failed with and without background identity', () => {
     for (const background of [false, true]) {
       const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'example' }, {}, ui);
       if (background) component.setBackgroundTaskId('shell-task');
-      component.updateResult({ content: [{ type: 'text', text: 'Error: failed' }], isError: false });
+      component.updateResult({ content: [{ type: 'text', text: 'Error: failed\n\nExit code: 1' }], isError: false });
       const output = stripAnsi(component.render(120).join('\n'));
       expect(output).toContain(background ? '✗ background · shell-task' : '✗');
       if (!background) expect(output).not.toContain('background');
     }
+  });
+
+  it('does not treat error-looking output from a successful command as a failure', () => {
+    const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'grep -n error src' }, {}, ui);
+    component.updateResult({ content: [{ type: 'text', text: '12:  ? { error: envelope.error }' }], isError: false });
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('✓');
+    expect(output).not.toContain('✗');
   });
 });
 
@@ -1116,11 +1138,10 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('shows the quiet shell command plus the last N output lines at the preview limit', () => {
-    const command = 'pnpm --filter ./mastracode/tui exec vitest run src/tui --reporter=dot --bail 1 && echo done';
+  it('previews the last N output lines above the $ header of the shell box', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command },
+      { command: 'pnpm test', description: 'Running the tests', cwd: '/tmp/w' },
       { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
@@ -1132,55 +1153,80 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       false,
     );
 
-    const rendered = component.render(60);
-    const visible = stripAnsi(rendered.join('\n'));
-    expect(rendered.join('\n')).toContain(theme.fg('success', ' ✓'));
-    expect(visible).toContain('╭');
-    expect(visible).toContain('╰');
-    expect(visible).toContain('⋯ (+14 lines)');
-    expect(visible).toContain('line 15');
-    expect(visible).toContain('line 16');
-    expect(visible).not.toMatch(/line 1\b/);
-    expect(visible).not.toContain('line 14');
-    // The `$` prompt identifies the shell box; the tool name would only cost width.
-    expect(visible).toContain('│ $ pnpm');
-    expect(visible).not.toContain('execute_command');
-    // The command wraps rather than truncates so the whole thing is still readable.
-    expect(visible).toContain('--reporter=dot');
-    expect(visible).toContain('echo done');
+    const lines = renderInChat([component]);
+    expect(lines).toEqual([
+      expect.stringMatching(/^╭─+╮$/),
+      expect.stringMatching(/^│ line 15 +│$/),
+      expect.stringMatching(/^│ line 16 +│$/),
+      expect.stringMatching(/^├─+┤$/),
+      expect.stringMatching(/^│ \$ \/tmp\/w +│$/),
+      expect.stringMatching(/^├─+┤$/),
+      expect.stringMatching(/^│ ✓ Running the tests +\d+ms │$/),
+      expect.stringMatching(/^╰─+╯$/),
+    ]);
   });
 
-  it('streams the last N quiet shell output lines while the command is running', () => {
-    const component = new ToolExecutionComponentEnhanced(
-      'execute_command',
-      { command: 'pnpm test' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
-      ui,
-    );
-    component.appendStreamingOutput(['stream 1', 'stream 2', 'stream 3', 'stream 4'].join('\n'));
+  it('streams the latest output of any call in the box into one shared preview', () => {
+    const make = (description: string) => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'pnpm test', description, cwd: '/tmp/w' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+        ui,
+      );
+      return component;
+    };
+    const first = make('Building');
+    first.updateResult({ content: [{ type: 'text', text: 'built 1\nbuilt 2\nbuilt 3' }], isError: false }, false);
+    const second = make('Testing');
 
-    const streaming = stripAnsi(component.render(60).join('\n'));
-    expect(streaming).not.toContain('stream 1');
-    expect(streaming).not.toContain('stream 2');
-    expect(streaming).toContain('stream 3');
-    expect(streaming).toContain('stream 4');
-    expect(streaming).toContain('⋯ (+2 lines)');
+    // Until the running call prints something, the preview keeps the last output
+    let lines = renderInChat([first, second]);
+    expect(lines.filter(line => line.startsWith('╭'))).toHaveLength(1);
+    expect(lines.slice(1, 3)).toEqual([
+      expect.stringMatching(/^│ built 2 +│$/),
+      expect.stringMatching(/^│ built 3 +│$/),
+    ]);
+
+    second.appendStreamingOutput('stream 1\nstream 2\nstream 3');
+    lines = renderInChat([first, second]);
+    expect(lines.slice(1, 3)).toEqual([
+      expect.stringMatching(/^│ stream 2 +│$/),
+      expect.stringMatching(/^│ stream 3 +│$/),
+    ]);
+    expect(lines.join('\n')).not.toContain('built');
+    expect(lines).toHaveLength(9);
+    first.stopLiveUpdates();
+    second.stopLiveUpdates();
   });
 
-  it('shows one extra quiet shell line instead of a marker that would take the same row', () => {
-    const component = new ToolExecutionComponentEnhanced(
-      'execute_command',
-      { command: 'printf "a\\nb\\nc"' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
-      ui,
-    );
-    component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
+  it('never shrinks the preview, so rows below it do not jump', () => {
+    const make = (description: string) =>
+      new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'pnpm test', description, cwd: '/tmp/w' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 3 },
+        ui,
+      );
+    const first = make('Building');
+    first.updateResult({ content: [{ type: 'text', text: 'a\nb\nc' }], isError: false }, false);
+    const second = make('Testing');
+    second.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false }, false);
+    const chat = new Container();
+    chat.addChild(first);
+    reconcileChatBoundarySpacers(chat);
+    const before = chat.render(80).length;
 
-    const visible = stripAnsi(component.render(60).join('\n'));
-    expect(visible).toContain('out 1');
-    expect(visible).toContain('out 2');
-    expect(visible).toContain('out 3');
-    expect(visible).not.toContain('⋯ (+');
+    // The next call prints a single line; the preview keeps its three rows
+    chat.addChild(second);
+    reconcileChatBoundarySpacers(chat);
+    const after = stripAnsi(chat.render(80).join('\n')).split('\n');
+    expect(after).toHaveLength(before + 1);
+    expect(after.slice(1, 4)).toEqual([
+      expect.stringMatching(/^│ done +│/),
+      expect.stringMatching(/^│ +│/),
+      expect.stringMatching(/^│ +│/),
+    ]);
   });
 
   it('hides quiet shell output entirely when the preview limit is None', () => {
@@ -1193,11 +1239,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     component.updateResult({ content: [{ type: 'text', text: '1\n2\n3\n4\n5' }], isError: false }, false);
 
     const visible = stripAnsi(component.render(60).join('\n'));
-    expect(visible).toContain('$ seq 1 5');
+    expect(visible).toMatch(/│ ✓ seq 1 5 +\d+ms │/);
     expect(visible).not.toMatch(/^\s*│ [1-5]/m);
     expect(visible).not.toContain('⋯ (+');
-    // top, command line, bottom
-    expect(visible.split('\n')).toHaveLength(3);
+    // top, header, divider, row, bottom
+    expect(visible.split('\n')).toHaveLength(5);
   });
 
   it('expanding a quiet shell tool reveals the full command and output', () => {
@@ -1210,53 +1256,444 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
 
-    const collapsed = stripAnsi(component.render(80).join('\n'));
+    const collapsed = renderInChat([component]).join('\n');
     expect(collapsed).not.toContain('open(p)');
     expect(collapsed).not.toContain('out 1');
     expect(collapsed).toContain('out 3');
 
     component.setExpanded(true);
-    const expanded = stripAnsi(component.render(80).join('\n'));
+    const expanded = renderInChat([component]).join('\n');
     expect(expanded).toContain('open(p)');
     expect(expanded).toContain('out 1');
     expect(expanded).toContain('out 3');
-    expect(expanded).not.toContain('⋯ (+');
 
     component.setExpanded(false);
-    expect(stripAnsi(component.render(80).join('\n'))).not.toContain('out 1');
+    expect(renderInChat([component]).join('\n')).not.toContain('out 1');
   });
 
-  it('caps long quiet shell commands at the preview limit with a hidden-line count', () => {
-    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', "open(p, 'w').write(s)", 'EOF'].join(
-      '\n',
-    );
+  it('shows the command description in place of the command in quiet mode', () => {
+    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', 'EOF'].join('\n');
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      { command, description: 'Drilling into the first of 15 failures', cwd: '/tmp/work' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
 
-    const visible = stripAnsi(component.render(80).join('\n'));
-    expect(visible).toContain("$ python3 - <<'EOF'");
-    expect(visible).toContain("p = 'file.ts'");
-    expect(visible).not.toContain('open(p)');
-    expect(visible).toContain('⋯ (+3 lines)');
-    expect(visible).toContain('ok');
-    // top, output line, divider, 2 command lines, marker (with status suffix), bottom
-    expect(visible.split('\n')).toHaveLength(7);
+    const quiet = stripAnsi(component.render(80).join('\n'));
+    expect(quiet).not.toContain('python3');
+    // No preview lines: a lone call is its own group — header, divider, one status row
+    expect(quiet).toContain('$ /tmp/work');
+    expect(quiet).toMatch(/✓ Drilling into the first of 15 failures +\d+ms/);
+    expect(quiet.split('\n')).toHaveLength(5);
 
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(80).join('\n'));
+    expect(expanded).toContain("$ python3 - <<'EOF'");
+    expect(expanded).toContain('open(p)');
+    expect(expanded).not.toContain('Drilling into');
+
+    component.setExpanded(false);
     component.setQuietModeDisplay('normal');
-    const full = stripAnsi(component.render(80).join('\n'));
-    expect(full).toContain('open(p)');
-    expect(full).not.toContain('⋯ (+');
+    const normal = stripAnsi(component.render(80).join('\n'));
+    expect(normal).toContain("$ python3 - <<'EOF'");
+    expect(normal).not.toContain('Drilling into');
   });
 
-  it('keeps the error tail visible when a quiet shell command fails', () => {
+  describe('grouped quiet shell rows (preview lines = None)', () => {
+    const make = (args: Record<string, unknown>, result?: { text: string; isError?: boolean }, limit = 0) => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        args,
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: limit },
+        ui,
+      );
+      if (result) {
+        component.updateResult({ content: [{ type: 'text', text: result.text }], isError: !!result.isError }, false);
+      }
+      return component;
+    };
+    const lines = (component: ToolExecutionComponentEnhanced, width = 80) =>
+      stripAnsi(component.render(width).join('\n'))
+        .split('\n')
+        .map(line => line.trimEnd());
+
+    it('opens, continues, and closes one shared box across consecutive calls', () => {
+      const first = make({ command: 'git log', description: 'Listing later commits' }, { text: 'abc' });
+      const second = make({ command: 'git show', description: 'Reading the changesets' }, { text: 'def' });
+      expect(first.getChatSpacingKind()).toBe('quiet-compact-tool');
+      expect(getSpacingBetweenComponents(first, second)).toBe(0);
+
+      first.setCompactToolHasFollowingContinuation(true);
+      second.setCompactToolContinuation(true, first.getCompactToolGroupSummary());
+
+      const top = lines(first);
+      expect(top[0]).toMatch(/^╭─+╮$/);
+      expect(top[1]).toMatch(/^│ \$ \S+ +│$/);
+      expect(top[2]).toMatch(/^├─+┤$/);
+      expect(top[3]).toMatch(/^│ ✓ Listing later commits +\d+ms │$/);
+      expect(top).toHaveLength(4);
+
+      const bottom = lines(second);
+      expect(bottom[0]).toMatch(/^│ ✓ Reading the changesets +\d+ms │$/);
+      expect(bottom[1]).toMatch(/^╰─+╯$/);
+      expect(bottom).toHaveLength(2);
+    });
+
+    it('shows the project root in full, paths inside it as ./, and starts a new box per directory', () => {
+      const home = homedir();
+      const root = make({ command: 'ls', description: 'Listing files' }, { text: '' });
+      const root2 = make({ command: 'pwd', description: 'Printing the directory' }, { text: '' });
+      const sub = make({ command: 'ls', description: 'Listing sources', cwd: 'src' }, { text: '' });
+      const cd = make({ command: 'cd /opt/elsewhere && ls', description: 'Listing elsewhere' }, { text: '' });
+      const tilde = make({ command: 'ls', description: 'Listing code', cwd: `${home}/code/project` }, { text: '' });
+      const project = process.cwd().startsWith(home) ? `~${process.cwd().slice(home.length)}` : process.cwd();
+      expect(root.getCompactToolGroupKey()).toBe(`$ ${project}`);
+      expect(sub.getCompactToolGroupKey()).toBe('$ ./src');
+      expect(cd.getCompactToolGroupKey()).toBe('$ /opt/elsewhere');
+      expect(tilde.getCompactToolGroupKey()).toBe('$ ~/code/project');
+      expect(lines(sub, 400)[1]).toContain('│ $ ./src ');
+
+      expect(getSpacingBetweenComponents(root, root2)).toBe(0);
+      // A new directory closes one box and opens the next, with no blank line between their borders
+      expect(getSpacingBetweenComponents(root, sub)).toBe(0);
+      const boxed = make({ command: 'git status', description: 'Checking status' }, { text: 'clean' });
+      boxed.setExpanded(true);
+      expect(boxed.getChatSpacingKind()).toBe('quiet-shell-tool');
+      expect(getSpacingBetweenComponents(sub, boxed)).toBe(0);
+      const view = new ToolExecutionComponentEnhanced(
+        'view',
+        { path: 'a.ts' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        ui,
+      );
+      expect(getSpacingBetweenComponents(root, view)).toBe(1);
+    });
+
+    it('resolves directories against the project root commands run in, not where the TUI was launched', () => {
+      // Launched from a subdirectory: commands still run from the git root.
+      const inRepo = (args: Record<string, unknown>) =>
+        new ToolExecutionComponentEnhanced(
+          'execute_command',
+          args,
+          { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0, projectRoot: '/work/repo' },
+          ui,
+        );
+      expect(inRepo({ command: 'ls', description: 'Listing' }).getCompactToolGroupKey()).toBe('$ /work/repo');
+      expect(inRepo({ command: 'cd packages/core && ls', description: 'Listing' }).getCompactToolGroupKey()).toBe(
+        '$ ./packages/core',
+      );
+      expect(inRepo({ command: 'ls', description: 'Listing', cwd: 'docs' }).getCompactToolGroupKey()).toBe('$ ./docs');
+    });
+
+    it('never wraps a row onto a second terminal line, at any width', () => {
+      const long = 'x'.repeat(300);
+      const cases = [
+        () => make({ command: 'ls', description: `Describing ${long}` }, { text: '' }),
+        () => make({ command: `cat\t${long}\nsecond line`, cwd: `/tmp/${long}` }, { text: '' }),
+        () => make({ command: 'sleep 100', description: `Waiting ${long}` }),
+        () =>
+          make(
+            { command: 'gh pr checks', description: 'Checking CI' },
+            {
+              text: `Validate changeset packages\tfail\t10m4s\thttps://github.com/${long}\n\nExit code: 1`,
+              isError: true,
+            },
+          ),
+      ];
+      for (const create of cases) {
+        const component = create();
+        const expectedRows = lines(component, 200).length;
+        for (let width = 12; width <= 200; width += 7) {
+          const rendered = component.render(width);
+          expect(rendered.length, `rows at width ${width}`).toBe(expectedRows);
+          for (const line of rendered) expect(visibleWidth(line), `width ${width}`).toBeLessThanOrEqual(width);
+        }
+        component.stopLiveUpdates();
+      }
+    });
+
+    it('shows run time recovered from history, and no fake time when it is unknown', () => {
+      const recorded = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
+      recorded.setRecordedTiming(1_000, 4_078);
+      expect(lines(recorded).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +3\.1s │$/);
+
+      const unknown = make({ command: 'sleep 3', description: 'Sleeping' }, { text: '' });
+      unknown.setRecordedTiming(undefined, undefined);
+      expect(lines(unknown).find(line => line.includes('Sleeping'))).toMatch(/Sleeping +│$/);
+    });
+
+    it('marks a call failed from its sandbox exit record when the result text does not say', () => {
+      // When the sandbox itself throws, the result is plain output ending in `Error: …`, no exit code.
+      const cases = [
+        'Error: Sandbox failed to start',
+        'stdout:\nfile.ts\n\nstderr:\nwarning\n\nError: connection reset',
+      ];
+      for (const text of cases) {
+        const withoutRecord = make({ command: 'ls', description: 'Listing files' }, { text });
+        expect(lines(withoutRecord).find(line => line.includes('Listing files'))).toMatch(/^│ ✓ /);
+
+        const component = make({ command: 'ls', description: 'Listing files' }, { text });
+        component.setCommandExit({ exitCode: -1, success: false });
+        const rendered = lines(component);
+        expect(rendered.find(line => line.includes('Listing files'))).toMatch(/^│ ✗ /);
+        expect(rendered).toContainEqual(expect.stringMatching(/└▸ Error: (Sandbox failed to start|connection reset)/));
+      }
+
+      const exited = make({ command: 'false', description: 'Failing quietly' }, { text: '(no output)' });
+      exited.setCommandExit({ exitCode: 3, success: false });
+      expect(lines(exited)).toContainEqual(expect.stringMatching(/└▸ exit code 3/));
+    });
+
+    it('marks failures with a red error line and background calls as started', () => {
+      const failed = make(
+        { command: 'git log v1..HEAD', description: 'Searching for stdin changes' },
+        { text: "fatal: ambiguous argument 'v1..HEAD': unknown revision\nExit code: 128", isError: true },
+      );
+      failed.setCompactToolContinuation(true);
+      failed.setCompactToolHasFollowingContinuation(true);
+      expect(lines(failed)).toEqual([
+        expect.stringMatching(/^│ ✗ Searching for stdin changes +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ fatal: ambiguous argument 'v1\.\.HEAD': unknown revision +│$/),
+      ]);
+
+      // Nonzero exits come back as ordinary output ending in "Exit code: N", not as error results
+      const exited = make(
+        { command: 'echo about to fail && ls /nope', description: 'Running a command that fails on purpose' },
+        { text: 'stdout:\nabout to fail\n\nstderr:\nls: /nope: No such file or directory\n\nExit code: 1' },
+      );
+      exited.setCompactToolContinuation(true);
+      exited.setCompactToolHasFollowingContinuation(true);
+      expect(lines(exited)).toEqual([
+        expect.stringMatching(/^│ ✗ Running a command that fails on purpose +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ ls: \/nope: No such file or directory +│$/),
+      ]);
+
+      // Without stderr or an error-looking line, the last output line is unrelated to the failure
+      const quietFailure = make(
+        {
+          command: "gh api graphql; echo ====; gh run view 1 --log-failed | rg -v '^$'",
+          description: 'Listing threads',
+        },
+        { text: 'resolved=false a.ts:1 :: a comment that mentions an error\n====\n\nExit code: 1' },
+      );
+      quietFailure.setCompactToolContinuation(true);
+      quietFailure.setCompactToolHasFollowingContinuation(true);
+      expect(lines(quietFailure)).toEqual([
+        expect.stringMatching(/^│ ✗ Listing threads +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ exit code 1 +│$/),
+      ]);
+
+      const background = make({ command: 'pnpm dev', description: 'Starting the dev server', background: true });
+      background.setBackgroundTaskId('bg-1');
+      background.setCompactToolContinuation(true, background.getCompactToolGroupSummary());
+      background.setCompactToolHasFollowingContinuation(true);
+      expect(lines(background)).toEqual([expect.stringMatching(/^│ ◷ Starting the dev server +started │$/)]);
+    });
+
+    it('ticks a running row every second and stops when the run ends', () => {
+      vi.useFakeTimers();
+      try {
+        const running = make({ command: 'sleep 5', description: 'Waiting for the build' });
+        expect(lines(running)[3]).toMatch(/^│ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Waiting for the build +0s │$/);
+        vi.advanceTimersByTime(2_100);
+        expect(lines(running)[3]).toMatch(/ 2s │$/);
+
+        running.stopLiveUpdates();
+        expect(lines(running)[3]).toMatch(/^│ ■ Waiting for the build +stopped │$/);
+        vi.advanceTimersByTime(5_000);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('uses the command for a row without a description, e.g. one rejected for missing it', () => {
+      const rejected = make(
+        { command: "cd /tmp/work; sed -i '' 's/a/b/' file.ts\ngrep -c b file.ts" },
+        {
+          text: JSON.stringify(
+            {
+              error: true,
+              message: 'Tool input validation failed for execute_command.\n- description: Required',
+              validationErrors: { fields: {} },
+            },
+            null,
+            2,
+          ),
+          isError: true,
+        },
+      );
+      expect(rejected.getChatSpacingKind()).toBe('quiet-compact-tool');
+      rejected.setCompactToolContinuation(true);
+      rejected.setCompactToolHasFollowingContinuation(true);
+      expect(lines(rejected)).toEqual([
+        expect.stringMatching(/^│ ✗ sed -i '' 's\/a\/b\/' file\.ts +\d+ms │$/),
+        expect.stringMatching(/^│ {3}└▸ Tool input validation failed for execute_command\. +│$/),
+      ]);
+    });
+
+    it('groups at any preview setting, and keeps its own box only when expanded', () => {
+      const withPreview = make({ command: 'git log', description: 'Listing later commits' }, { text: 'out 1' }, 2);
+      expect(withPreview.getChatSpacingKind()).toBe('quiet-compact-tool');
+      expect(withPreview.getQuietShellPreviewLines()).toEqual(['out 1']);
+      expect(make({ command: 'git log' }, { text: 'out 1' }, 0).getQuietShellPreviewLines()).toBeUndefined();
+
+      const expanded = make({ command: 'git log', description: 'Listing later commits' }, { text: 'out 1' });
+      expanded.setExpanded(true);
+      expect(expanded.getChatSpacingKind()).toBe('quiet-shell-tool');
+      const text = lines(expanded).join('\n');
+      expect(text).toContain('$ git log');
+      expect(text).toContain('out 1');
+    });
+
+    it('keeps a finished duration fixed when the row is rebuilt later', () => {
+      vi.useFakeTimers();
+      try {
+        const done = make({ command: 'true', description: 'Doing nothing' }, { text: '' });
+        const before = lines(done)[3];
+        vi.advanceTimersByTime(3_000);
+        done.setCompactToolHasFollowingContinuation(true);
+        expect(lines(done)[3]).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it('renders the quiet description as plain text instead of shell-highlighting it', () => {
+    const previousLevel = chalk.level;
+    chalk.level = 3;
+    try {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'git status', description: 'Checking for uncommitted changes' },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
+
+      // Shell highlighting colors each word token separately, so the raw line would not contain
+      // the description as one contiguous run.
+      expect(component.render(80).join('\n')).toContain('Checking for uncommitted changes');
+
+      component.setExpanded(true);
+      expect(component.render(80).join('\n')).not.toContain('git status');
+      expect(stripAnsi(component.render(80).join('\n'))).toContain('$ git status');
+    } finally {
+      chalk.level = previousLevel;
+    }
+  });
+
+  it('falls back to the command when the description is blank', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command: 'ls /definitely-not-a-real-path' },
+      { command: 'git status', description: '  \n ' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
+
+    expect(renderInChat([component])).toContainEqual(expect.stringMatching(/^│ ✓ git status +\d+ms │$/));
+  });
+
+  it('strips a leading cd prefix separated by a bare newline and shows the path in the footer', () => {
+    // The form callers actually emit: no `&&`, path on its own line, no `cwd` arg.
+    const command = [
+      'cd /Users/example/code/some-workspace',
+      "timeout 400 pnpm exec vitest run src/sandbox/index.test.ts --reporter=dot 2>&1 | grep -E 'Tests '",
+    ].join('\n');
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).not.toContain('cd /Users/example');
+    expect(visible).toContain('$ timeout 400 pnpm exec vitest');
+    expect(visible).toContain('in /Users/example/code/some-workspace');
+  });
+
+  it('strips cd prefixes for quoted paths, semicolons, and leading whitespace', () => {
+    const cases = [
+      ['cd "/Users/example/some path/ws" && npm run build', 'npm run build'],
+      ["cd '/Users/example/some path/ws' && npm run build", 'npm run build'],
+      ['cd /Users/example/ws; npm run build', 'npm run build'],
+      ['  cd /Users/example/ws && npm run build', 'npm run build'],
+    ];
+
+    for (const [command, expected] of cases) {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command },
+        { quietDisplayMode: 'normal', collapsedByDefault: true },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+      const visible = stripAnsi(component.render(120).join('\n'));
+      expect(visible).not.toContain('cd ');
+      expect(visible).toContain(`$ ${expected}`);
+    }
+  });
+
+  it('keeps a lone cd command since stripping it would leave nothing to run', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'cd /Users/example/ws' },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    expect(stripAnsi(component.render(120).join('\n'))).toContain('$ cd /Users/example/ws');
+  });
+
+  it('shows where the command runs when it has both a cwd arg and a cd prefix', () => {
+    const render = (command: string, quietDisplayMode: 'normal' | 'quiet') => {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command, cwd: '/Users/example/real-cwd' },
+        { quietDisplayMode, collapsedByDefault: true, projectRoot: '/work/repo' },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+      return { component, visible: stripAnsi(component.render(120).join('\n')) };
+    };
+
+    // The shell starts in cwd, and an absolute cd moves it elsewhere.
+    const absolute = render('cd /Users/example/somewhere-else && npm run build', 'normal').visible;
+    expect(absolute).toContain('$ npm run build');
+    expect(absolute).toContain('in /Users/example/somewhere-else');
+    // A relative cd moves it within cwd.
+    expect(render('cd packages/core && npm run build', 'normal').visible).toContain(
+      'in /Users/example/real-cwd/packages/core',
+    );
+    expect(render('cd packages/core && npm run build', 'quiet').component.getCompactToolGroupKey()).toBe(
+      '$ /Users/example/real-cwd/packages/core',
+    );
+    expect(render('npm run build', 'quiet').component.getCompactToolGroupKey()).toBe('$ /Users/example/real-cwd');
+
+    // A relative cd from a home cwd moves from the home directory, not from `~` as literal text.
+    const fromHome = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'cd .. && ls', cwd: '~' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, projectRoot: '/work/repo' },
+      ui,
+    );
+    expect(fromHome.getCompactToolGroupKey()).toBe(`$ ${dirname(homedir())}`);
+    fromHome.updateArgs({ command: 'cd ../.. && ls', cwd: '~/a' });
+    expect(fromHome.getCompactToolGroupKey()).toBe(`$ ${dirname(homedir())}`);
+  });
+
+  it('keeps the error visible when a quiet shell command fails', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'ls /definitely-not-a-real-path', description: 'Listing a missing path' },
       { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
@@ -1268,9 +1705,75 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       false,
     );
 
-    const output = component.render(80).join('\n');
-    expect(output).toContain(theme.fg('error', ' ✗'));
-    expect(stripAnsi(output)).toContain('No such file or directory');
+    const lines = renderInChat([component]);
+    expect(lines).toContainEqual(expect.stringMatching(/^│ ✗ Listing a missing path +\d+ms │$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ ls: .*No such file or directory +│$/));
+  });
+
+  it('never passes escape sequences from a description, command, cwd, output, or error to the terminal', () => {
+    // Cursor moves and a screen clear (CSI), a clipboard write, a title change and a hyperlink (OSC),
+    // device control (DCS), an 8-bit CSI, and a stray ESC.
+    const hostile = [
+      '\x1b[2J\x1b[1A',
+      '\x1b]52;c;aGVsbG8=\x07',
+      '\x1b]0;pwned\x1b\\',
+      '\x1b]8;;https://evil.example\x1b\\',
+      '\x1bPpayload\x1b\\',
+      '\x9b2J',
+      '\x1b=',
+    ].join('');
+    const injected = [
+      '\x1b[2J',
+      '\x1b[1A',
+      '\x1b]',
+      'aGVsbG8=',
+      'pwned',
+      'evil.example',
+      '\x1bP',
+      'payload',
+      '\x9b',
+      '\x1b=',
+    ];
+    const renderBox = (component: ToolExecutionComponentEnhanced) => {
+      const container = new Container();
+      container.addChild(component);
+      reconcileChatBoundarySpacers(container);
+      const raw = container.render(120).join('\n');
+      for (const sequence of injected) expect(raw).not.toContain(sequence);
+      return stripAnsi(raw)
+        .split('\n')
+        .map(line => line.trimEnd());
+    };
+
+    const described = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'ls', description: `Listing${hostile} files` },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    described.updateResult(
+      {
+        content: [{ type: 'text', text: `out${hostile}put\n\nstderr:\nerror: bad${hostile}\n\nExit code: 1` }],
+        isError: false,
+      },
+      false,
+    );
+    const lines = renderBox(described);
+    expect(lines).toContainEqual(expect.stringMatching(/^│ ✗ Listing files +\d+ms │$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ error: bad +│$/));
+    expect(lines).toContainEqual(expect.stringMatching(/^│ {3}└▸ error: bad +│$/));
+
+    // Without a description the row shows the command, and the header shows the cwd argument.
+    const bare = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: `ls${hostile} -la`, cwd: `/tmp/work${hostile}dir` },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+    bare.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+    const bareLines = renderBox(bare);
+    expect(bareLines).toContainEqual(expect.stringMatching(/^│ \$ \/tmp\/workdir +│$/));
+    expect(bareLines).toContainEqual(expect.stringMatching(/^│ ✓ ls -la +\d+ms │$/));
   });
 
   it('keeps quiet shell box borders aligned for long git output', () => {
@@ -1344,11 +1847,11 @@ Test plan:
     expect(lines[1]).toContain('│');
   });
 
-  it('does not add a preview line to quiet shell tools and keeps the prompt orange', () => {
+  it('does not add an output section to a shell box without output and keeps the prompt orange', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1360,12 +1863,12 @@ Test plan:
     expect(visible.split('\n')).toHaveLength(3);
   });
 
-  it('syntax highlights quiet shell command footers as bash', () => {
+  it('syntax highlights shell command footers as bash', () => {
     const command = 'if [ -f package.json ]; then echo "ok"; fi';
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1400,7 +1903,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1416,7 +1919,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1431,7 +1934,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1464,12 +1967,12 @@ Test plan:
     expect(output).not.toContain(chalk.blue('then'));
   });
 
-  it('preserves standalone ampersands in quiet shell command footers', () => {
+  it('preserves standalone ampersands in shell command footers', () => {
     const command = 'sleep 1 & wait && echo ok 2>&1';
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1479,7 +1982,7 @@ Test plan:
     expect(output).toContain(theme.fg('muted', '>'));
   });
 
-  it('wraps long quiet shell commands in the footer instead of truncating them', () => {
+  it('wraps long shell commands in the footer instead of truncating them', () => {
     const command =
       'pnpm --filter mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail 1 --reporter=dot';
     const component = new ToolExecutionComponentEnhanced(
@@ -1504,7 +2007,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 

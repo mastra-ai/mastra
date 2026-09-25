@@ -12,6 +12,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 
 import { BufferingCoordinator } from './processors/observational-memory/buffering-coordinator';
 import { updateWorkingMemoryTool } from './tools/working-memory';
@@ -207,6 +208,50 @@ describe('Memory', () => {
 
       expect(systemMessage).toContain('calling the updateWorkingMemory tool');
       expect(systemMessage).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+    });
+
+    describe('when no working memory has been stored', () => {
+      const emptyDataBlock = '<working_memory_data>\nNo working memory data available.\n</working_memory_data>';
+
+      it.each([
+        { name: 'markdown template, resource scope', workingMemory: { enabled: true, template: '# User Profile' } },
+        {
+          name: 'markdown template, thread scope',
+          workingMemory: { enabled: true, template: '# User Profile', scope: 'thread' as const },
+        },
+        { name: 'JSON schema', workingMemory: { enabled: true, schema: z.object({ name: z.string() }) } },
+      ])('renders a fallback instead of "null" ($name)', async ({ workingMemory }) => {
+        const memory = new Memory({ storage: new InMemoryStore(), options: { workingMemory } });
+        const threadId = 'empty-wm-thread';
+        const resourceId = 'empty-wm-resource';
+        await memory.createThread({ threadId, resourceId });
+
+        const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+        expect(systemMessage).toContain('calling the updateWorkingMemory tool');
+        expect(systemMessage).toContain(emptyDataBlock);
+        expect(systemMessage).not.toContain('<working_memory_data>\nnull');
+      });
+
+      it('renders a fallback instead of "null" (vNext)', async () => {
+        const workingMemory = {
+          enabled: true,
+          template: '# User Profile',
+          version: 'vnext',
+        } as MemoryConfig['workingMemory'];
+        const memory = new Memory({ storage: new InMemoryStore(), options: { workingMemory } });
+        const threadId = 'empty-wm-vnext-thread';
+        const resourceId = 'empty-wm-vnext-resource';
+        await memory.createThread({ threadId, resourceId });
+
+        const systemMessage = await memory.getSystemMessage({ threadId, resourceId, memoryConfig: { workingMemory } });
+
+        expect(systemMessage).toContain(
+          'If your memory has not changed, you do not need to call the updateWorkingMemory',
+        );
+        expect(systemMessage).toContain(emptyDataBlock);
+        expect(systemMessage).not.toContain('<working_memory_data>\nnull');
+      });
     });
   });
 

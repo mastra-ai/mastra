@@ -23,6 +23,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
+import type { ToolPayloadTransformMetadata } from '../../tools/payload-transform';
 import type {
   CoreTool,
   MCPToolExecutionContext,
@@ -170,6 +171,13 @@ export interface SerializableModelSettings {
   stopSequences?: string[];
   seed?: number;
   maxRetries?: number;
+  /**
+   * Execution time budgets (#21724). Persisted so a cold resume / recovery can
+   * re-arm the run-level budget the run was started with; `stepMs` and
+   * `firstChunkMs` are consumed by the shared per-call execute wrapper, which
+   * receives these serialized settings on the durable path.
+   */
+  timeout?: { stepMs?: number; totalMs?: number; firstChunkMs?: number };
 }
 
 /**
@@ -182,8 +190,21 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
-  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed). Headers are excluded — see RunRegistryEntry. */
+  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, maxRetries, timeout). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
+  /**
+   * Agent-level maxRetries (folded, defaults to 0). Single-model agents have
+   * no modelList entry to carry retry config, so it rides on options; the
+   * llm-execution step's retry ladder reads it to apply the same
+   * agent-vs-call-time precedence as the in-process loop.
+   */
+  agentMaxRetries?: number;
+  /**
+   * Whether `maxRetries` was explicitly configured on the agent. An explicit
+   * value (including 0) overrides call-time `modelSettings.maxRetries`;
+   * otherwise the call-time value wins — matching `llm-execution-step.ts`.
+   */
+  agentMaxRetriesConfigured?: boolean;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
   /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
@@ -260,6 +281,15 @@ export interface DurableAgenticWorkflowInput {
   agentId: string;
   /** Agent name for logging/tracing */
   agentName?: string;
+  /**
+   * Exact stored version id the run resolved to at start time. A run that
+   * suspends while executing a stored version must resume on *that* version —
+   * a status selector would re-resolve to whatever is published at resume
+   * time and silently change instructions/tools underneath a human approver.
+   * `DurableAgent.resume()` reads this on cold rehydration to pin the
+   * version. Absent for purely code-defined agents.
+   */
+  agentVersionId?: string;
   /** Serialized MessageList state */
   messageListState: SerializedMessageListState;
   /** Tool metadata (without execute functions) */
@@ -369,6 +399,51 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   result?: unknown;
   /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
   modelOutputComputed?: boolean;
+  /**
+   * Set when execution was interrupted by request abort (not a tool error).
+   * The call carries no result/error so the mapping step leaves it incomplete.
+   */
+  aborted?: boolean;
+  /**
+   * Set when a processToolResult processor blocked the result via tripwire.
+   * A tripwire chunk was emitted instead of the tool-result; the call carries
+   * no result so the mapping step leaves it incomplete (mirrors the main
+   * loop's tripwire handling, where commit and emission are both skipped).
+   */
+  resultBlocked?: boolean;
+  /**
+   * Non-transient data-* chunks emitted by output processors via
+   * writer.custom() during this tool call. The tool-call step's messageList
+   * is a local copy whose mutations don't cross the step boundary, so parts
+   * are carried here and persisted into the authoritative messageList by the
+   * mapping step (#19375 parity port).
+   */
+  processorDataParts?: Array<{
+    type: string;
+    data?: unknown;
+    messageId?: string;
+  }>;
+  /**
+   * Chunk-level `mastra.toolPayloadTransform` metadata computed when the
+   * tool-result/tool-error chunk was emitted (L18b). The tool-call step's
+   * messageList is a local copy, so the metadata travels here across the
+   * serialization boundary and is layered into the persisted providerMetadata
+   * by the mapping step — matching the main loop's llm-mapping, which reads it
+   * off the live chunk. Without it, transcript-target transforms would not
+   * apply to the persisted args/result on recall.
+   */
+  transformMetadata?: { mastra?: { toolPayloadTransform?: ToolPayloadTransformMetadata } };
+  /**
+   * Set when a delegation `onDelegationComplete` hook called `ctx.bail()`
+   * during this tool call. The bail signal is written by-reference to the
+   * RequestContext the sub-agent tool was built with, which on the evented
+   * engine is a different instance from the one later steps rehydrate from
+   * their event payloads — so the tool-call step reads it in-process and
+   * carries it here across the serialization boundary. The mapping step ORs
+   * it into the iteration output so the dountil predicate stops the loop in
+   * the same iteration on every engine (G3).
+   */
+  delegationBailed?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -759,6 +834,16 @@ export interface RunRegistryEntry {
    * should call `result.abort()` instead, which routes through here.
    */
   abortController?: AbortController;
+  /**
+   * Run-level execution budget from `modelSettings.timeout.totalMs` (#21724
+   * parity port). Parked here so warm resumes re-arm the original budget
+   * without re-reading the snapshot; cold resumes restore it from the
+   * persisted workflow input. The budget is armed per execution session
+   * (stream/resume/recover) — matching the main loop, where each session
+   * gets a fresh timer — by composing `abortSignal` through
+   * `createTimeoutAbortSignal` at install time.
+   */
+  timeoutTotalMs?: number;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every

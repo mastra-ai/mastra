@@ -4,6 +4,7 @@
 
 import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PubSub } from '@mastra/core/events';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -67,6 +68,18 @@ import {
   createVersionOverridesTests,
   createMemoryPersistenceTests,
   createBackgroundTaskTests,
+  // Crash-recovery tests (kill mid-run, fresh host over same storage, recover)
+  createRecoveryTests,
+  // FGA / actor-identity tests (actor threading, agents:execute enforcement)
+  createFGATests,
+  // Network-equivalent delegation tests (supervisor → sub-agent routing)
+  createNetworkTests,
+  // agentId propagation into tool execution context
+  createAgentIdContextTests,
+  // requestContextSchema validation at the stream() boundary
+  createRequestContextSchemaTests,
+  // stream({ untilIdle }) idle-loop entry point (no-background-manager contract)
+  createStreamUntilIdleTests,
 } from './domains';
 
 // Workflow domain imports (imported directly to avoid circular deps with domains/index)
@@ -109,25 +122,40 @@ const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
  * If config.needsStorage is true, creates a Mastra with MockStore for snapshot persistence (needed for resume)
  */
 function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTestContext): DurableAgentLike {
-  const pubsub = context.getPubSub();
+  // Recovery tests give each simulated "host" its own bus, mirroring a real
+  // process restart; everything else shares the suite pubsub.
+  const pubsub = config.isolatedPubsub ? new EventEmitterPubSub() : context.getPubSub();
   const agent = new Agent({
     id: config.id,
     name: config.name || config.id,
     instructions: config.instructions,
     model: config.model,
     tools: config.tools,
+    ...(config.agents ? { agents: config.agents } : {}),
+    ...(config.memory ? { memory: config.memory } : {}),
+    ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+    ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
   });
   const durableAgent = createDurableAgent({ agent, pubsub });
 
-  if (config.needsStorage) {
+  if (config.needsStorage || config.storage || config.fga) {
     new Mastra({
       logger: false,
-      storage: new MockStore(),
+      // A caller-supplied store is shared across hosts (crash-recovery tests
+      // build a second host over the crashed host's storage).
+      storage: config.storage ?? new MockStore(),
       agents: { [config.id]: durableAgent as any },
+      // Crash-recovery hosts opt into `running` checkpoints (#23915): the
+      // default policy skips them unless recovery is enabled.
+      ...(config.recovery ? { recovery: { durableAgents: 'auto' as const } } : {}),
+      // FGA-domain tests activate the agents:execute gate on the host.
+      ...(config.fga ? { server: { fga: config.fga as any } } : {}),
     });
   }
 
-  return durableAgent;
+  // Cast matches the evented/inngest harnesses: DurableAgentLike is a loose
+  // behavioral interface and engine callback shapes differ slightly.
+  return durableAgent as unknown as DurableAgentLike;
 }
 
 /**
@@ -368,6 +396,38 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
 
     if (!skip.backgroundTasks) {
       createBackgroundTaskTests(context);
+    }
+
+    // Crash-recovery (kill mid-run, fresh host over same storage, recover).
+    // Engines whose recovery is orchestrated externally (e.g. Inngest) set
+    // skip.recovery.
+    if (!skip.recovery) {
+      createRecoveryTests(context);
+    }
+
+    // FGA / actor-identity (actor threading + agents:execute enforcement)
+    if (!skip.fga) {
+      createFGATests(context);
+    }
+
+    // Network-equivalent delegation (supervisor → sub-agent routing)
+    if (!skip.network) {
+      createNetworkTests(context);
+    }
+
+    // agentId propagation into tool execution context
+    if (!skip.agentIdContext) {
+      createAgentIdContextTests(context);
+    }
+
+    // requestContextSchema validation at the stream() boundary
+    if (!skip.requestContextSchema) {
+      createRequestContextSchemaTests(context);
+    }
+
+    // stream({ untilIdle }) idle-loop entry point (no-background-manager contract)
+    if (!skip.streamUntilIdle) {
+      createStreamUntilIdleTests(context);
     }
   });
 }

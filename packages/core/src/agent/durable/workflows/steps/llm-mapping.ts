@@ -1,8 +1,14 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
+import {
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+} from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../../mastra';
-import { EntityType, SpanType } from '../../../../observability';
+import { SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
+import { persistProcessorDataChunk } from '../../../../stream/base/output';
+import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
@@ -16,7 +22,6 @@ import type {
   SerializableDurableState,
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
-import { normalizeModelOutput } from './normalize-model-output';
 
 /**
  * Input schema for the durable LLM mapping step.
@@ -111,9 +116,18 @@ export function createDurableLLMMappingStep() {
       // stay in `call` state, must not appear as a tool result anywhere, and must end the
       // turn — the durable counterpart of the non-durable llm-mapping-step's
       // `hasPendingHITL` (issue #23295).
+      //
+      // Aborted calls also lack a result/error but were cancelled, not awaiting input,
+      // so they must not count as a HITL suspension (mirrors the non-durable predicate's
+      // `!tc.aborted`). Tripwire-blocked calls (`resultBlocked`) are resolved by policy,
+      // not awaiting a client answer, so they keep the pre-existing continuation
+      // semantics (isContinued follows tool errors / the model's stepResult) instead of
+      // force-ending the turn.
       const isPendingClientCall = (toolResult: (typeof toolResults)[number]) =>
         toolResult.result === undefined &&
         !toolResult.error &&
+        !toolResult.aborted &&
+        !toolResult.resultBlocked &&
         !toolResult.providerExecuted &&
         !isDeniedApproval(toolResult);
 
@@ -140,20 +154,47 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          // An aborted call was cancelled mid-flight, not completed: recording it
+          // would fake-complete the call (`result: undefined` reads as success on
+          // resume), so leave the invocation incomplete. Mirrors the non-durable
+          // llm-mapping-step's aborted exclusion.
+          if (toolResult.aborted) {
+            continue;
+          }
+
+          // A processToolResult processor blocked this result via tripwire at
+          // tool-call time: a tripwire chunk was emitted instead of the
+          // tool-result, and no result crossed the boundary. Leave the
+          // invocation incomplete, mirroring the main loop's tripwire handling
+          // (commit and emission both skipped).
+          if (toolResult.resultBlocked) {
+            continue;
+          }
+
+          // Provider-executed results are already committed by llm-execution's
+          // buildMessagesFromChunks when the result arrives in-stream; committing
+          // here again would overwrite that entry with the serialized copy (and
+          // clobber the providerMetadata captured from the live stream chunk).
+          // A deferred provider result (no output yet) has nothing to commit.
+          // Mirrors the non-durable llm-mapping-step's providerExecuted gate.
+          if (toolResult.providerExecuted) {
+            continue;
+          }
+
           if (isDeniedApproval(toolResult)) {
-            messageList.updateToolInvocation({
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'output-denied' as const,
-                toolCallId: toolResult.toolCallId,
-                toolName: toolResult.toolName,
-                args: toolResult.args,
+            commitToolResult({
+              messageList,
+              outcome: {
+                kind: 'denied',
                 approval: {
                   id: toolResult.approval!.id,
                   approved: false,
                   reason: toolResult.approval!.reason,
                 },
               },
+              toolCallId: toolResult.toolCallId,
+              toolName: toolResult.toolName,
+              toolArgs: toolResult.args,
             });
             continue;
           }
@@ -164,101 +205,87 @@ export function createDurableLLMMappingStep() {
             continue;
           }
 
-          const result = toolResult.error ? toolResult.error.message : toolResult.result;
-
           // Compute toModelOutput for successful tool results (Bug 9 parity).
           // Start from the existing providerMetadata so it's preserved even when
           // toModelOutput is absent or fails — otherwise provider-executed tools
-          // or tools without a mapper lose their metadata.
-          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata;
+          // or tools without a mapper lose their metadata. Results that already
+          // carry a mapped output from tool-call.ts (`modelOutputComputed`) are
+          // not recomputed: the serialization boundary is why tool-call maps
+          // eagerly, and this step only covers results that crossed the boundary
+          // unmapped (background completion, provider fallback).
+          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
+            | Record<string, unknown>
+            | undefined;
           if (
             !toolResult.error &&
             toolResult.result != null &&
             !toolResult.providerExecuted &&
             !toolResult.modelOutputComputed
           ) {
-            const tool = registryTools?.[toolResult.toolName] as
-              | { toModelOutput?: (output: unknown) => unknown }
-              | undefined;
-
-            if (tool?.toModelOutput) {
-              const mappingSpan = stepSpan?.createChildSpan({
-                type: SpanType.MAPPING,
-                name: `tool output mapping: '${toolResult.toolName}'`,
-                entityType: EntityType.TOOL,
-                entityId: toolResult.toolName,
-                entityName: toolResult.toolName,
-                input: toolResult.result,
-                attributes: {
-                  mappingType: 'toModelOutput',
-                  toolCallId: toolResult.toolCallId,
-                },
-              });
-              try {
-                let modelOutput = await tool.toModelOutput(toolResult.result);
-                modelOutput = normalizeModelOutput(modelOutput);
-                mappingSpan?.end({ output: modelOutput });
-
-                // A nullish return means "no special mapping needed" — the raw result is
-                // already what the model should see (see read-file.ts / sandboxToModelOutput).
-                // Writing the key anyway would make the consumer in MessageList (which keys
-                // off presence) override the real result with `undefined`, producing a tool
-                // message with no `output`. Mirrors the non-durable llm-mapping-step.
-                if (modelOutput != null) {
-                  const existingMastra = (toolResult.providerMetadata as any)?.mastra;
-                  providerMetadata = {
-                    ...toolResult.providerMetadata,
-                    mastra: { ...existingMastra, modelOutput },
-                  };
-                }
-              } catch (err) {
-                mappingSpan?.error({ error: err as Error, endSpan: true });
+            providerMetadata = await computeModelOutputProviderMetadata({
+              tool: registryTools?.[toolResult.toolName] as
+                | { toModelOutput?: (output: unknown) => unknown }
+                | undefined,
+              toolName: toolResult.toolName,
+              toolCallId: toolResult.toolCallId,
+              result: toolResult.result,
+              existingProviderMetadata: toolResult.providerMetadata as Record<string, unknown> | undefined,
+              parentSpan: stepSpan,
+              onMappingError: (err: unknown) => {
                 // toModelOutput errors are non-fatal — the tool result is still usable
                 mastra
                   ?.getLogger?.()
                   ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
-              }
-            }
+              },
+            });
           }
 
-          const updated = messageList.updateToolInvocation({
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              // A tool error must be recorded as `output-error` with the message in
-              // `errorText` so the transcript/adapters read it as a failure rather than
-              // a normal result. Successful results keep `state: 'result'` + `result`.
-              ...(toolResult.error
-                ? { state: 'output-error' as const, errorText: toolResult.error.message }
-                : { state: 'result' as const, result }),
-              toolCallId: toolResult.toolCallId,
-              toolName: toolResult.toolName,
-              args: toolResult.args,
-              // Preserve the approval decision for an approved approval-gated tool so it
-              // round-trips on recall as `approval: { approved: true }`.
-              ...(toolResult.approval ? { approval: toolResult.approval } : {}),
-            },
-            ...(providerMetadata ? { providerMetadata: providerMetadata as any } : {}),
+          // Layer the tool-payload-transform metadata captured at emission time
+          // on top (L18b). The tool-call step's messageList is a local copy, so
+          // the chunk-level metadata travels on the output record and is merged
+          // into the persisted providerMetadata here — matching the main loop's
+          // llm-mapping, which reads it off the live chunk. Without it,
+          // transcript-target transforms would not apply to the persisted
+          // args/result on recall.
+          if (toolResult.transformMetadata) {
+            providerMetadata = withToolPayloadTransformProviderMetadata(
+              providerMetadata,
+              toolResult.transformMetadata,
+            ) as Record<string, unknown> | undefined;
+          }
+
+          // A tool error must be recorded as `output-error` with the message in
+          // `errorText` so the transcript/adapters read it as a failure rather than
+          // a normal result. Successful results keep `state: 'result'` + `result`.
+          // The approval decision for an approved approval-gated tool is preserved
+          // so it round-trips on recall as `approval: { approved: true }`.
+          commitToolResult({
+            messageList,
+            outcome: toolResult.error
+              ? { kind: 'error', errorText: toolResult.error.message }
+              : { kind: 'result', result: toolResult.result },
+            toolCallId: toolResult.toolCallId,
+            toolName: toolResult.toolName,
+            toolArgs: toolResult.args,
+            approval: toolResult.approval,
+            providerMetadata: providerMetadata as any,
+            fallbackAppend: true,
           });
+        }
+      }
 
-          if (!updated) {
-            messageList.add(
-              [
-                {
-                  role: 'tool' as const,
-                  content: [
-                    {
-                      type: 'tool-result' as const,
-                      toolCallId: toolResult.toolCallId,
-                      toolName: toolResult.toolName,
-                      result,
-                      isError: toolResult.error !== undefined,
-                    },
-                  ],
-                },
-              ],
-              'response',
-            );
-          }
+      // 2a. Persist processor-emitted data-* chunks (#19375 parity port).
+      // The tool-call step's messageList is a local copy whose mutations don't
+      // cross the step boundary, so non-transient data-* chunks emitted by
+      // output processors during tool execution travel on the output record
+      // and are committed here, into the messageList that gets serialized and
+      // flushed to memory. Runs for every entry — including aborted/blocked/
+      // provider-executed calls skipped by the commit loop above — because in
+      // the main loop persistence happens at emission time, before any
+      // tripwire or abort can intervene.
+      for (const toolResult of toolResults) {
+        for (const part of toolResult.processorDataParts ?? []) {
+          persistProcessorDataChunk(messageList, part.messageId ?? messageId, part);
         }
       }
 
@@ -278,17 +305,31 @@ export function createDurableLLMMappingStep() {
       // can see the error messages (already added to messageList above) and
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
+      //
+      // Deliberate divergence from the main loop: this override
+      // can trump a terminal finish reason — a step that finished with
+      // `stop`/`length`/`content-filter` whose tool result errored still
+      // continues. Main avoids the case structurally: its #17893
+      // `hasPendingToolCalls` gate stops the loop before tools ever run on a
+      // terminal reason. Durable runs tools first (the tool-call foreach is
+      // unconditional), so this override IS its tool-error recovery path —
+      // do not "fix" it to match main's gating without a pinning test for
+      // tool-error recovery.
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
       // A pending client call ends the turn so the client can answer it. Without this the
       // loop re-invoked the model on a result nobody produced.
       const hasPendingHITL = toolResults.some(isPendingClientCall);
       const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
-      // Check if any delegation hook called ctx.bail(). The bail flag is
-      // communicated via requestContext because Zod output validation strips
-      // unknown fields from the tool result. We read it here and propagate
-      // it on the serializable output so the dowhile predicate can stop.
-      let delegationBailed = false;
+      // Check if any delegation hook called ctx.bail(). The primary channel
+      // is the tool-call step's serializable output: the hook writes the flag
+      // by-reference to the RequestContext the tool was built with, which the
+      // tool-call step consumes in-process and carries as `delegationBailed`
+      // on its output — the only channel that survives the evented engine's
+      // per-step RequestContext rehydration (G3). The requestContext read is
+      // kept as a fallback for same-process paths where the flag lands on
+      // this step's own instance.
+      let delegationBailed = toolResults.some(r => r?.delegationBailed === true);
       if (requestContext?.get('__mastra_delegationBailed')) {
         delegationBailed = true;
         requestContext.set('__mastra_delegationBailed', false);
@@ -350,6 +391,11 @@ export function createDurableLLMMappingStep() {
       // it arrives AFTER tool-result chunks (emitted by tool-call.ts). This
       // matches the regular agent's chunk ordering which MastraModelOutput
       // relies on for correct step content reconstruction in onStepFinish.
+      // Unlike the main loop — where one in-process driver holds the deferred
+      // chunk in a local variable — the emission point here lives in a
+      // different workflow step than the stream that produced it, so the
+      // deferral must ride the serialized step output
+      // (`deferredStepFinishChunk`).
       const deferredChunk = llmOutput.deferredStepFinishChunk as any;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       if (deferredChunk && pubsub) {

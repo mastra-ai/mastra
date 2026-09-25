@@ -59,6 +59,8 @@ const event = { type: 'test', data: {}, runId: 'run-id' };
 const threadTopic = (resourceId: string, threadId: string) =>
   `agent.thread-stream.${encodeURIComponent(`${resourceId}\0${threadId}`)}`;
 
+const findSocket = (socketPath: string) => mocks.instances.find(instance => instance.socketPath === socketPath);
+
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>(res => {
@@ -85,8 +87,7 @@ describe('SignalsPubSub', () => {
     await pubsub.publish(topic, event);
 
     expect(mocks.mkdir).toHaveBeenCalledWith(`/tmp/mc/${resourceId}`, { recursive: true });
-    expect(mocks.instances).toHaveLength(1);
-    expect(mocks.instances[0]?.socketPath).toBe(`/tmp/mc/${resourceId}/${threadId}.sock`);
+    expect(findSocket(`/tmp/mc/${resourceId}/${threadId}.sock`)).toBeDefined();
   });
 
   it('falls back to a sanitized topic when thread-stream decoding fails', async () => {
@@ -97,8 +98,7 @@ describe('SignalsPubSub', () => {
     const pubsub = createSignalsPubSub(resourceId);
     await expect(pubsub.publish(topic, event)).resolves.toBeUndefined();
 
-    expect(mocks.instances).toHaveLength(1);
-    expect(mocks.instances[0]?.socketPath).toBe(`/tmp/mc/${resourceId}/agent_thread-stream__E0_A4_A.sock`);
+    expect(findSocket(`/tmp/mc/${resourceId}/agent_thread-stream__E0_A4_A.sock`)).toBeDefined();
   });
 
   it('deduplicates concurrent first-time access for the same topic', async () => {
@@ -114,14 +114,14 @@ describe('SignalsPubSub', () => {
     const subscribePromise = pubsub.subscribe(topic, vi.fn());
 
     await Promise.resolve();
-    expect(mocks.instances).toHaveLength(0);
+    expect(findSocket(`/tmp/mc/${resourceId}/${threadId}.sock`)).toBeUndefined();
 
     mkdir.resolve();
     await Promise.all([publishPromise, subscribePromise]);
 
-    expect(mocks.instances).toHaveLength(1);
-    expect(mocks.instances[0]?.published).toHaveLength(1);
-    expect(mocks.instances[0]?.subscriptions).toEqual([topic]);
+    const topicSocket = findSocket(`/tmp/mc/${resourceId}/${threadId}.sock`);
+    expect(topicSocket?.published).toHaveLength(1);
+    expect(topicSocket?.subscriptions).toEqual([topic]);
   });
 
   it('does not retain a socket created after close starts', async () => {
@@ -140,8 +140,22 @@ describe('SignalsPubSub', () => {
     mkdir.resolve();
 
     await expect(publishPromise).rejects.toThrow('SignalsPubSub is closed');
-    expect(mocks.instances).toHaveLength(0);
+    expect(findSocket(`/tmp/mc/${resourceId}/${threadId}.sock`)).toBeUndefined();
+    expect(findSocket(`/tmp/mc/${resourceId}/.leases.sock`)?.closed).toBe(true);
     expect(pubsub.getSocket(topic)).toBeUndefined();
+  });
+
+  it('exposes and closes a resource-wide lease provider', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+    const leasePath = `/tmp/mc/${resourceId}/.leases.sock`;
+
+    const pubsub = createSignalsPubSub(resourceId);
+    const leaseProvider = pubsub.getLeaseProvider();
+
+    expect(leaseProvider).toBe(findSocket(leasePath));
+    await pubsub.close();
+    expect(findSocket(leasePath)?.closed).toBe(true);
   });
 
   it('routes non-signal topics through Unix sockets', async () => {
@@ -153,9 +167,8 @@ describe('SignalsPubSub', () => {
     await pubsub.publish('workflows-finish', event);
 
     // Non-signal topics should create Unix sockets (no in-memory fallback)
-    expect(mocks.instances).toHaveLength(2);
-    expect(mocks.instances[0]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows.sock`);
-    expect(mocks.instances[1]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows-finish.sock`);
+    expect(findSocket(`/tmp/mc/${resourceId}/workflows.sock`)).toBeDefined();
+    expect(findSocket(`/tmp/mc/${resourceId}/workflows-finish.sock`)).toBeDefined();
   });
 
   it('hashes long socket paths that would exceed macOS sun_path limit', async () => {
@@ -167,8 +180,9 @@ describe('SignalsPubSub', () => {
     const pubsub = createSignalsPubSub(resourceId);
     await pubsub.publish(longTopic, event);
 
-    expect(mocks.instances).toHaveLength(1);
-    const socketPath = mocks.instances[0]?.socketPath;
+    const socketPath = mocks.instances.find(
+      instance => instance.socketPath !== `/tmp/mc/${resourceId}/.leases.sock`,
+    )?.socketPath;
     // The full path must be ≤ 104 bytes (macOS sun_path limit)
     expect(Buffer.byteLength(socketPath!)).toBeLessThanOrEqual(104);
     // Should use a hash-based filename instead of the raw topic

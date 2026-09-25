@@ -31,6 +31,21 @@ export interface CachingPubSubOptions {
    * the policy has to be supplied at construction time instead.
    */
   shouldCache?: (topic: string) => boolean;
+  /**
+   * Optional bus to follow for topics this cache serves.
+   *
+   * Publishers that don't go through this `CachingPubSub` (e.g. the evented
+   * workflow engine, which publishes agent-stream events on `mastra.pubsub`
+   * from whichever worker executes a step) never hit `publish()` here, so
+   * their events are neither cached nor — when `source` is a different
+   * transport than `inner` — delivered to local subscribers at all. Setting
+   * `source` makes this cache a follower: whenever a topic has local
+   * subscribers, the cache also subscribes to `source`, assigns indices to and
+   * caches events that haven't passed through a caching layer yet, and (when
+   * `source` and `inner` are genuinely different transports) republishes them
+   * into `inner` for live delivery. See {@link CachingPubSub.__setSource}.
+   */
+  source?: PubSub;
 }
 
 /**
@@ -72,6 +87,10 @@ export class CachingPubSub extends PubSub {
   private readonly shouldCache?: (topic: string) => boolean;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
+  /** Bus this cache follows for externally-published events. See {@link __setSource}. */
+  private source?: PubSub;
+  /** Per-topic follower subscriptions on {@link source}, refcounted by local subscribers. */
+  private followers = new Map<string, { source: PubSub; cb: EventCallback; refs: number }>();
 
   constructor(
     private readonly inner: PubSub,
@@ -82,6 +101,36 @@ export class CachingPubSub extends PubSub {
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
+    if (options.source) this.__setSource(options.source);
+  }
+
+  /**
+   * Set (or replace) the source bus this cache follows.
+   *
+   * Exists separately from the constructor because the natural source is often
+   * not known at construction time: a durable agent builds its `CachingPubSub`
+   * lazily, but `mastra.pubsub` only becomes available at registration.
+   * Replacing the source only affects topics that start being followed
+   * afterwards — existing follower subscriptions stay on the bus they were
+   * created against until released.
+   * @internal
+   */
+  __setSource(source: PubSub | undefined): void {
+    // Following ourselves is meaningless and hazardous: every publish on such
+    // a source already flows through this.publish(), so any un-indexed event
+    // the follower would observe is one publish() *deliberately* declined to
+    // cache (the `localOnly` bypass, or `shouldCache`) — re-caching it would
+    // resurrect the run-local cache leak (#21668). The `__self()` probe sees
+    // through the `mastra.pubsub` proxy, which breaks plain reference
+    // equality while still targeting this very instance (the reuse-not-
+    // double-wrap configuration, #18148).
+    if (source === this || source?.__self?.() === this) return;
+    this.source = source;
+  }
+
+  /** Unwrap to the inner transport so aliasing checks see through this decorator. */
+  override __rawBus(): PubSub {
+    return this.inner.__rawBus();
   }
 
   get supportsNativeBatching(): boolean {
@@ -132,6 +181,118 @@ export class CachingPubSub extends PubSub {
    */
   private getCounterKey(topic: string): string {
     return `${this.keyPrefix}${topic}:counter`;
+  }
+
+  /**
+   * Whether {@link source} is backed by the same transport as {@link inner}.
+   *
+   * When they alias (e.g. the test harness passes one `EventEmitterPubSub`
+   * both to the agent and to `Mastra`, or the agent adopted `mastra.pubsub`
+   * as its inner bus), local subscribers already receive source-published
+   * events through their inner subscription — the follower must then only
+   * cache, never republish, or every event would be delivered twice.
+   */
+  private isSourceAliased(source: PubSub): boolean {
+    return source.__rawBus() === this.inner.__rawBus();
+  }
+
+  /**
+   * Start following {@link source} for a topic (idempotent, refcounted).
+   * Called on every local subscription entry point; released on unsubscribe
+   * and torn down on {@link clearTopic}.
+   *
+   * The follower's contract:
+   * - On an aliased source, events that carry an `index` are this cache's own
+   *   publish echo (or its own republish) — ack and ignore them. This is both
+   *   the dedup and the republish loop guard.
+   * - On a non-aliased source, an `index` means the event passed through a
+   *   *foreign* caching tier (e.g. a user-supplied `CachingPubSub` handed to
+   *   `new Mastra({ pubsub })` while this agent runs its own cache tier).
+   *   That tier's cache is not the one this instance replays from, so the
+   *   event is treated like an un-indexed one: cached here under a fresh
+   *   index (replacing the foreign index) and republished into `inner`.
+   *   Dropping it instead would lose the event for local subscribers entirely
+   *   — the exact stream-loss failure `source` following exists to prevent
+   *   (#20646).
+   * - Un-indexed events were published directly on the source bus (e.g. by
+   *   the evented workflow engine, possibly from another process). Assign an
+   *   index, cache them (subject to `shouldCache`), and — only when source and
+   *   inner are different transports — republish the indexed copy into `inner`
+   *   so local subscribers receive it live. On an aliased bus the original
+   *   delivery already reached them.
+   *
+   * Subscribes with `startFrom: 'latest'`: the follower's job is to mirror
+   * live traffic into the cache, not to re-ingest a persistent backend's
+   * retained history — re-reading from 'earliest' after a process restart
+   * would re-cache already-cached events under fresh indices.
+   */
+  private async retainFollower(topic: string): Promise<void> {
+    const source = this.source;
+    if (!source) return;
+    const existing = this.followers.get(topic);
+    if (existing) {
+      existing.refs++;
+      return;
+    }
+
+    const followerCb: EventCallback = async (event, ack) => {
+      try {
+        const aliased = this.isSourceAliased(source);
+        if (event.index !== undefined && aliased) {
+          return await ack?.();
+        }
+        let outbound: Event = event;
+        if (this.shouldCache?.(topic) !== false) {
+          // Same single-round-trip op as publish() (#22477): the follower sits
+          // on the identical per-chunk hot path for engine-originated events.
+          // The stored copy carries the allocated index, preserving the
+          // "indexed ⇒ already cached" dedup contract.
+          try {
+            const index = await this.cache.listPushIndexed(this.getCacheKey(topic), this.getCounterKey(topic), event);
+            outbound = { ...event, index };
+          } catch (error) {
+            this.logError(`[CachingPubSub] Failed to cache followed event for ${topic}`, error);
+          }
+        }
+        if (!aliased) {
+          // Inner implementations regenerate `id` but preserve `index`, same
+          // as the publish() path — live and cached copies dedup by index.
+          await this.inner.publish(topic, outbound);
+        }
+        await ack?.();
+      } catch (error) {
+        this.logError(`[CachingPubSub] Follower failed for ${topic}`, error);
+        await ack?.();
+      }
+    };
+
+    // Record synchronously so concurrent retains don't double-subscribe.
+    const entry = { source, cb: followerCb, refs: 1 };
+    this.followers.set(topic, entry);
+    try {
+      await source.subscribe(topic, followerCb, { startFrom: 'latest' });
+    } catch (error) {
+      this.followers.delete(topic);
+      this.logError(`[CachingPubSub] Failed to follow source for ${topic}`, error);
+    }
+  }
+
+  /** Drop one follower reference for a topic; unsubscribe from source at zero. */
+  private async releaseFollower(topic: string): Promise<void> {
+    const entry = this.followers.get(topic);
+    if (!entry) return;
+    entry.refs--;
+    if (entry.refs > 0) return;
+    this.followers.delete(topic);
+    await entry.source.unsubscribe(topic, entry.cb).catch?.(() => {});
+  }
+
+  /** Tear down a topic's follower unconditionally (stream completion). */
+  private async stopFollowing(topic: string): Promise<void> {
+    const entry = this.followers.get(topic);
+    if (!entry) return;
+    this.followers.delete(topic);
+    await entry.source.unsubscribe(topic, entry.cb).catch?.(() => {});
   }
 
   /**
@@ -203,6 +364,7 @@ export class CachingPubSub extends PubSub {
    * Subscribe to live events on a topic (no replay).
    */
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    await this.retainFollower(topic);
     await this.inner.subscribe(topic, cb, options);
   }
 
@@ -229,6 +391,11 @@ export class CachingPubSub extends PubSub {
    * @param cb - Callback invoked for each event
    */
   async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    // Follow the source (if any) before attaching locally: events the source
+    // delivers between now and the live subscription below land in the cache
+    // and are picked up by the history fetch.
+    await this.retainFollower(topic);
+
     // --- Phase 1: subscribe live, buffer everything during bootstrap ---
     let bootstrapping = true;
     const buffer: Array<{
@@ -273,11 +440,16 @@ export class CachingPubSub extends PubSub {
 
     try {
       // --- Phase 2: fetch and deliver cached history ---
+      // `seen` records the index-based dedup key AND the event id. The id
+      // matters on an aliased source bus: the follower caches an indexed COPY
+      // of an event whose original live delivery carries no index, so the two
+      // only correlate by id (same emitter delivery → same id). Distinct
+      // events never share ids, so the extra key can't over-suppress.
       const seen = new Set<string>();
       const history = await this.getHistory(topic, offset);
       for (const event of history) {
-        const key = this.dedupKey(event);
-        seen.add(key);
+        seen.add(this.dedupKey(event));
+        if (event.id) seen.add(`id:${event.id}`);
         if (typeof event.index === 'number') {
           lastDelivered = event.index;
         }
@@ -289,11 +461,13 @@ export class CachingPubSub extends PubSub {
 
       // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
       for (const { event, ack, nack } of buffer) {
-        const key = this.dedupKey(event);
-        if (seen.has(key)) {
+        if (seen.has(this.dedupKey(event)) || (event.id && seen.has(`id:${event.id}`))) {
+          // Acknowledge the suppressed duplicate so it doesn't stay pending.
+          await ack?.();
           continue;
         }
-        seen.add(key);
+        seen.add(this.dedupKey(event));
+        if (event.id) seen.add(`id:${event.id}`);
         if (typeof event.index === 'number') {
           lastDelivered = event.index;
         }
@@ -314,6 +488,7 @@ export class CachingPubSub extends PubSub {
       // Rollback: unsubscribe wrappedCb so it doesn't strand in bootstrap mode
       this.callbackMap.delete(cb);
       await this.inner.unsubscribe(topic, wrappedCb).catch(() => {});
+      await this.releaseFollower(topic);
       throw error;
     }
   }
@@ -325,6 +500,7 @@ export class CachingPubSub extends PubSub {
     const wrappedCb = this.callbackMap.get(cb) ?? cb;
     this.callbackMap.delete(cb);
     await this.inner.unsubscribe(topic, wrappedCb);
+    await this.releaseFollower(topic);
   }
 
   /**
@@ -370,6 +546,9 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
     try {
+      // Stop mirroring the source first — a follower running past the clear
+      // would repopulate the cache the caller is trying to free.
+      await this.stopFollowing(topic);
       await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey), this.inner.clearTopic(topic)]);
     } catch (error) {
       // Honor the base-class contract: clearTopic is best-effort and callers

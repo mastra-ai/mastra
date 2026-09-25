@@ -69,6 +69,11 @@ describe('EventedAgent.executeWorkflow terminal error emission', () => {
     }
 
     expect(unhandled).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledOnce();
+    // Scope to the publish-failure warning: this hostless EventedAgent also
+    // (correctly) warns about falling back to the default in-process engine.
+    const publishWarnings = warn.mock.calls.filter((c: any[]) =>
+      String(c[0]).includes('Failed to publish error event'),
+    );
+    expect(publishWarnings).toHaveLength(1);
   });
 });

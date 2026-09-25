@@ -1,6 +1,6 @@
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ScoreDelta } from './score-delta';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ComparisonScoreRowProps {
   scorerId: string;

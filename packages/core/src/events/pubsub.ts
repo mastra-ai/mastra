@@ -159,6 +159,35 @@ export abstract class PubSub {
     }
     return this.subscribeWithReplay(topic, cb);
   }
+
+  /**
+   * The underlying delivery transport, unwrapped through decorators.
+   *
+   * Decorators that delegate delivery (e.g. `CachingPubSub`) override this to
+   * return their inner's raw bus. The `mastra.pubsub` proxy forwards the call
+   * to its target, so it also unwraps transparently. Used to detect when two
+   * PubSub references are backed by the same transport (e.g. an agent's custom
+   * pubsub that is also the Mastra-level bus) so a bridge between them doesn't
+   * double-deliver.
+   * @internal
+   */
+  __rawBus(): PubSub {
+    return this;
+  }
+
+  /**
+   * Identity probe that sees through binding decorators.
+   *
+   * The `mastra.pubsub` proxy binds every method to its target, so calling
+   * `__self()` on the proxy returns the underlying PubSub instance. Used where
+   * reference equality must hold across the proxy (e.g. `CachingPubSub`
+   * refusing to follow itself). Unlike `__rawBus`, this does NOT unwrap
+   * delegating decorators — a `CachingPubSub` returns itself, not its inner.
+   * @internal
+   */
+  __self(): PubSub {
+    return this;
+  }
 }
 
 /**

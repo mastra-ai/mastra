@@ -1,6 +1,6 @@
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Renders the "Create agent" CTA in the page header of the agents

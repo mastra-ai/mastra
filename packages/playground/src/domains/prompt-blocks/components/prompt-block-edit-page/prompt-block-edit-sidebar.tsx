@@ -5,6 +5,7 @@ import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaFor
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
@@ -14,7 +15,6 @@ import type { UseFormReturn } from 'react-hook-form';
 import type { PromptBlockFormValues } from './utils/form-validation';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { SectionHeader } from '@/domains/cms';
-import { useLinkComponent } from '@/lib/framework';
 
 function RecursiveFieldRenderer({
   field,
