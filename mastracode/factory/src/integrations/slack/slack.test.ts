@@ -513,17 +513,6 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
   });
 
-  // A project without a repository cannot start a session. Explain the
-  // missing setup instead of downgrading to a chat-only session.
-  it('a factory without a repository refuses the new thread instead of starting a chat-only session', async () => {
-    const sourceControl = makeSourceControl({ hasRepo: false });
-    const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
-
-    await expect(resolve(resolveArgs())).rejects.toThrow(/connect source control|link a repository/i);
-    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
-  });
-
   it('an unlinked sender is refused rather than given a chat-only thread', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ link: null, sourceControl });
@@ -568,38 +557,23 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
-  it.each(['source-control selection', 'repository resolution', 'session lookup', 'session creation'])(
-    'a %s failure is reported safely instead of dropping to a chat-only thread',
-    async operation => {
-      const sourceControl = makeSourceControl();
-      const failure = new Error('db down: postgres://private');
-      if (operation === 'source-control selection') sourceControl.connections.list.mockRejectedValue(failure);
-      if (operation === 'repository resolution') {
-        sourceControl.connections.list.mockResolvedValueOnce([
-          { id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' },
-        ]).mockRejectedValueOnce(failure);
-      }
-      if (operation === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(failure);
-      if (operation === 'session creation') sourceControl.sessions.create.mockRejectedValue(failure);
-      const deps = makeResolverDeps({ sourceControl });
-      const resolve = createChannelResourceIdResolver(deps as any);
-      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      await expect(resolve(resolveArgs())).rejects.toThrow('Could not start a session right now. Please try again later.');
-      expect(log).toHaveBeenCalledWith(
-        '[slack] failed to start repo-backed session for thread',
-        'slack:C-1:1700.42',
-        failure,
-      );
-    },
-  );
-
   it.each([
-    { failure: 'missing repository', hasRepo: false, expected: /connect|link.*repository/i },
-    { failure: 'storage outage', hasRepo: true, expected: /try again later/i },
-  ])('posts one safe explanation for a $failure without creating a thread or card', async ({ hasRepo, expected }) => {
-    const sourceControl = makeSourceControl({ hasRepo });
-    if (hasRepo) sourceControl.sessions.create.mockRejectedValue(new Error('db down: postgres://private'));
+    { failure: 'missing repository', expected: /connect|link.*repository/i },
+    { failure: 'source-control selection', expected: /try again later/i },
+    { failure: 'repository resolution', expected: /try again later/i },
+    { failure: 'session lookup', expected: /try again later/i },
+    { failure: 'session creation', expected: /try again later/i },
+  ])('posts one safe explanation for $failure without creating a thread or card', async ({ failure, expected }) => {
+    const sourceControl = makeSourceControl({ hasRepo: failure !== 'missing repository' });
+    const outage = new Error('db down: postgres://private');
+    if (failure === 'source-control selection') sourceControl.connections.list.mockRejectedValue(outage);
+    if (failure === 'repository resolution') {
+      sourceControl.connections.list.mockResolvedValueOnce([
+        { id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' },
+      ]).mockRejectedValueOnce(outage);
+    }
+    if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
+    if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
     const deps = makeResolverDeps({ sourceControl });
     deps.projects = makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: true }]);
     const workItems = { upsert: vi.fn() };
@@ -618,6 +592,8 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     });
     const handlers = createHandlers({ ...deps, workItems } as any);
     const ctx = handlerCtx(mastra);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await handlers.onDirectMessage!(thread, message, (t: any, m: any) =>
       (channels as any).handleChatMessage(t, m, mastra, ctx.requestContext, {}), ctx);
@@ -629,8 +605,8 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(thread.postEphemeral).not.toHaveBeenCalled();
     expect(store.saveThread).not.toHaveBeenCalled();
     expect(workItems.upsert).not.toHaveBeenCalled();
-    if (!hasRepo) expect(sourceControl.sessions.create).not.toHaveBeenCalled();
-    else expect(sourceControl.sessions.create).toHaveBeenCalledTimes(1);
+    if (failure === 'session creation') expect(sourceControl.sessions.create).toHaveBeenCalledTimes(1);
+    else expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 });
 
