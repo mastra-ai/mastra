@@ -1,4 +1,5 @@
 import type { AutoFormFieldProps } from '@autoform/react';
+import { v4 as uuid } from '@lukeed/uuid';
 import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/ds/components/Button';
@@ -14,7 +15,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
   const { onChange } = inputProps;
   const [pairs, setPairs] = React.useState<KeyValuePair[]>(() =>
     Object.entries(field.default || {}).map(([key, val]) => ({
-      id: key || crypto.randomUUID(),
+      id: key || uuid(),
       key,
       value: val as string,
     })),
@@ -22,7 +23,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
 
   React.useEffect(() => {
     if (pairs.length === 0) {
-      setPairs([{ id: crypto.randomUUID(), key: '', value: '' }]);
+      setPairs([{ id: uuid(), key: '', value: '' }]);
     }
   }, [pairs]);
 
@@ -54,7 +55,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
   };
 
   const addPair = () => {
-    const newPairs = [...pairs, { id: crypto.randomUUID(), key: '', value: '' }];
+    const newPairs = [...pairs, { id: uuid(), key: '', value: '' }];
     setPairs(newPairs);
     updateForm(newPairs);
   };
@@ -62,7 +63,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
   const removePair = (id: string) => {
     const newPairs = pairs.filter(p => p.id !== id);
     if (newPairs.length === 0) {
-      newPairs.push({ id: crypto.randomUUID(), key: '', value: '' });
+      newPairs.push({ id: uuid(), key: '', value: '' });
     }
     setPairs(newPairs);
     updateForm(newPairs);

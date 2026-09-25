@@ -5955,6 +5955,9 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
+      '@lukeed/uuid':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@radix-ui/react-visually-hidden':
         specifier: ^1.2.4
         version: 1.2.4(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -5982,6 +5985,9 @@ importers:
       mdast-util-to-markdown:
         specifier: ^2.1.2
         version: 2.1.2
+      nanoid:
+        specifier: ^5.1.16
+        version: 5.1.16
       prettier:
         specifier: ^3.9.5
         version: 3.9.5

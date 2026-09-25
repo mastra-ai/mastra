@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 const processorPartSchema = z.object({ type: z.string(), text: z.string().optional() }).passthrough();
@@ -31,7 +32,7 @@ export function parseProcessorDraft(input: unknown): ProcessorDraft | undefined 
 
 function createProcessorMessage(text: string): ProcessorMessage {
   return {
-    id: crypto.randomUUID(),
+    id: nanoid(),
     role: 'user',
     createdAt: new Date().toISOString(),
     content: { format: 2, parts: [{ type: 'text', text }] },
