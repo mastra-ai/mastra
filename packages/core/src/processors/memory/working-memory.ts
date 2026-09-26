@@ -6,6 +6,9 @@ import type { MastraDBMessage, MemoryConfigInternal } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import { generateEmptyFromSchema } from '../../utils';
+import { neutralizePromptTags } from './neutralize-prompt-tags';
+
+const WORKING_MEMORY_PROMPT_TAGS = ['working_memory_data', 'working_memory_template'];
 
 export type WorkingMemoryTemplate =
   | { format: 'markdown'; content: string }
@@ -118,6 +121,10 @@ export class WorkingMemory implements Processor {
       workingMemoryData = memoryRunState
         ? await memoryRunState.load(cacheKey, loadWorkingMemory)
         : await loadWorkingMemory();
+    }
+
+    if (workingMemoryData) {
+      workingMemoryData = neutralizePromptTags(workingMemoryData, WORKING_MEMORY_PROMPT_TAGS);
     }
 
     // Get template (use template provider if available, then provided template, then default)
