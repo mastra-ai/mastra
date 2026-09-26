@@ -2303,7 +2303,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tools: currentStep.tools,
           });
           for (const msg of builtMessages) {
-            messageList.add(msg, 'response');
+            // These are this step's newly emitted parts, not a replay of earlier steps under the same id.
+            messageList.add(msg, 'response', { isDelta: true });
           }
 
           // Apply structuredOutput metadata to the assistant message.

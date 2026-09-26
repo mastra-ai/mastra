@@ -3,4 +3,8 @@
 '@mastra/memory': patch
 ---
 
-Prevented a cause of Anthropic rejecting a thread with "'thinking' or 'redacted_thinking' blocks in the latest assistant message cannot be modified" when observational memory is on. If an assistant message sealed by observational memory came back with its tool call resolved, the whole message, signed thinking included, was added again as a new message. Now the tool result is recorded on the existing message and only new content is added, so each thinking block reaches the model once. The resolved call is also saved even though the message is sealed, so it is still there on the next turn instead of reverting to pending. This stops new duplicates from being written. Threads that already hold a duplicated message will keep failing. Fixes #22802.
+Prevented duplicate signed thinking when a sealed assistant message is reloaded with a resolved tool call. The result now updates the existing call without changing its arguments, provider call identity, or reasoning. Observational memory saves the resolved call so it survives the next turn.
+
+Newly streamed text, reasoning, and processor data remain intact even when their content repeats earlier output. New content split from a sealed snapshot is saved separately instead of inheriting the old message's seal.
+
+This prevents new duplicates that can cause Anthropic to reject a thread with "'thinking' or 'redacted_thinking' blocks in the latest assistant message cannot be modified". It does not repair threads that already contain duplicated messages. Fixes #22802.

@@ -134,25 +134,6 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
 }
 
 /**
- * Moves tool calls held by a sealed message forward, in place, with the matching calls from a later
- * copy of that message (e.g. an approved call that now has its result). Returns whether any moved.
- */
-function advanceFrozenToolInvocations(frozen: MastraDBMessage, incoming: MastraDBMessage): boolean {
-  const frozenStates = new Map<string, MastraToolInvocation['state']>();
-  for (const part of frozen.content.parts) {
-    if (part.type === 'tool-invocation') frozenStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
-  }
-  const advancing = incoming.content.parts.filter(part => {
-    if (part.type !== 'tool-invocation') return false;
-    const frozenState = frozenStates.get(part.toolInvocation.toolCallId);
-    return !!frozenState && advancesToolInvocationState(frozenState, part.toolInvocation.state);
-  });
-  if (advancing.length === 0) return false;
-  MessageMerger.merge(frozen, { ...incoming, content: { format: 2, parts: advancing } });
-  return true;
-}
-
-/**
  * Records that a sealed message changed after it was persisted. Observational memory skips sealed
  * messages when saving (buffering already wrote them), so without this marker the stored copy would
  * keep showing a held tool call as pending and its result would be lost on the next turn.
@@ -170,31 +151,34 @@ function partContentKey(part: MastraMessagePart): string {
   return stableStringify(content);
 }
 
-/**
- * Returns the parts of a later copy of a sealed message that belong in a new message. Parts past
- * the seal boundary are new. A copy that doesn't extend past the boundary (e.g. the whole message
- * re-added with a call resolved) contributes only parts the sealed message doesn't already hold.
- * Tool calls the sealed message holds are never copied - they move forward in place - and neither
- * is signed reasoning: repeating it makes providers such as Anthropic reject the thread.
- */
-function partsMissingFromFrozenMessage(frozen: MastraDBMessage, incoming: MastraDBMessage): MastraMessagePart[] {
+/** Split accumulated snapshots by their matching prefix; independent deltas keep every new occurrence. */
+function partsMissingFromFrozenMessage(
+  frozen: MastraDBMessage,
+  incoming: MastraDBMessage,
+  isDelta: boolean,
+): MastraMessagePart[] {
   const frozenParts = frozen.content.parts;
-  const sealedIndex = frozenParts.findLastIndex(
-    part => !!(part as { metadata?: { mastra?: { sealedAt?: number } } }).metadata?.mastra?.sealedAt,
-  );
-  const sealedPartCount = sealedIndex === -1 ? frozenParts.length : sealedIndex + 1;
+  const incomingParts = incoming.content.parts;
+  let prefixLength = 0;
+  if (!isDelta) {
+    while (prefixLength < Math.min(frozenParts.length, incomingParts.length)) {
+      const held = frozenParts[prefixLength]!;
+      const part = incomingParts[prefixLength]!;
+      const sameTool =
+        held.type === 'tool-invocation' &&
+        part.type === 'tool-invocation' &&
+        held.toolInvocation.toolCallId === part.toolInvocation.toolCallId;
+      if (!sameTool && partContentKey(held) !== partContentKey(part)) break;
+      prefixLength++;
+    }
+  }
+
   const frozenToolCallIds = new Set(
     frozenParts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [])),
   );
-  const isFrozenToolCall = (part: MastraMessagePart) =>
-    part.type === 'tool-invocation' && frozenToolCallIds.has(part.toolInvocation.toolCallId);
-
-  if (incoming.content.parts.length > sealedPartCount) {
-    return incoming.content.parts.slice(sealedPartCount).filter(part => !isFrozenToolCall(part));
-  }
-
-  const frozenPartKeys = new Set(frozenParts.map(partContentKey));
-  return incoming.content.parts.filter(part => !isFrozenToolCall(part) && !frozenPartKeys.has(partContentKey(part)));
+  return incomingParts
+    .slice(prefixLength)
+    .filter(part => part.type !== 'tool-invocation' || !frozenToolCallIds.has(part.toolInvocation.toolCallId));
 }
 
 /**
@@ -237,6 +221,8 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
 
 type MessageListAddOptions = {
   merge?: boolean;
+  /** Newly emitted response parts, rather than an accumulated snapshot of the same message. */
+  isDelta?: boolean;
 };
 
 /**
@@ -1734,6 +1720,38 @@ export class MessageList {
     return true;
   }
 
+  private advanceFrozenToolInvocations(
+    frozen: MastraDBMessage,
+    incoming: MastraDBMessage,
+    source: MessageSource,
+  ): void {
+    const updates = source === 'input' ? clientToolOutcomes(frozen, incoming) : incoming;
+    for (const part of updates.content.parts) {
+      if (part.type !== 'tool-invocation') continue;
+      const index = frozen.content.parts.findIndex(
+        held => held.type === 'tool-invocation' && held.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+      );
+      const held = frozen.content.parts[index];
+      if (
+        held?.type !== 'tool-invocation' ||
+        !advancesToolInvocationState(held.toolInvocation.state, part.toolInvocation.state)
+      )
+        continue;
+      this.mergeToolResultIntoPart(frozen, index, {
+        ...held,
+        ...part,
+        createdAt: held.createdAt,
+        toolInvocation: {
+          ...held.toolInvocation,
+          state: part.toolInvocation.state,
+          result: part.toolInvocation.result,
+          errorText: part.toolInvocation.errorText,
+          approval: part.toolInvocation.approval ?? held.toolInvocation.approval,
+        },
+      });
+    }
+  }
+
   /**
    * Merge a tool-result `inputPart` into the stored tool-invocation part at
    * `msg.content.parts[i]`: preserves the original call args, merges
@@ -1805,11 +1823,21 @@ export class MessageList {
           })()
         : undefined;
 
+    const isSealed = MessageMerger.isSealed(msg);
     const mergedPart: Extract<MastraMessagePart, { type: 'tool-invocation' }> = {
       ...inputPart,
+      // Re-saving a sealed row must preserve its part timestamps and seal boundary metadata.
+      ...(isSealed ? part : {}),
       toolInvocation: {
         ...inputPart.toolInvocation,
         args: part.toolInvocation.args,
+        ...(isSealed
+          ? {
+              toolName: part.toolInvocation.toolName,
+              step: part.toolInvocation.step,
+              rawInput: part.toolInvocation.rawInput,
+            }
+          : {}),
       },
       // Preserve providerExecuted from original call if not in result
       ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
@@ -1862,7 +1890,7 @@ export class MessageList {
     this.updateLastCreatedAt(msg);
     // A sealed row was already written by buffering; record that it now holds a newer tool state
     // so observational memory re-saves it instead of skipping it as an unchanged sealed message.
-    if (MessageMerger.isSealed(msg)) {
+    if (isSealed) {
       markSealedMessageChanged(msg);
     }
     if (!this.stateManager.isResponseMessage(msg)) {
@@ -2290,16 +2318,20 @@ export class MessageList {
       }
     }
 
-    const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
+    const hasFrozenReplacementTarget =
+      !!replacementTarget && this.messages.indexOf(replacementTarget) <= latestSealedIndex;
+    const isDelta = messageSource === 'response' && options.isDelta === true;
+    // Independent response deltas may repeat text; input/history snapshots stay idempotent.
+    const reconcileById = shouldReplace || (hasFrozenReplacementTarget && isDelta);
 
     // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
     // shouldMerge() only decides whether to append to the latest assistant message,
-    // but replace-by-id can target an older sealed message elsewhere in the list.
+    // but replace-by-id can target an older frozen message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
       options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
-      !hasSealedReplacementTarget &&
+      !hasFrozenReplacementTarget &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
@@ -2313,35 +2345,35 @@ export class MessageList {
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
     else {
       let existingIndex = -1;
-      if (shouldReplace) {
+      if (reconcileById) {
         existingIndex = this.messages.findIndex(m => m.id === id);
       }
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
-      if (shouldReplace && existingMessage) {
+      if (reconcileById && existingMessage) {
         const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
 
         // A sealed message (e.g., after observation), or one at or before the latest seal, must not
         // be replaced or grown. Tool calls it already holds move forward in place; any other parts it
         // doesn't have yet go into a new message with a fresh ID.
         if (MessageMerger.isSealed(existingMessage) || existingIsAtOrBeforeSealedBoundary) {
-          if (messagesAreEqual(existingMessage, messageV2)) {
-            return this;
-          }
+          this.advanceFrozenToolInvocations(existingMessage, messageV2, messageSource);
+          // A client's rendering of stored assistant history is not fresh model output.
+          if (messageSource === 'input' && existingMessage.role === 'assistant') return this;
 
-          if (advanceFrozenToolInvocations(existingMessage, messageV2)) {
-            markSealedMessageChanged(existingMessage);
-            if (messageSource !== 'memory') {
-              this.pushMessageToSource(existingMessage, messageSource);
-            }
-          }
-
-          const newParts = partsMissingFromFrozenMessage(existingMessage, messageV2);
+          const newParts = partsMissingFromFrozenMessage(existingMessage, messageV2, isDelta);
           if (newParts.length === 0) {
             return this;
           }
           messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
           messageV2.content.parts = newParts;
+          // The suffix has never been persisted or observed, even if its snapshot was sealed.
+          if (messageV2.content.metadata?.mastra) {
+            const mastra: Record<string, unknown> = { ...messageV2.content.metadata.mastra };
+            delete mastra.sealed;
+            delete mastra.sealedChanged;
+            messageV2.content.metadata = { ...messageV2.content.metadata, mastra };
+          }
           // Ensure the new message has a timestamp after the sealed message
           if (messageV2.createdAt <= existingMessage.createdAt) {
             messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);

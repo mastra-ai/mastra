@@ -85,7 +85,7 @@ export function persistProcessorDataChunk(
     },
     createdAt: new Date(),
   };
-  messageList.add(message, 'response');
+  messageList.add(message, 'response', { isDelta: true });
 }
 
 type PromiseResults<OUTPUT = undefined> = Pick<

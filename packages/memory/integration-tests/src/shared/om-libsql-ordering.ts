@@ -288,7 +288,7 @@ export async function runOm14745RotationScenario(opts: {
   threadId: string;
   resourceId: string;
   rotateResponseMessageId: () => string;
-}): Promise<void> {
+}): Promise<MastraDBMessage> {
   const { memoryStore, threadId, resourceId, rotateResponseMessageId } = opts;
 
   await memoryStore.saveThread({
@@ -364,6 +364,12 @@ export async function runOm14745RotationScenario(opts: {
         format: 2,
         parts: [
           {
+            type: 'reasoning',
+            reasoning: 'The tool needs to run before the reply.',
+            details: [{ type: 'text', text: 'The tool needs to run before the reply.', signature: 'sealed-signature' }],
+            providerMetadata: { anthropic: { signature: 'sealed-signature' } },
+          },
+          {
             type: 'tool-invocation',
             toolInvocation: {
               state: 'call',
@@ -423,6 +429,10 @@ export async function runOm14745RotationScenario(opts: {
     throw new Error('OM 14745 controller: expected om.buffer() to run (buffered=false)');
   }
 
+  const sealedBeforeResult = structuredClone(
+    messageList.get.all.db().find(message => message.id === OM_14745_PRE_SEAL_ASSISTANT_ID)!,
+  );
+
   messageList.updateToolInvocation({
     type: 'tool-invocation',
     toolInvocation: {
@@ -457,4 +467,5 @@ export async function runOm14745RotationScenario(opts: {
       messageList.add(msg, 'memory');
     }
   }
+  return sealedBeforeResult;
 }

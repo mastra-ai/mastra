@@ -421,6 +421,65 @@ describe('MessageList sealed message handling', () => {
     expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('new content after boundary');
   });
 
+  describe.each(['sealed', 'before boundary'] as const)('independent flushes to a message %s', boundary => {
+    const createList = (parts: MastraMessagePart[]) => {
+      const list = new MessageList({ threadId: 'thread-1' });
+      list.add(
+        {
+          id: 'old-assistant',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          content: {
+            format: 2,
+            parts,
+            ...(boundary === 'sealed' ? { metadata: { mastra: { sealed: true } } } : {}),
+          },
+        },
+        'memory',
+      );
+      if (boundary === 'before boundary') {
+        list.add(
+          {
+            id: 'boundary',
+            role: 'assistant',
+            createdAt: new Date('2026-01-01T00:00:01Z'),
+            content: { format: 2, parts: [], metadata: { mastra: { sealed: true } } },
+          },
+          'memory',
+        );
+      }
+      return list;
+    };
+
+    it.each([
+      { old: ['old response'], fresh: ['new first', 'new second'] },
+      { old: ['Again.', 'old tail'], fresh: ['Again.'] },
+      { old: ['Again.'], fresh: ['Again.', 'new tail'] },
+      { old: ['Again.'], fresh: ['Again.'] },
+      { old: ['abc'], fresh: ['xyz'] },
+    ])('keeps the independent flush $fresh after $old', ({ old, fresh }) => {
+      const list = createList(old.map(text => ({ type: 'text', text })));
+      list.add(
+        {
+          id: 'old-assistant',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:02Z'),
+          content: { format: 2, parts: fresh.map(text => ({ type: 'text', text })) },
+        },
+        'response',
+        { isDelta: true },
+      );
+
+      expect(list.get.all.db().find(message => message.id === 'old-assistant')?.content.parts).toEqual(
+        old.map(text => ({ type: 'text', text })),
+      );
+      const flushed = list.get.response.db();
+      expect(flushed).toHaveLength(1);
+      expect(flushed[0]?.id).not.toBe('old-assistant');
+      expect(flushed[0]?.content.parts).toEqual(fresh.map(text => expect.objectContaining({ type: 'text', text })));
+    });
+  });
+
   // https://github.com/mastra-ai/mastra/issues/22802
   describe('same-id copy of a sealed message whose tool call has resolved', () => {
     const signedReasoning = (): MastraMessagePart =>
@@ -552,6 +611,161 @@ describe('MessageList sealed message handling', () => {
       expect(signatureCountInPrompt(messageList)).toBe(1);
     });
 
+    it.each(['input', 'response'] as const)('preserves the original call payload when %s resolves it', source => {
+      const messageList = createList();
+      const sealed = approvalMessage('call', { sealed: true });
+      messageList.add(sealed, 'memory');
+      const expectedList = createList();
+      expectedList.add(approvalMessage('result', { sealed: true }), 'memory');
+      const expectedAssistant = expectedList.get.all.aiV5.model().find(message => message.role === 'assistant');
+      const originalParts = structuredClone(sealed.content.parts);
+      const resumed = approvalMessage('result', { sealed: false });
+      const result = resumed.content.parts.find(part => part.type === 'tool-invocation')!;
+      result.toolInvocation.args = { id: 'edited-workflow', extra: true };
+      result.toolInvocation.toolName = 'editedTool';
+      messageList.add(resumed, source);
+
+      expect(toolInvocation(assistantMessages(messageList)[0])).toMatchObject({
+        state: 'result',
+        result: 'complete',
+        toolName: 'runWorkflow',
+        args: { id: 'wf-1' },
+      });
+      expect(messageList.get.all.aiV5.model().find(message => message.role === 'assistant')).toEqual(expectedAssistant);
+      expect(sealed.content.parts.slice(0, 2)).toEqual(originalParts.slice(0, 2));
+      expect(sealed.createdAt).toEqual(new Date('2026-01-01T00:00:01.000Z'));
+      expect(sealed.content.parts[2]).toMatchObject({ metadata: { mastra: { sealedAt: 1 } } });
+    });
+
+    it('keeps repeated text after an accumulated snapshot rather than deduplicating it by content', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+      const resumed = approvalMessage('result', { sealed: false });
+      resumed.content.parts.push({ type: 'text', text: 'May I run the workflow?' });
+      messageList.add(resumed, 'response');
+      expect(assistantMessages(messageList)[1]?.content.parts).toEqual([
+        expect.objectContaining({ type: 'text', text: 'May I run the workflow?' }),
+      ]);
+      expect(signatureCountInPrompt(messageList)).toBe(1);
+    });
+
+    it('accepts a partial tool update followed by fresh text that matches earlier text', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+      const resumed = approvalMessage('result', { sealed: false });
+      resumed.content.parts = [resumed.content.parts[2]!, { type: 'text', text: 'May I run the workflow?' }];
+      messageList.add(resumed, 'response', { isDelta: true });
+      expect(toolInvocation(assistantMessages(messageList)[0])).toMatchObject({ state: 'result', result: 'complete' });
+      expect(assistantMessages(messageList)[1]?.content.parts).toEqual([
+        expect.objectContaining({ type: 'text', text: 'May I run the workflow?' }),
+      ]);
+      expect(signatureCountInPrompt(messageList)).toBe(1);
+    });
+
+    it('does not regress a result when one incoming copy repeats a stale tool update', () => {
+      const messageList = createList();
+      const pending = approvalMessage('call', { sealed: true });
+      const pendingPart = pending.content.parts[2]!;
+      messageList.add(pending, 'memory');
+      const resumed = approvalMessage('result', { sealed: false });
+      if (pendingPart.type !== 'tool-invocation') throw new Error('Expected a tool invocation');
+      resumed.content.parts.push({
+        ...pendingPart,
+        toolInvocation: {
+          ...pendingPart.toolInvocation,
+          state: 'approval-responded',
+          approval: { id: 'approval-1', approved: true },
+        },
+      });
+      messageList.add(resumed, 'response');
+      expect(toolInvocation(assistantMessages(messageList)[0])).toMatchObject({ state: 'result', result: 'complete' });
+      expect(assistantMessages(messageList)).toHaveLength(1);
+    });
+
+    it.each(['copy', 'native'] as const)(
+      'preserves provider call identity and result metadata through a %s update',
+      path => {
+        const messageList = createList();
+        const sealed = approvalMessage('call', { sealed: true });
+        const call = sealed.content.parts.find(part => part.type === 'tool-invocation')!;
+        call.providerMetadata = { openai: { itemId: 'tsc_1' }, mastra: { original: true } };
+        messageList.add(sealed, 'memory');
+        const resumed = approvalMessage('result', { sealed: false });
+        const result = resumed.content.parts.find(part => part.type === 'tool-invocation')!;
+        result.providerMetadata = {
+          openai: { itemId: 'tso_1' },
+          mastra: { modelOutput: { type: 'text', value: 'formatted result' } },
+        };
+        if (path === 'copy') messageList.add(resumed, 'response');
+        else messageList.updateToolInvocation(result);
+        expect(
+          assistantMessages(messageList)[0]?.content.parts.find(part => part.type === 'tool-invocation')
+            ?.providerMetadata,
+        ).toEqual({
+          openai: { itemId: 'tsc_1', resultItemId: 'tso_1' },
+          mastra: { original: true, modelOutput: { type: 'text', value: 'formatted result' } },
+        });
+      },
+    );
+
+    it('keeps independent repeated text following a held tool at the start of the message', () => {
+      const messageList = createList();
+      const sealed = approvalMessage('call', { sealed: true });
+      sealed.content.parts = [sealed.content.parts[2]!, { type: 'text', text: 'Again.' }];
+      messageList.add(sealed, 'memory');
+      const delta = approvalMessage('result', { sealed: false });
+      delta.content.parts = [delta.content.parts[2]!, { type: 'text', text: 'Again.' }];
+      messageList.add(delta, 'response', { isDelta: true });
+      expect(assistantMessages(messageList)[1]?.content.parts).toEqual([
+        expect.objectContaining({ type: 'text', text: 'Again.' }),
+      ]);
+    });
+
+    it('keeps newly emitted unsigned reasoning even when its text repeats', () => {
+      const messageList = createList();
+      const sealed = approvalMessage('call', { sealed: true });
+      const reasoning: MastraMessagePart = { type: 'reasoning', reasoning: 'Let me think', details: [] };
+      sealed.content.parts = [{ type: 'text', text: 'old' }, reasoning];
+      messageList.add(sealed, 'memory');
+      const delta = approvalMessage('result', { sealed: false });
+      delta.content.parts = [structuredClone(reasoning), { type: 'text', text: 'new' }];
+      messageList.add(delta, 'response', { isDelta: true });
+      expect(assistantMessages(messageList)[1]?.content.parts).toEqual([
+        expect.objectContaining(reasoning),
+        expect.objectContaining({ type: 'text', text: 'new' }),
+      ]);
+    });
+
+    it('keeps repeated unsigned reasoning in the new suffix of an accumulated snapshot', () => {
+      const messageList = createList();
+      const sealed = approvalMessage('call', { sealed: true });
+      const reasoning: MastraMessagePart = { type: 'reasoning', reasoning: 'Let me think', details: [] };
+      sealed.content.parts = [reasoning, { type: 'text', text: 'old' }];
+      messageList.add(sealed, 'memory');
+      const snapshot = structuredClone(sealed);
+      snapshot.content.parts.push(structuredClone(reasoning), { type: 'text', text: 'new' });
+      messageList.add(snapshot, 'response');
+      expect(assistantMessages(messageList)[1]?.content.parts).toEqual([
+        expect.objectContaining(reasoning),
+        expect.objectContaining({ type: 'text', text: 'new' }),
+      ]);
+    });
+
+    it.each(['user', 'assistant'] as const)('does not re-id an unchanged %s history echo before the boundary', role => {
+      const messageList = createList();
+      const echoed: MastraDBMessage = {
+        id: 'echoed',
+        role,
+        createdAt: new Date('2026-01-01T00:00:00.500Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+      };
+      messageList.add(echoed, 'memory');
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+      const ids = messageList.get.all.db().map(message => message.id);
+      messageList.add(structuredClone(echoed), 'input');
+      expect(messageList.get.all.db().map(message => message.id)).toEqual(ids);
+    });
+
     it('marks the sealed message changed when a later copy resolves its call', () => {
       const messageList = createList();
       messageList.add(approvalMessage('call', { sealed: true }), 'memory');
@@ -584,6 +798,8 @@ describe('MessageList sealed message handling', () => {
       const sealed = assistantMessages(messageList)[0]!;
       expect(toolInvocation(sealed)).toMatchObject({ state: 'result', result: 'complete' });
       expect(sealed.content.metadata?.mastra).toMatchObject({ sealed: true, sealedChanged: true });
+      expect(sealed.content.parts[2]).toMatchObject({ metadata: { mastra: { sealedAt: 1 } } });
+      expect(sealed.createdAt).toEqual(new Date('2026-01-01T00:00:01.000Z'));
     });
   });
 });

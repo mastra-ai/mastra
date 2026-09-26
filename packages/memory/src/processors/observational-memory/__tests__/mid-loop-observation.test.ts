@@ -667,9 +667,9 @@ describe('Mid-Loop Observation', () => {
       return record?.bufferedObservationChunks ?? [];
     }
 
-    it('buffers only the prefix before a tool call still pending on the newest message', async () => {
+    it('buffers the prefix first and observes the pending tool only after its saved result arrives', async () => {
       const { tid, rid } = nextIds();
-      const { processorWithBuffering } = await createBufferedProcessor(tid, rid);
+      const { omWithBuffering, processorWithBuffering, observerSpy } = await createBufferedProcessor(tid, rid);
       const messageList = new MessageList({ threadId: tid, resourceId: rid });
       const now = Date.now();
 
@@ -698,7 +698,66 @@ describe('Mid-Loop Observation', () => {
       // Raw persistence still happened: the pending call remains in the list,
       // eligible to buffer on a later turn once its result arrives.
       expect(messageList.get.all.db().map(msg => msg.id)).toContain('pending-tool-msg');
+      const pending = messageList.get.all.db().find(msg => msg.id === 'pending-tool-msg')!;
+      expect(pending.content.metadata?.mastra?.sealed).not.toBe(true);
+      expect(JSON.stringify(observerSpy.mock.calls)).not.toContain('pending-tool-msg-tc');
+
+      const result = 'APPROVED_AFTER_BUFFER: '.padEnd(3200, 'r');
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'pending-tool-msg-tc',
+          toolName: 'test-tool',
+          args: {},
+          result,
+        },
+      });
+      await omWithBuffering.persistMessages(messageList.get.response.db(), tid, rid);
+      const stored = await storage.listMessages({ threadId: tid });
+      const reloaded = new MessageList({ threadId: tid, resourceId: rid });
+      reloaded.add(stored.messages, 'memory');
+      expect(reloaded.get.all.db().find(msg => msg.id === pending.id)?.createdAt).toEqual(pending.createdAt);
+
+      observerSpy.mockClear();
+      await processorWithBuffering.processInputStep(stepArgsFor(tid, rid, reloaded, {}));
+      await vi.waitFor(() => expect(JSON.stringify(observerSpy.mock.calls)).toContain(result), { timeout: 15000 });
     }, 20000);
+
+    it('persists a new snapshot suffix without inheriting the old row seal', async () => {
+      const reasoning = { type: 'reasoning', reasoning: 'Let me think', details: [] } as const;
+      const sealed: MastraDBMessage = {
+        id: 'sealed-snapshot',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          metadata: { modelId: 'test-model', mastra: { sealed: true, custom: 'preserved' } },
+          parts: [
+            { ...reasoning, details: [] },
+            { type: 'text', text: 'old' },
+          ],
+        },
+      };
+      await storage.saveMessages({ messages: [sealed] });
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(sealed, 'memory');
+      const snapshot = structuredClone(sealed);
+      snapshot.content.parts.push({ ...reasoning, details: [] }, { type: 'text', text: 'new' });
+      messageList.add(snapshot, 'response');
+
+      await om.persistMessages(messageList.get.response.db(), threadId, resourceId);
+      const { messages } = await storage.listMessages({ threadId });
+      expect(messages).toHaveLength(2);
+      expect(messages[0]!.content.metadata?.mastra?.sealed).toBe(true);
+      expect(messages[1]!.content.metadata).toEqual({ modelId: 'test-model', mastra: { custom: 'preserved' } });
+      expect(messages[1]!.content.parts).toEqual([
+        expect.objectContaining(reasoning),
+        expect.objectContaining({ type: 'text', text: 'new' }),
+      ]);
+    });
 
     it('buffers an abandoned call once the conversation has continued past it', async () => {
       const { tid, rid } = nextIds();
