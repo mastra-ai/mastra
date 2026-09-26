@@ -1358,16 +1358,38 @@ export class MessageList {
 
     const parts = message.content.parts.map(part => {
       if (part.type === 'tool-invocation' && part.toolInvocation) {
-        const inputTransform = getTransformedToolPayload(part.providerMetadata, 'transcript', 'input-available');
+        // Strip a run-local truncated modelOutput (e.g. TokenLimiterProcessor's
+        // maxToolResultTokens cap) so every persistence path — not just
+        // MessageHistory's — sees the full tool result again on later turns,
+        // not a truncation snapshot frozen at this run's cap setting.
+        const mastraMeta = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
+        let providerMetadata = part.providerMetadata;
+        let strippedCap = false;
+        if (mastraMeta?.modelOutputCapped) {
+          const restMastra = { ...mastraMeta };
+          delete restMastra.modelOutput;
+          delete restMastra.modelOutputCapped;
+          providerMetadata = {
+            ...part.providerMetadata,
+            mastra: restMastra as unknown as Record<string, AIV5Type.JSONValue>,
+          };
+          strippedCap = true;
+        }
+
+        const inputTransform = getTransformedToolPayload(providerMetadata, 'transcript', 'input-available');
         const outputTransform =
           part.toolInvocation.state === 'result'
-            ? (getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
-              getTransformedToolPayload(part.providerMetadata, 'transcript', 'error'))
+            ? (getTransformedToolPayload(providerMetadata, 'transcript', 'output-available') ??
+              getTransformedToolPayload(providerMetadata, 'transcript', 'error'))
             : part.toolInvocation.state === 'output-error'
-              ? getTransformedToolPayload(part.providerMetadata, 'transcript', 'error')
+              ? getTransformedToolPayload(providerMetadata, 'transcript', 'error')
               : undefined;
 
         if (!inputTransform && !outputTransform) {
+          if (strippedCap) {
+            changed = true;
+            return { ...part, providerMetadata };
+          }
           return part;
         }
 
@@ -1395,6 +1417,7 @@ export class MessageList {
 
         return {
           ...part,
+          providerMetadata,
           toolInvocation: {
             ...part.toolInvocation,
             args: transformedArgs,
@@ -1736,6 +1759,24 @@ export class MessageList {
             // same item twice ("Duplicate item found"). Retain the call's id and
             // stash the result's beside it; prompt conversion splits them back
             // onto their own tool parts.
+            // Only a genuine post-cap mutation counts: the ordinary 'call' -> 'result'
+            // transition also flips `result` from undefined to its first real value,
+            // and that first commit must not be mistaken for a later rewrite.
+            const resultChanged =
+              part.toolInvocation.result !== undefined &&
+              part.toolInvocation.result !== inputPart.toolInvocation.result;
+            const mastraMerged = merged.mastra as Record<string, unknown> | undefined;
+            const incomingMastra = incoming.mastra as Record<string, unknown> | undefined;
+            // A processor (e.g. a redactor) that rewrites `result` without also
+            // refreshing `modelOutput` leaves behind a stale cap/mapping keyed to
+            // the OLD value — e.g. TokenLimiterProcessor's maxToolResultTokens
+            // truncation of pre-redaction content. Once the underlying result has
+            // changed, that stale copy would be shown to the model in place of
+            // the new one, so drop it rather than let it survive unnoticed.
+            if (resultChanged && mastraMerged?.modelOutputCapped && incomingMastra?.modelOutput === undefined) {
+              const { modelOutput: _modelOutput, modelOutputCapped: _modelOutputCapped, ...restMastra } = mastraMerged;
+              merged.mastra = restMastra as unknown as Record<string, AIV5Type.JSONValue>;
+            }
             return preserveResponseItemIdsOnMerge(original, incoming, merged) as AIV5Type.ProviderMetadata;
           })()
         : undefined;

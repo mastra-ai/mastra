@@ -400,6 +400,15 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
   modelOutputComputed?: boolean;
   /**
+   * Set when a `processToolResult` processor (e.g. TokenLimiterProcessor's
+   * `maxToolResultTokens`) wrote a capped `modelOutput` to the tool-call
+   * step's local messageList. The mapping step reads this flag to skip its
+   * own `computeModelOutputProviderMetadata` recompute — which otherwise
+   * unconditionally overwrites `providerMetadata` from this step's stale,
+   * pre-cap output and clobbers the cap before it ever reaches a prompt.
+   */
+  resultCapped?: boolean;
+  /**
    * Set when execution was interrupted by request abort (not a tool error).
    * The call carries no result/error so the mapping step leaves it incomplete.
    */

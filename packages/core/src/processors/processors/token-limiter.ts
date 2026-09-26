@@ -431,7 +431,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const existing = findToolInvocationPart(messageList, toolCallId);
     if (!existing) return;
 
-    const value = this.capToolResult(result, this.maxToolResultTokens);
+    // Prefer the messageList's current result over `args.result`: `args.result`
+    // is the tool's original raw return value, unchanged for every processor
+    // in the outputProcessors chain regardless of order. If an earlier
+    // processor already rewrote the result (e.g. a redaction hook), reading
+    // from the messageList caps that rewritten value instead of leaking the
+    // pre-redaction content into `modelOutput`.
+    const currentResult = existing.result !== undefined ? existing.result : result;
+    const value = this.capToolResult(currentResult, this.maxToolResultTokens);
     if (value === undefined) return;
 
     messageList.updateToolInvocation({

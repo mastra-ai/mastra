@@ -3,7 +3,10 @@ import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
-import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
+import {
+  readCappedProviderMetadataFromMessageList,
+  readToolResultFromMessageList,
+} from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
@@ -88,6 +91,11 @@ const durableToolCallInputSchema = z.object({
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
+  // Set when TokenLimiterProcessor's maxToolResultTokens cap wrote
+  // `providerMetadata.mastra.modelOutput`/`modelOutputCapped` onto this step's
+  // local messageList copy. Tells llm-mapping to keep `providerMetadata`
+  // as-is instead of recomputing it from scratch (mirrors modelOutputComputed).
+  resultCapped: z.boolean().optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
   // so the mapping step leaves the call incomplete.
   // Mirrors the non-durable tool-call output schema.
@@ -1573,6 +1581,7 @@ export function createDurableToolCallStep() {
         // the raw pre-serialization result for the same reason.
         let providerMetadata = typedInput.providerMetadata;
         let modelOutputComputed: boolean | undefined;
+        let resultCapped: boolean | undefined;
         const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
         if (toModelOutput) {
@@ -1664,6 +1673,24 @@ export function createDurableToolCallStep() {
             const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
+            }
+            // TokenLimiterProcessor's maxToolResultTokens cap is metadata-only
+            // (it never promotes state/result — see capOversizedToolResult's
+            // docblock), so it never surfaces via readToolResultFromMessageList
+            // above. llm-mapping rebuilds `providerMetadata` from this step's
+            // *returned* value rather than the local messageList, so the cap
+            // must be carried across the boundary explicitly here, the same
+            // way `modelOutputComputed` carries a `toModelOutput` mapping.
+            const cappedProviderMetadata = readCappedProviderMetadataFromMessageList(messageList, toolCallId);
+            if (cappedProviderMetadata) {
+              const existingMastra = (providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+              const cappedMastra = (cappedProviderMetadata as { mastra?: Record<string, unknown> }).mastra;
+              providerMetadata = {
+                ...providerMetadata,
+                ...cappedProviderMetadata,
+                mastra: { ...existingMastra, ...cappedMastra },
+              };
+              resultCapped = true;
             }
           } catch (processorError) {
             if (processorError instanceof TripWire) {
@@ -1757,6 +1784,7 @@ export function createDurableToolCallStep() {
           providerMetadata,
           result,
           modelOutputComputed,
+          resultCapped,
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(transformMetadata ? { transformMetadata } : {}),

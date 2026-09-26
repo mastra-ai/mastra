@@ -212,7 +212,12 @@ export function createDurableLLMMappingStep() {
           // carry a mapped output from tool-call.ts (`modelOutputComputed`) are
           // not recomputed: the serialization boundary is why tool-call maps
           // eagerly, and this step only covers results that crossed the boundary
-          // unmapped (background completion, provider fallback).
+          // unmapped (background completion, provider fallback). `resultCapped`
+          // is the same deal for TokenLimiterProcessor's maxToolResultTokens
+          // cap: tool-call.ts already carried the capped `modelOutput` across
+          // the boundary onto `toolResult.providerMetadata`, so recomputing
+          // here would just re-derive the same pass-through value at best —
+          // skip it and keep the carried metadata as-is.
           let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
             | Record<string, unknown>
             | undefined;
@@ -220,7 +225,8 @@ export function createDurableLLMMappingStep() {
             !toolResult.error &&
             toolResult.result != null &&
             !toolResult.providerExecuted &&
-            !toolResult.modelOutputComputed
+            !toolResult.modelOutputComputed &&
+            !toolResult.resultCapped
           ) {
             providerMetadata = await computeModelOutputProviderMetadata({
               tool: registryTools?.[toolResult.toolName] as

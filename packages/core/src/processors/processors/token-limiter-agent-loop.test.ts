@@ -76,7 +76,10 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
 
   it('sends the model a capped copy of an oversized tool result instead of dropping it', async () => {
     const big = 'result '.repeat(3000);
-    const { agent, prompts, executions } = setup(big, new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }));
+    const { agent, prompts, executions } = setup(
+      big,
+      new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }),
+    );
     const result = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
 
     expect(executions()).toBe(1);
@@ -101,17 +104,23 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
     expect(prompts).toHaveLength(5);
     expect(result.text).toBe('');
     for (const p of prompts) {
-      const hasToolResult = p.some((m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool-result'));
+      const hasToolResult = p.some(
+        (m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool-result'),
+      );
       expect(hasToolResult).toBe(false);
     }
   });
 
   it('maxToolResultTokens has no effect unless the limiter is also registered as an outputProcessor', async () => {
     const big = 'result '.repeat(3000);
-    const { agent, prompts, executions } = setup(big, new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }), {
-      input: true,
-      output: false,
-    });
+    const { agent, prompts, executions } = setup(
+      big,
+      new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }),
+      {
+        input: true,
+        output: false,
+      },
+    );
     const result = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
 
     // processToolResult never runs (no outputProcessor registration), so the cap never
@@ -151,7 +160,11 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
             ]
           : [
               { type: 'tool-call', toolCallId: `call-${prompts.length}`, toolName: 'lookup', input: '{"q":"x"}' },
-              { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
             ];
         return {
           stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),

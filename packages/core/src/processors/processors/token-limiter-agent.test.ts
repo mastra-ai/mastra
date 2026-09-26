@@ -8,6 +8,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import type { MastraDBMessage } from '../../memory/types';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -191,7 +192,11 @@ describe('TokenLimiterProcessor through an agent', () => {
               ]
             : [
                 { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
-                { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
               ];
           return {
             stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),
@@ -226,6 +231,99 @@ describe('TokenLimiterProcessor through an agent', () => {
       const sentToolResult = JSON.stringify(prompts.at(-1));
       expect(sentToolResult).toMatch(/\[truncated: showing/);
       expect(sentToolResult.length).toBeLessThan(JSON.stringify(big).length);
+    });
+
+    it('does not persist the cap into stored history for durable agents (#24110)', async () => {
+      const big = 'result '.repeat(3000);
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async () => big,
+      });
+      const prompts: LanguageModelV2Prompt[] = [];
+      const hasToolResult = (prompt: LanguageModelV2Prompt) =>
+        (prompt as any[])
+          .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+          .some((c: any) => c.type === 'tool-result');
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          const chunks: any[] = hasToolResult(prompt)
+            ? [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'ok' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ]
+            : [
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ];
+          return {
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+      const limiter = new TokenLimiterProcessor({ limit: 50000, maxToolResultTokens: 50 });
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        id: 'limiter-durable-persist',
+        name: 'limiter-durable-persist',
+        instructions: 'Answer briefly.',
+        model,
+        tools: { lookup },
+        memory: mockMemory,
+        inputProcessors: [limiter],
+        outputProcessors: [limiter],
+      });
+      void new Mastra({ agents: { 'limiter-durable-persist': agent }, storage: new InMemoryStore() });
+      const pubsub = new EventEmitterPubSub();
+      const threadId = 'thread-cap-persist';
+      const resourceId = 'resource-cap-persist';
+
+      try {
+        const durableAgent = createDurableAgent({ agent, pubsub });
+
+        const turn1 = await durableAgent.stream('question', {
+          maxSteps: 2,
+          memory: { thread: threadId, resource: resourceId },
+        });
+        for await (const _chunk of turn1.fullStream) {
+          // drain
+        }
+
+        const turn1Prompt = JSON.stringify(prompts.at(-1));
+        expect(turn1Prompt).toMatch(/\[truncated: showing/);
+
+        const turn2 = await durableAgent.stream('second question', {
+          maxSteps: 1,
+          memory: { thread: threadId, resource: resourceId },
+        });
+        for await (const _chunk of turn2.fullStream) {
+          // drain
+        }
+
+        const turn2Prompt = JSON.stringify(prompts.at(-1));
+        expect(turn2Prompt).not.toMatch(/\[truncated: showing/);
+        expect(turn2Prompt.length).toBeGreaterThan(JSON.stringify(big).length);
+      } finally {
+        await pubsub.close();
+      }
+
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      const toolPart = messages
+        .flatMap(message => message.content.parts ?? [])
+        .find(part => part.type === 'tool-invocation');
+      const storedMastra = toolPart?.providerMetadata?.mastra as Record<string, unknown> | undefined;
+      expect(storedMastra?.modelOutput).toBeUndefined();
+      expect(storedMastra?.modelOutputCapped).toBeUndefined();
     });
 
     it('keeps the assistant answer when input processors are resolved per request', async () => {

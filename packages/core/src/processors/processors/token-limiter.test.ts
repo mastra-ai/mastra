@@ -1947,12 +1947,22 @@ describe('TokenLimiterProcessor', () => {
       content: {
         format: 2,
         content: '',
-        parts: [{ type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: `call-${id}`, toolName: 'lookup', args: {} } }],
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: `call-${id}`, toolName: 'lookup', args: {} },
+          },
+        ],
       },
       createdAt: at(n),
     });
 
-    const runProcessToolResult = (processor: TokenLimiterProcessor, messageList: MessageList, id: string, result: unknown) =>
+    const runProcessToolResult = (
+      processor: TokenLimiterProcessor,
+      messageList: MessageList,
+      id: string,
+      result: unknown,
+    ) =>
       processor.processToolResult({
         result,
         toolCallId: `call-${id}`,
@@ -1998,6 +2008,59 @@ describe('TokenLimiterProcessor', () => {
       expect(part.toolInvocation.state).toBe('call');
       expect(part.toolInvocation.result).toBeUndefined();
       expect(part.providerMetadata?.mastra?.modelOutput?.type).toBe('text');
+    });
+
+    it('drops a stale cap when a later processor rewrites the result without refreshing modelOutput (#24110)', async () => {
+      // Order: [tokenLimiter, redactor]. The cap runs first and caps the
+      // original oversized result; a later processor then redacts the
+      // *stored* result (e.g. scrubbing secrets) without touching
+      // providerMetadata. The stale cap — built from the pre-redaction text —
+      // must not survive, or the model would see leaked pre-redaction content
+      // via the cap's `modelOutput` while storage shows the redacted value.
+      const big = `secret-token-xyz ${'word '.repeat(2000)}`;
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const cappedPart = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(cappedPart.providerMetadata?.mastra?.modelOutput?.value).toContain('secret-token-xyz');
+
+      // A later redactor rewrites the result, dropping the secret, without
+      // touching providerMetadata at all.
+      const redacted = 'REDACTED';
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: { ...cappedPart.toolInvocation, result: redacted },
+      });
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.toolInvocation.result).toBe(redacted);
+      expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+      expect(part.providerMetadata?.mastra?.modelOutputCapped).toBeUndefined();
+    });
+
+    it('caps whatever the current messageList result is, not the stale args.result, when a redactor runs first (#24110)', async () => {
+      // Order: [redactor, tokenLimiter]. By the time the cap hook runs, the
+      // messageList already holds the redacted value even though the
+      // processor's `args.result` still carries the tool's original raw
+      // return value (ProcessorRunner passes the same raw `result` to every
+      // processor regardless of order). The cap must key off the messageList's
+      // current value so it never re-surfaces pre-redaction content.
+      const secretResult = `secret-token-xyz ${'word '.repeat(2000)}`;
+      const redactedResult = `REDACTED ${'word '.repeat(2000)}`;
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', redactedResult, 1), 'response');
+
+      // args.result carries the stale pre-redaction value; the messageList
+      // already has the redacted one.
+      await runProcessToolResult(processor, messageList, 'tool-now', secretResult);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata?.mastra?.modelOutput?.value).not.toContain('secret-token-xyz');
+      expect(part.providerMetadata?.mastra?.modelOutput?.value).toContain('REDACTED');
     });
 
     it('leaves results under maxToolResultTokens untouched', async () => {
