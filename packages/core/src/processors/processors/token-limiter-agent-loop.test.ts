@@ -2,6 +2,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import { TripWire } from '../../agent/trip-wire';
+import type { ProcessToolResultArgs } from '../index';
 import { createTool } from '../../tools';
 import { TokenLimiterProcessor } from './token-limiter';
 
@@ -10,6 +12,7 @@ function setup(
   toolOutput: string,
   limiter: TokenLimiterProcessor,
   registration: { input?: boolean; output?: boolean } = { input: true, output: true },
+  extraOutputProcessors: any[] = [],
 ) {
   let executions = 0;
   const prompts: any[][] = [];
@@ -57,7 +60,7 @@ function setup(
     // maxToolResultTokens only takes effect via processToolResult, which only
     // fires for output processors, so the limiter must be registered on both.
     inputProcessors: registration.input ? [limiter] : [],
-    outputProcessors: registration.output ? [limiter] : [],
+    outputProcessors: registration.output ? [limiter, ...extraOutputProcessors] : [],
   });
   return { agent, prompts, executions: () => executions };
 }
@@ -117,6 +120,33 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
     // even though maxToolResultTokens was configured.
     expect(executions()).toBe(5);
     expect(prompts).toHaveLength(5);
+    expect(result.text).toBe('');
+  });
+
+  it('a later output processor can still abort via TripWire after the cap runs', async () => {
+    // Regression: capOversizedToolResult must only ever write `providerMetadata`, never
+    // promote the part's state/result itself -- otherwise a later processor aborting via
+    // TripWire would find the part already promoted to 'result' with no rollback path.
+    // (See the unit-level "does not touch toolInvocation state or result" test for the
+    // direct assertion; this proves the chain-level behavior still works end to end.)
+    const big = 'result '.repeat(3000);
+    const tripwiringProcessor = {
+      id: 'tripwire-after-cap',
+      name: 'tripwire-after-cap',
+      async processToolResult(_args: ProcessToolResultArgs): Promise<void> {
+        throw new TripWire('blocked after cap');
+      },
+    };
+    const { agent, executions } = setup(
+      big,
+      new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }),
+      { input: true, output: true },
+      [tripwiringProcessor],
+    );
+    const result = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
+
+    // The tripwire fired -- the model never got an answer from a tool result.
+    expect(executions()).toBe(1);
     expect(result.text).toBe('');
   });
 });

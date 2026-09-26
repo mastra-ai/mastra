@@ -1,7 +1,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { estimateTokenCount } from 'tokenx';
-import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
@@ -53,6 +53,9 @@ export interface TokenLimiterOptions {
    * receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. A tool's own
    * `toModelOutput` mapping always takes precedence over this cap. Requires the processor to also be
    * registered in `outputProcessors` — that's what runs `processToolResult`. Unset by default (no capping).
+   *
+   * Does not apply to durable agents: the durable step only syncs its `result` field back out of the
+   * message list, not `providerMetadata`, so this cap is a no-op there regardless of registration.
    */
   maxToolResultTokens?: number;
 }
@@ -397,6 +400,15 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * output processor invocation, so register this processor in `outputProcessors`
    * for capping to take effect (`inputProcessors` alone only trims history).
    *
+   * This writes `providerMetadata` only — it never sets `toolInvocation.state`
+   * or `.result`. Committing `state: 'result'` here would promote the part to
+   * "done" before the rest of the output-processor chain (and its TripWire
+   * safety checkpoint) has run; a later processor that aborts via TripWire
+   * would then leave this uncapped-but-promoted part behind with no rollback.
+   * Leaving state/result untouched means whichever later step is responsible
+   * for the real commit (redaction hooks, `commitToolResult`, etc.) still owns
+   * that transition, and this hook only ever adds the model-facing cap.
+   *
    * If the tool has its own `toModelOutput` mapping, that mapping is computed
    * and committed to the message list *after* this hook runs, and its write
    * always wins on the `modelOutput` key — this cap never overrides a genuine
@@ -404,18 +416,26 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * clears a stale `modelOutputCapped` flag left behind by this hook in that
    * case, so the mapper's permanent output doesn't get mistaken for our
    * transient truncation and stripped before persistence.)
+   *
+   * Durable agents: this hook's `messageList` mutations are never read back
+   * into the durable step's returned output (only the `result` field is
+   * synced back, not `providerMetadata`), so `maxToolResultTokens` has no
+   * effect on durable agents. See the durable-agent test below.
    */
   private async capOversizedToolResult(args: ProcessToolResultArgs): Promise<void> {
     if (this.maxToolResultTokens === undefined) return;
     const { result, toolCallId, toolName, args: toolArgs, messageList } = args;
     if (!messageList) return;
 
+    const existing = findToolInvocationPart(messageList, toolCallId);
+    if (!existing) return;
+
     const value = this.capToolResult(result, this.maxToolResultTokens);
     if (value === undefined) return;
 
     messageList.updateToolInvocation({
       type: 'tool-invocation',
-      toolInvocation: { state: 'result', toolCallId, toolName, args: toolArgs, result },
+      toolInvocation: { ...existing, toolCallId, toolName, args: toolArgs },
       providerMetadata: { mastra: { modelOutput: { type: 'text', value }, modelOutputCapped: true } },
     });
   }
@@ -891,4 +911,28 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   getMaxTokens(): number {
     return this.maxTokens;
   }
+}
+
+/**
+ * Walk messageList backwards looking for a tool-invocation part with the given
+ * toolCallId, in *any* state (unlike `readToolResultFromMessageList`, which
+ * only matches `state: 'result'`). Used by `capOversizedToolResult` to carry
+ * the part's current state/result through unchanged so the cap's
+ * `updateToolInvocation` call only ever adds `providerMetadata`.
+ */
+function findToolInvocationPart(
+  messageList: MessageList,
+  toolCallId: string,
+): Extract<MastraMessagePart, { type: 'tool-invocation' }>['toolInvocation'] | undefined {
+  const messages: MastraDBMessage[] = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+        return part.toolInvocation;
+      }
+    }
+  }
+  return undefined;
 }

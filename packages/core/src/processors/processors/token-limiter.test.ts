@@ -1941,6 +1941,17 @@ describe('TokenLimiterProcessor', () => {
       createdAt: at(n),
     });
 
+    const pendingToolCall = (id: string, n: number): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      content: {
+        format: 2,
+        content: '',
+        parts: [{ type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: `call-${id}`, toolName: 'lookup', args: {} } }],
+      },
+      createdAt: at(n),
+    });
+
     const runProcessToolResult = (processor: TokenLimiterProcessor, messageList: MessageList, id: string, result: unknown) =>
       processor.processToolResult({
         result,
@@ -1968,6 +1979,25 @@ describe('TokenLimiterProcessor', () => {
       expect(modelOutput.type).toBe('text');
       expect(modelOutput.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
       expect(modelOutput.value.length).toBeLessThan(big.length);
+    });
+
+    it('does not promote toolInvocation state or write the result field (only providerMetadata)', async () => {
+      // Regression: promoting state to 'result' here (before the rest of the output-processor
+      // chain, including its TripWire checkpoint, has run) would leave an unvetted part behind
+      // with no rollback if a later processor throws TripWire. The cap must only ever touch
+      // `providerMetadata`, leaving state/result for whichever step is actually responsible for
+      // committing the tool result.
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50 });
+      const messageList = new MessageList();
+      messageList.add(pendingToolCall('tool-now', 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.toolInvocation.state).toBe('call');
+      expect(part.toolInvocation.result).toBeUndefined();
+      expect(part.providerMetadata?.mastra?.modelOutput?.type).toBe('text');
     });
 
     it('leaves results under maxToolResultTokens untouched', async () => {
@@ -2029,7 +2059,23 @@ describe('TokenLimiterProcessor', () => {
       expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
 
-    it.each([5, 20, 50, 1234])(
+    it('falls back to an empty string when the cap is too small for even the bare marker (cap=5)', async () => {
+      // Policy: a cap smaller than the marker text itself cannot produce a truncation
+      // notice that fits its own budget, so capText returns '' rather than emitting a
+      // marker that overflows the configured cap. This is asserted explicitly (not a
+      // silent early-return in the parametrized test below) so the policy stays covered.
+      const big = 'word '.repeat(20000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 5 });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      expect(part.providerMetadata.mastra.modelOutput.value).toBe('');
+    });
+
+    it.each([20, 50, 1234])(
       'always emits a truncation marker whose reported count matches the actual tokens shown (cap=%i)',
       async cap => {
         // 20,000 tokens of content so even the cap=1234 case leaves a "shown" count
@@ -2045,13 +2091,6 @@ describe('TokenLimiterProcessor', () => {
         const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
         const value: string = part.providerMetadata.mastra.modelOutput.value;
 
-        if (value === '') {
-          // The cap is too small even for the bare "showing 0 of M" marker: capText
-          // documents falling back to an empty string rather than a marker that
-          // itself exceeds the configured budget (see capText docstring).
-          return;
-        }
-
         // Both the shown-count and the total-count are formatted with toLocaleString,
         // so either can carry thousands separators (e.g. "1,220") once >= 1000.
         const match = value.match(/\[truncated: showing ([\d,]+) of ([\d,]+) tokens\]$/);
@@ -2064,6 +2103,11 @@ describe('TokenLimiterProcessor', () => {
         // The whole capped payload (slice + marker) must always fit inside the requested cap,
         // for every cap size tested, including caps >= 1000.
         expect(estimateTokenCount(value)).toBeLessThanOrEqual(cap);
+        // cap=1234 must actually exercise the comma-formatting path -- the marker's
+        // total-count part reports M >= 1000 with a thousands separator.
+        if (cap === 1234) {
+          expect(match![2]).toContain(',');
+        }
       },
     );
 
