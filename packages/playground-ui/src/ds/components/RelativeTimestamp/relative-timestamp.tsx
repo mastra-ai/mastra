@@ -9,6 +9,7 @@ import { formatRelativeTime } from '@/utils/relative-time';
 
 export interface RelativeTimestampProps {
   value: DateInput;
+  end?: DateInput | null;
   className?: string;
 }
 
@@ -94,12 +95,20 @@ function zoneRow(date: Date, timeZone?: string) {
   };
 }
 
-export function RelativeTimestamp({ value, className }: RelativeTimestampProps) {
+export function RelativeTimestamp({ value, end, className }: RelativeTimestampProps) {
   const date = toDate(value);
   if (!date) return null;
 
+  const endDate = end ? toDate(end) : undefined;
   const local = zoneRow(date);
-  const rows = local.zone === 'UTC' ? [local] : [local, zoneRow(date, 'UTC')];
+  const rows = endDate
+    ? [
+        { ...local, zone: 'Start' },
+        { ...zoneRow(endDate), zone: 'End' },
+      ]
+    : local.zone === 'UTC'
+      ? [local]
+      : [local, zoneRow(date, 'UTC')];
 
   return (
     <Tooltip>

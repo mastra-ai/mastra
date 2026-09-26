@@ -68,10 +68,10 @@ describe('TracesListView columns', () => {
       assert(grid);
       assert(top);
       const headers = Array.from(top.children).map(cell => cell.textContent);
-      expect(headers).toEqual(['Start', 'Type', 'Name', 'Input', 'Status', 'Duration', 'Est. cost']);
+      expect(headers).toEqual(['Time', 'Type', 'Name', 'Input', 'Status', 'Duration', 'Est. cost']);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('9rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('6rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -99,7 +99,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('9rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe('6rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });
@@ -286,7 +286,7 @@ describe('TracesListView — rows', () => {
   });
 
   it('explains the level icon only where rows mix traces and subtraces', () => {
-    const trigger = (root: HTMLElement) => root.querySelector('[data-base-ui-tooltip-trigger]');
+    const trigger = (root: HTMLElement) => root.querySelector('[data-base-ui-tooltip-trigger]:not(time)');
 
     const flat = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
     expect(trigger(flat.container)).toBeNull();
@@ -340,7 +340,7 @@ describe('TracesListView — usage cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Total tokens']);
+      expect(headers).toEqual(['Time', 'Name', 'Status', 'Total tokens']);
       expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
@@ -419,7 +419,7 @@ describe('TracesListView — metadata cells', () => {
   });
 });
 
-describe('TracesListView — environment and end time cells', () => {
+describe('TracesListView — environment and time cells', () => {
   describe('when the environment column is visible', () => {
     it('renders the header and the value, with a dash when the trace has none', () => {
       const { container } = render(
@@ -434,33 +434,26 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Environment']);
+      expect(headers).toEqual(['Time', 'Name', 'Status', 'Environment']);
       expect(screen.getByText('production')).toBeTruthy();
       expect(screen.getByText('—')).toBeTruthy();
     });
   });
 
-  describe('when the end time column is visible', () => {
-    it('formats the end timestamp like the start one', () => {
-      render(
-        <TracesListView
-          traces={[makeTrace({ traceId: 'trace-1', endedAt: new Date(2026, 5, 10, 13, 7, 47) })]}
-          columnPreferences={{ visibleColumns: ['endTime'], customColumns: [], metadataKeys: [] }}
-          onTraceClick={vi.fn()}
-        />,
+  describe('when the trace has ended', () => {
+    it('lists the start and end times in the time tooltip', async () => {
+      const startedAt = new Date(2026, 5, 10, 13, 7, 44);
+      const endedAt = new Date(2026, 5, 10, 13, 7, 47);
+      const { container } = render(
+        <TracesListView traces={[makeTrace({ traceId: 'trace-1', startedAt, endedAt })]} onTraceClick={vi.fn()} />,
       );
 
-      expect(screen.getByText('End')).toBeTruthy();
-      const endedAt = new Date(2026, 5, 10, 13, 7, 47);
-      const title = new Intl.DateTimeFormat(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit',
-      }).format(endedAt);
-      expect(screen.getByTitle(title).textContent).toBe(title);
+      const time = container.querySelector(`time[datetime="${startedAt.toISOString()}"]`);
+      assert(time instanceof HTMLElement);
+      fireEvent.focus(time);
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip.textContent).toContain('Start');
+      expect(tooltip.textContent).toContain('End');
     });
   });
 });
@@ -477,7 +470,7 @@ describe('TracesListView — custom columns', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Thread ID']);
+      expect(headers).toEqual(['Time', 'Name', 'Status', 'Thread ID']);
       expect(screen.getByText('thread-42')).toBeTruthy();
     });
 
@@ -612,7 +605,7 @@ describe('TracesListView — the duration column', () => {
       />,
     );
 
-    expect(screen.getByText('46.3s')).toBeTruthy();
+    expect(screen.getByText('46s')).toBeTruthy();
   });
 
   it('leaves the duration out when the column is not selected', () => {

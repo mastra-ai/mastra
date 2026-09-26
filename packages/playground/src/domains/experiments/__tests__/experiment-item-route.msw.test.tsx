@@ -153,7 +153,7 @@ describe('experiment item sub-route', () => {
       expect(await screen.findByText('Tokens')).toBeDefined();
       expect(await screen.findByText('12.4K')).toBeDefined();
       expect(screen.getByText('Latency (avg)')).toBeDefined();
-      expect(await screen.findByText('1.85s')).toBeDefined();
+      expect(await screen.findByText('1.9s')).toBeDefined();
 
       expect(metricRequests.length).toBeGreaterThanOrEqual(3);
       for (const body of metricRequests) {

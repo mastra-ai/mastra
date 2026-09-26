@@ -69,13 +69,13 @@ describe('TraceColumnsMenu', () => {
   });
 
   describe('when opened', () => {
-    it('lists the environment and end time columns alongside the standard ones', async () => {
+    it('lists the environment column alongside the standard ones', async () => {
       render(<TraceColumnsMenu {...defaultProps} />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
 
-      expect(await screen.findByRole('menuitemcheckbox', { name: 'End' })).toBeTruthy();
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Environment' })).toBeTruthy();
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Environment' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'End' })).toBeNull();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Total tokens' })).toBeTruthy();
     });
   });

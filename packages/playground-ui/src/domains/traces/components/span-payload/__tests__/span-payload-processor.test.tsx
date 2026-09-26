@@ -118,7 +118,7 @@ describe('SpanProcessorAttributes', () => {
     expect(valueOf('Executor')).toBe('Workflow');
     // processorIndex is 0-based; the position reads 1-based.
     expect(valueOf('Pipeline position')).toBe('2');
-    expect(valueOf('Hook duration')).toBe('1.84s');
+    expect(valueOf('Hook duration')).toBe('1.8s');
   });
 
   it('shows message-list changes as readable actions', () => {

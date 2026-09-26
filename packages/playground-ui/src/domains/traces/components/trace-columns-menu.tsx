@@ -19,13 +19,12 @@ import { FieldBlock } from '@/ds/components/FormFieldBlocks';
 const METADATA_KEY_FIELD_NAME = 'trace-metadata-key';
 const EMPTY_KEYS: readonly string[] = [];
 
-const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
+const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'environment'];
 
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   type: 'Type',
   input: 'Input',
   duration: 'Duration',
-  endTime: 'End',
   environment: 'Environment',
   inputTokens: 'Input tokens',
   outputTokens: 'Output tokens',

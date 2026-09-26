@@ -6,7 +6,9 @@ describe('formatDuration', () => {
     it('picks the most readable unit', () => {
       expect(formatDuration(0)).toBe('0ms');
       expect(formatDuration(123)).toBe('123ms');
-      expect(formatDuration(1234)).toBe('1.23s');
+      expect(formatDuration(1234)).toBe('1.2s');
+      expect(formatDuration(2820)).toBe('2.8s');
+      expect(formatDuration(12_340)).toBe('12s');
       expect(formatDuration(65_000)).toBe('1m 5s');
       expect(formatDuration(7_380_000)).toBe('2h 3m');
       expect(formatDuration(100_800_000)).toBe('1d 4h');

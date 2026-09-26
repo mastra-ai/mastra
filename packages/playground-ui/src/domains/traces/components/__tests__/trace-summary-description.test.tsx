@@ -20,7 +20,7 @@ describe('TraceSummaryDescription', () => {
     const startedAt = screen.getByText(
       new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(rootSpan.startedAt),
     );
-    expect(screen.getByText('46.3s')).not.toBeNull();
+    expect(screen.getByText('46s')).not.toBeNull();
 
     fireEvent.focus(startedAt);
     expect((await screen.findByRole('tooltip')).textContent).toBe(
