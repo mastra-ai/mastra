@@ -1087,7 +1087,7 @@ export class AgentController<TState = {}> {
     }
 
     const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
-    return {
+    const cloned: AgentControllerThread = {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
       title: result.thread.title ?? 'Cloned Thread',
@@ -1095,6 +1095,10 @@ export class AgentController<TState = {}> {
       updatedAt: result.thread.updatedAt,
       metadata: result.thread.metadata,
     };
+    // A per-user memory may live in a different store than the controller's
+    // thread rows; mirror the row so getById, listing, and ownership checks see it.
+    if (this.config.memory) await this.persistThreadRow(cloned);
+    return cloned;
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {

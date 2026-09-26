@@ -169,6 +169,11 @@ describe('AgentController cloneThread', () => {
     // The subscription opened on the clone loaded the copied history.
     expect(recalled).toHaveLength(1);
     expect((await recalled[0]!).messages.map(m => m.id)).toEqual(['copied-message']);
+    // The clone row is visible to controller-side thread reads, so the caller
+    // can switch back to it after leaving.
+    expect(await session.thread.getById({ threadId: 'c' })).toMatchObject({ id: 'c' });
+    await session.thread.create({ requestContext });
+    await expect(session.thread.switch({ threadId: 'c', requestContext })).resolves.not.toThrow();
   });
 
   it('uses the raw memory storage clone when configured memory is absent', async () => {
