@@ -26,7 +26,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border" />
-    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-success-indicator shadow-[0_0_12px_currentColor]" />
+    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-success-indicator glow-md glow-success-indicator" />
   </div>
 );
 
@@ -242,7 +242,7 @@ export const SignalsEmptyState = ({
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
               <span className="signals-engine-pulse absolute size-20 rounded-full border border-success-border" />
               <span className="absolute size-14 rounded-full border border-success-border" />
-              <span className="absolute size-9 rounded-full border border-success-border bg-success-bg shadow-[0_0_24px_var(--color-success-indicator)]" />
+              <span className="absolute size-9 rounded-full border border-success-border bg-success-bg glow-lg glow-success-indicator" />
               <CpuIcon className="relative size-4 text-success-fg" />
             </div>
             <p className="mt-3 max-w-40 text-meta text-muted-foreground">
@@ -259,11 +259,11 @@ export const SignalsEmptyState = ({
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
-                  className="signals-chip inline-flex items-center gap-2 rounded border border-current/25 bg-card px-2.5 py-1.5 text-column shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
+                  className="signals-chip inline-flex items-center gap-2 rounded border border-current/25 bg-card px-2.5 py-1.5 text-column glow-md/12"
                   key={signal.key}
                   style={signalStyle(signal.key)}
                 >
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current shadow-[0_0_7px_currentColor]" />
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current glow-sm" />
                   {signal.label}
                 </span>
               ))}
@@ -293,7 +293,7 @@ export const SignalsEmptyState = ({
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"
-              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator shadow-[0_0_9px_currentColor]"
+              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator glow-sm glow-warning-indicator"
             />
             <div className="min-w-0 flex-1">
               <p className="text-caption text-muted-foreground">

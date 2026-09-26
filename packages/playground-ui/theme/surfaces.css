@@ -207,3 +207,24 @@ html.light {
   --color-border-focus: var(--border-focus);
   --color-ring: var(--ring);
 }
+
+@property --glow-color {
+  syntax: '*';
+  inherits: false;
+}
+
+@theme {
+  --glow-sm: 8px;
+  --glow-md: 12px;
+  --glow-lg: 24px;
+}
+
+@utility glow-* {
+  --glow-color: --value(--color-*);
+  --tw-shadow: 0 0 --value(--glow-*) var(--glow-color, currentcolor);
+  --tw-shadow: 0 0 --value(--glow-*)
+    color-mix(in oklab, var(--glow-color, currentcolor) calc(--modifier(integer) * 1%), transparent);
+  box-shadow:
+    var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000);
+}
