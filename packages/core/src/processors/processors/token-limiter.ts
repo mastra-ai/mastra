@@ -53,9 +53,7 @@ export interface TokenLimiterOptions {
    * receives a truncated copy ending in a `[truncated: showing N of M tokens]` marker. A tool's own
    * `toModelOutput` mapping always takes precedence over this cap. Requires the processor to also be
    * registered in `outputProcessors` — that's what runs `processToolResult`. Unset by default (no capping).
-   *
-   * Does not apply to durable agents: the durable step only syncs its `result` field back out of the
-   * message list, not `providerMetadata`, so this cap is a no-op there regardless of registration.
+   * Works for both durable and non-durable agents.
    */
   maxToolResultTokens?: number;
 }
@@ -417,10 +415,6 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * case, so the mapper's permanent output doesn't get mistaken for our
    * transient truncation and stripped before persistence.)
    *
-   * Durable agents: this hook's `messageList` mutations are never read back
-   * into the durable step's returned output (only the `result` field is
-   * synced back, not `providerMetadata`), so `maxToolResultTokens` has no
-   * effect on durable agents. See the durable-agent test below.
    */
   private async capOversizedToolResult(args: ProcessToolResultArgs): Promise<void> {
     if (this.maxToolResultTokens === undefined) return;

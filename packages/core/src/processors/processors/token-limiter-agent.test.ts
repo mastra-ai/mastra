@@ -3,12 +3,14 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { MastraDBMessage } from '../../memory/types';
 import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../step-schema';
 
@@ -163,6 +165,67 @@ describe('TokenLimiterProcessor through an agent', () => {
       const prompt = JSON.stringify(prompts.at(-1));
       expect(prompt).toContain(ANSWER);
       expect(prompt).not.toContain(TOOL_PAYLOAD);
+    });
+
+    it('maxToolResultTokens also caps oversized tool results for durable agents (#24110)', async () => {
+      const big = 'result '.repeat(3000);
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async () => big,
+      });
+      const prompts: LanguageModelV2Prompt[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          const toolResult = (prompt as any[])
+            .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+            .find((c: any) => c.type === 'tool-result');
+          const chunks: any[] = toolResult
+            ? [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'ok' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ]
+            : [
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
+                { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ];
+          return {
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+      const limiter = new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 50 });
+      const agent = new Agent({
+        id: 'limiter-durable-cap',
+        name: 'limiter-durable-cap',
+        instructions: 'Answer briefly.',
+        model,
+        tools: { lookup },
+        inputProcessors: [limiter],
+        outputProcessors: [limiter],
+      });
+      void new Mastra({ agents: { 'limiter-durable-cap': agent }, storage: new InMemoryStore() });
+      const pubsub = new EventEmitterPubSub();
+
+      try {
+        const durableAgent = createDurableAgent({ agent, pubsub });
+        const result = await durableAgent.stream('question', { maxSteps: 2 });
+        for await (const _chunk of result.fullStream) {
+          // drain
+        }
+      } finally {
+        await pubsub.close();
+      }
+
+      const sentToolResult = JSON.stringify(prompts.at(-1));
+      expect(sentToolResult).toMatch(/\[truncated: showing/);
+      expect(sentToolResult.length).toBeLessThan(JSON.stringify(big).length);
     });
 
     it('keeps the assistant answer when input processors are resolved per request', async () => {
