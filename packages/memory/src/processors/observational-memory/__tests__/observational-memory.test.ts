@@ -4037,11 +4037,6 @@ User asked about </current-task> parsing and how it works
       expect(detectDegenerateRepetition(text)).toBe(true);
     });
 
-    it('should detect extremely long single lines', () => {
-      const line = 'a'.repeat(60_000);
-      expect(detectDegenerateRepetition(line)).toBe(true);
-    });
-
     it('should flag degenerate output in parseObserverOutput', () => {
       const block = 'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, ';
       const text = `<observations>\n${block.repeat(100)}\n</observations>`;

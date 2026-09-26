@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
-import { parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
+import { detectDegenerateRepetition, parseMultiThreadObserverOutput, parseObserverOutput } from '../observer-agent';
 
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
@@ -23,10 +23,10 @@ beforeEach(() => {
 // A single legitimately-long line, e.g. a summarized progress bar (reporter saw 72k–237k chars).
 const giantLine = `- 🟡 Build output: ${Array.from({ length: 12_000 }, (_, i) => `step${i}`).join(' ')}`;
 
-// Faithful summary of a build thread: many identical tool results in a row.
+// Faithful summary of a build thread: many identical short tool results in a row.
 const repetitiveToolLines = [
   '- 🔴 User asked to run the build and tests',
-  ...Array.from({ length: 40 }, () => '  * -> execute_command pnpm build → ok (exit 0)'),
+  ...Array.from({ length: 200 }, () => '  * -> pnpm build → ok'),
   '- 🟡 All build steps succeeded',
 ].join('\n');
 
@@ -51,10 +51,15 @@ describe('Observer degenerate detection (#24354)', () => {
   });
 
   it('does not flag faithfully-summarized repetitive short tool output as degenerate', () => {
-    const result = parseObserverOutput(`<observations>\n${repetitiveToolLines}\n</observations>`);
+    const output = `<observations>\n${repetitiveToolLines}\n</observations>`;
+    // The raw text trips the 200-char window check (the lines are too short
+    // for the duplicate-line check); collapsing the short run avoids it.
+    expect(detectDegenerateRepetition(output)).toBe(true);
+
+    const result = parseObserverOutput(output);
 
     expect(result.degenerate).not.toBe(true);
-    expect(result.observations).toContain('execute_command pnpm build → ok');
+    expect(result.observations).toContain('pnpm build → ok');
     expect(result.observations).toContain('All build steps succeeded');
   });
 
@@ -64,6 +69,14 @@ describe('Observer degenerate detection (#24354)', () => {
       (_, i) => `- 🟡 Looping observation number ${i} about the same repeated topic`,
     ).join('\n');
     const result = parseObserverOutput(`<observations>\n${Array(20).fill(block).join('\n')}\n</observations>`);
+
+    expect(result.degenerate).toBe(true);
+  });
+
+  it('still flags one long line repeated back to back', () => {
+    const line = '- 🟡 The agent called the same tool again with identical arguments and got the same result';
+    expect(line.length).toBeGreaterThan(80);
+    const result = parseObserverOutput(`<observations>\n${Array(300).fill(line).join('\n')}\n</observations>`);
 
     expect(result.degenerate).toBe(true);
   });

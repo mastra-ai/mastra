@@ -1856,13 +1856,18 @@ export function sanitizeObservationLines(observations: string): string {
 /**
  * Normalize observer output before degenerate detection: truncate giant lines
  * (so a single long-but-legitimate line is trimmed rather than rejected) and
- * collapse runs of consecutive identical lines, which is how faithful
- * summaries of repetitive tool output look (e.g. many "execute_command → ok").
- * Non-consecutive repetition loops are still caught by the detector.
+ * collapse runs of consecutive identical SHORT lines, which is how faithful
+ * summaries of repetitive tool output look (e.g. many "→ ok"). Long lines
+ * repeated back to back are left intact so the classic loop is still caught.
  */
 function prepareForDegenerateCheck(output: string): string {
   const lines = sanitizeObservationLines(output).split('\n');
-  return lines.filter((line, i) => i === 0 || line.trim() === '' || line !== lines[i - 1]).join('\n');
+  return lines
+    .filter((line, i) => {
+      if (i === 0 || line !== lines[i - 1]) return true;
+      return line.trim().length >= MIN_DUPLICATE_LINE_CHARS;
+    })
+    .join('\n');
 }
 
 /**
@@ -1908,14 +1913,9 @@ export function detectDegenerateRepetition(text: string): boolean {
     return true;
   }
 
-  // Strategy 2: Check for extremely long lines (a single line with 50k+ chars
-  // is almost certainly degenerate enumeration)
   const lines = text.split('\n');
-  for (const line of lines) {
-    if (line.length > 50_000) return true;
-  }
 
-  // Strategy 3: Exact-duplicate line ratio. The window sampling above has an
+  // Strategy 2: Exact-duplicate line ratio. The window sampling above has an
   // aliasing blind spot: for a repeating block with period P chars, sampled
   // windows only collide when two sample positions are congruent mod P, so a
   // long-period multi-line loop (e.g. a 21-line block repeated 62 times,
