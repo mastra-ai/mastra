@@ -1,5 +1,18 @@
 # @mastra/server
 
+## 1.72.0-alpha.3
+
+### Patch Changes
+
+- Fixed tool approvals for Inngest durable agents ([#25154](https://github.com/mastra-ai/mastra/issues/25154)). ([#25167](https://github.com/mastra-ai/mastra/pull/25167))
+
+  - Runs created with `createInngestAgent()` that wait on tool approval now appear in `GET /api/agents/:agentId/suspended-runs` and `agent.listSuspendedRuns()`.
+  - `approve-tool-call` and `decline-tool-call` now accept these runs. They no longer return "Access denied: durable run belongs to a different resource".
+  - Durable runs waiting on an approval-gated tool now report `requiresApproval: true` and the tool's `args`.
+
+- Updated dependencies [[`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53)]:
+  - @mastra/core@1.72.0-alpha.3
+
 ## 1.72.0-alpha.2
 
 ### Minor Changes
