@@ -3397,6 +3397,30 @@ export class Agent<
     return modelConfig;
   }
 
+  private resolveModelFromSelection(
+    resolved: ResolvedModelSelection,
+    requestContext: RequestContext,
+  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+    if (!Array.isArray(resolved)) {
+      return this.resolveModelConfig(resolved, requestContext);
+    }
+
+    const enabledModel = resolved.find(entry => entry.enabled);
+    if (!enabledModel) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: this.name },
+        text: `[Agent:${this.name}] - No enabled models found in model list`,
+      });
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
+
+    return this.resolveModelConfig(enabledModel.model, requestContext);
+  }
+
   /**
    * Gets the model instance, resolving it if it's a function or model configuration.
    * When the agent has multiple models configured, returns the first enabled model.
@@ -3417,26 +3441,9 @@ export class Agent<
     requestContext?: RequestContext;
     modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   } = {}): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
-    return this.resolveModelSelection(modelConfig, requestContext).then(resolved => {
-      if (!Array.isArray(resolved)) {
-        return this.resolveModelConfig(resolved, requestContext);
-      }
-
-      const enabledModel = resolved.find(entry => entry.enabled);
-      if (!enabledModel) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: { agentName: this.name },
-          text: `[Agent:${this.name}] - No enabled models found in model list`,
-        });
-        this.logger.trackException(mastraError);
-        throw mastraError;
-      }
-
-      return this.resolveModelConfig(enabledModel.model, requestContext);
-    });
+    return this.resolveModelSelection(modelConfig, requestContext).then(resolved =>
+      this.resolveModelFromSelection(resolved, requestContext),
+    );
   }
 
   /**
@@ -3473,6 +3480,38 @@ export class Agent<
     }
 
     return models.map(({ maxRetriesConfigured: _, ...model }) => model);
+  }
+
+  /** @internal */
+  public async __getModelAndModelList({
+    requestContext = new RequestContext(),
+  }: {
+    requestContext?: RequestContext;
+  } = {}): Promise<{
+    model: MastraLanguageModel | MastraLegacyLanguageModel;
+    modelList: Array<AgentModelManagerConfig> | null;
+    fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
+  }> {
+    const resolvedSelection = await this.resolveModelSelection(this.model, requestContext);
+    const model = await this.resolveModelFromSelection(resolvedSelection, requestContext);
+    if (!Array.isArray(resolvedSelection)) {
+      return { model, modelList: null, fallbackTimeouts: [] };
+    }
+
+    const enabledModelIndex = resolvedSelection.findIndex(entry => entry.enabled);
+    const preparedModels = await this.prepareModels(requestContext, resolvedSelection, {
+      index: enabledModelIndex,
+      model,
+    });
+    const fallbackTimeouts = resolvedSelection.map((modelConfig, index) => {
+      if (modelConfig.enabled) {
+        return preparedModels[index]?.modelSettings?.timeout;
+      }
+      return typeof modelConfig.modelSettings === 'function' ? undefined : modelConfig.modelSettings?.timeout;
+    });
+    const modelList = preparedModels.map(({ maxRetriesConfigured: _, ...preparedModel }) => preparedModel);
+
+    return { model, modelList, fallbackTimeouts };
   }
 
   /**
@@ -6452,6 +6491,7 @@ export class Agent<
     methodType?: AgentMethodType;
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6489,6 +6529,7 @@ export class Agent<
       methodType: options.methodType ?? 'stream',
       backgroundTaskEnabled: options.backgroundTaskEnabled,
       backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
+      model: options.model,
     });
   }
 
@@ -6945,6 +6986,10 @@ export class Agent<
   private async prepareModels(
     requestContext: RequestContext,
     resolvedSelection?: ResolvedModelSelection,
+    resolvedModel?: {
+      index: number;
+      model: MastraLanguageModel | MastraLegacyLanguageModel;
+    },
   ): Promise<Array<AgentModelManagerConfig>> {
     const selection =
       resolvedSelection ??
@@ -6975,8 +7020,11 @@ export class Agent<
     }
 
     const models = await Promise.all(
-      selection.map(async modelConfig => {
-        const model = await this.resolveModelConfig(modelConfig.model, requestContext);
+      selection.map(async (modelConfig, index) => {
+        const model =
+          resolvedModel?.index === index
+            ? resolvedModel.model
+            : await this.resolveModelConfig(modelConfig.model, requestContext);
         this.assertSupportsPreparedModels(model);
 
         const modelId = modelConfig.id || model.modelId;
