@@ -191,7 +191,15 @@ export function createExecuteWriteOperationWithRetry({
   };
 }
 
-export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
+export function prepareStatement({
+  tableName,
+  record,
+  onConflict = 'replace',
+}: {
+  tableName: TABLE_NAMES;
+  record: Record<string, any>;
+  onConflict?: 'replace' | 'ignore' | 'error';
+}): {
   sql: string;
   args: InValue[];
 } {
@@ -224,8 +232,11 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
     })
     .join(', ');
 
+  const insertClause =
+    onConflict === 'replace' ? 'INSERT OR REPLACE' : onConflict === 'ignore' ? 'INSERT OR IGNORE' : 'INSERT';
+
   return {
-    sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+    sql: `${insertClause} INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
     args: values,
   };
 }

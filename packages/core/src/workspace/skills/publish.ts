@@ -7,7 +7,9 @@ import type {
   StorageSkillFileNode,
   StorageSkillSnapshotType,
 } from '../../storage/types';
+import { isBinaryMimeType } from './mime-type';
 import type { SkillSource, SkillSourceEntry } from './skill-source';
+import { StoredFilesSkillSource } from './stored-files-skill-source';
 
 /**
  * Result of collecting a skill's filesystem tree.
@@ -63,27 +65,13 @@ function detectMimeType(filename: string): string | undefined {
   return mimeTypes[ext];
 }
 
-/**
- * Whether a MIME type represents binary content that cannot be safely stored as UTF-8 text.
- */
-function isBinaryMimeType(mimeType: string | undefined): boolean {
-  if (!mimeType) return false;
-  // Text-based types are safe for UTF-8
-  if (mimeType.startsWith('text/')) return false;
-  // JSON and YAML are text-safe
-  if (mimeType === 'application/json') return false;
-  // SVG is XML-based text
-  if (mimeType === 'image/svg+xml') return false;
-  // Everything else (image/png, image/jpeg, application/octet-stream, etc.) is binary
-  return true;
-}
-
 interface WalkedFile {
   path: string;
   /** Text content (UTF-8) or raw binary content (Buffer) */
   content: string | Buffer;
   /** Whether this file is binary */
   isBinary: boolean;
+  mimeType?: string;
 }
 
 /**
@@ -105,19 +93,21 @@ async function walkSkillDirectory(
       const subFiles = await walkSkillDirectory(source, basePath, entryPath);
       files.push(...subFiles);
     } else {
-      const rawContent = await source.readFile(entryPath);
+      const [rawContent, stat] = await Promise.all([source.readFile(entryPath), source.stat(entryPath)]);
       const relativePath = entryPath.substring(basePath.length + 1);
-      const mimeType = detectMimeType(entry.name);
-      const isBinary = isBinaryMimeType(mimeType);
+      const mimeType = stat.mimeType ?? detectMimeType(entry.name);
+      const isBinary =
+        stat.encoding === 'base64' ||
+        (stat.encoding !== 'utf-8' && (Buffer.isBuffer(rawContent) || isBinaryMimeType(mimeType)));
 
       if (isBinary) {
         // Keep binary content as Buffer
         const buf = Buffer.isBuffer(rawContent) ? rawContent : Buffer.from(rawContent, 'utf-8');
-        files.push({ path: relativePath, content: buf, isBinary: true });
+        files.push({ path: relativePath, content: buf, isBinary: true, mimeType });
       } else {
         // Text content as string
         const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
-        files.push({ path: relativePath, content, isBinary: false });
+        files.push({ path: relativePath, content, isBinary: false, mimeType });
       }
     }
   }
@@ -184,7 +174,13 @@ function buildSkillFileNodes(files: WalkedFile[]): StorageSkillFileNode[] {
     const content = file.isBinary
       ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content)).toString('base64')
       : (file.content as string);
-    cursor.push({ name: fileName, type: 'file', content });
+    cursor.push({
+      name: fileName,
+      type: 'file',
+      content,
+      encoding: file.isBinary ? 'base64' : 'utf-8',
+      ...(file.mimeType ? { mimeType: file.mimeType } : {}),
+    });
   }
 
   return root;
@@ -267,51 +263,27 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   const now = new Date();
 
   for (const file of files) {
-    const hash = await hashContent(file.content);
-    const mimeType = detectMimeType(file.path);
+    const content = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, 'utf-8');
+    const hash = await hashContent(content);
+    const mimeType = file.mimeType ?? detectMimeType(file.path);
+    const size = content.length;
 
-    if (file.isBinary) {
-      // Binary file: store as base64-encoded string
-      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
-      const size = buf.length;
-      const base64Content = buf.toString('base64');
+    treeEntries[file.path] = {
+      blobHash: hash,
+      size,
+      mimeType,
+      ...(file.isBinary ? { encoding: 'base64' as const } : {}),
+      sourceEncoding: file.isBinary ? 'base64' : 'utf-8',
+    };
 
-      treeEntries[file.path] = {
-        blobHash: hash,
+    if (!blobMap.has(hash)) {
+      blobMap.set(hash, {
+        hash,
+        content: file.isBinary ? content.toString('base64') : content.toString('utf-8'),
         size,
         mimeType,
-        encoding: 'base64',
-      };
-
-      if (!blobMap.has(hash)) {
-        blobMap.set(hash, {
-          hash,
-          content: base64Content,
-          size,
-          mimeType,
-          createdAt: now,
-        });
-      }
-    } else {
-      // Text file: store as UTF-8 string
-      const content = file.content as string;
-      const size = Buffer.byteLength(content, 'utf-8');
-
-      treeEntries[file.path] = {
-        blobHash: hash,
-        size,
-        mimeType,
-      };
-
-      if (!blobMap.has(hash)) {
-        blobMap.set(hash, {
-          hash,
-          content,
-          size,
-          mimeType,
-          createdAt: now,
-        });
-      }
+        createdAt: now,
+      });
     }
   }
 
@@ -349,6 +321,22 @@ export async function publishSkillFromSource(
 ): Promise<SkillPublishResult> {
   const result = await collectSkillForPublish(source, skillPath);
   // Store blobs in batch
+  await blobStore.putMany(result.blobs);
+  return result;
+}
+
+/** Collect a stored file snapshot into immutable publication data. */
+export async function collectSkillForPublishFromFiles(files: StorageSkillFileNode[]): Promise<SkillPublishResult> {
+  const source = new StoredFilesSkillSource(files);
+  return collectSkillForPublish(source, source.rootPath);
+}
+
+/** Store blobs for a stored file snapshot and return its immutable publication data. */
+export async function publishSkillFromFiles(
+  files: StorageSkillFileNode[],
+  blobStore: BlobStore,
+): Promise<SkillPublishResult> {
+  const result = await collectSkillForPublishFromFiles(files);
   await blobStore.putMany(result.blobs);
   return result;
 }

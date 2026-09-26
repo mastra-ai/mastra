@@ -166,11 +166,16 @@ export { createSkillTools, formatSkillActivation } from './skills';
 
 // Skill Publishing
 export type { SkillPublishResult } from './skills';
-export { collectSkillForPublish, publishSkillFromSource } from './skills';
+export {
+  collectSkillForPublish,
+  collectSkillForPublishFromFiles,
+  publishSkillFromSource,
+  publishSkillFromFiles,
+} from './skills';
 
 // Skill Source
 export type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skills';
-export { LocalSkillSource } from './skills';
+export { LocalSkillSource, StoredFilesSkillSource } from './skills';
 
 // Versioned Skill Sources
 export { VersionedSkillSource } from './skills';

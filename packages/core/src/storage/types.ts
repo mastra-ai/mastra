@@ -2019,6 +2019,8 @@ export interface StorageSkillFileNode {
   type: 'file' | 'folder';
   content?: string;
   children?: StorageSkillFileNode[];
+  encoding?: 'utf-8' | 'base64';
+  mimeType?: string;
 }
 
 /**
@@ -2209,6 +2211,8 @@ export interface SkillVersionTreeEntry {
    * - 'base64': content stored as base64-encoded string (for binary files like images)
    */
   encoding?: 'utf-8' | 'base64';
+  /** Logical encoding of the source file, separate from the blob's storage encoding. */
+  sourceEncoding?: 'utf-8' | 'base64';
 }
 
 /**

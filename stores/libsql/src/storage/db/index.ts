@@ -241,11 +241,7 @@ export class LibSQLDB extends MastraBase {
     return this.executeWriteOperationWithRetry(async () => {
       const filteredRecord = await this.filterRecordToKnownColumns(args.tableName, args.record);
       if (Object.keys(filteredRecord).length === 0) return;
-      const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord });
-      if (!statement.sql.startsWith('INSERT OR REPLACE')) {
-        throw new Error(`Unexpected insert statement generated for table ${args.tableName}`);
-      }
-      statement.sql = statement.sql.replace('INSERT OR REPLACE', 'INSERT');
+      const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord, onConflict: 'error' });
       await withClientWriteLock(this.client, () => this.client.execute(statement));
     }, `insert into table ${args.tableName}`);
   }
@@ -288,9 +284,11 @@ export class LibSQLDB extends MastraBase {
   private async doBatchInsert({
     tableName,
     records,
+    onConflict = 'replace',
   }: {
     tableName: TABLE_NAMES;
     records: Record<string, any>[];
+    onConflict?: 'replace' | 'ignore';
   }): Promise<void> {
     if (records.length === 0) return;
     // Filter out columns that don't exist in the actual database table
@@ -298,7 +296,7 @@ export class LibSQLDB extends MastraBase {
     // Skip records that have no known columns after filtering
     const nonEmptyRecords = filteredRecords.filter(r => Object.keys(r).length > 0);
     if (nonEmptyRecords.length === 0) return;
-    const batchStatements = nonEmptyRecords.map(r => prepareStatement({ tableName, record: r }));
+    const batchStatements = nonEmptyRecords.map(record => prepareStatement({ tableName, record, onConflict }));
     await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
@@ -308,9 +306,14 @@ export class LibSQLDB extends MastraBase {
    * @param args - The batch insert arguments
    * @param args.tableName - The name of the table to insert into
    * @param args.records - Array of records to insert
+   * @param args.onConflict - Whether an existing primary key is replaced or ignored
    * @throws {MastraError} When the batch insert fails after retries
    */
-  public async batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+  public async batchInsert(args: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+    onConflict?: 'replace' | 'ignore';
+  }): Promise<void> {
     return this.executeWriteOperationWithRetry(
       () => this.doBatchInsert(args),
       `batch insert into table ${args.tableName}`,
