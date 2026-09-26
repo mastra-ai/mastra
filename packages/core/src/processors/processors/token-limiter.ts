@@ -501,10 +501,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Trim non-system message groups in reverse order (newest first). No group
-    // is exempt — the current run's tool results were already capped in
-    // `processToolResult`, so an oversized run can no longer exhaust the
-    // budget on its own the way it could when this stage tried to protect it.
+    // Trim non-system message groups in reverse order (newest first), so the
+    // current run is tried first. No group is exempt from the fit check: in
+    // 'best-fit' mode (the default) a group that doesn't fit is skipped and
+    // older groups that do fit are still kept, so an oversized current-run
+    // group can still be silently dropped if maxToolResultTokens wasn't set
+    // to cap it in `processToolResult`. In 'contiguous' mode, once a group
+    // doesn't fit the loop stops entirely, so if the current run doesn't fit
+    // nothing does and the TripWire below fires instead of dropping it.
     const keptGroups = new Set<PromptMessage[]>();
     let currentTokens = 0;
 
