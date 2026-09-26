@@ -50,6 +50,13 @@ describe('v5 tool output containing a value key', () => {
     expect(result[0]?.parts[0]).toMatchObject({ state: 'output-available', output: { ok: true } });
   });
 
+  it('preserves a raw tool result with a custom type', () => {
+    const toolOutput = { type: 'celsius', value: 20 };
+    const result = sanitizeV5UIMessages([makeMessage(toolOutput)], 'prompt');
+
+    expect(result[0]?.parts[0]).toMatchObject({ state: 'output-available', output: toolOutput });
+  });
+
   it('preserves the native multimodal content wrapper', () => {
     const toolOutput = { type: 'content', value: [{ type: 'text', text: 'ok' }] };
     const result = sanitizeV5UIMessages([makeMessage(toolOutput)], 'prompt');

@@ -383,7 +383,14 @@ export function sanitizeV5UIMessages(
                 // See: https://github.com/mastra-ai/mastra/issues/17876
                 if (obj.type === 'content' && Array.isArray(obj.value)) return o;
                 // Unwrap AI SDK typed output wrappers before model-message conversion.
-                if ('type' in obj && 'value' in obj && Object.keys(obj).length === 2) return obj.value;
+                const isTypedOutputWrapper =
+                  (obj.type === 'text' ||
+                    obj.type === 'json' ||
+                    obj.type === 'error-text' ||
+                    obj.type === 'error-json') &&
+                  'value' in obj &&
+                  Object.keys(obj).length === 2;
+                if (isTypedOutputWrapper) return obj.value;
                 return unwrapLegacyToolOutput(o);
               })(),
             };
