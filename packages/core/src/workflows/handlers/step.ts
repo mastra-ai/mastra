@@ -140,6 +140,9 @@ export async function executeStep(
     });
   } else if (resume?.steps[0] === step.id) {
     resumeDataToUse = resume?.resumePayload;
+  } else if (restart?.activeStepsPath?.[step.id] && stepResults[step.id]?.status === 'running') {
+    // A resumed step that was in flight when the process died re-runs with its original resume data.
+    resumeDataToUse = (stepResults[step.id] as { resumePayload?: unknown }).resumePayload;
   }
 
   // Extract suspend data if this step was previously suspended
@@ -227,6 +230,7 @@ export async function executeStep(
     workflowStatus: 'running',
     requestContext,
     phase: 'start',
+    recordResumedStepStart: resumeDataToUse !== undefined,
   });
 
   // Check if this is a nested workflow that requires special handling
