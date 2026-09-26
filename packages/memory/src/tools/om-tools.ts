@@ -5,6 +5,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 
 import { safeSlice } from '../processors/observational-memory/string-utils';
+import { decodeImageBuffer, isHttpUrlString } from '../processors/observational-memory/token-counter';
 import {
   formatToolResultForObserver,
   resolveToolResultValue,
@@ -556,6 +557,104 @@ function formatAttachmentPart(partType: 'image' | 'file', part: Record<string, u
   return [`[${partType === 'image' ? 'Image' : 'File'}${filename}]`, mediaType, reference].filter(Boolean).join(' ');
 }
 
+/**
+ * Media types the model can be handed directly. Mirrors the observational memory observer's
+ * default `observeAttachments` allowlist — anything else (docx, pptx, video, …) is not a type
+ * providers accept as an inline part, so it stays text-only.
+ */
+function isViewableAttachmentMediaType(mediaType: string | undefined): mediaType is string {
+  if (!mediaType) return false;
+  const normalized = mediaType.toLowerCase();
+  return normalized.startsWith('image/') || normalized === 'application/pdf';
+}
+
+/** Mirrors core's DEFAULT_MAX_MEDIA_BYTES cap on inline media results. */
+const MAX_VIEWABLE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+export type RecallAttachmentPart = { type: 'image' | 'file'; data: string; mimeType: string };
+
+export type RecallAttachmentContent = {
+  content: [{ type: 'text'; text: string }, RecallAttachmentPart];
+};
+
+function isRecallAttachmentContent(value: unknown): value is RecallAttachmentContent {
+  if (typeof value !== 'object' || value === null) return false;
+  const content = (value as { content?: unknown }).content;
+  if (!Array.isArray(content) || content.length !== 2) return false;
+  return content.every(part => {
+    if (typeof part !== 'object' || part === null) return false;
+    const { type, text, data, mimeType } = part as Record<string, unknown>;
+    if (type === 'text') return typeof text === 'string';
+    return (type === 'image' || type === 'file') && typeof data === 'string' && typeof mimeType === 'string';
+  });
+}
+
+/**
+ * Turns an attachment part into a model-viewable payload. Returns the base64 bytes for inline
+ * payloads, or the http(s) URL for remote ones (the provider fetches those itself). Everything
+ * else — provider file IDs, unreachable schemes, oversized payloads, unsupported media types —
+ * comes back as an explanation for the agent instead.
+ */
+function resolveViewableAttachment(
+  part: Record<string, unknown>,
+): { data: string; mimeType: string } | { note: string } {
+  const payload = part.image ?? part.data ?? part.url;
+  const payloadString = payload instanceof URL ? payload.href : typeof payload === 'string' ? payload.trim() : '';
+  let mediaType = [part.mimeType, part.mediaType].find((v): v is string => typeof v === 'string' && v.length > 0);
+
+  if (payloadString.startsWith('data:')) {
+    mediaType ??= /^data:([^;,]+)/i.exec(payloadString)?.[1];
+  }
+
+  if (!payloadString && !(payload instanceof Uint8Array) && !(payload instanceof ArrayBuffer)) {
+    return { note: 'This attachment has no stored payload to show.' };
+  }
+
+  if (!isViewableAttachmentMediaType(mediaType)) {
+    return {
+      note: mediaType
+        ? `Attachments of type ${mediaType} can't be shown inline. Use the attachment's url or file id if you need to reference it.`
+        : "This attachment has no media type recorded, so it can't be shown inline.",
+    };
+  }
+
+  if (isHttpUrlString(payloadString)) {
+    return { data: payloadString, mimeType: mediaType };
+  }
+
+  if (payloadString.length * 0.75 > MAX_VIEWABLE_ATTACHMENT_BYTES) {
+    return { note: 'This attachment is too large to show inline.' };
+  }
+
+  const bytes = decodeImageBuffer(payloadString || payload);
+  if (!bytes) {
+    return { note: "This attachment's payload is not inline data or an http(s) URL, so it can't be shown." };
+  }
+
+  if (bytes.byteLength > MAX_VIEWABLE_ATTACHMENT_BYTES) {
+    return { note: 'This attachment is too large to show inline.' };
+  }
+
+  return { data: bytes.toString('base64'), mimeType: mediaType };
+}
+
+/**
+ * Presents a resolved attachment to the model as a native media part alongside its text
+ * description. `media` covers both shapes: base64 stays inline, and an http(s) URL is turned
+ * into an `image-url`/`file-url` part when the prompt is built.
+ */
+function recallAttachmentToModelOutput(output: unknown): unknown {
+  if (!isRecallAttachmentContent(output)) return undefined;
+  const [textPart, attachment] = output.content;
+  return {
+    type: 'content' as const,
+    value: [
+      { type: 'text' as const, text: textPart.text },
+      { type: 'media' as const, data: attachment.data, mediaType: attachment.mimeType },
+    ],
+  };
+}
+
 function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
   const parts: FormattedPart[] = [];
 
@@ -902,6 +1001,71 @@ export async function recallPart({
     charOffset: chunk.charOffset,
     nextCharOffset: chunk.nextCharOffset,
     note,
+  };
+}
+
+// ── Attachment viewing ───────────────────────────────────────────────
+
+export async function recallAttachmentView({
+  memory,
+  threadId,
+  resourceId,
+  cursor,
+  partIndex,
+  threadScope,
+  retrievalScope = 'thread',
+}: {
+  memory: RecallMemory;
+  threadId: string;
+  resourceId?: string;
+  cursor: string;
+  partIndex: number;
+  threadScope?: string;
+  retrievalScope?: 'thread' | 'resource';
+}): Promise<RecallAttachmentContent | { messages: string }> {
+  if (!memory || typeof memory.getMemoryStore !== 'function') {
+    throw new Error('Memory instance is required for recall');
+  }
+
+  if (!threadId) {
+    throw new Error('Thread ID is required for recall');
+  }
+
+  const resolved = await resolveCursorMessage(memory, cursor, {
+    resourceId,
+    threadScope,
+    enforceThreadScope: retrievalScope !== 'resource',
+  });
+
+  if ('hint' in resolved) {
+    return { messages: resolved.hint };
+  }
+
+  const rawPart = getMessageParts(resolved)[partIndex] as { type?: string } | undefined;
+  const partType = rawPart?.type;
+
+  if (!rawPart || (partType !== 'image' && partType !== 'file')) {
+    return {
+      messages: `Part ${partIndex} of message ${cursor} is ${rawPart ? `a ${partType ?? 'unknown'}-type part` : 'missing'}, not an attachment. Call recall with the same cursor and partIndex without viewAttachment to read it.`,
+    };
+  }
+
+  const resolvedAttachment = resolveViewableAttachment(rawPart as Record<string, unknown>);
+  if ('note' in resolvedAttachment) {
+    return {
+      messages: `${formatAttachmentPart(partType, rawPart as Record<string, unknown>)} — ${resolvedAttachment.note}`,
+    };
+  }
+
+  return {
+    content: [
+      { type: 'text', text: formatAttachmentPart(partType, rawPart as Record<string, unknown>) },
+      {
+        type: partType === 'image' ? 'image' : 'file',
+        data: resolvedAttachment.data,
+        mimeType: resolvedAttachment.mimeType,
+      },
+    ],
   };
 }
 
@@ -1358,6 +1522,11 @@ export const recallTool = (
           description:
             'Continue reading a truncated single part from this position. Pass the exact nextCharOffset value returned by a previous call; do not compute it yourself. Only applies with cursor and partIndex in mode="messages".',
         },
+        viewAttachment: {
+          type: 'boolean',
+          description:
+            'Show the actual attachment instead of just describing it. Requires cursor and partIndex, and only applies when that part is an image or file. Use it after recall shows you an attachment you need to look at.',
+        },
       },
     } satisfies JSONSchema7,
     execute: async (inputData, context) => {
@@ -1376,6 +1545,7 @@ export const recallTool = (
         charOffset,
         before,
         after,
+        viewAttachment,
       } = inputData as {
         mode?: 'messages' | 'threads' | 'search';
         query?: string;
@@ -1391,6 +1561,7 @@ export const recallTool = (
         charOffset?: number;
         before?: string;
         after?: string;
+        viewAttachment?: boolean;
       };
       const memory = (context as any)?.memory as RecallMemory | undefined;
       const currentThreadId = context?.agent?.threadId;
@@ -1563,6 +1734,18 @@ export const recallTool = (
 
       // Single-part fetch mode
       if (partIndex !== undefined && partIndex !== null) {
+        if (viewAttachment) {
+          return recallAttachmentView({
+            memory,
+            threadId: targetThreadId,
+            resourceId,
+            cursor,
+            partIndex,
+            threadScope,
+            retrievalScope,
+          });
+        }
+
         return recallPart({
           memory,
           threadId: targetThreadId,
@@ -1573,6 +1756,13 @@ export const recallTool = (
           threadScope,
           retrievalScope,
         });
+      }
+
+      if (viewAttachment) {
+        return {
+          messages:
+            'viewAttachment needs both cursor and partIndex so it knows which attachment to show. Call recall with cursor, partIndex, and viewAttachment: true.',
+        };
       }
 
       return recallMessages({
@@ -1589,5 +1779,6 @@ export const recallTool = (
         retrievalScope,
       });
     },
+    toModelOutput: recallAttachmentToModelOutput,
   });
 };
