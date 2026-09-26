@@ -25,6 +25,56 @@ import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
 
 /**
+ * On resume, input processors are not run against the real MessageList. Their
+ * processInput system messages would otherwise be lost, changing the system
+ * prompt (and busting prompt caches) after e.g. a tool approval. Run them on a
+ * throwaway list holding only the current system messages, ignore tripwires and
+ * non-system output, and copy over any system messages they added.
+ */
+async function replayInputProcessorSystemMessages({
+  capabilities,
+  requestContext,
+  observabilityContext,
+  messageList,
+  inputProcessorOverrides,
+}: {
+  capabilities: AgentCapabilities;
+  requestContext: RequestContext;
+  observabilityContext: ReturnType<typeof resolveObservabilityContext>;
+  messageList: MessageList;
+  inputProcessorOverrides: InnerAgentExecutionOptions['inputProcessors'];
+}): Promise<void> {
+  const existingTagged = { ...messageList.getPersisted.taggedSystemMessages };
+  const replayList = new MessageList();
+  replayList.addSystem(messageList.getSystemMessages());
+  for (const [tag, messages] of Object.entries(existingTagged)) {
+    replayList.addSystem(messages, tag);
+  }
+
+  try {
+    await capabilities.runInputProcessors({
+      requestContext,
+      ...observabilityContext,
+      messageList: replayList,
+      inputProcessorOverrides,
+      processorStates: new Map<string, ProcessorState>(),
+    });
+  } catch (error) {
+    capabilities.logger.debug('Failed to replay input processor system messages on resume', { error });
+    return;
+  }
+
+  // Mirror the replayed buckets so replacements, removals and tags match a fresh run.
+  messageList.replaceAllSystemMessages(replayList.getSystemMessages());
+  const replayedTagged = replayList.getPersisted.taggedSystemMessages;
+  for (const tag of new Set([...Object.keys(existingTagged), ...Object.keys(replayedTagged)])) {
+    messageList.clearSystemMessages(tag);
+    const messages = replayedTagged[tag];
+    if (messages?.length) messageList.addSystem(messages, tag);
+  }
+}
+
+/**
  * Helper function to add system message(s) to a MessageList
  * Handles string, CoreSystemMessage, SystemModelMessage, and arrays of these message formats
  * Used for both agent instructions and user-provided system messages
@@ -119,10 +169,11 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         messageList.add(options.messages, 'input');
         const initialSignalEchoes = getInitialSignalEchoes(messageList);
 
-        // Skip input processors during resume — the messageList has no user messages
-        // (resumeStream passes messages: []) and the real conversation state lives in the
-        // workflow snapshot. Running processors on an empty messageList would cause
-        // processors like TokenLimiterProcessor to throw a TripWire.
+        // Don't run input processors on the real messageList during resume — it has no
+        // user messages (resumeStream passes messages: []) and the real conversation state
+        // lives in the workflow snapshot. Running processors on an empty messageList would
+        // cause processors like TokenLimiterProcessor to throw a TripWire. Instead, replay
+        // them on a throwaway list so the system messages they add are still sent.
         let tripwire;
         if (!isResume) {
           ({ tripwire } = await capabilities.runInputProcessors({
@@ -132,6 +183,14 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
             inputProcessorOverrides: options.inputProcessors,
             processorStates,
           }));
+        } else {
+          await replayInputProcessorSystemMessages({
+            capabilities,
+            requestContext,
+            observabilityContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+          });
         }
 
         // Class instances (MessageList) and Maps (processorStates) live on the
@@ -221,10 +280,8 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       messageList.add(options.messages, 'input');
       const initialSignalEchoes = getInitialSignalEchoes(messageList);
 
-      // Skip input processors during resume — the messageList has no user messages
-      // (resumeStream passes messages: []) and the real conversation state lives in the
-      // workflow snapshot. Running processors on an empty messageList would cause
-      // processors like TokenLimiterProcessor to throw a TripWire.
+      // On resume, don't run input processors on the real messageList (see the
+      // no-memory branch above); only replay the system messages they add.
       let tripwire;
       if (!isResume) {
         ({ tripwire } = await capabilities.runInputProcessors({
@@ -234,6 +291,14 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           inputProcessorOverrides: options.inputProcessors,
           processorStates,
         }));
+      } else {
+        await replayInputProcessorSystemMessages({
+          capabilities,
+          requestContext,
+          observabilityContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+        });
       }
 
       runScope.set(MESSAGE_LIST_KEY, messageList);
