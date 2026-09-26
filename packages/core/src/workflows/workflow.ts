@@ -59,7 +59,7 @@ import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { StorageListWorkflowRunsInput } from '../storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -120,6 +120,7 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
   StepFlowEntryOptions,
+  WorkflowCancelResult,
 } from './types';
 import {
   cleanStepResult,
@@ -292,6 +293,8 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
     before.every((message, index) => messagesAreEqual(message as MessageInput, after[index] as MessageInput))
   );
 }
+
+const TERMINAL_RUN_STATUSES = new Set<string>(['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped']);
 
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
@@ -3565,6 +3568,22 @@ export class Workflow<
  * Represents a workflow run that can be executed
  */
 
+/**
+ * Marks a run canceled by rewriting its snapshot. Used for stores that don't support concurrent
+ * updates, several of which (Cloudflare D1/KV/DO, ClickHouse, LanceDB) don't implement `updateWorkflowState`.
+ */
+async function persistCanceledSnapshot(workflowsStore: WorkflowsStorage, record: WorkflowRun): Promise<void> {
+  const snapshot =
+    typeof record.snapshot === 'string' ? (JSON.parse(record.snapshot) as WorkflowRunState) : record.snapshot;
+  await workflowsStore.persistWorkflowSnapshot({
+    workflowName: record.workflowName,
+    runId: record.runId,
+    resourceId: record.resourceId,
+    snapshot: { ...snapshot, status: 'canceled' },
+    createdAt: record.createdAt,
+  });
+}
+
 export class Run<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -3741,19 +3760,141 @@ export class Run<
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    // Storage errors don't prevent cancellation: the abort signal and in-memory status are already
+    // updated. They are reported to the caller instead.
+    return this.persistCancellation();
+  }
+
+  /**
+   * Persists 'canceled' for this run and its persisted nested runs, collecting failures.
+   */
+  protected async persistCancellation(): Promise<WorkflowCancelResult> {
+    const failed: WorkflowCancelResult['failed'] = [];
+    let workflowsStore: WorkflowsStorage | undefined;
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      await workflowsStore?.updateWorkflowState({
-        workflowName: this.workflowId,
-        runId: this.runId,
-        opts: {
-          status: 'canceled',
-        },
-      });
-    } catch {
-      // Storage errors should not prevent cancellation from succeeding
-      // The abort signal and in-memory status are already updated
+      workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      if (workflowsStore && !workflowsStore.supportsConcurrentUpdates()) {
+        const record = await workflowsStore.getWorkflowRunById({ runId: this.runId, workflowName: this.workflowId });
+        if (record) await persistCanceledSnapshot(workflowsStore, record);
+      } else {
+        await workflowsStore?.updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'canceled' },
+        });
+      }
+    } catch (error) {
+      this.mastra?.getLogger()?.error(`Failed to persist cancellation for workflow run ${this.runId}`, { error });
+      failed.push({ workflowName: this.workflowId, runId: this.runId, error });
     }
+    if (workflowsStore) {
+      failed.push(...(await this.cancelPersistedDescendants(workflowsStore)));
+    }
+    return { failed };
+  }
+
+  /**
+   * Cancels every persisted, non-terminal nested workflow run linked from this run's snapshot.
+   * Links are read from storage (step `metadata.nestedRunId`, or the parent runId for non-foreach nesting), so this also works after a process
+   * restart when no in-memory parent/child tracking exists. Terminal runs are left untouched.
+   */
+  protected async cancelPersistedDescendants(
+    workflowsStore: WorkflowsStorage,
+  ): Promise<WorkflowCancelResult['failed']> {
+    const failed: WorkflowCancelResult['failed'] = [];
+    const visited = new Set<string>([`${this.workflowId}:${this.runId}`]);
+    const queue: Array<{ runId: string; workflowName: string }> = [
+      { runId: this.runId, workflowName: this.workflowId },
+    ];
+
+    while (queue.length > 0) {
+      const { runId, workflowName } = queue.shift()!;
+      let record: WorkflowRun | null | undefined;
+      let snapshot: WorkflowRunState | string | undefined;
+      try {
+        record = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+        snapshot = record?.snapshot;
+        if (typeof snapshot === 'string') snapshot = JSON.parse(snapshot) as WorkflowRunState;
+      } catch (error) {
+        this.mastra?.getLogger()?.error(`Failed to load workflow run ${runId} while canceling descendants`, { error });
+        // An unreadable run hides its descendants, so it is reported even when it is the root.
+        failed.push({ workflowName, runId, error });
+        continue;
+      }
+      if (!snapshot?.context) continue;
+
+      const { input: _input, ...steps } = snapshot.context;
+      for (const [stepId, stepResult] of Object.entries(steps) as Array<[string, any]>) {
+        const stepGraph = findStepInGraph(snapshot.serializedStepGraph ?? [], stepId) as any;
+        const nestedWorkflowId: string | undefined =
+          stepGraph?.type === 'workflow'
+            ? stepGraph.workflowId
+            : stepGraph?.step?.type === 'workflow'
+              ? stepGraph.step.workflowId
+              : stepGraph?.step?.component === 'WORKFLOW'
+                ? stepId
+                : undefined;
+        if (!nestedWorkflowId) continue;
+
+        // Suspended foreach iterations keep their links under `suspendPayload.__workflow_meta`
+        // (default engine: `foreachOutput`). The evented engine persists suspended iterations inline in
+        // `output`, so for suspended foreach steps only entries shaped as suspended iteration results
+        // are read; completed iterations' user output is ignored.
+        const linkedRunIds = (result: any): unknown[] => [
+          result?.metadata?.nestedRunId,
+          result?.suspendPayload?.__workflow_meta?.runId,
+        ];
+        const suspendedForeachOutput =
+          stepGraph?.type === 'foreach' && stepResult?.status === 'suspended' && Array.isArray(stepResult.output)
+            ? stepResult.output
+                .filter((entry: any) => entry?.status === 'suspended')
+                .map((entry: any) => entry.suspendPayload?.__workflow_meta?.runId)
+            : [];
+        const nestedRunIds = [stepResult, ...(Array.isArray(stepResult) ? stepResult : [])]
+          .flatMap(result => [result, ...(result?.suspendPayload?.__workflow_meta?.foreachOutput ?? [])])
+          .flatMap(linkedRunIds)
+          .concat(suspendedForeachOutput)
+          .flat();
+        if (!nestedRunIds.some(id => typeof id === 'string') && stepGraph?.type !== 'foreach') nestedRunIds.push(runId);
+
+        for (const nestedRunId of nestedRunIds) {
+          const key = `${nestedWorkflowId}:${nestedRunId}`;
+          if (typeof nestedRunId !== 'string' || visited.has(key)) continue;
+          visited.add(key);
+          queue.push({ runId: nestedRunId, workflowName: nestedWorkflowId });
+        }
+      }
+
+      if ((runId === this.runId && workflowName === this.workflowId) || TERMINAL_RUN_STATUSES.has(snapshot.status))
+        continue;
+      try {
+        if (!workflowsStore.supportsConcurrentUpdates()) {
+          await persistCanceledSnapshot(workflowsStore, { ...record!, snapshot });
+          continue;
+        }
+        // Guard against a descendant changing status between our read and this write:
+        // on a rejected write, reload and retry while it is still non-terminal.
+        let expectedStatus = snapshot.status;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const updated = await workflowsStore.updateWorkflowState({
+            workflowName,
+            runId,
+            opts: { status: 'canceled', expectedStatus },
+          });
+          if (updated) break;
+          let current = (await workflowsStore.getWorkflowRunById({ runId, workflowName }))?.snapshot;
+          if (typeof current === 'string') current = JSON.parse(current) as WorkflowRunState;
+          if (!current) throw new Error(`Nested workflow run ${runId} disappeared during cancellation`);
+          if (TERMINAL_RUN_STATUSES.has(current.status)) break;
+          if (attempt === 2) throw new Error(`Cancellation of nested workflow run ${runId} kept being rejected`);
+          expectedStatus = current.status;
+        }
+      } catch (error) {
+        this.mastra?.getLogger()?.error(`Failed to cancel nested workflow run ${runId}`, { error });
+        failed.push({ workflowName, runId, error });
+      }
+    }
+    return failed;
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {

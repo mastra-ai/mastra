@@ -72,6 +72,7 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
   WorkflowRunStatus,
+  WorkflowCancelResult,
   WorkflowRunState,
   StepParams,
   ToolStep,
@@ -1959,11 +1960,15 @@ export class EventedRun<
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
+  #abortHandlerRegistered = false;
+
   /**
    * Set up abort signal handler to publish workflow.cancel event when abortController.abort() is called.
    * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
    */
   private setupAbortHandler(): void {
+    if (this.#abortHandlerRegistered) return;
+    this.#abortHandlerRegistered = true;
     const abortHandler = () => {
       this.mastra?.pubsub
         .publish('workflows', {
@@ -2623,23 +2628,19 @@ export class EventedRun<
     };
   }
 
-  async cancel() {
+  async cancel(): Promise<WorkflowCancelResult> {
     // Update storage directly for immediate status update (same pattern as Inngest)
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: {
-        status: 'canceled',
-      },
-    });
+    const result = await this.persistCancellation();
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
     this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
 
-    // Trigger abort signal - the abort handler will publish the workflow.cancel event
-    // This ensures consistent behavior whether cancel() or abort() is called
+    // Trigger abort signal - the abort handler publishes the workflow.cancel event so workers
+    // stop executing. A run recreated after a restart never ran start()/resume() in this process,
+    // so register the handler here too; otherwise the event would never be published.
+    this.setupAbortHandler();
     this.abortController.abort();
+    return result;
   }
 }
