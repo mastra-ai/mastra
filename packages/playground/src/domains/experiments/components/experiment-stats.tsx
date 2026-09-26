@@ -12,7 +12,7 @@ export interface ExperimentStatsProps {
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
-  pending: { icon: <ClockIcon className="size-4 text-warning1" />, label: 'Pending' },
+  pending: { icon: <ClockIcon className="size-4 text-warning-fg" />, label: 'Pending' },
   running: { icon: <Spinner size="sm" />, label: 'Running' },
   completed: { icon: <CircleCheckIcon className="size-4 text-muted-foreground" />, label: 'Completed' },
   failed: { icon: <CircleXIcon className="size-4 text-error" />, label: 'Failed' },

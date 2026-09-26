@@ -298,12 +298,12 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="flex max-w-[80%] flex-col gap-3 border-accent6/40 bg-accent6/5 p-4"
+      className="flex max-w-[80%] flex-col gap-3 border-warning-border bg-warning-bg p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-accent6" aria-hidden />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-fg" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
           <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.

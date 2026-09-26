@@ -103,11 +103,11 @@ const SidebarLink = ({
         className={cn(
           'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2 text-body',
           controlStateColorTransition,
-          active ? 'border-accent1 bg-fill-hover text-foreground' : `hover:bg-fill-subtle ${quietTextHover}`,
+          active ? 'border-border-strong bg-fill-hover text-foreground' : `hover:bg-fill-subtle ${quietTextHover}`,
         )}
       >
         {done ? (
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent1">
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-info-bg">
             <Check className="size-3.5 text-white" />
           </div>
         ) : (

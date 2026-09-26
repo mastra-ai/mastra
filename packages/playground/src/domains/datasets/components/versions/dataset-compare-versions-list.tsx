@@ -24,20 +24,20 @@ const columns = [
 
 const versionInfoConfig = {
   added: {
-    badgeVariant: 'blue' as const,
-    borderColor: 'border-blue-900',
+    badgeVariant: 'info' as const,
+    borderColor: 'border-info-border',
     icon: <PlusIcon />,
     tooltip: 'Added in this version',
   },
   changed: {
-    badgeVariant: 'yellow' as const,
-    borderColor: 'border-yellow-900',
+    badgeVariant: 'warning' as const,
+    borderColor: 'border-warning-border',
     icon: <PenIcon />,
     tooltip: 'Changed in this version',
   },
   same: {
-    badgeVariant: 'green' as const,
-    borderColor: 'border-green-900',
+    badgeVariant: 'success' as const,
+    borderColor: 'border-success-border',
     icon: <EqualIcon />,
     tooltip: 'Same in both versions',
   },
@@ -58,7 +58,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
       >
         <BanIcon
           className={cn('h-5 w-5 text-muted-foreground/40', {
-            'text-red-900': red,
+            'text-destructive-indicator': red,
           })}
         />
       </TooltipTrigger>

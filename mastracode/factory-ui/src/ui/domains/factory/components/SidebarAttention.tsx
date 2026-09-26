@@ -86,7 +86,9 @@ export function SidebarAttention() {
         <PopoverTrigger id="attention-trigger" type="button" aria-label={triggerLabel(openCount, unreadCount)}>
           <span className="relative grid size-4 shrink-0 place-items-center" aria-hidden>
             <Inbox size={16} />
-            {openCount > 0 ? <span className="bg-warning1 absolute -top-0.5 -right-0.5 size-1.5 rounded-full" /> : null}
+            {openCount > 0 ? (
+              <span className="bg-warning-indicator absolute -top-0.5 -right-0.5 size-1.5 rounded-full" />
+            ) : null}
           </span>
           <MainSidebar.NavLabel className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">Needs attention</span>

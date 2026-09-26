@@ -89,7 +89,7 @@ export const CommentItem = forwardRef<HTMLElement, CommentItemProps>(
           'group/comment-item',
           commentItemLayout[variant],
           variant === 'thread' && (continued ? 'py-0.5' : 'py-1.5'),
-          highlighted && 'bg-accent1/10',
+          highlighted && 'bg-info-bg',
           className,
         )}
         {...props}

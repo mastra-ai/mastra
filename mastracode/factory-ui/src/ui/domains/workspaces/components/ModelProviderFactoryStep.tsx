@@ -42,7 +42,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
       )}
 
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
+        <Txt as="p" variant="caption" className="text-destructive-fg m-0" role="alert">
           {error}
         </Txt>
       )}

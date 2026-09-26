@@ -60,9 +60,9 @@ export function ActionsMenu({
             Create Dataset
           </Button>
           <Button
-            variant="ghost"
+            variant="destructive-ghost"
             size="sm"
-            className="w-full justify-start text-red-500 hover:text-red-400"
+            className="w-full justify-start"
             onClick={() => handleAction(onDeleteClick)}
             icon={<Trash2 />}
           >

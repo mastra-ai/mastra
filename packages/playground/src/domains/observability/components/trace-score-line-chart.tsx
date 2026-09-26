@@ -4,7 +4,14 @@ import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineCh
 import { useMemo } from 'react';
 import { buildScoreChartData } from './trace-score-line-chart.utils';
 
-const SERIES_COLORS = ['#22c55e', '#4f83f1', '#8b5cf6', '#fb923c', '#f472b6', '#facc15'];
+const SERIES_COLORS = [
+  'var(--chart-4)',
+  'var(--chart-1)',
+  'var(--chart-5)',
+  'var(--chart-6)',
+  'var(--chart-7)',
+  'var(--chart-3)',
+];
 
 export function TraceScoreLineChart({
   scoresData,

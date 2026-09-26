@@ -149,7 +149,7 @@ function DefaultErrorFallback({
       >
         <div
           className={cn(
-            'flex items-center justify-center rounded-full bg-accent2/10 text-accent2',
+            'flex items-center justify-center rounded-full bg-destructive-bg text-destructive-fg',
             isInline
               ? 'size-10 [&>svg]:size-5'
               : 'size-14 @md:size-16 @lg:size-20 [&>svg]:size-7 @md:[&>svg]:size-8 @lg:[&>svg]:size-10',

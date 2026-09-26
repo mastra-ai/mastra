@@ -288,7 +288,7 @@ describe('DataListRoot', () => {
           </DataList>,
         );
         const row = container.querySelector<HTMLButtonElement>('.data-list-row');
-        expect(row?.className).toContain('data-[variant=error]:active:bg-notice-destructive/20');
+        expect(row?.className).toContain('data-[variant=error]:active:bg-destructive-indicator/20');
       });
     });
 

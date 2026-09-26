@@ -102,7 +102,7 @@ export function CustomProvidersSection() {
       </div>
 
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-fg">
           {error}
         </Txt>
       )}
@@ -178,7 +178,7 @@ export function CustomProvidersSection() {
                     {p.name}
                   </Txt>
                   {p.hasApiKey && (
-                    <Badge size="sm" variant="green">
+                    <Badge size="sm" variant="success">
                       Key saved
                     </Badge>
                   )}

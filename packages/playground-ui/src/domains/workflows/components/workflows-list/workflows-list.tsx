@@ -163,7 +163,7 @@ function WorkflowRow({
             {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
             <span className="truncate">{name}</span>
             {wf.origin === 'dynamic' ? (
-              <Badge size="xs" variant="blue" title="Registered via the dynamic-workflows API">
+              <Badge size="xs" variant="info" title="Registered via the dynamic-workflows API">
                 Dynamic
               </Badge>
             ) : null}
@@ -182,10 +182,10 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-positive1"
+              className="inline-flex items-center gap-1.5 text-success-fg"
               aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
             >
-              <span aria-hidden className="size-2 rounded-full bg-positive1 motion-safe:animate-pulse" />
+              <span aria-hidden className="size-2 rounded-full bg-success-indicator motion-safe:animate-pulse" />
               {runningCount}
             </span>
           ) : (
@@ -195,7 +195,7 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-warning1"
+              className="inline-flex items-center gap-1.5 text-warning-fg"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />

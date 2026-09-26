@@ -58,7 +58,7 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="flex min-w-0 items-center gap-3 text-caption text-accent6">
+    <div className="flex min-w-0 items-center gap-3 text-caption text-warning-fg">
       <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
       {onReturnToLatestVersion && (
         <button
@@ -124,7 +124,7 @@ export function DatasetItemsToolbar({
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+            <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
               <Trash2 /> Delete Items
             </DropdownMenu.Item>
           </>

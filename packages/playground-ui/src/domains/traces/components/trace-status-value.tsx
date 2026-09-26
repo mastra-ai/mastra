@@ -9,7 +9,7 @@ const STATUS_LABELS: Record<TraceStatusValueStatus, string> = {
 };
 
 const STATUS_STYLES: Record<TraceStatusValueStatus, string> = {
-  success: 'text-accent1',
+  success: 'text-success-fg',
   error: 'text-error',
   running: 'text-muted-foreground',
 };

@@ -12,8 +12,8 @@ const laneX = (status: TaskStatus, singleLane: boolean) => (status === 'in_progr
 const rowCenter = (index: number) => index * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2;
 
 const ink: Record<TaskStatus, string> = {
-  completed: 'var(--accent1)',
-  in_progress: 'var(--accent6)',
+  completed: 'var(--success-indicator)',
+  in_progress: 'var(--warning-indicator)',
   pending: 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)',
 };
 

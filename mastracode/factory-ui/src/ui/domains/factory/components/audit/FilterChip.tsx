@@ -17,7 +17,7 @@ export function FilterChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'text-meta focus-visible:ring-accent1 flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold outline-none transition-colors focus-visible:ring-1',
+        'text-meta focus-visible:ring-border-focus flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold outline-none transition-colors focus-visible:ring-1',
         pressed
           ? 'bg-fill-active text-foreground'
           : 'text-muted-foreground hover:bg-fill hover:text-foreground focus-visible:bg-fill focus-visible:text-foreground',

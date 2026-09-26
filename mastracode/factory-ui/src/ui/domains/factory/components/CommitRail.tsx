@@ -31,7 +31,10 @@ function segment(first: boolean, last: boolean) {
 /** The ring is filled with the page colour so the rail does not show through its hole. */
 function CommitMark({ head }: { head: boolean }) {
   return head ? (
-    <span className="border-accent1 bg-background size-2.5 rounded-full border-2" aria-label="Tip of the branch" />
+    <span
+      className="border-success-border bg-background size-2.5 rounded-full border-2"
+      aria-label="Tip of the branch"
+    />
   ) : (
     <span className="bg-border-strong size-1.5 rounded-full" aria-hidden />
   );

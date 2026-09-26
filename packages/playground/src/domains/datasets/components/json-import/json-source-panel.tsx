@@ -129,8 +129,8 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
       onDrop={handleDrop}
       className={cn(
         'relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center',
-        'hover:border-accent1/50 hover:bg-accent1/5',
-        isDragOver && 'border-accent1/50 bg-accent1/5',
+        'hover:border-success-border hover:bg-success-bg',
+        isDragOver && 'border-success-border bg-success-bg',
         disabled && 'cursor-wait opacity-60',
       )}
     >
@@ -203,11 +203,11 @@ function FileCard({
             {formatInput(row.input)}
           </Txt>
           {!row.hasInput ? (
-            <Badge variant="red" size="xs">
+            <Badge variant="destructive" size="xs">
               no input
             </Badge>
           ) : !row.hasGroundTruth ? (
-            <Badge variant="yellow" size="xs">
+            <Badge variant="warning" size="xs">
               no groundTruth
             </Badge>
           ) : null}

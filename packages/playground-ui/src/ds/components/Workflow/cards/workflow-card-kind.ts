@@ -29,7 +29,7 @@ export function getWorkflowCardBadge(props: WorkflowTypeBadgeProps): {
   if (props.isNestedWorkflowStep || props.stepGraph)
     return { label: 'Workflow', tone: 'purple', Icon: Workflow, indicator: 'workflow' };
   if (props.isParallel && !props.nodeKind)
-    return { label: 'Parallel', tone: 'blue', Icon: GitFork, indicator: 'parallel' };
+    return { label: 'Parallel', tone: 'info', Icon: GitFork, indicator: 'parallel' };
   if (props.nodeKind === 'map' || props.mapConfig)
     return { label: 'Map', tone: 'orange', Icon: ArrowRightLeft, indicator: 'map' };
   if (props.nodeKind === 'wait-until' || props.date)

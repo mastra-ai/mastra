@@ -253,7 +253,7 @@ export function AddSkillDialog({
                           className={cn(
                             'w-full rounded-md px-3 py-2 text-left',
                             'hover:bg-fill-subtle',
-                            selectedSkillUniqueId === skillUniqueId && 'border border-accent1 bg-fill-hover',
+                            selectedSkillUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -261,7 +261,7 @@ export function AddSkillDialog({
                               <div className="flex items-center gap-2">
                                 <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="inline-flex items-center gap-1 rounded bg-accent1/20 px-1.5 py-0.5 text-meta text-accent1">
+                                  <span className="inline-flex items-center gap-1 rounded bg-info-bg px-1.5 py-0.5 text-meta text-info-fg">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
@@ -346,7 +346,7 @@ export function AddSkillDialog({
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-1 text-caption text-accent1 hover:underline"
+                            className="mt-2 flex items-center gap-1 text-caption text-info-fg hover:underline"
                           >
                             View on skills.sh <ExternalLink className="h-3 w-3" />
                           </a>

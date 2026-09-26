@@ -1,5 +1,5 @@
 [data-composer-tone] {
-  --composer-tone-color: var(--accent1);
+  --composer-tone-color: var(--color-ds-green);
 }
 
 .composer-tone-label {
@@ -9,27 +9,27 @@
 }
 
 [data-composer-tone='green'] {
-  --composer-tone-color: #4ade80;
+  --composer-tone-color: var(--green-400);
 }
 
 [data-composer-tone='purple'] {
-  --composer-tone-color: #c4b5fd;
+  --composer-tone-color: var(--purple-300);
 }
 
 [data-composer-tone='orange'] {
-  --composer-tone-color: #fdba74;
+  --composer-tone-color: var(--orange-300);
 }
 
 html.light [data-composer-tone='green'] {
-  --composer-tone-color: #087a32;
+  --composer-tone-color: var(--green-700);
 }
 
 html.light [data-composer-tone='purple'] {
-  --composer-tone-color: #6d28d9;
+  --composer-tone-color: var(--purple-700);
 }
 
 html.light [data-composer-tone='orange'] {
-  --composer-tone-color: #8a4400;
+  --composer-tone-color: var(--orange-800);
 }
 
 .composer-box {
@@ -56,7 +56,7 @@ html.light .composer-box {
 .composer-box::before {
   background: radial-gradient(
     200px circle at var(--composer-spotlight-x, 50%) var(--composer-spotlight-y, 50%),
-    color-mix(in srgb, var(--composer-tone-color, var(--accent1)) 5%, transparent),
+    color-mix(in srgb, var(--composer-tone-color, var(--color-ds-green)) 5%, transparent),
     transparent 75%
   );
   filter: blur(12px);

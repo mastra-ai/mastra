@@ -207,13 +207,13 @@ const ScopedTargetDemo = () => {
         <div
           ref={ref}
           tabIndex={0}
-          className="flex-1 rounded-lg border border-border bg-card p-6 text-caption text-muted-foreground outline-none focus:border-accent1"
+          className="flex-1 rounded-lg border border-border bg-card p-6 text-caption text-muted-foreground outline-none focus:border-border-focus"
         >
           Focus me, then press <Keys keys="g then a" /> or <Keys keys="Enter" />.
         </div>
         <div
           tabIndex={0}
-          className="flex-1 rounded-lg border border-dashed border-border p-6 text-caption text-muted-foreground outline-none focus:border-accent1"
+          className="flex-1 rounded-lg border border-dashed border-border p-6 text-caption text-muted-foreground outline-none focus:border-border-focus"
         >
           Keys pressed here are ignored.
         </div>
@@ -243,7 +243,7 @@ const TypingInFieldsDemo = () => {
     >
       <input
         placeholder="Type g, a or ? here — they are typed, not intercepted. Try mod+k."
-        className="rounded-md border border-border bg-card px-3 py-2 text-caption text-foreground outline-none focus:border-accent1"
+        className="rounded-md border border-border bg-card px-3 py-2 text-caption text-foreground outline-none focus:border-border-focus"
       />
     </Layout>
   );
@@ -304,7 +304,7 @@ const ScopedOverrideDemo = () => {
         </label>
         {agentPageMounted && (
           <KeyboardScope>
-            <div className="rounded-lg border border-dashed border-accent1 p-3 text-caption text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-success-border p-3 text-caption text-muted-foreground">
               agent page mounted — <Keys keys="g then t" /> now targets the agent's traces
             </div>
             <AgentPageShortcuts log={out.log} />

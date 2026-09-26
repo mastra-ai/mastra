@@ -64,11 +64,11 @@ export default function Resources() {
               key={resource.href}
               href={resource.href}
               {...(resource.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="group state-layer flex flex-col gap-3 rounded-lg border border-border bg-background p-5 hover:border-accent1"
+              className="group state-layer flex flex-col gap-3 rounded-lg border border-border bg-background p-5 hover:border-border-strong"
             >
               <div className="flex items-center gap-2.5">
                 <resource.icon
-                  className={cn('h-5 w-5 text-muted-foreground group-hover:text-accent1', controlStateColorTransition)}
+                  className={cn('h-5 w-5 text-muted-foreground group-hover:text-info-fg', controlStateColorTransition)}
                 />
                 <span className="text-subheading text-foreground">{resource.title}</span>
                 {resource.external && (

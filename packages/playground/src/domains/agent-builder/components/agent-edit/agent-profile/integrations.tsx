@@ -125,7 +125,7 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       data-testid={`integration-card-${platform.id}`}
       className={cn(
         raisedSurfaceStyle,
-        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
+        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
       )}
     >
       <div className="grid size-14 place-items-center rounded-xl bg-muted">
@@ -144,11 +144,11 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       </div>
 
       {!platform.isConfigured ? (
-        <Badge variant="yellow" size="sm" indicator="dot">
+        <Badge variant="warning" size="sm" indicator="dot">
           Not configured
         </Badge>
       ) : installation ? (
-        <Badge variant="green" size="sm" indicator="dot">
+        <Badge variant="success" size="sm" indicator="dot">
           Connected
         </Badge>
       ) : (
@@ -158,7 +158,7 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       )}
 
       {showLibraryBadge ? (
-        <Badge variant="yellow" size="sm" indicator="dot">
+        <Badge variant="warning" size="sm" indicator="dot">
           Add to library to connect
         </Badge>
       ) : null}

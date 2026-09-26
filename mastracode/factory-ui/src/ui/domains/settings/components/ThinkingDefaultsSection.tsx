@@ -15,7 +15,7 @@ const READ_ONLY_REASON = 'Read-only here — these defaults are shared by everyo
 
 function RowError({ error }: { error: unknown }) {
   if (!error) return null;
-  return <span className="text-notice-destructive-fg">{error instanceof Error ? error.message : String(error)}</span>;
+  return <span className="text-destructive-fg">{error instanceof Error ? error.message : String(error)}</span>;
 }
 
 export function BaseThinkingSection() {

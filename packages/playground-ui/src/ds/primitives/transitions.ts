@@ -43,12 +43,12 @@ export const hoverEffects = {
 // Focus ring styles
 export const focusRing = {
   // Standard focus ring with glow
-  default: 'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
+  default: 'focus:outline-hidden focus:ring-1 focus:ring-border-focus focus:shadow-focus-ring',
   // Focus ring without glow
-  simple: 'focus:outline-hidden focus:ring-1 focus:ring-accent1',
+  simple: 'focus:outline-hidden focus:ring-1 focus:ring-border-focus',
   // Focus visible only (keyboard navigation)
   visible:
-    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
+    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:shadow-focus-ring',
 } as const;
 
 export type TransitionPreset = keyof typeof transitions;

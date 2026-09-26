@@ -100,7 +100,7 @@ function PipelineStep({
           aria-hidden="true"
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border text-muted-foreground',
+            done ? 'border-success-border bg-success-bg text-success-fg' : 'border-border text-muted-foreground',
           )}
         >
           {index}
@@ -345,7 +345,7 @@ export function ExperimentTriggerDialog({
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
-                <Badge size="xs" variant="blue">
+                <Badge size="xs" variant="info">
                   set
                 </Badge>
               )}
@@ -370,7 +370,7 @@ export function ExperimentTriggerDialog({
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
-                <Badge variant="green" indicator="dot">
+                <Badge variant="success" indicator="dot">
                   Ready
                 </Badge>
                 <span className="text-meta text-muted-foreground">

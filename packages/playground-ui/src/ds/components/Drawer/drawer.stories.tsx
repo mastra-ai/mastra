@@ -510,7 +510,7 @@ function ActionSheetExample() {
         <DrawerFooter className="border-t border-border">
           <Button
             variant="ghost"
-            className="w-full justify-center rounded-none text-negative1"
+            className="w-full justify-center rounded-none text-destructive-fg"
             onClick={() => setOpen(false)}
           >
             Block user

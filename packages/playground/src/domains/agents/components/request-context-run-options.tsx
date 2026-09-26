@@ -57,7 +57,7 @@ function VariablesRequestContextForm({
   if (!zodSchema) {
     return (
       <div className="p-4">
-        <Txt variant="caption" className="text-red-400">
+        <Txt variant="caption" className="text-destructive-fg">
           Failed to parse request context schema
         </Txt>
       </div>

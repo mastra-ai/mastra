@@ -43,7 +43,7 @@ function PageHeaderStory({
         {showTitle && <PageHeader.Title isLoading={isLoading}>{title}</PageHeader.Title>}
         {showMeta && (
           <PageHeader.Meta beside={metaBeside}>
-            <Badge variant="green">Active</Badge>
+            <Badge variant="success">Active</Badge>
             {!metaBeside && <span className="font-mono text-meta text-placeholder">agent_8f3a91b2</span>}
           </PageHeader.Meta>
         )}
@@ -104,7 +104,7 @@ export const MetaBeside: Story = {
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green">Live</Badge>
+          <Badge variant="success">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Action>
           <Button size="sm">Settings</Button>
@@ -121,7 +121,7 @@ export const MetaBoth: Story = {
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green">Live</Badge>
+          <Badge variant="success">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Meta>
           <span className="font-mono text-meta text-placeholder">env_01j9</span>
@@ -173,7 +173,7 @@ export const MetaOnly: Story = {
     <StoryFrame>
       <PageHeader>
         <PageHeader.Meta>
-          <Badge variant="green">Meta only</Badge>
+          <Badge variant="success">Meta only</Badge>
         </PageHeader.Meta>
       </PageHeader>
     </StoryFrame>

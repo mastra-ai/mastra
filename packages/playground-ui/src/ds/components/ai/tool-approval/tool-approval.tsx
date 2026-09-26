@@ -31,7 +31,7 @@ export function ToolApprovalActions({
         aria-label={toolName ? `Approve ${toolName}` : undefined}
         autoFocus={autoFocus}
         disabled={actionsDisabled}
-        className={status === 'approved' ? 'text-accent1!' : undefined}
+        className={status === 'approved' ? 'text-success-fg!' : undefined}
         onClick={onApprove}
       >
         Approve
@@ -42,7 +42,7 @@ export function ToolApprovalActions({
         icon={<X />}
         aria-label={toolName ? `Decline ${toolName}` : undefined}
         disabled={actionsDisabled}
-        className={status === 'declined' ? 'text-accent2!' : undefined}
+        className={status === 'declined' ? 'text-destructive-fg!' : undefined}
         onClick={onDecline}
       >
         Decline
@@ -59,7 +59,7 @@ export interface ToolApprovalProps extends ToolApprovalActionsProps {
 export function ToolApproval({ toolName, children, ...actions }: ToolApprovalProps) {
   return (
     <div
-      className="my-2 min-w-0 rounded-lg border border-l-4 border-border border-l-warning1 bg-fill px-4 py-3"
+      className="my-2 min-w-0 rounded-lg border border-l-4 border-border border-l-warning-indicator bg-fill px-4 py-3"
       role="group"
       aria-label={`Tool approval for ${toolName}`}
     >

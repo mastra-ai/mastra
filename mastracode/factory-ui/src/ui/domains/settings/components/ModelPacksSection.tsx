@@ -42,7 +42,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
           render={
             <span
               aria-label={`${label}: ${description}`}
-              className="focus-visible:ring-accent1 inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2"
+              className="focus-visible:ring-border-focus inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2"
               tabIndex={0}
             >
               <Icon aria-hidden size={12} className="text-muted-foreground" />
@@ -136,7 +136,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
         runs continue to use the Factory default model.
       </Txt>
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-fg">
           {error}
         </Txt>
       )}
@@ -196,13 +196,13 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
             <li key={p.id} className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  {p.active && <Check size={13} className="text-accent1 shrink-0" />}
+                  {p.active && <Check size={13} className="text-success-fg shrink-0" />}
                   <Txt as="span" variant="body" className="text-foreground truncate">
                     {p.name}
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}
                   {p.active && (
-                    <Badge size="sm" variant="green">
+                    <Badge size="sm" variant="success">
                       Default
                     </Badge>
                   )}

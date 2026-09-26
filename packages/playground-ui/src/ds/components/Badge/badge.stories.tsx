@@ -4,24 +4,24 @@ import { Badge } from './Badge';
 import type { BadgeProps } from './Badge';
 import { cn } from '@/lib/utils';
 
-const meta: Meta<typeof Badge> = {
+const meta = {
   title: 'Elements/Badge',
   component: Badge,
   parameters: {
     layout: 'centered',
   },
-};
+} satisfies Meta<typeof Badge>;
 
 export default meta;
-type Story = StoryObj<typeof Badge>;
+type Story = StoryObj<typeof meta>;
 type ComparisonBadge = BadgeProps & { children: string };
 
 const comparisonTones = [
   { variant: 'neutral', children: 'Draft' },
-  { variant: 'green', children: 'Published' },
-  { variant: 'red', children: 'Failed' },
-  { variant: 'blue', children: 'Email' },
-  { variant: 'yellow', children: 'Pending' },
+  { variant: 'success', children: 'Published' },
+  { variant: 'destructive', children: 'Failed' },
+  { variant: 'info', children: 'Email' },
+  { variant: 'warning', children: 'Pending' },
   { variant: 'purple', children: 'Template' },
   { variant: 'orange', children: 'Component' },
   { variant: 'cyan', children: 'Workflow' },
@@ -38,7 +38,7 @@ const comparisonGroups = [
     label: 'With icons',
     surfaceClassName: '',
     badges: [
-      { variant: 'yellow', children: 'Health & wellness', icon: <Tag /> },
+      { variant: 'warning', children: 'Health & wellness', icon: <Tag /> },
       { children: 'SKILL.md, +1', icon: <FileText /> },
       { variant: 'orange', children: 'Image lab', icon: <ImageIcon /> },
     ],
@@ -47,8 +47,8 @@ const comparisonGroups = [
     label: 'On a raised surface',
     surfaceClassName: 'bg-card rounded-md p-4',
     badges: [
-      { variant: 'green', children: 'Connected', indicator: 'dot' },
-      { variant: 'blue', children: 'Running', indicator: 'dot' },
+      { variant: 'success', children: 'Connected', indicator: 'dot' },
+      { variant: 'info', children: 'Running', indicator: 'dot' },
       { children: 'Draft' },
     ],
   },
@@ -83,10 +83,10 @@ export const Matrix: Story = {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="neutral">Neutral</Badge>
-        <Badge variant="green">Green</Badge>
-        <Badge variant="red">Red</Badge>
-        <Badge variant="blue">Blue</Badge>
-        <Badge variant="yellow">Yellow</Badge>
+        <Badge variant="success">Success</Badge>
+        <Badge variant="destructive">Destructive</Badge>
+        <Badge variant="info">Info</Badge>
+        <Badge variant="warning">Warning</Badge>
         <Badge variant="purple">Purple</Badge>
         <Badge variant="orange">Orange</Badge>
         <Badge variant="cyan">Cyan</Badge>
@@ -96,17 +96,17 @@ export const Matrix: Story = {
         <Badge variant="neutral" icon={<Tag />}>
           Neutral
         </Badge>
-        <Badge variant="green" icon={<Check />}>
-          Green
+        <Badge variant="success" icon={<Check />}>
+          Success
         </Badge>
-        <Badge variant="red" icon={<AlertCircle />}>
-          Red
+        <Badge variant="destructive" icon={<AlertCircle />}>
+          Destructive
         </Badge>
-        <Badge variant="blue" icon={<InfoIcon />}>
-          Blue
+        <Badge variant="info" icon={<InfoIcon />}>
+          Info
         </Badge>
-        <Badge variant="yellow" icon={<TriangleAlert />}>
-          Yellow
+        <Badge variant="warning" icon={<TriangleAlert />}>
+          Warning
         </Badge>
         <Badge variant="purple" icon={<Tag />}>
           Purple
@@ -122,9 +122,9 @@ export const Emphasis: Story = {
       <div className="flex flex-wrap items-center gap-2">
         <Badge>Neutral</Badge>
         <Badge emphasis="muted">Neutral muted</Badge>
-        <Badge variant="green">Green</Badge>
-        <Badge variant="green" emphasis="muted">
-          Green muted
+        <Badge variant="success">Success</Badge>
+        <Badge variant="success" emphasis="muted">
+          Success muted
         </Badge>
         <Badge variant="purple">Purple</Badge>
         <Badge variant="purple" emphasis="muted">

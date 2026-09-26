@@ -24,30 +24,29 @@ function useSettingsOpen() {
  * as a subtle stage marker rather than a solid pill competing with the nav items.
  * Tinted with the Mastra brand green (#7aff78, `--color-ds-green` on the website).
  *
- * The tint is centralised in the `--beta-green` custom property so it can flip
- * per theme: the neon brand green only reads on dark surfaces, so light mode uses
+ * The tint flips per theme: the neon brand green only reads on dark surfaces, so light mode uses
  * a darker brand-green shade that keeps enough contrast against the pale sidebar.
  */
 function BetaBadge() {
   return (
-    <span className="relative bg-[var(--beta-green)]/10 px-[0.1875rem] text-[0.625rem]/[0.875rem] font-medium tracking-wide text-[var(--beta-green)] uppercase [--beta-green:oklch(48%_0.17_142)] dark:[--beta-green:#7aff78]">
+    <span className="dark:bg-ds-green/10 dark:text-ds-green relative bg-green-700/10 px-[0.1875rem] text-[0.625rem]/[0.875rem] font-medium tracking-wide text-green-700 uppercase">
       Beta
-      <span className="absolute inset-x-[-0.1875rem] -top-px block transform-gpu text-[var(--beta-green)]/40">
+      <span className="dark:text-ds-green/40 absolute inset-x-[-0.1875rem] -top-px block transform-gpu text-green-700/40">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
         </svg>
       </span>
-      <span className="absolute inset-x-[-0.1875rem] -bottom-px block transform-gpu text-[var(--beta-green)]/40">
+      <span className="dark:text-ds-green/40 absolute inset-x-[-0.1875rem] -bottom-px block transform-gpu text-green-700/40">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
         </svg>
       </span>
-      <span className="absolute inset-y-[-0.1875rem] -left-px block transform-gpu text-[var(--beta-green)]/40">
+      <span className="dark:text-ds-green/40 absolute inset-y-[-0.1875rem] -left-px block transform-gpu text-green-700/40">
         <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>
       </span>
-      <span className="absolute inset-y-[-0.1875rem] -right-px block transform-gpu text-[var(--beta-green)]/40">
+      <span className="dark:text-ds-green/40 absolute inset-y-[-0.1875rem] -right-px block transform-gpu text-green-700/40">
         <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>

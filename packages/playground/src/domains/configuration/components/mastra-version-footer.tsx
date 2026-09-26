@@ -91,7 +91,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
                   {isLoadingUpdates && <Spinner className="size-3 text-muted-foreground" />}
                   {outdatedCount > 0 && (
                     <Badge
-                      variant="yellow"
+                      variant="warning"
                       size="xs"
                       aria-label={`${outdatedCount} outdated package${outdatedCount === 1 ? '' : 's'}`}
                     >
@@ -100,7 +100,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
                   )}
                   {deprecatedCount > 0 && (
                     <Badge
-                      variant="red"
+                      variant="destructive"
                       size="xs"
                       aria-label={`${deprecatedCount} deprecated package${deprecatedCount === 1 ? '' : 's'}`}
                     >
@@ -173,12 +173,12 @@ const PackagesModalContent = ({
           {isLoadingUpdates ? (
             <span className="text-muted-foreground">Checking for updates...</span>
           ) : !hasUpdates ? (
-            <span className="text-accent1">✓ All packages are up to date</span>
+            <span className="text-success-fg">✓ All packages are up to date</span>
           ) : (
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="yellow" size="sm">
+                  <Badge variant="warning" size="sm">
                     {outdatedCount}
                   </Badge>
                   <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
@@ -186,7 +186,7 @@ const PackagesModalContent = ({
               )}
               {deprecatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Badge variant="red" size="sm">
+                  <Badge variant="destructive" size="sm">
                     {deprecatedCount}
                   </Badge>
                   <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
@@ -211,7 +211,7 @@ const PackagesModalContent = ({
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1 hover:text-accent1 hover:underline"
+                    className="group inline-flex items-center gap-1 hover:text-success-fg hover:underline"
                   >
                     <Txt as="span" variant="body" font="mono">
                       {pkg.name}
@@ -229,7 +229,7 @@ const PackagesModalContent = ({
                           font="mono"
                           className={cn(
                             'cursor-help',
-                            pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
+                            pkg.isDeprecated ? 'text-destructive-fg' : pkg.isOutdated ? 'text-warning-fg' : '',
                           )}
                         >
                           {pkg.version}
@@ -251,7 +251,7 @@ const PackagesModalContent = ({
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
                       <MoveRight className="mx-2 h-4 w-4 text-muted-foreground" />
-                      <Txt as="span" variant="body" font="mono" className="text-accent1">
+                      <Txt as="span" variant="body" font="mono" className="text-success-fg">
                         {pkg.latestVersion}
                       </Txt>
                     </>

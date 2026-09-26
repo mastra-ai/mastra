@@ -47,7 +47,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-caption text-accent1">{name}</code>
+        <code className="text-caption text-foreground">{name}</code>
         <span className="text-caption text-muted-foreground">{typeLabel}</span>
         {prop.description && (
           <span className="truncate text-caption text-muted-foreground italic">— {prop.description}</span>
@@ -186,8 +186,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
             key={idx}
             className={cn(
               'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-              line.type === 'removed' && 'bg-red-950/20 text-red-300',
-              line.type === 'added' && 'bg-green-950/20 text-green-300',
+              line.type === 'removed' && 'bg-destructive-bg text-destructive-fg',
+              line.type === 'added' && 'bg-success-bg text-success-fg',
               line.type === 'equal' && 'text-muted-foreground',
             )}
           >
@@ -213,11 +213,11 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-green-900/30 bg-green-950/10 p-3 text-body">
-              <Txt variant="meta" className="mb-1 text-green-400">
+            <div key={idx} className="rounded-md border border-success-border bg-success-bg p-3 text-body">
+              <Txt variant="meta" className="mb-1 text-success-fg">
                 + Added block
               </Txt>
-              <Txt variant="caption" className="whitespace-pre-wrap text-green-300">
+              <Txt variant="caption" className="whitespace-pre-wrap text-success-fg">
                 {newStr}
               </Txt>
             </div>
@@ -226,14 +226,17 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (prevBlock && !currBlock) {
           return (
-            <div key={idx} className="relative rounded-md border border-red-900/30 bg-red-950/10 p-3 text-body">
+            <div
+              key={idx}
+              className="relative rounded-md border border-destructive-border bg-destructive-bg p-3 text-body"
+            >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
-              <Txt variant="meta" className="mb-1 text-red-400">
+              <Txt variant="meta" className="mb-1 text-destructive-fg">
                 − Removed in latest
               </Txt>
-              <Txt variant="caption" className="whitespace-pre-wrap text-red-300">
+              <Txt variant="caption" className="whitespace-pre-wrap text-destructive-fg">
                 {oldStr}
               </Txt>
             </div>
@@ -268,8 +271,8 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                 key={lidx}
                 className={cn(
                   'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
-                  line.type === 'removed' && 'bg-red-950/20 text-red-300',
-                  line.type === 'added' && 'bg-green-950/20 text-green-300',
+                  line.type === 'removed' && 'bg-destructive-bg text-destructive-fg',
+                  line.type === 'added' && 'bg-success-bg text-success-fg',
                   line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
@@ -382,8 +385,8 @@ function ToolsDiffView({
             key={tool}
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
-              status === 'removed' && 'border-red-900/30 bg-red-950/10',
-              status === 'added' && 'border-green-900/30 bg-green-950/10',
+              status === 'removed' && 'border-destructive-border bg-destructive-bg',
+              status === 'added' && 'border-success-border bg-success-bg',
               status === 'same' && 'border-border bg-background',
             )}
           >
@@ -391,19 +394,19 @@ function ToolsDiffView({
               variant="caption"
               font="mono"
               className={cn(
-                status === 'removed' && 'text-red-300 line-through',
-                status === 'added' && 'text-green-300',
+                status === 'removed' && 'text-destructive-fg line-through',
+                status === 'added' && 'text-success-fg',
               )}
             >
               {tool}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="red" className="ml-auto">
+              <Badge variant="destructive" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="green" className="ml-auto">
+              <Badge variant="success" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -481,8 +484,8 @@ function VariablesDiffView({
             key={name}
             className={cn(
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
-              status === 'removed' && 'border-red-900/30 bg-red-950/10',
-              status === 'added' && 'border-green-900/30 bg-green-950/10',
+              status === 'removed' && 'border-destructive-border bg-destructive-bg',
+              status === 'added' && 'border-success-border bg-success-bg',
               status === 'same' && 'border-border bg-background',
             )}
           >
@@ -490,19 +493,19 @@ function VariablesDiffView({
               variant="caption"
               font="mono"
               className={cn(
-                status === 'removed' && 'text-red-300 line-through',
-                status === 'added' && 'text-green-300',
+                status === 'removed' && 'text-destructive-fg line-through',
+                status === 'added' && 'text-success-fg',
               )}
             >
               {`{{${name}}}`}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="red" className="ml-auto">
+              <Badge variant="destructive" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="green" className="ml-auto">
+              <Badge variant="success" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -581,19 +584,19 @@ function ReadOnlyConfigWithDiff({
   const variablesDiff = diffMap.get('requestContextSchema');
 
   const instructionsBadge = instructionsDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : null;
   const toolsBadge = toolsDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : toolCount > 0 ? (
     <Badge size="sm">{`${toolCount}`}</Badge>
   ) : null;
   const variablesBadge = variablesDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : null;
@@ -740,7 +743,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">
                       <span>
-                        Use <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax to insert
+                        Use <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax to insert
                         dynamic values into your instruction blocks.
                       </span>
                     </TooltipContent>

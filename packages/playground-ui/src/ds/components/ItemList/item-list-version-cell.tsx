@@ -27,12 +27,12 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         <div className="flex items-center gap-1">
           {isLatest && (
             <span className="inline-flex" role="img" aria-label={ITEM_LIST_VERSION_STATUS_LABELS.latest}>
-              <Badge variant="blue" size="sm" icon={<ClockIcon />} />
+              <Badge variant="info" size="sm" icon={<ClockIcon />} />
             </span>
           )}
           {isDeleted && (
             <span className="inline-flex" role="img" aria-label={ITEM_LIST_VERSION_STATUS_LABELS.deleted}>
-              <Badge variant="red" size="sm" icon={<BanIcon />} />
+              <Badge variant="destructive" size="sm" icon={<BanIcon />} />
             </span>
           )}
         </div>

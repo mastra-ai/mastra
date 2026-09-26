@@ -46,10 +46,10 @@ function changedLines(doc: string, { against, side }: DataCodeSectionDiff): Set<
 }
 
 const diffLineStyles = {
-  removed: 'code-diff-removed bg-[color-mix(in_srgb,var(--accent2)_18%,transparent)]',
-  added: 'code-diff-added bg-[color-mix(in_srgb,var(--accent1)_18%,transparent)]',
+  removed: 'code-diff-removed bg-destructive-indicator/18',
+  added: 'code-diff-added bg-success-indicator/18',
 };
-const searchMatchStyle = 'code-search-match rounded-sm bg-[color-mix(in_srgb,var(--accent6)_30%,transparent)]';
+const searchMatchStyle = 'code-search-match rounded-sm bg-warning-indicator/30';
 
 interface CodeViewProps {
   code: string;

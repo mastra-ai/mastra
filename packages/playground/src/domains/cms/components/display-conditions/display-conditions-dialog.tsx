@@ -39,8 +39,8 @@ export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChan
           variant="ghost"
           className="relative"
         >
-          <Ruler className="text-accent6" />
-          {ruleCount > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent1" />}
+          <Ruler className="text-warning-fg" />
+          {ruleCount > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success-indicator" />}
         </Button>
       </DialogTrigger>
       <DialogContent className="w-full max-w-5xl">

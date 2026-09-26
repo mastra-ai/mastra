@@ -216,7 +216,7 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
                     overlaySurfaceStyle,
                     quietTextHoverInGroup,
                     surfaceGroupStateLayerStyle,
-                    'inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1 group-focus-visible:ring-accent1',
+                    'inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1 group-focus-visible:ring-border-focus',
                   )}
                 >
                   <MenuIcon className="size-4" />
@@ -289,7 +289,7 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
         <ResizeHandleIndicator
           className={cn(
             'via-foreground/30 group-hover:opacity-100',
-            'group-focus-visible:via-accent1 group-focus-visible:opacity-100',
+            'group-focus-visible:via-border-focus group-focus-visible:opacity-100',
             'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100',
           )}
         />

@@ -26,13 +26,13 @@ export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps
 function getStatusVisual(status: WorkflowRunStatus): { icon: React.ReactNode; color: string } {
   switch (status) {
     case 'success':
-      return { icon: <Check size={14} />, color: 'text-accent1' };
+      return { icon: <Check size={14} />, color: 'text-success-fg' };
     case 'failed':
-      return { icon: <X size={14} />, color: 'text-accent2' };
+      return { icon: <X size={14} />, color: 'text-destructive-fg' };
     case 'running':
       return { icon: <Spinner />, color: 'text-muted-foreground' };
     case 'suspended':
-      return { icon: <CirclePause size={14} />, color: 'text-accent3' };
+      return { icon: <CirclePause size={14} />, color: 'text-info-fg' };
     case 'canceled':
       return { icon: <CircleSlash size={14} />, color: 'text-muted-foreground' };
     case 'pending':

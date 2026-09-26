@@ -185,7 +185,7 @@ export const AllAppUsages: Story = {
         <Crumb as="a" to="/experiments" icon={<DatasetsIcon />}>
           Experiments
         </Crumb>
-        <Crumb as="a" to="/experiments/nightly" icon={<CircleCheckIcon className="text-accent1" />}>
+        <Crumb as="a" to="/experiments/nightly" icon={<CircleCheckIcon className="text-success-fg" />}>
           Nightly regression
         </Crumb>
         <Crumb as="span" isCurrent icon={<LoaderIcon className="animate-spin" />}>

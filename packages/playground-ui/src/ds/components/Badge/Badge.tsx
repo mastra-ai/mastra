@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
 import { Icon } from '../../icons/Icon';
+import { productColors } from '../ProductAvatar/product-identity';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -9,53 +10,91 @@ export type BadgeIndicator = 'dot' | 'pulse';
 
 type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
-const badgeToneStyles = {
+const semanticBadgeToneStyles = {
+  studio: {
+    default: productColors['studio'],
+    muted: productColors['studio'],
+    indicator: 'bg-product-studio-fg',
+  },
+  server: {
+    default: productColors['server'],
+    muted: productColors['server'],
+    indicator: 'bg-product-server-fg',
+  },
+  observability: {
+    default: productColors['observability'],
+    muted: productColors['observability'],
+    indicator: 'bg-product-observability-fg',
+  },
+  factory: {
+    default: productColors['factory'],
+    muted: productColors['factory'],
+    indicator: 'bg-product-factory-fg',
+  },
+  workers: {
+    default: productColors['workers'],
+    muted: productColors['workers'],
+    indicator: 'bg-product-workers-fg',
+  },
+  'persistent-server': {
+    default: productColors['persistent-server'],
+    muted: productColors['persistent-server'],
+    indicator: 'bg-product-persistent-server-fg',
+  },
   neutral: {
     default: 'bg-fill text-badge-neutral-fg',
     muted: 'bg-fill-subtle text-badge-neutral-fg',
     indicator: 'bg-muted-foreground',
   },
-  green: {
-    default: 'bg-badge-green/20 text-badge-green-fg',
-    muted: 'bg-badge-green/10 text-badge-green-fg',
-    indicator: 'bg-badge-green',
+  success: {
+    default: 'bg-success-bg inset-ring-success-border text-success-fg',
+    muted: 'bg-success-bg text-success-fg',
+    indicator: 'bg-success-indicator',
   },
-  red: {
-    default: 'bg-badge-red/20 text-badge-red-fg',
-    muted: 'bg-badge-red/10 text-badge-red-fg',
-    indicator: 'bg-badge-red',
+  destructive: {
+    default: 'bg-destructive-bg inset-ring-destructive-border text-destructive-fg',
+    muted: 'bg-destructive-bg text-destructive-fg',
+    indicator: 'bg-destructive-indicator',
   },
-  blue: {
-    default: 'bg-badge-blue/20 text-badge-blue-fg',
-    muted: 'bg-badge-blue/10 text-badge-blue-fg',
-    indicator: 'bg-badge-blue',
+  info: {
+    default: 'bg-info-bg inset-ring-info-border text-info-fg',
+    muted: 'bg-info-bg text-info-fg',
+    indicator: 'bg-info-indicator',
   },
-  yellow: {
-    default: 'bg-badge-yellow/20 text-badge-yellow-fg',
-    muted: 'bg-badge-yellow/10 text-badge-yellow-fg',
-    indicator: 'bg-badge-yellow',
+  warning: {
+    default: 'bg-warning-bg inset-ring-warning-border text-warning-fg',
+    muted: 'bg-warning-bg text-warning-fg',
+    indicator: 'bg-warning-indicator',
   },
   purple: {
-    default: 'bg-badge-purple/20 text-badge-purple-fg',
-    muted: 'bg-badge-purple/10 text-badge-purple-fg',
+    default: 'bg-badge-purple-bg inset-ring-badge-purple-border text-badge-purple-fg',
+    muted: 'bg-badge-purple-bg text-badge-purple-fg',
     indicator: 'bg-badge-purple',
   },
   orange: {
-    default: 'bg-badge-orange/20 text-badge-orange-fg',
-    muted: 'bg-badge-orange/10 text-badge-orange-fg',
+    default: 'bg-badge-orange-bg inset-ring-badge-orange-border text-badge-orange-fg',
+    muted: 'bg-badge-orange-bg text-badge-orange-fg',
     indicator: 'bg-badge-orange',
   },
   cyan: {
-    default: 'bg-badge-cyan/20 text-badge-cyan-fg',
-    muted: 'bg-badge-cyan/10 text-badge-cyan-fg',
+    default: 'bg-badge-cyan-bg inset-ring-badge-cyan-border text-badge-cyan-fg',
+    muted: 'bg-badge-cyan-bg text-badge-cyan-fg',
     indicator: 'bg-badge-cyan',
   },
   pink: {
-    default: 'bg-badge-pink/20 text-badge-pink-fg',
-    muted: 'bg-badge-pink/10 text-badge-pink-fg',
+    default: 'bg-badge-pink-bg inset-ring-badge-pink-border text-badge-pink-fg',
+    muted: 'bg-badge-pink-bg text-badge-pink-fg',
     indicator: 'bg-badge-pink',
   },
 } satisfies Record<string, BadgeToneStyles>;
+
+const badgeToneStyles = {
+  ...semanticBadgeToneStyles,
+  green: semanticBadgeToneStyles.success,
+  red: semanticBadgeToneStyles.destructive,
+  yellow: semanticBadgeToneStyles.warning,
+  blue: semanticBadgeToneStyles.info,
+};
 
 export type BadgeVariant = keyof typeof badgeToneStyles;
 
@@ -113,7 +152,6 @@ export const Badge = ({
         'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px]',
         'inset-ring-1 inset-ring-current/5',
         'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
-        'dark:bg-linear-to-b dark:from-white/3 dark:to-white/0',
         badgeToneStyles[variant][emphasis],
         sizeStyles.badge,
         paddingClass,

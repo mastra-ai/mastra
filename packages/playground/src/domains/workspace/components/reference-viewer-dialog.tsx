@@ -65,7 +65,7 @@ export function ReferenceViewerDialog({
           <div className="flex items-center gap-2">
             <Button size="md" variant="default" onClick={handleCopy} disabled={!content || isLoading}>
               <Icon>
-                {isCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                {isCopied ? <Check className="h-3.5 w-3.5 text-success-indicator" /> : <Copy className="h-3.5 w-3.5" />}
               </Icon>
               {isCopied ? 'Copied!' : 'Copy'}
             </Button>
@@ -83,11 +83,11 @@ export function ReferenceViewerDialog({
         <div className="flex-1 overflow-auto p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent1 border-t-transparent" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-success-border border-t-transparent" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="mb-2 text-red-400">Failed to load reference</p>
+              <p className="mb-2 text-destructive-fg">Failed to load reference</p>
               <p className="text-body text-muted-foreground">{error}</p>
             </div>
           ) : content ? (

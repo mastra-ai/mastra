@@ -56,7 +56,7 @@ export function ThemeCompareSparkline({
       {markers.map(point => (
         <span
           key={point.index}
-          className="absolute size-2 -translate-1/2 rounded-full bg-green-400"
+          className="absolute size-2 -translate-1/2 rounded-full bg-success-indicator"
           style={{ left: `${positions[point.index]}%`, top: `${pointFor(point).y}px` }}
         />
       ))}

@@ -42,7 +42,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          <SectionTitle icon={<ToolsIcon className="text-accent6" />}>
+          <SectionTitle icon={<ToolsIcon className="text-span-tool" />}>
             Tools{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
@@ -103,7 +103,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                             key={tool.value}
                             id={tool.value}
                             name={tool.label}
-                            icon={<ToolsIcon className="text-accent6" />}
+                            icon={<ToolsIcon className="text-span-tool" />}
                             description={field.value?.[tool.value]?.description || ''}
                             onDescriptionChange={
                               readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)

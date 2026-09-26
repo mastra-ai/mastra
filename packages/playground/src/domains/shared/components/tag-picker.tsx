@@ -44,10 +44,10 @@ export function TagPicker({
       {tags.map(tag => (
         <span
           key={tag}
-          className="inline-flex items-center gap-0.5 rounded-md bg-accent1/10 px-1.5 py-0.5 text-meta text-accent1"
+          className="inline-flex items-center gap-0.5 rounded-md bg-info-bg px-1.5 py-0.5 text-meta text-info-fg"
         >
           {tag}
-          <button type="button" onClick={() => removeTag(tag)} className="hover:text-accent1/70">
+          <button type="button" onClick={() => removeTag(tag)} className="hover:text-info-fg">
             <X className="h-2.5 w-2.5" />
           </button>
         </span>
@@ -91,7 +91,7 @@ export function TagPicker({
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="w-full rounded px-2 py-1 text-left text-caption text-accent1 hover:bg-fill-subtle"
+                className="w-full rounded px-2 py-1 text-left text-caption text-info-fg hover:bg-fill-subtle"
               >
                 Create &quot;{search.trim()}&quot;
               </button>

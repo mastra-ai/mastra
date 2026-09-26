@@ -177,8 +177,8 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   const dotClassName = cn(
     'size-1.5 shrink-0 rounded-full',
     validation.status === 'idle' && 'bg-muted-foreground',
-    validation.status === 'ready' && 'bg-accent1',
-    validation.status === 'error' && 'bg-accent2',
+    validation.status === 'ready' && 'bg-success-indicator',
+    validation.status === 'error' && 'bg-destructive-indicator',
   );
 
   let message: React.ReactNode;

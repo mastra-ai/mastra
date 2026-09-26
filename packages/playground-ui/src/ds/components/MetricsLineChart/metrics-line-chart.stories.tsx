@@ -28,8 +28,8 @@ const total = (key: string) => (points: Record<string, unknown>[]) => ({
 });
 
 const series = [
-  { dataKey: 'requests', label: 'Requests', color: 'var(--chart-blue)', aggregate: total('requests') },
-  { dataKey: 'errors', label: 'Errors', color: 'var(--chart-red)', aggregate: total('errors') },
+  { dataKey: 'requests', label: 'Requests', color: 'var(--chart-1)', aggregate: total('requests') },
+  { dataKey: 'errors', label: 'Errors', color: 'var(--chart-8)', aggregate: total('errors') },
 ] satisfies MetricsLineChartSeries[];
 
 const meta: Meta<typeof MetricsLineChart> = {
@@ -58,7 +58,7 @@ export const MultipleSeries: Story = {
 export const SinglePoint: Story = {
   args: {
     data: [{ time: 'Now', requests: 42 }],
-    series: [{ dataKey: 'requests', label: 'Requests', color: 'var(--chart-blue)' }],
+    series: [{ dataKey: 'requests', label: 'Requests', color: 'var(--chart-1)' }],
     showDots: true,
   },
   render: args => (
@@ -81,8 +81,8 @@ const average = (key: string) => (points: Record<string, unknown>[]) => {
 };
 
 const latencySeries = [
-  { dataKey: 'p50', label: 'p50', color: 'var(--chart-green)', aggregate: average('p50') },
-  { dataKey: 'p95', label: 'p95', color: 'var(--chart-orange)', aggregate: average('p95') },
+  { dataKey: 'p50', label: 'p50', color: 'var(--chart-4)', aggregate: average('p50') },
+  { dataKey: 'p95', label: 'p95', color: 'var(--chart-6)', aggregate: average('p95') },
 ] satisfies MetricsLineChartSeries[];
 
 function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
@@ -140,7 +140,7 @@ export const FixedDomain: Story = {
       { time: 'Wed', score: 0.76 },
       { time: 'Thu', score: 0.93 },
     ],
-    series: [{ dataKey: 'score', label: 'Answer relevancy', color: 'var(--chart-purple)' }],
+    series: [{ dataKey: 'score', label: 'Answer relevancy', color: 'var(--chart-5)' }],
     yDomain: [0, 1],
     showDots: true,
   },

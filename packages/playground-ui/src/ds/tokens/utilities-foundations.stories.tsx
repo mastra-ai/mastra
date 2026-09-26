@@ -180,7 +180,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Where a click landed in a remote browser view',
     demo: (
       <div className="relative flex h-16 items-center justify-center overflow-hidden rounded-md bg-background">
-        <span className="animate-click-ripple pointer-events-none size-12 rounded-full bg-accent1/40" />
+        <span className="animate-click-ripple pointer-events-none size-12 rounded-full bg-success-bg" />
       </div>
     ),
   },

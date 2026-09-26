@@ -43,7 +43,7 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          <SectionTitle icon={<WorkflowIcon className="text-accent3" />}>
+          <SectionTitle icon={<WorkflowIcon className="text-span-workflow" />}>
             Workflows{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
@@ -101,7 +101,7 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
                             key={workflow.value}
                             id={workflow.value}
                             name={workflow.label}
-                            icon={<WorkflowIcon className="text-accent3" />}
+                            icon={<WorkflowIcon className="text-span-workflow" />}
                             description={field.value?.[workflow.value]?.description || ''}
                             onDescriptionChange={
                               readOnly ? undefined : desc => handleDescriptionChange(workflow.value, desc)

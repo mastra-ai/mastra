@@ -25,7 +25,7 @@ function ToolTypeIcon({ type }: { type: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span aria-label={known} className="text-neutral3 inline-flex [&>svg]:size-4">
+        <span aria-label={known} className="inline-flex text-muted-foreground [&>svg]:size-4">
           <Icon />
         </span>
       </TooltipTrigger>

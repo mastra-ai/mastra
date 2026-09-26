@@ -121,7 +121,7 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-l-2 border-accent3/30 pl-3">
+      <div className="border-l-2 border-info-border pl-3">
         {isLoading ? (
           <div className="flex items-center gap-2 py-3 text-muted-foreground">
             <Spinner className="h-4 w-4" />
@@ -135,12 +135,12 @@ const RefBlockContent = ({
                 {promptBlock.name}
               </Txt>
               {isDraft && (
-                <Badge size="xs" variant="yellow" aria-label="Draft prompt block">
+                <Badge size="xs" variant="warning" aria-label="Draft prompt block">
                   Draft
                 </Badge>
               )}
               {hasUnpublishedEdits && (
-                <Badge size="xs" variant="yellow" aria-label="Unpublished prompt block edits">
+                <Badge size="xs" variant="warning" aria-label="Unpublished prompt block edits">
                   Unpublished edits
                 </Badge>
               )}

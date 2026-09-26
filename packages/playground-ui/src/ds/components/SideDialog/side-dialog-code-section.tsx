@@ -62,16 +62,16 @@ function buildSideDialogLightTheme(): Extension {
 
   const highlightStyle = HighlightStyle.define([
     { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
+    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];

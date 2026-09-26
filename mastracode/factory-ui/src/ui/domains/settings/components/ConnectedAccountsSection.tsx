@@ -58,7 +58,7 @@ export function ConnectedAccountsSection() {
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+      <Txt as="p" variant="caption" className="text-destructive-fg">
         {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
       </Txt>
     );
@@ -78,7 +78,7 @@ export function ConnectedAccountsSection() {
         <Txt
           as="span"
           variant="caption"
-          className={slackAccounts.length > 0 ? 'text-positive1' : 'text-muted-foreground'}
+          className={slackAccounts.length > 0 ? 'text-success-fg' : 'text-muted-foreground'}
         >
           {slackAccounts.length > 1
             ? `${slackAccounts.length} connected`
@@ -95,7 +95,7 @@ export function ConnectedAccountsSection() {
       {slackAccounts.length > 0 && factoryId ? (
         <Link
           to={`/factories/${factoryId}/settings/connections/slack`}
-          className="group hover:bg-fill focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
+          className="group hover:bg-fill focus-visible:ring-border-focus block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
         >
           <SettingsRow label={slackLabel}>
             <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
@@ -109,7 +109,7 @@ export function ConnectedAccountsSection() {
           type="button"
           disabled={!canConnect}
           onClick={connectSlack}
-          className="group hover:bg-fill focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="group hover:bg-fill focus-visible:ring-border-focus block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <SettingsRow label={slackLabel}>
             <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">

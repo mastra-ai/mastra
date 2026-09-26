@@ -227,7 +227,7 @@ export function BuilderAddSkillDialog({
                           className={cn(
                             'w-full rounded-md px-3 py-2 text-left',
                             'hover:bg-fill-subtle',
-                            selectedUniqueId === skillUniqueId && 'border border-accent1 bg-fill-hover',
+                            selectedUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -235,7 +235,7 @@ export function BuilderAddSkillDialog({
                               <div className="flex items-center gap-2">
                                 <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="inline-flex items-center gap-1 rounded bg-accent1/20 px-1.5 py-0.5 text-meta text-accent1">
+                                  <span className="inline-flex items-center gap-1 rounded bg-info-bg px-1.5 py-0.5 text-meta text-info-fg">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
@@ -321,7 +321,7 @@ export function BuilderAddSkillDialog({
           {selectedSkill && (
             <div className="flex flex-col gap-3 border-t border-border pt-4">
               {installError && (
-                <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-body text-red-400">
+                <div className="rounded-md border border-destructive-border bg-destructive-bg px-3 py-2 text-body text-destructive-fg">
                   {installError}
                 </div>
               )}

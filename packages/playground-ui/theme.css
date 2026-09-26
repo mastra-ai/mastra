@@ -20,6 +20,7 @@
  * still waiting on a ramp of their own.
  */
 
+@import './legacy-theme.css';
 @import './theme/colors.css';
 @import './theme/status.css';
 @import './theme/data-viz.css';
@@ -46,31 +47,24 @@
   --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
 
-  --destructive: oklch(0.637 0.237 25.331);
-  --destructive-foreground: oklch(0 0 0);
-  --error: oklch(0.637 0.237 25.331);
+  --destructive: var(--red-600);
+  --destructive-foreground: var(--red-50);
+  --error: var(--destructive-indicator);
   /* Lightness for hue-only generated accents (e.g. per-filter colors) — legible on each theme. */
   --generated-accent-lightness: 72%;
 
   /* Semantic color aliases. Theme-agnostic: the ramps they point at flip. */
-  --warning1: var(--accent6);
-  --positive1: var(--accent1);
-  --negative1: var(--accent2);
 }
 
 html.light {
-  --destructive: oklch(0.47 0.19 27.325);
-  --destructive-foreground: oklch(1 0 0);
-  --error: oklch(0.577 0.245 27.325);
+  --destructive: var(--red-600);
+  --destructive-foreground: var(--red-50);
+  --error: var(--destructive-indicator);
   --generated-accent-lightness: 38%;
 }
 
 @theme {
   --color-error: var(--error);
-
-  --color-warning1: var(--warning1);
-  --color-positive1: var(--positive1);
-  --color-negative1: var(--negative1);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled

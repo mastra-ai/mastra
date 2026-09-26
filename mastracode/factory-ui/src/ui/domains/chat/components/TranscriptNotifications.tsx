@@ -47,9 +47,9 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
     return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-success-fg' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
+  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-fg' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {

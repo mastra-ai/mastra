@@ -28,8 +28,8 @@ export function ItemListItemStatus({ status }: ItemListItemStatusProps) {
       {status ? (
         <div
           className={cn('size-[0.6rem] rounded-full', {
-            'bg-green-600': status === 'success',
-            'bg-red-700': status === 'failed',
+            'bg-success-indicator': status === 'success',
+            'bg-destructive-indicator': status === 'failed',
           })}
         ></div>
       ) : (

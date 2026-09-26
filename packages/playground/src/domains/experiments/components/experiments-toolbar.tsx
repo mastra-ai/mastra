@@ -110,12 +110,12 @@ export function ExperimentsToolbar({
         <ActionRow.End>
           <ButtonsGroup className="whitespace-nowrap">
             <ButtonsGroupText className="gap-2">
-              <Badge size="sm" variant={selection.selectedCount < 2 ? 'red' : 'green'}>
+              <Badge size="sm" variant={selection.selectedCount < 2 ? 'destructive' : 'success'}>
                 {selection.selectedCount} / 2
               </Badge>
               selected
               {selection.compareDisabledReason && (
-                <span className="text-accent2">· {selection.compareDisabledReason}</span>
+                <span className="text-destructive-fg">· {selection.compareDisabledReason}</span>
               )}
             </ButtonsGroupText>
             <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>

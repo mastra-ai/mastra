@@ -67,7 +67,7 @@ function Breadcrumb({
       {threadId ? (
         <>
           <ChevronRight size={11} />
-          <span className="max-w-52 truncate text-purple-300" title={threadId}>
+          <span className="text-badge-purple-fg max-w-52 truncate" title={threadId}>
             session {threadId.slice(0, 8)}
           </span>
         </>
@@ -159,7 +159,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           <Txt as="p" variant="body" className="text-muted-foreground">
             This session's knowledge is no longer available.
           </Txt>
-          <button type="button" className="text-sm text-purple-300 hover:underline" onClick={backToProject}>
+          <button type="button" className="text-badge-purple-fg text-sm hover:underline" onClick={backToProject}>
             Back to the project view
           </button>
         </div>

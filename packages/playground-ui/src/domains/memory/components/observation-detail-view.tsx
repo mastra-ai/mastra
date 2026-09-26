@@ -48,27 +48,27 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   switch (priority) {
     case 'high':
       return {
-        card: 'border-purple-400/30 bg-purple-500/10',
+        card: 'border-badge-purple-border bg-badge-purple-bg',
         text: 'text-foreground',
-        time: 'text-purple-200/80',
+        time: 'text-badge-purple-fg',
       };
     case 'medium':
       return {
-        card: 'border-blue-400/30 bg-blue-500/10',
+        card: 'border-info-border bg-info-bg',
         text: 'text-foreground',
-        time: 'text-blue-200/80',
+        time: 'text-info-fg',
       };
     case 'low':
       return {
-        card: 'border-emerald-400/30 bg-emerald-500/10',
+        card: 'border-success-border bg-success-bg',
         text: 'text-foreground',
-        time: 'text-emerald-200/80',
+        time: 'text-success-fg',
       };
     case 'complete':
       return {
-        card: 'border-green-400/30 bg-green-500/10',
+        card: 'border-success-border bg-success-bg',
         text: 'text-foreground',
-        time: 'text-green-200/80',
+        time: 'text-success-fg',
       };
     default:
       return {
@@ -259,7 +259,7 @@ function ObservationHistoryPanel({
               type="button"
               className={cn(
                 'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
-                isSelected && 'border-l-accent1 bg-fill-hover',
+                isSelected && 'border-l-border-strong bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
             >

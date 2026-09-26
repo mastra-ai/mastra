@@ -18,7 +18,7 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
 
-const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };
 
 export interface ResumeStepParams {
   stepId: string | string[];

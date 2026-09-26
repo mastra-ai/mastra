@@ -125,14 +125,14 @@ export function OMSection({
   return (
     <>
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-fg px-4 py-3">
           {error}
         </Txt>
       )}
 
       {config && !modelsAvailable && (
         <div className="flex items-center gap-2 px-4 py-3">
-          <Badge size="md" variant="yellow">
+          <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
           <Txt as="p" variant="meta" className="text-muted-foreground">

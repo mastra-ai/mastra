@@ -24,21 +24,21 @@ export const deployStates = {
 } satisfies Record<DeployState, Omit<StatusPresentation, 'description'>>;
 
 const TONE_FILL: Record<StatusTone, string> = {
-  success: 'bg-notice-success',
-  progress: 'bg-notice-warning',
-  error: 'bg-notice-destructive',
+  success: 'bg-success-indicator',
+  progress: 'bg-warning-indicator',
+  error: 'bg-destructive-indicator',
   neutral: 'bg-muted-foreground',
 };
 
 const TONE_RING: Record<StatusTone, string> = {
-  success: 'border-notice-success',
-  progress: 'border-notice-warning',
-  error: 'border-notice-destructive',
+  success: 'border-success-indicator',
+  progress: 'border-warning-indicator',
+  error: 'border-destructive-indicator',
   neutral: 'border-muted-foreground',
 };
 
 const PROGRESS_DECORATION =
-  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-notice-warning/20 before:border-t-notice-warning before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
+  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-warning-indicator/20 before:border-t-warning-indicator before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
 
 export function statusToneFill(tone: StatusTone): string {
   return TONE_FILL[tone];

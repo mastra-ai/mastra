@@ -48,9 +48,9 @@ export type DatasetsSortKey = 'name' | 'updatedAt';
 const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
-  if (successPct !== null && successPct >= 70) return 'green';
-  if (successPct !== null && successPct >= 40) return 'yellow';
-  return 'red';
+  if (successPct !== null && successPct >= 70) return 'success';
+  if (successPct !== null && successPct >= 40) return 'warning';
+  return 'destructive';
 }
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();

@@ -44,9 +44,9 @@ export function ScorerVersionCombobox({
         value: version.id,
         description: formatDate(version.createdAt, 'date-time') ?? '',
         end: isPublished ? (
-          <Badge variant="green">Published</Badge>
+          <Badge variant="success">Published</Badge>
         ) : isDraft ? (
-          <Badge variant="blue">Draft</Badge>
+          <Badge variant="info">Draft</Badge>
         ) : undefined,
       };
     }),

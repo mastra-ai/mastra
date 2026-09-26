@@ -10,7 +10,7 @@ import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
 const RELATED_ITEM_LINK_CLASS =
-  'text-meta text-muted-foreground hover:text-foreground focus-visible:outline-accent1 relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2';
+  'text-meta text-muted-foreground hover:text-foreground focus-visible:outline-border-focus relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 export function RelatedWorkItemLink({
   item,
@@ -41,7 +41,7 @@ export function RelatedWorkItemLink({
         <PullRequestStatusIcon status={pullRequestStatus} size={12} decorative />
       )}
       <span className="truncate">{reference ?? item.title}</span>
-      {live && <MessageSquare data-live-session-indicator size={11} className="text-accent1 shrink-0" aria-hidden />}
+      {live && <MessageSquare data-live-session-indicator size={11} className="text-success-fg shrink-0" aria-hidden />}
     </>
   );
   let tooltip = reference === undefined ? relation : `${relation} · ${item.title}`;

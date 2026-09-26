@@ -60,8 +60,8 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               className={cn(
                 'rounded px-2 py-0.5 text-column',
                 workingMemorySource === 'resource'
-                  ? 'bg-purple-500/20 text-purple-400'
-                  : 'bg-blue-500/20 text-blue-400',
+                  ? 'bg-badge-purple-bg text-badge-purple-fg'
+                  : 'bg-info-bg text-info-fg',
               )}
               title={
                 workingMemorySource === 'resource'
@@ -100,13 +100,13 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                               type="button"
                               onClick={handleCopy}
                               aria-label="Copy working memory"
-                              className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-hidden"
+                              className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden"
                             />
                             <div className="pointer-events-none">
                               <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
                             </div>
                             {isCopied && (
-                              <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-green-500/20 px-1.5 py-0.5 text-meta text-green-500">
+                              <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-success-bg px-1.5 py-0.5 text-meta text-success-fg">
                                 Copied!
                               </span>
                             )}
@@ -211,7 +211,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+              'inline-flex items-center gap-2 text-body text-info-fg hover:underline',
               controlStateColorTransition,
             )}
           >

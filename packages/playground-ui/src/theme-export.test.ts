@@ -187,9 +187,66 @@ describe('theme.css export', () => {
     expect(themeCss).not.toMatch(/\.bg-sidebar\b/);
   });
 
+  it('ships the exact Mastra brand palette independently of theme modes', () => {
+    const brand = parseVariables(blocksOf(themeCss, '@theme static'));
+    expect(brand.get('color-ds-green')).toBe('#7aff78');
+    expect(brand.get('color-ds-orange')).toBe('#fdac53');
+    expect(brand.get('color-ds-pink')).toBe('#ff69cc');
+    expect(brand.get('color-ds-purple')).toBe('#b588fe');
+    expect(brand.get('color-ds-blue')).toBe('#6ccdfb');
+    expect(brand.get('color-ds-red')).toBe('#ff4758');
+    expect(brand.get('color-ds-yellow')).toBe('#e7e67b');
+    expect(lightTheme).not.toMatch(/--color-ds-/);
+  });
+
+  it('loads legacy colors through the public theme entry in both modes', () => {
+    const legacyCss = readFileSync(resolve(pkgRoot, 'legacy-theme.css'), 'utf8');
+    const names = [...parseVariables(blocksOf(legacyCss, ':root')).keys()];
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
+    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).toContain("@import './legacy-theme.css';");
+    expect(names).toContain('accent1');
+    expect(names).toContain('chart-blue');
+    expect(names).toContain('span-type-agent');
+    for (const variables of [darkVariables, lightVariables]) {
+      for (const name of names) expect(resolveToken(name, variables)).not.toContain('var(');
+    }
+    expect(resolveToken('accent1', darkVariables)).toBe('oklch(0.723 0.219 149.579)');
+    expect(resolveToken('accent1', lightVariables)).toBe('oklch(0.627 0.194 149.214)');
+    expect(Colors.accent1).toBe('var(--accent1)');
+  });
+
+  it('generates legacy utilities alongside semantic utilities', async () => {
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
+    const css = compiler.build([
+      'bg-accent1',
+      'text-positive1',
+      'bg-notice-success',
+      'text-badge-green-fg',
+      'bg-success-bg',
+    ]);
+    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success', 'text-badge-green-fg', 'bg-success-bg']) {
+      expect(css).toContain(`.${name}`);
+    }
+  });
+
+  it('generates named chromatic utilities from the shared palette', async () => {
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
+    const css = compiler.build(['text-span-agent', 'bg-chart-1', 'stroke-chart-6', 'fill-span-tool', 'bg-purple-300']);
+    for (const [utility, property, token] of [
+      ['text-span-agent', 'color', 'span-agent'],
+      ['bg-chart-1', 'background-color', 'chart-1'],
+      ['stroke-chart-6', 'stroke', 'chart-6'],
+      ['fill-span-tool', 'fill', 'span-tool'],
+      ['bg-purple-300', 'background-color', 'purple-300'],
+    ]) {
+      expect(css).toContain(`.${utility}`);
+      expect(css).toContain(`${property}: var(--${token})`);
+    }
+  });
+
   it('overrides the green palette the native v4 way (initial + remap)', () => {
     expect(themeCss).toContain('--color-green-*: initial;');
-    expect(themeCss).toContain('--color-green-500: var(--brand-green-500);');
+    expect(themeCss).toContain('--color-green-500: var(--green-500);');
   });
 
   it('exposes the background and gray foundation scales', () => {
@@ -533,6 +590,24 @@ describe('theme.css export', () => {
         expect(wcagContrast(placeholderLightness, backgroundLightness)).toBeGreaterThanOrEqual(3);
       }
     }
+  });
+
+  it('resolves chromatic roles to opaque ramp values in both themes', () => {
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
+    const roles =
+      /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^product-|^chart-(?:[1-8]|sequential-[1-5])$|^span-(?!type-)/;
+
+    for (const variables of [darkVariables, lightVariables]) {
+      const tokens = [...variables.keys()].filter(name => roles.test(name));
+      expect(tokens.length).toBe(52);
+      for (const token of tokens) {
+        const value = resolveToken(token, variables);
+        expect(value).toMatch(/^oklch\(/);
+        expect(oklchAlpha(value)).toBe(1);
+      }
+    }
+    expect(resolveToken('success-bg', darkVariables)).not.toBe(resolveToken('success-bg', lightVariables));
+    expect(resolveToken('chart-1', darkVariables)).not.toBe(resolveToken('chart-1', lightVariables));
   });
 
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {

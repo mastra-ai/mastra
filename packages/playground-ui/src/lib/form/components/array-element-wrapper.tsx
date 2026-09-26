@@ -51,7 +51,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               {summary}
             </span>
           )}
-          {invalid && <span className="ml-auto shrink-0 text-meta text-accent2">Needs input</span>}
+          {invalid && <span className="ml-auto shrink-0 text-meta text-destructive-fg">Needs input</span>}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button

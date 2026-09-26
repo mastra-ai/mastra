@@ -16,7 +16,7 @@ export interface EntityIndexListProps {
 
 function Status({ entity }: { entity: ThemeLearningEntity }) {
   const label = entityStatusLabel(entity.status);
-  const variant = entity.status === 'ready' ? 'green' : entity.status === 'processing' ? 'blue' : 'neutral';
+  const variant = entity.status === 'ready' ? 'success' : entity.status === 'processing' ? 'info' : 'neutral';
   return (
     <Badge variant={variant} size="sm" indicator={entity.status === undefined ? undefined : 'dot'}>
       {label}

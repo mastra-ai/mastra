@@ -103,10 +103,10 @@ export function SkillsTable({
       )}
 
       {hasUndiscoveredAgentSkills && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <div className="flex items-start gap-3 rounded-lg border border-warning-border bg-warning-bg p-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-indicator" />
           <div className="text-body">
-            <p className="font-medium text-amber-500">Skills installed but not discovered</p>
+            <p className="font-medium text-warning-fg">Skills installed but not discovered</p>
             <p className="mt-1 text-muted-foreground">
               You have skills in <code className="rounded bg-muted px-1 py-0.5 text-caption">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.

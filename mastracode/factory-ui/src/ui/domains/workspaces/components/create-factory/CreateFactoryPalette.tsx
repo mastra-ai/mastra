@@ -83,7 +83,10 @@ export function CreateFactoryPalette({
             <li
               key={item}
               aria-current={item === step ? 'step' : undefined}
-              className={cn('h-1 w-6 rounded-full transition-colors', index <= stepIndex ? 'bg-accent1' : 'bg-fill')}
+              className={cn(
+                'h-1 w-6 rounded-full transition-colors',
+                index <= stepIndex ? 'bg-success-indicator' : 'bg-fill',
+              )}
             />
           ))}
         </ol>
@@ -122,7 +125,7 @@ export function CreateFactoryPalette({
 
 export function CreateFactoryPaletteAlert({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" role="alert" variant="caption" className="text-notice-destructive-fg m-0 px-3 py-2">
+    <Txt as="p" role="alert" variant="caption" className="text-destructive-fg m-0 px-3 py-2">
       {children}
     </Txt>
   );

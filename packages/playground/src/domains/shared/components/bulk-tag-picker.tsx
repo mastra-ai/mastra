@@ -64,7 +64,7 @@ export function BulkTagPicker({
               <button
                 type="button"
                 onClick={() => onRemoveTag(tag)}
-                className="ml-2 text-placeholder hover:text-negative1"
+                className="ml-2 text-placeholder hover:text-destructive-fg"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -77,7 +77,7 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="w-full rounded px-2 py-1 text-left text-caption text-accent1 hover:bg-fill-subtle"
+              className="w-full rounded px-2 py-1 text-left text-caption text-info-fg hover:bg-fill-subtle"
             >
               Create &amp; apply &quot;{search.trim()}&quot;
             </button>

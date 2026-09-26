@@ -104,7 +104,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         className={cn(
           'group flex w-full items-center gap-3 px-4 py-3',
           'hover:bg-fill-subtle',
-          'focus:ring-2 focus:ring-accent1 focus:outline-none focus:ring-inset',
+          'focus:ring-2 focus:ring-border-focus focus:outline-none focus:ring-inset',
         )}
       >
         {/* Thumbnail preview */}
@@ -124,7 +124,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
             <span className="truncate text-subheading text-foreground">{agentName}&apos;s browser</span>
-            <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
+            <Badge variant={isLive ? 'success' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>

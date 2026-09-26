@@ -17,7 +17,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
   if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError) {
     return (
-      <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
+      <Txt as="p" variant="caption" className="text-destructive-fg m-0" role="alert">
         {connection.catalogError.message}
       </Txt>
     );

@@ -114,7 +114,7 @@ export function ModelPicker() {
   }
   if (!selectedModelId && error) {
     return (
-      <span className="text-accent2" aria-label="Model unavailable" title={error.message}>
+      <span className="text-destructive-fg" aria-label="Model unavailable" title={error.message}>
         Model unavailable
       </span>
     );
@@ -140,7 +140,7 @@ export function ModelPicker() {
   if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
     return (
       <span
-        className={notConfigured ? 'text-accent2' : 'text-muted-foreground'}
+        className={notConfigured ? 'text-destructive-fg' : 'text-muted-foreground'}
         aria-label={notConfigured ? `${label} is not configured` : undefined}
         title={selectedModelId}
       >
@@ -182,7 +182,7 @@ export function ModelPicker() {
         aria-busy={busy}
         className={cn(
           buttonVariants({ variant: 'ghost', size: 'sm' }),
-          notConfigured ? 'text-accent2' : 'text-muted-foreground',
+          notConfigured ? 'text-destructive-fg' : 'text-muted-foreground',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
       >
@@ -212,7 +212,7 @@ export function ModelPicker() {
                       <span className="inline-flex items-center gap-1.5">
                         <span className="truncate">{pack.name}</span>
                         {pack.id === defaultModelPackId ? (
-                          <Badge variant="blue" size="xs">
+                          <Badge variant="info" size="xs">
                             Default
                           </Badge>
                         ) : null}

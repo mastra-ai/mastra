@@ -19,7 +19,7 @@ export function ExperimentTraceTimelineStructureSign({
         'after:absolute after:top-0 after:bottom-0 after:left-[-1px] after:w-0 after:border-l after:border-dashed after:border-muted-foreground after:content-[""]',
         'before:absolute before:top-[50%] before:left-0 before:h-0 before:w-full before:border-b before:border-dashed before:border-muted-foreground before:content-[""]',
         '[&_svg]:transition-all',
-        '[&:hover_svg]:scale-[1.3] [&:hover_svg]:text-yellow-500 [&:hover_svg]:opacity-100',
+        '[&:hover_svg]:scale-[1.3] [&:hover_svg]:text-warning-indicator [&:hover_svg]:opacity-100',
         {
           'after:bottom-[50%]': isLastChild,
         },

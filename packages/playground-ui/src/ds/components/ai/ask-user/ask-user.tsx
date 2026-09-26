@@ -121,7 +121,7 @@ export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProp
     className={cn('grid gap-2 rounded-lg bg-fill p-3', className)}
     {...props}
   >
-    <Badge size="xs" variant={result.isError ? 'red' : 'green'} className="justify-self-start">
+    <Badge size="xs" variant={result.isError ? 'destructive' : 'success'} className="justify-self-start">
       {result.isError ? 'Error' : 'Answered'}
     </Badge>
     <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-error')}>
@@ -168,7 +168,7 @@ const AskUserInput = ({
         <AskUserLabel />
         <AskUserBody>
           <AskUserQuestion>{payload.question}</AskUserQuestion>
-          {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
+          {result ? <AskUserOutput result={result} /> : <Badge variant="success">Answered</Badge>}
         </AskUserBody>
       </AskUserContainer>
     );

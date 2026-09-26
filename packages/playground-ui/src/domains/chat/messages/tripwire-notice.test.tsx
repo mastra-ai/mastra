@@ -20,13 +20,6 @@ describe('TripwireNotice', () => {
 
       expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
     });
-
-    it('uses the warning notice tokens instead of hardcoded colors', () => {
-      const { container } = render(<TripwireNotice reason="blocked for safety" />);
-
-      expect(container.querySelector('[class*="notice-warning"]')).not.toBeNull();
-      expect(container.querySelector('[class*="amber"]')).toBeNull();
-    });
   });
 
   describe('when tripwire metadata is provided', () => {

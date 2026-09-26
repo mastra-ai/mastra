@@ -39,7 +39,7 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   /**
    * Optional inline styles applied to the underlying tab list element.
    * To override the active tab indicator color, set the `--tab-indicator-color`
-   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}`.
+   * CSS variable, e.g. `style={{ '--tab-indicator-color': 'var(--info-indicator)' } as React.CSSProperties}`.
    */
   style?: React.CSSProperties;
 };
@@ -212,7 +212,10 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         tabIndex={tabs?.value === tab.value ? 0 : -1}
                         data-slot="tab-close"
                         onClick={tab.onClose}
-                        className={cn('rounded p-0.5 hover:bg-fill-hover hover:text-accent2', transitions.colors)}
+                        className={cn(
+                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-fg',
+                          transitions.colors,
+                        )}
                       />
                     }
                   >
@@ -261,7 +264,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             render={
                               <DropdownMenu.Item
                                 data-slot="tabs-overflow-close"
-                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-accent2 data-[highlighted]:text-accent2"
+                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-fg data-[highlighted]:text-destructive-fg"
                                 style={{ gridArea: `${index + 1} / 1` }}
                                 onClick={tab.onClose}
                               />

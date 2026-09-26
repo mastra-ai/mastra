@@ -380,7 +380,7 @@ export function SkillEditDialog({
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
-                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-caption text-yellow-600">
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-bg p-3 text-caption text-warning-fg">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId

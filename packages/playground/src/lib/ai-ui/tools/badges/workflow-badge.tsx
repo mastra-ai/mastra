@@ -76,7 +76,7 @@ export const WorkflowBadge = ({
   return (
     <BadgeWrapper
       data-testid="workflow-badge"
-      icon={<WorkflowIcon className="text-accent3" />}
+      icon={<WorkflowIcon className="text-span-workflow" />}
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={

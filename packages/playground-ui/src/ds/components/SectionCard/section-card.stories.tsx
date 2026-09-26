@@ -69,7 +69,7 @@ export const Danger: Story = {
       title="Delete project"
       description="Irreversible. All data, deployments, and members will be removed."
     >
-      <p className="text-accent2/80">Confirmation controls go here.</p>
+      <p className="text-destructive-fg">Confirmation controls go here.</p>
     </SectionCard>
   ),
 };
@@ -99,7 +99,7 @@ export const OnSurfaces: Story = {
               <p className="text-muted-foreground">Body content goes here.</p>
             </SectionCard>
             <SectionCard variant="danger" title="Delete project" description="Danger variant on this surface.">
-              <p className="text-accent2/80">Confirmation controls go here.</p>
+              <p className="text-destructive-fg">Confirmation controls go here.</p>
             </SectionCard>
           </div>
         </SurfaceFrame>

@@ -1,9 +1,8 @@
 import type { ScatterPlotChartFormatter } from './scatter-plot-chart';
-import { Colors } from '@/ds/tokens';
 
 export function getScatterPlotPointColor(point: Record<string, unknown>, colorKey?: string) {
   const color = colorKey ? point[colorKey] : undefined;
-  return typeof color === 'string' && color.length > 0 ? color : Colors.accent3;
+  return typeof color === 'string' && color.length > 0 ? color : 'var(--chart-1)';
 }
 
 export function getScatterPlotClickedPoint(payload: unknown) {

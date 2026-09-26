@@ -799,3 +799,43 @@ describe('SankeyChart', () => {
     expect(onColumnOrderChange).toHaveBeenCalledWith(['region', 'channel', 'outcome']);
   });
 });
+
+describe('semantic Sankey colors', () => {
+  it('blends links between semantic node colors, including on hover', async () => {
+    const { container } = render(
+      <Sankey data={data} columns={columns}>
+        <SankeyChart
+          getNodeColor={({ column }) => (column.id === columns[0].id ? 'var(--chart-1)' : 'var(--chart-5)')}
+        />
+      </Sankey>,
+    );
+    await waitFor(() => expect(container.querySelector('linearGradient')).not.toBeNull());
+    const link = container.querySelector('path[fill="url(#sankey-grad-0)"]');
+    if (!link) throw new Error('Missing gradient link');
+    for (const id of ['sankey-grad-0', 'sankey-grad-0-vivid']) {
+      const stops = container.querySelectorAll(`#${id} stop`);
+      expect(stops[0]?.getAttribute('stop-color')).toBe('var(--chart-1)');
+      expect(stops[1]?.getAttribute('stop-color')).toBe('var(--chart-5)');
+    }
+    expect(link.getAttribute('fill-opacity')).toBe('0.32');
+    fireEvent.mouseEnter(link);
+    expect(link.getAttribute('fill')).toBe('url(#sankey-grad-0-vivid)');
+    expect(link.getAttribute('fill-opacity')).toBe('0.75');
+  });
+
+  it('preserves link transparency and hover emphasis with semantic tokens', async () => {
+    const { container } = render(
+      <Sankey data={data} columns={columns}>
+        <SankeyChart getNodeColor={() => 'var(--span-agent)'} getLinkColor={() => 'var(--chart-1)'} />
+      </Sankey>,
+    );
+    await waitFor(() => expect(container.querySelector('rect[fill="var(--span-agent)"]')).not.toBeNull());
+    const link = container.querySelector('path[fill="var(--chart-1)"]');
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('fill-opacity')).toBe('0.32');
+    if (!link) throw new Error('Missing semantic Sankey link');
+    fireEvent.mouseEnter(link);
+    expect(link?.getAttribute('fill')).toBe('var(--chart-1)');
+    expect(link?.getAttribute('fill-opacity')).toBe('0.75');
+  });
+});

@@ -133,7 +133,13 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
               Phase
             </FieldBlock.Label>
-            <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
+            <Select
+              value={selectedPhase}
+              onValueChange={value => {
+                const phase = processor.phases.find(phase => phase === value);
+                if (phase) setSelectedPhase(phase);
+              }}
+            >
               <SelectTrigger id={phaseId} className="w-full">
                 <SelectValue placeholder="Select phase" />
               </SelectTrigger>
@@ -189,7 +195,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-accent6">
+            <Txt variant="meta" className="text-warning-fg">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}
@@ -200,12 +206,14 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'success' : 'destructive'}>
+                  {result.success ? 'Success' : 'Failed'}
+                </Badge>
+                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="mt-2 rounded-md border border-accent6/20 bg-accent6Dark p-3">
-                  <Txt variant="column" className="text-accent6">
+                <div className="mt-2 rounded-md border border-warning-border bg-warning-bg p-3">
+                  <Txt variant="column" className="text-warning-fg">
                     Tripwire Reason
                   </Txt>
                   <Txt variant="caption" tone="muted" className="mt-1">

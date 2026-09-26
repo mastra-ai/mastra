@@ -91,7 +91,7 @@ export function MessageBubble({
           <>
             {steeringStatus && (
               <span
-                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-notice-destructive-fg')}
+                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-destructive-fg')}
                 aria-live="polite"
               >
                 {steeringStatus}

@@ -18,8 +18,8 @@ export const TaskListContainer = ({ className, ...props }: ComponentProps<'secti
 );
 
 const barColors: Record<TaskListItem['status'], string> = {
-  completed: 'bg-positive1',
-  in_progress: 'bg-warning1',
+  completed: 'bg-success-indicator',
+  in_progress: 'bg-warning-indicator',
   pending: 'bg-fill-hover',
 };
 
@@ -71,8 +71,8 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 };
 
 const ringClasses: Record<TaskListItem['status'], string> = {
-  completed: 'size-[7px] border-accent1 bg-card',
-  in_progress: 'size-2 border-accent6 bg-accent6/25',
+  completed: 'size-[7px] border-success-indicator bg-card',
+  in_progress: 'size-2 border-warning-indicator bg-warning-indicator/25',
   pending: 'size-1.5 border-muted-foreground/45 bg-card',
 };
 
@@ -125,7 +125,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
       <span
         aria-hidden={!active}
         className={cn(
-          'col-start-1 row-start-1 truncate bg-linear-to-r from-accent6 to-foreground to-30% bg-size-[200%_100%] bg-clip-text font-medium text-transparent transition-[opacity,translate,filter,background-position] dark:from-[color-mix(in_oklab,var(--accent6)_60%,var(--foreground))]',
+          'col-start-1 row-start-1 truncate bg-linear-to-r from-warning-indicator to-foreground to-30% bg-size-[200%_100%] bg-clip-text font-medium text-transparent transition-[opacity,translate,filter,background-position] dark:from-yellow-300',
           taskGraphMotion,
           active
             ? 'translate-y-0 bg-position-[0%_0] opacity-100 blur-none'

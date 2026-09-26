@@ -38,16 +38,16 @@ function buildDarkTheme(): Extension {
     },
     styles: [
       { tag: [t.className, t.propertyName], color: 'var(--foreground)' },
-      { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
+      { tag: t.heading, color: 'var(--info-indicator)', fontWeight: 'bold' },
       {
         tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-        color: 'var(--accent3)',
+        color: 'var(--info-indicator)',
         fontWeight: 'bold',
       },
       { tag: t.emphasis, fontStyle: 'italic', color: 'var(--foreground)' },
       { tag: t.strong, fontWeight: 'bold', color: 'var(--foreground)' },
-      { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
-      { tag: t.url, color: 'var(--accent3)' },
+      { tag: t.link, color: 'var(--info-indicator)', textDecoration: 'underline' },
+      { tag: t.url, color: 'var(--info-indicator)' },
       { tag: t.monospace, color: 'var(--foreground)' },
       { tag: t.strikethrough, textDecoration: 'line-through' },
       { tag: t.quote, fontStyle: 'italic', color: 'var(--placeholder)' },
@@ -72,7 +72,7 @@ function buildDarkTheme(): Extension {
       borderLeftColor: 'var(--foreground)',
     },
     '.cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: 'color-mix(in srgb, var(--accent3) 22%, transparent)',
+      backgroundColor: 'color-mix(in srgb, var(--info-indicator) 22%, transparent)',
     },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',
@@ -106,7 +106,7 @@ function buildDarkTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--accent6) !important',
+      color: 'var(--warning-indicator) !important',
       fontWeight: '500',
     },
   });
@@ -148,7 +148,7 @@ function buildLightTheme(): Extension {
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'color-mix(in srgb, var(--accent3) 22%, transparent) !important',
+        background: 'color-mix(in srgb, var(--info-indicator) 22%, transparent) !important',
       },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',
@@ -182,38 +182,38 @@ function buildLightTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--accent6) !important',
+      color: 'var(--warning-indicator) !important',
       fontWeight: '500',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
     { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
-    { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
+    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
+    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
+    { tag: t.heading, color: 'var(--syntax-link)', fontWeight: 'bold' },
     {
       tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
       fontWeight: 'bold',
     },
     { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--foreground)' },
     { tag: [t.strong], fontWeight: 'bold', color: 'var(--foreground)' },
-    { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
-    { tag: t.url, color: 'var(--accent3)' },
+    { tag: t.link, color: 'var(--syntax-link)', textDecoration: 'underline' },
+    { tag: t.url, color: 'var(--syntax-link)' },
     { tag: t.monospace, color: 'var(--foreground)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
-    { tag: [t.deleted], color: 'var(--accent2)' },
+    { tag: [t.deleted], color: 'var(--syntax-keyword)' },
     { tag: t.invalid, color: 'var(--error)' },
-    { tag: [t.standard(t.tagName)], color: 'var(--accent1)' },
+    { tag: [t.standard(t.tagName)], color: 'var(--syntax-string)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];

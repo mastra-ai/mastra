@@ -65,9 +65,9 @@ function parseDiff(patch: string): ParsedDiffLine[] {
 }
 
 function diffLineClass(line: string) {
-  if (line.startsWith('+')) return 'bg-notice-success/10 text-foreground';
-  if (line.startsWith('-')) return 'bg-notice-destructive/10 text-foreground';
-  if (line.startsWith('@@')) return 'bg-card text-accent1';
+  if (line.startsWith('+')) return 'bg-success-bg text-foreground';
+  if (line.startsWith('-')) return 'bg-destructive-bg text-foreground';
+  if (line.startsWith('@@')) return 'bg-card text-success-fg';
   return 'text-foreground';
 }
 

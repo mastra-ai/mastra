@@ -10,7 +10,7 @@ const WRITTEN_FILE_MAX_CHARS = 2000;
 
 const DIFF_SIDES = {
   removed: { sign: '-', row: 'bg-error/10', gutter: 'text-error' },
-  added: { sign: '+', row: 'bg-accent1/10', gutter: 'text-accent1' },
+  added: { sign: '+', row: 'bg-success-bg', gutter: 'text-success-fg' },
 } as const;
 
 function boundedLines(text: string): { lines: string[]; hidden: number } {

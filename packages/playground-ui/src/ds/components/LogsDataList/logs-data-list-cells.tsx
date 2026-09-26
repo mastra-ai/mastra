@@ -10,10 +10,10 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 const LEVEL_VARIANT: Record<LogLevel, BadgeVariant> = {
   debug: 'neutral',
-  info: 'blue',
-  warn: 'yellow',
-  error: 'red',
-  fatal: 'red',
+  info: 'info',
+  warn: 'warning',
+  error: 'destructive',
+  fatal: 'destructive',
 };
 
 // ---------------------------------------------------------------------------

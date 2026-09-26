@@ -67,7 +67,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
       </div>
       {result?.status === 'suspended' && (
         <div className="shrink-0 border-t border-border/50 p-2">
-          <Button variant="ghost" className="w-full justify-start text-warning1" onClick={closeStepDetail}>
+          <Button variant="ghost" className="w-full justify-start text-warning-fg" onClick={closeStepDetail}>
             <CirclePause />
             Return to suspended step
             <ChevronRight className="ml-auto" />

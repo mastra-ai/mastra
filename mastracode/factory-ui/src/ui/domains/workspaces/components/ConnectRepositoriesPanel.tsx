@@ -92,7 +92,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </div>
 
           {error && (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 pb-2">
+            <Txt as="p" variant="caption" className="text-destructive-fg px-4 pb-2">
               {error.message}
             </Txt>
           )}

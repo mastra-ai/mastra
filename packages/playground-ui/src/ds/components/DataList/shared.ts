@@ -31,7 +31,7 @@ export const dataListRowStateStyles = [
   'active:bg-fill',
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
-  'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10 data-[variant=error]:active:bg-notice-destructive/20 has-data-[variant=error]:active:bg-notice-destructive/20',
+  'data-[variant=error]:bg-destructive-bg has-data-[variant=error]:bg-destructive-bg data-[variant=error]:active:bg-destructive-indicator/20 has-data-[variant=error]:active:bg-destructive-indicator/20',
 ] as const;
 
 /**
@@ -40,7 +40,7 @@ export const dataListRowStateStyles = [
  */
 export const dataListRowInteractiveStyles = [
   'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
-  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-focus',
 ] as const;
 
 export const dataListRowStyles = [

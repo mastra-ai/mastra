@@ -161,12 +161,12 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
         </Txt>
       )}
       {skillsQuery.error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-fg">
           {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
         </Txt>
       )}
       {catalog.error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-fg">
           Installed boards could not be loaded; showing built-in skills ungrouped.
         </Txt>
       )}

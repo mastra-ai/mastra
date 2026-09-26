@@ -29,7 +29,7 @@ export interface ComparisonSideHeaderProps {
 }
 
 const sideLabel = { baseline: 'Baseline', contender: 'Contender' } as const;
-const sideVariant = { baseline: 'purple', contender: 'blue' } as const;
+const sideVariant = { baseline: 'purple', contender: 'info' } as const;
 
 /** Inline link: small leading glyph, truncating name, small trailing external cue. */
 const linkClass = 'flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0';
@@ -85,7 +85,7 @@ export function ComparisonSideHeader({
               <TargetIcon /> {experiment.targetId}
             </TextAndIcon>
           )}
-          <span className={cn(versionMismatch && 'text-accent6')}>
+          <span className={cn(versionMismatch && 'text-warning-fg')}>
             <TextAndIcon>
               <LayersIcon /> v{experiment.datasetVersion ?? '—'}
               {versionMismatch && ' · different dataset version'}

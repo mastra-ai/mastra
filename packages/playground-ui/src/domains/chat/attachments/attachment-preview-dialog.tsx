@@ -23,7 +23,7 @@ export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   if (url) {
     return (
       <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
-        <FileText className="text-accent2" aria-label="View PDF" />
+        <FileText className="text-destructive-fg" aria-label="View PDF" />
       </a>
     );
   }
@@ -31,7 +31,7 @@ export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   return (
     <>
       <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
-        <FileText className="text-accent2" aria-label="View PDF" />
+        <FileText className="text-destructive-fg" aria-label="View PDF" />
       </button>
 
       <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} />
@@ -73,7 +73,7 @@ const iconForContentType = (contentType?: string) => {
 };
 export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
   const { Icon, label } = iconForContentType(contentType);
-  const icon = <Icon className="text-accent2" aria-label={label} />;
+  const icon = <Icon className="text-destructive-fg" aria-label={label} />;
 
   if (url) {
     return (

@@ -38,7 +38,7 @@ export function JSONFormatPanel() {
             <dd className="flex flex-col items-start gap-1.5 text-meta text-muted-foreground">
               <span>{field.description}</span>
               {field.required ? (
-                <Badge variant="green" size="xs">
+                <Badge variant="success" size="xs">
                   required
                 </Badge>
               ) : (

@@ -61,7 +61,7 @@ function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
         className={cn(
           'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2 text-caption text-foreground',
           controlStateColorTransition,
-          'hover:text-yellow-500',
+          'hover:text-warning-fg',
           '[&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-all',
         )}
       >
