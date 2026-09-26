@@ -149,16 +149,18 @@ export class SentenceTransformer extends TextTransformer {
           chunks.push(currentChunk.join(separator));
         }
 
-        currentChunk = this.calculateSentenceOverlap(currentChunk);
+        const overlapSentences = this.calculateSentenceOverlap(currentChunk);
         // Trim overlap from the front until the incoming sentence fits
-        while (
-          currentChunk.length > 0 &&
-          this.calculateChunkSize(currentChunk) + sepLength + sentenceLength > this.maxSize
-        ) {
-          currentChunk.shift();
+        let overlapSize = this.calculateChunkSize(overlapSentences);
+        let start = 0;
+        while (start < overlapSentences.length && overlapSize + sepLength + sentenceLength > this.maxSize) {
+          overlapSize -= this.lengthFunction(overlapSentences[start]!);
+          if (start < overlapSentences.length - 1) overlapSize -= sepLength;
+          start++;
         }
+        currentChunk = overlapSentences.slice(start);
         carriedCount = currentChunk.length;
-        currentSize = this.calculateChunkSize(currentChunk);
+        currentSize = currentChunk.length > 0 ? overlapSize : 0;
       }
 
       currentSize += sentenceLength + (currentChunk.length > 0 ? sepLength : 0);
