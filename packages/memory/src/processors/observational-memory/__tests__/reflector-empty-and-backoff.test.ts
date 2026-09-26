@@ -264,6 +264,45 @@ describe('reflector empty-output guard', () => {
     // The failure path must clear the boundary so future attempts aren't blocked.
     expect(BufferingCoordinator.lastBufferedBoundary.has(bufferKey)).toBe(false);
   });
+
+  it("never fails the run on degenerate buffered reflection, even under the default 'abort' policy, and reports it to onReflectionEnd", async () => {
+    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
+    const updateBufferedReflection = vi.fn(async () => {});
+    const onReflectionEnd = vi.fn();
+    const multiLine = Array.from({ length: 20 }, (_, i) => `* observed fact number ${i}`).join('\n');
+    const record = makeRecord({ activeObservations: multiLine, observationTokenCount: multiLine.length });
+    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
+      storage: {
+        updateBufferedReflection,
+        getObservationalMemory: vi.fn(async () => record),
+        setBufferingReflectionFlag: vi.fn(async () => {}),
+      },
+      buffering: {
+        isAsyncReflectionEnabled: () => true,
+        getReflectionBufferKey: (lockKey: string) => `refl:${lockKey}`,
+        isAsyncBufferingInProgress: () => false,
+      },
+      reflectionConfig: { bufferActivation: 0.5 },
+    });
+
+    await expect(
+      runner.maybeReflect({
+        record,
+        observationTokens: 60,
+        threadId: 'thread-1',
+        reflectionHooks: { onReflectionEnd },
+      }),
+    ).resolves.toBeUndefined();
+
+    const op = BufferingCoordinator.asyncBufferingOps.get('refl:thread-1:resource-1');
+    expect(op).toBeDefined();
+    await expect(op).resolves.not.toThrow();
+
+    expect(updateBufferedReflection).not.toHaveBeenCalled();
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+    expect(onReflectionEnd).toHaveBeenCalledTimes(1);
+    expect(onReflectionEnd.mock.calls[0][0].error).toMatchObject({ name: 'DegenerateReflectorOutputError' });
+  });
 });
 
 describe('reflector retry budget and terminal policy', () => {

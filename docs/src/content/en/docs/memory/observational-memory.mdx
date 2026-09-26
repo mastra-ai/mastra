@@ -238,6 +238,8 @@ With `failurePolicy: 'continue'`, Mastra retries as configured, reports the fail
 
 A provider outage usually takes out both stages, so set the policy on both if you want the turn to survive one.
 
+Degenerate model output (a repetition loop that persists after retries) is treated as a model failure. Synchronous Observer and Reflector cycles follow `failurePolicy` for it: `'abort'` fails the turn, `'continue'` skips the cycle and reports the error to `onObservationEnd` or `onReflectionEnd`. Buffered reflection runs in the background, so it never fails the turn under either policy: it commits nothing, records a failure marker when a stream writer is attached, and reports the error to `onReflectionEnd`.
+
 This policy applies only to Observer and Reflector model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
 
 <Callout type="warning">
