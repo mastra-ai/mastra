@@ -183,6 +183,47 @@ describe('AgentController cloneThread', () => {
     expect((await callerStore!.listMessages({ threadId: 'c' })).messages).toEqual([]);
   });
 
+  it('removes the caller-side clone when mirroring its row to controller storage fails', async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const storage = new InMemoryStore();
+    const callerStorage = new InMemoryStore();
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      resourceId: 'controller-resource',
+      storage,
+      memory: (() => new MockMemory({ storage: callerStorage })) as any,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            id: 'a',
+            name: 'a',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4o' } as any,
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const memoryStore = await storage.getStore('memory');
+    const callerStore = await callerStorage.getStore('memory');
+    for (const store of [memoryStore!, callerStore!]) {
+      await store.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: now, updatedAt: now, metadata: {} },
+      });
+    }
+    const session = await controller.createSession({ id: 's', ownerId: 'o' });
+    vi.spyOn(memoryStore!, 'saveThread').mockRejectedValue(new Error('controller write failed'));
+
+    await expect(session.thread.clone({ sourceThreadId: 'src' })).rejects.toThrow('controller write failed');
+
+    const { threads } = await callerStore!.listThreads({ filter: { resourceId: 'controller-resource' } });
+    expect(threads.map(t => t.id)).toEqual(['src']);
+  });
+
   it('uses the raw memory storage clone when configured memory is absent', async () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     const storage = new InMemoryStore();

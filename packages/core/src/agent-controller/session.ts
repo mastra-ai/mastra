@@ -614,6 +614,14 @@ export class SessionThread {
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId, requestContext });
+    // A concurrent caller may have attached and started a run while we awaited;
+    // never replace a live subscription mid-run, and dispose any idle one we supersede.
+    if (session.stream.isActive() || session.run.isRunning()) {
+      // Unsubscribe only: aborting would reach the other caller's run on this thread.
+      subscription.unsubscribe();
+      throw new Error(`Thread ${threadId} is running for another caller; retry once the current run has finished`);
+    }
+    this.cleanupSubscription();
     session.stream.attach({ subscription, agent, key, callerId });
     session.ensureFollowUpBinding(agent, resourceId, threadId);
     void session.processSubscribedThreadStream(subscription);

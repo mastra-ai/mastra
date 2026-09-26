@@ -101,6 +101,29 @@ describe('AgentController subscription caller binding', () => {
     expect(recalls).toEqual(['alice', 'bob']);
   });
 
+  it('does not replace a subscription whose run started while the rebind was subscribing', async () => {
+    const { session } = await setup();
+
+    await session.thread.switch({ threadId: 't', requestContext: callerContext('alice') });
+    const subscribe = session.machinery.subscribeToThread.bind(session.machinery);
+    const opened: { abort: ReturnType<typeof vi.spyOn>; unsubscribe: ReturnType<typeof vi.spyOn> }[] = [];
+    vi.spyOn(session.machinery, 'subscribeToThread').mockImplementation(async input => {
+      const subscription = await subscribe(input);
+      opened.push({ abort: vi.spyOn(subscription, 'abort'), unsubscribe: vi.spyOn(subscription, 'unsubscribe') });
+      // While bob's subscription opens, alice re-subscribes and her run starts.
+      session.stream.attach({ subscription: await subscribe(input), key: 'alice-key', callerId: 'alice' });
+      vi.spyOn(session.run, 'isRunning').mockReturnValue(true);
+      return subscription;
+    });
+
+    await expect(session.thread.ensureCurrentSubscription(callerContext('bob'))).rejects.toThrow(
+      /running for another caller/,
+    );
+    expect(session.stream.callerId()).toBe('alice');
+    expect(opened[0]!.unsubscribe).toHaveBeenCalled();
+    expect(opened[0]!.abort).not.toHaveBeenCalled();
+  });
+
   it('refuses a different caller while a run is in flight instead of tearing it down', async () => {
     const { session, recalls } = await setup();
 

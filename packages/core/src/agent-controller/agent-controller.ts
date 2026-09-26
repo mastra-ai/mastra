@@ -1098,8 +1098,9 @@ export class AgentController<TState = {}> {
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
-    const memory = this.config.memory
-      ? await this.resolveMemory(session, requestContext)
+    const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
+    const memory = callerMemory
+      ? callerMemory
       : storage
         ? await storage.getStore('memory')
         : undefined;
@@ -1120,7 +1121,15 @@ export class AgentController<TState = {}> {
     };
     // A per-user memory may live in a different store than the controller's
     // thread rows; mirror the row so getById, listing, and ownership checks see it.
-    if (this.config.memory) await this.persistThreadRow(cloned);
+    if (callerMemory) {
+      try {
+        await this.persistThreadRow(cloned);
+      } catch (error) {
+        // Without the controller row the clone is unreachable; remove it rather than orphan it.
+        await callerMemory.deleteThread(cloned.id).catch(() => {});
+        throw error;
+      }
+    }
     return cloned;
   }
 
