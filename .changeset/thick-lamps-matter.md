@@ -19,4 +19,4 @@ const { sessionUrl, triggeredBy, reviewTarget } = await tools.factory_review_sou
 const publishedBlock = ['## Factory Session', `- Session: ${sessionUrl}`].join('\n');
 ```
 
-The skills instruct the agent to end every published review body with a `## Factory Session` section carrying these values verbatim, so a suspicious review can be traced back to the session that produced it.
+The skills instruct the agent to end every published review body with a `## Factory Session` section carrying `sessionUrl` verbatim, so a suspicious review can be traced back to the session that produced it.
