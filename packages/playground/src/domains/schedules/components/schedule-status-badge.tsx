@@ -3,11 +3,13 @@ import type { ScheduleStatus } from '@mastra/client-js';
 const STATUS_DOT_COLOR: Record<ScheduleStatus, string> = {
   active: 'bg-accent1',
   paused: 'bg-accent3',
+  completed: 'bg-neutral3',
 };
 
 const STATUS_TEXT_COLOR: Record<ScheduleStatus, string> = {
   active: 'text-accent1',
   paused: 'text-accent3',
+  completed: 'text-neutral3',
 };
 
 /**

@@ -89,6 +89,57 @@ describe('Scheduler', () => {
     expect(events[0]!.data).toMatchObject({ workflowId: 'wf-test', resourceId: 'tenant-1' });
   });
 
+  it('fires a one-off schedule once and marks it completed', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-once',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '',
+      runAt: past,
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    await scheduler.tick();
+    await scheduler.tick();
+
+    expect(events).toHaveLength(1);
+    const row = await store.getSchedule('sched-once');
+    expect(row!.status).toBe('completed');
+    expect(row!.lastRunId).toBe(events[0]!.runId);
+  });
+
+  it('completes a bounded cron schedule when the next occurrence is past endAt', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+
+    const past = Date.now() - 5_000;
+    await store.createSchedule({
+      id: 'sched-bounded',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      endAt: Date.now() + 60_000,
+      status: 'active',
+      nextFireAt: past,
+      createdAt: past,
+      updatedAt: past,
+    });
+
+    await scheduler.tick();
+
+    expect(events).toHaveLength(1);
+    expect((await store.getSchedule('sched-bounded'))!.status).toBe('completed');
+  });
+
   it('skips paused schedules', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();

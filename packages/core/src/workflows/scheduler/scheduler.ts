@@ -2,7 +2,7 @@ import { MastraBase } from '../../base';
 import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger/constants';
 import type { Schedule, ScheduleTrigger, SchedulesStorage } from '../../storage/domains/schedules/base';
-import { computeNextFireAt } from './cron';
+import { computeNextFire } from './cron';
 import type { SchedulerConfig } from './types';
 
 const TOPIC_WORKFLOWS = 'workflows';
@@ -343,11 +343,9 @@ export class Scheduler extends MastraBase {
     const actualFireAt = Date.now();
 
     let newNextFireAt: number;
+    let completed: boolean;
     try {
-      newNextFireAt = computeNextFireAt(schedule.cron, {
-        timezone: schedule.timezone,
-        after: actualFireAt,
-      });
+      ({ nextFireAt: newNextFireAt, completed } = computeNextFire(schedule, actualFireAt));
     } catch (err) {
       this.logger.error('Failed to compute next fire time for schedule', {
         scheduleId: schedule.id,
@@ -369,6 +367,7 @@ export class Scheduler extends MastraBase {
         newNextFireAt,
         actualFireAt,
         runId,
+        completed ? 'completed' : undefined,
       );
     } catch (err) {
       this.logger.error('Failed to claim due schedule fire', {

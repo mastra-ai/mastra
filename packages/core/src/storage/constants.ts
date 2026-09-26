@@ -857,6 +857,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     metadata: { type: 'jsonb', nullable: true },
     owner_type: { type: 'text', nullable: true },
     owner_id: { type: 'text', nullable: true },
+    run_at: { type: 'bigint', nullable: true },
+    end_at: { type: 'bigint', nullable: true },
   },
   [TABLE_SCHEDULE_TRIGGERS]: {
     id: { type: 'text', nullable: false, primaryKey: true },

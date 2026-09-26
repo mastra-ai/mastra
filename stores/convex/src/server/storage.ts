@@ -453,6 +453,7 @@ export async function handleTypedOperation(
         last_fire_at: request.lastFireAt,
         last_run_id: request.lastRunId,
         updated_at: Date.now(),
+        ...(request.newStatus ? { status: request.newStatus } : {}),
       });
 
       return { ok: true, result: true };

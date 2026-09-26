@@ -60,6 +60,8 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   if (metadata !== undefined) schedule.metadata = metadata;
   if (row.owner_type != null) schedule.ownerType = String(row.owner_type) as Schedule['ownerType'];
   if (row.owner_id != null) schedule.ownerId = String(row.owner_id);
+  if (row.run_at != null) schedule.runAt = Number(row.run_at);
+  if (row.end_at != null) schedule.endAt = Number(row.end_at);
   return schedule;
 }
 
@@ -111,6 +113,11 @@ export class SchedulesMySQL extends SchedulesStorage {
     await this.operations.createTable({
       tableName: TABLE_SCHEDULES,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_SCHEDULES,
+      schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+      ifNotExists: ['run_at', 'end_at'],
     });
     await this.operations.createTable({
       tableName: TABLE_SCHEDULE_TRIGGERS,
@@ -187,7 +194,7 @@ export class SchedulesMySQL extends SchedulesStorage {
       throw new Error(`Schedule with id "${schedule.id}" already exists`);
     }
     await this.pool.execute(
-      `INSERT INTO ${formatTableName(TABLE_SCHEDULES)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('target', 'column name')}, ${quoteIdentifier('cron', 'column name')}, ${quoteIdentifier('timezone', 'column name')}, ${quoteIdentifier('status', 'column name')}, ${quoteIdentifier('next_fire_at', 'column name')}, ${quoteIdentifier('last_fire_at', 'column name')}, ${quoteIdentifier('last_run_id', 'column name')}, ${quoteIdentifier('created_at', 'column name')}, ${quoteIdentifier('updated_at', 'column name')}, ${quoteIdentifier('metadata', 'column name')}, ${quoteIdentifier('owner_type', 'column name')}, ${quoteIdentifier('owner_id', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ${formatTableName(TABLE_SCHEDULES)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('target', 'column name')}, ${quoteIdentifier('cron', 'column name')}, ${quoteIdentifier('timezone', 'column name')}, ${quoteIdentifier('status', 'column name')}, ${quoteIdentifier('next_fire_at', 'column name')}, ${quoteIdentifier('last_fire_at', 'column name')}, ${quoteIdentifier('last_run_id', 'column name')}, ${quoteIdentifier('created_at', 'column name')}, ${quoteIdentifier('updated_at', 'column name')}, ${quoteIdentifier('metadata', 'column name')}, ${quoteIdentifier('owner_type', 'column name')}, ${quoteIdentifier('owner_id', 'column name')}, ${quoteIdentifier('run_at', 'column name')}, ${quoteIdentifier('end_at', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         schedule.id,
         JSON.stringify(schedule.target),
@@ -202,6 +209,8 @@ export class SchedulesMySQL extends SchedulesStorage {
         schedule.metadata ? JSON.stringify(schedule.metadata) : null,
         schedule.ownerType ?? null,
         schedule.ownerId ?? null,
+        schedule.runAt ?? null,
+        schedule.endAt ?? null,
       ],
     );
     return schedule;
@@ -295,6 +304,14 @@ export class SchedulesMySQL extends SchedulesStorage {
       setClauses.push(`${quoteIdentifier('owner_id', 'column name')} = ?`);
       params.push((update.ownerId as string) ?? null);
     }
+    if ('runAt' in update) {
+      setClauses.push(`${quoteIdentifier('run_at', 'column name')} = ?`);
+      params.push(update.runAt ?? null);
+    }
+    if ('endAt' in update) {
+      setClauses.push(`${quoteIdentifier('end_at', 'column name')} = ?`);
+      params.push(update.endAt ?? null);
+    }
 
     if (setClauses.length === 0) {
       const existing = await this.getSchedule(id);
@@ -322,10 +339,11 @@ export class SchedulesMySQL extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
-      `UPDATE ${formatTableName(TABLE_SCHEDULES)} SET ${quoteIdentifier('next_fire_at', 'column name')} = ?, ${quoteIdentifier('last_fire_at', 'column name')} = ?, ${quoteIdentifier('last_run_id', 'column name')} = ?, ${quoteIdentifier('updated_at', 'column name')} = ? WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('next_fire_at', 'column name')} = ? AND ${quoteIdentifier('status', 'column name')} = ?`,
-      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
+      `UPDATE ${formatTableName(TABLE_SCHEDULES)} SET ${quoteIdentifier('next_fire_at', 'column name')} = ?, ${quoteIdentifier('last_fire_at', 'column name')} = ?, ${quoteIdentifier('last_run_id', 'column name')} = ?, ${quoteIdentifier('updated_at', 'column name')} = ?, ${quoteIdentifier('status', 'column name')} = COALESCE(?, ${quoteIdentifier('status', 'column name')}) WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('next_fire_at', 'column name')} = ? AND ${quoteIdentifier('status', 'column name')} = ?`,
+      [newNextFireAt, lastFireAt, lastRunId, Date.now(), newStatus ?? null, id, expectedNextFireAt, 'active'],
     );
     return result.affectedRows > 0;
   }
