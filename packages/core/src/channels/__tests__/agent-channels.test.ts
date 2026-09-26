@@ -1851,7 +1851,200 @@ describe('AgentChannels', () => {
         mastra: mockMastra,
         requestContext: expect.any(RequestContext),
         signalMetadata: {},
+        skipped: [],
       });
+
+      spy.mockRestore();
+    });
+
+    it('gives a custom handler the messages batched by the SDK as ctx.skipped', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const earlier = { ...message, id: 'msg-earlier', text: 'first part' };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message, {}, { skipped: [earlier], totalSinceLastHandler: 2 });
+
+      const ctx = onDirectMessage.mock.calls[0]![3] as { skipped: unknown[] };
+      expect(ctx.skipped).toEqual([earlier]);
+
+      spy.mockRestore();
+    });
+
+    it('merges batched messages into one agent turn, oldest first', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, second, {}, { skipped: [first], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(1);
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('first part');
+      expect(serialized).toContain('second part');
+      expect(serialized.indexOf('first part')).toBeLessThan(serialized.indexOf('second part'));
+
+      spy.mockRestore();
+    });
+
+    it('does not repeat batched messages as thread history on a first mention', async () => {
+      const chatMod = await getChatModule();
+      let registeredMentionWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
+        registeredMentionWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const older = { ...message, id: 'm0', text: 'older chatter', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({
+        adapter: channels.adapters.discord,
+        isDM: false,
+        isSubscribed: vi.fn().mockResolvedValue(false),
+        // newest-first, as the SDK yields them
+        messages: (async function* () {
+          yield second;
+          yield first;
+          yield older;
+        })(),
+      });
+      await registeredMentionWrapper!(chatThread, second, { skipped: [first], totalSinceLastHandler: 2 });
+
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('older chatter');
+      expect(serialized.split('first part')).toHaveLength(2);
+
+      spy.mockRestore();
+    });
+
+    it("dispatches another sender's batched messages as their own turn", async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const fromOther = {
+        ...message,
+        id: 'm1',
+        text: 'other user text',
+        author: { userId: 'user-2', userName: 'mallory' },
+        attachments: [],
+      };
+      const current = { ...message, id: 'm2', text: 'my text', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, current, {}, { skipped: [fromOther], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(2);
+      const firstTurn = JSON.stringify(dispatches[0].signalContents);
+      const secondTurn = JSON.stringify(dispatches[1].signalContents);
+      expect(firstTurn).toContain('other user text');
+      expect(firstTurn).not.toContain('my text');
+      expect(secondTurn).toContain('my text');
+      expect(secondTurn).not.toContain('other user text');
+      expect(dispatches[0].attributes.messageId).toBe('m1');
+      expect(dispatches[1].attributes.messageId).toBe('m2');
+
+      spy.mockRestore();
+    });
+
+    it("isolates each sender's run and keeps going when one run is refused", async () => {
+      const chatMod = await getChatModule();
+      const { ChannelSessionRejectedError } = await import('../errors');
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('tenant', 'current-sender');
+        return defaultHandler(thread, msg);
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const calls: { id: string; tenant: unknown }[] = [];
+      vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+        calls.push({ id: args[1].id, tenant: args[3].get('tenant') });
+        if (args[1].id === 'a') throw new ChannelSessionRejectedError('no');
+      });
+
+      const author = (userId?: string) => ({ userId, userName: userId ?? 'anon' });
+      const skipped = [
+        { ...message, id: 'a', author: author('user-a') },
+        { ...message, id: 'anon1', author: author(undefined) },
+        { ...message, id: 'anon2', author: author(undefined) },
+      ];
+      const current = { ...message, id: 'c', author: author('user-c') };
+      await registeredDMWrapper!(
+        makeChatThread({ adapter: channels.adapters.discord }),
+        current,
+        {},
+        {
+          skipped,
+          totalSinceLastHandler: 4,
+        },
+      );
+
+      expect(calls).toEqual([
+        { id: 'a', tenant: undefined },
+        { id: 'anon1', tenant: undefined },
+        { id: 'anon2', tenant: undefined },
+        { id: 'c', tenant: 'current-sender' },
+      ]);
 
       spy.mockRestore();
     });

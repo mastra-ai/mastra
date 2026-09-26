@@ -446,21 +446,23 @@ export class AgentChannels {
       // MUST be built per message, never once at initialize() time: a custom
       // handler may write the sender's tenant onto the request context, and a
       // shared instance would leak that tenant into the next message's run.
-      const beginMessage = () => {
+      // `skipped` holds earlier messages the Chat SDK batched into this dispatch
+      // under a `burst`/`debounce`/`queue` concurrency strategy (oldest first).
+      const beginMessage = (skipped: readonly Message[] = []) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
-        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata, skipped };
         return { defaultHandler, handlerContext };
       };
 
       if (onDirectMessage !== false) {
-        chat.onDirectMessage((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onDirectMessage((thread, message, _channel, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onDirectMessage === 'function') {
             return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -469,8 +471,8 @@ export class AgentChannels {
       }
 
       if (onMention !== false) {
-        chat.onNewMention((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onNewMention((thread, message, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onMention === 'function') {
             return onMention(thread, message, defaultHandler, handlerContext);
           }
@@ -479,8 +481,8 @@ export class AgentChannels {
       }
 
       if (onSubscribedMessage !== false) {
-        chat.onSubscribedMessage((thread, message) => {
-          const { defaultHandler, handlerContext } = beginMessage();
+        chat.onSubscribedMessage((thread, message, context) => {
+          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
           if (typeof onSubscribedMessage === 'function') {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -1132,37 +1134,69 @@ export class AgentChannels {
     mastra: Mastra,
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown>,
+    skipped: readonly Message[] = [],
   ): Promise<void> {
-    try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      // A refused request is not a malfunction: the host decided this sender
-      // gets nothing. Log it and stop — posting would echo the host's
-      // authorization message into the chat thread and confirm the bot is
-      // present to a sender who was just turned away.
-      if (err instanceof ChannelSessionRejectedError) {
-        this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
-          messageId: message.id,
-          authorId: message.author?.userId,
-          reason: error.message,
-        });
-        return;
+    // The SDK batches by conversation, not sender. Split the batch into runs of
+    // consecutive messages from one sender so each run is dispatched under its
+    // own author's identity, in the order they were sent. A message without a
+    // userId is never grouped with another.
+    const all = [...skipped, message];
+    const batchIds = new Set(all.map(m => m.id));
+    const runs: Message[][] = [];
+    for (const m of all) {
+      const last = runs[runs.length - 1];
+      const userId = m.author?.userId;
+      if (last && userId !== undefined && last[0]!.author?.userId === userId) last.push(m);
+      else runs.push([m]);
+    }
+    for (const [i, run] of runs.entries()) {
+      const runMessage = run[run.length - 1]!;
+      // The final run holds the triggering message, so it uses the context the
+      // handler saw. Earlier runs belong to other senders (or earlier turns) and
+      // get a fresh context so per-sender data never leaks between runs.
+      const isLast = i === runs.length - 1;
+      try {
+        await this.processChatMessage(
+          chatThread,
+          runMessage,
+          mastra,
+          isLast ? requestContext : new RequestContext(),
+          isLast ? signalMetadata : {},
+          run.slice(0, -1),
+          batchIds,
+        );
+      } catch (err) {
+        // One failed or refused run must not stop later senders' runs.
+        await this.handleRunError(chatThread, runMessage, err);
       }
-      this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+    }
+  }
+
+  private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
+    const error = err instanceof Error ? err : new Error(String(err));
+    // A refused request is not a malfunction: the host decided this sender
+    // gets nothing. Log it and stop — posting would echo the host's
+    // authorization message into the chat thread and confirm the bot is
+    // present to a sender who was just turned away.
+    if (err instanceof ChannelSessionRejectedError) {
+      this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
         messageId: message.id,
         authorId: message.author?.userId,
-        error: String(err),
+        reason: error.message,
       });
-      try {
-        const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
-        const errorMessage = adapterConfig?.formatError
-          ? adapterConfig.formatError(error)
-          : `❌ Error: ${error.message}`;
-        await chatThread.post(errorMessage);
-      } catch (postErr) {
-        this.log('debug', 'Failed to post error message to thread', postErr);
-      }
+      return;
+    }
+    this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+      messageId: message.id,
+      authorId: message.author?.userId,
+      error: String(err),
+    });
+    try {
+      const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
+      const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
+      await chatThread.post(errorMessage);
+    } catch (postErr) {
+      this.log('debug', 'Failed to post error message to thread', postErr);
     }
   }
 
@@ -1172,8 +1206,12 @@ export class AgentChannels {
     mastra: Mastra,
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown> = {},
+    skipped: readonly Message[] = [],
+    historyExcludeIds: ReadonlySet<string> = new Set([...skipped, message].map(m => m.id)),
   ): Promise<void> {
     const platform = chatThread.adapter.name;
+    // Messages batched by a concurrency strategy, oldest first, then the current one.
+    const batch = [...skipped, message].filter(m => !this.isContentlessMessage(m));
 
     // Some adapters lift platform side-channel events (read receipts, delivery
     // acks) into inbound messages carrying no text and no attachments. Running
@@ -1182,7 +1220,7 @@ export class AgentChannels {
     // nothing to answer here, so drop it before any thread, memory, or run
     // work happens. Custom handlers run ahead of this and still see the
     // message if they want it.
-    if (this.isContentlessMessage(message)) {
+    if (batch.length === 0) {
       this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
         messageId: message.id,
       });
@@ -1227,7 +1265,7 @@ export class AgentChannels {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
         this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
-        const history = await this.fetchThreadHistory(chatThread, message.id, maxMessages);
+        const history = await this.fetchThreadHistory(chatThread, historyExcludeIds, maxMessages);
         this.logger?.debug?.(`Fetched ${history.length} messages from thread history`);
         if (history.length > 0) {
           const lines = ['[Thread context — messages in this thread before you joined]'];
@@ -1244,10 +1282,13 @@ export class AgentChannels {
       }
     }
 
-    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
-    const text = [historyBlock, richText || message.text].filter(Boolean).join('\n\n');
+    const messageTexts = batch.map(m => {
+      const richText = m.formatted ? chatModule().stringifyMarkdown(m.formatted).trim() : undefined;
+      return richText || m.text;
+    });
+    const text = [historyBlock, ...messageTexts].filter(Boolean).join('\n\n');
     const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
-    const attachments = message.attachments.filter(a => a.url || a.fetchData);
+    const attachments = batch.flatMap(m => m.attachments ?? []).filter(a => a.url || a.fetchData);
 
     // Route attachments based on `inlineMedia` config (see DEFAULT_INLINE_MEDIA_TYPES).
     // Inline types are sent as file parts (the LLM adapter converts image/* to
@@ -1430,7 +1471,7 @@ export class AgentChannels {
    */
   private async fetchThreadHistory(
     chatThread: Thread,
-    currentMessageId: string,
+    excludeIds: ReadonlySet<string>,
     maxMessages: number,
   ): Promise<ThreadHistoryMessage[]> {
     const messages: ThreadHistoryMessage[] = [];
@@ -1438,8 +1479,8 @@ export class AgentChannels {
     try {
       // chatThread.messages is an async iterator that yields newest-first
       for await (const msg of chatThread.messages) {
-        // Skip the current message that triggered this request
-        if (msg.id === currentMessageId) continue;
+        // Skip the messages that triggered this request
+        if (excludeIds.has(msg.id)) continue;
 
         const historyText = msg.formatted ? chatModule().stringifyMarkdown(msg.formatted).trim() : undefined;
         messages.push({
