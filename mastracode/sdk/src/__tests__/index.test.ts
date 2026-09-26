@@ -1662,8 +1662,8 @@ describe('createMastraCode', () => {
     // appends missing defaults after a caller's list, which would place it after
     // the blind retry. The named instance replaces the default in its slot, so
     // exactly one instance of each repair resolves.
-    const config = configs.find(
-      config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'),
+    const config = configs.find(config =>
+      config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'),
     );
     const ids = config?.errorProcessors?.map(processor => processor.id);
     expect(ids).toEqual([
