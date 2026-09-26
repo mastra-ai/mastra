@@ -39,7 +39,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
-import { describeDegenerateOutput } from './observer-agent';
+import { DegenerateReflectorOutputError, describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -407,6 +407,8 @@ export class ReflectorRunner {
     let attemptNumber = 0;
     /** True when the latest attempt returned an empty block for non-empty input. */
     let emptyOutput = false;
+    /** Smallest usable (non-degenerate, non-empty) reflection seen on the ladder. */
+    let bestCandidate: { parsed: typeof parsed; reflectedTokens: number } | undefined;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -534,6 +536,9 @@ export class ReflectorRunner {
         reflectedTokens = originalTokens;
       } else {
         reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+        if (!bestCandidate || reflectedTokens < bestCandidate.reflectedTokens) {
+          bestCandidate = { parsed, reflectedTokens };
+        }
       }
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
@@ -590,6 +595,16 @@ export class ReflectorRunner {
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
     }
 
+    // Commit the smallest usable candidate. A later attempt that failed
+    // (degenerate or empty) or came back larger must not discard it. When the
+    // ladder stopped on a valid compression, that attempt is already the best.
+    if (bestCandidate && bestCandidate.parsed !== parsed) {
+      omDebug(
+        `[OM:callReflector] final attempt ${parsed.degenerate || emptyOutput ? 'unusable' : 'larger'}, falling back to smallest earlier candidate (${bestCandidate.reflectedTokens} tokens)`,
+      );
+      parsed = bestCandidate.parsed;
+    }
+
     // A reflection of non-empty observations must never come back empty: the
     // caller commits the result as the new activeObservations (sync path) or
     // as the bufferedReflection replacing the reflected slice (buffered path),
@@ -597,9 +612,8 @@ export class ReflectorRunner {
     // when every ladder attempt was degenerate (parseReflectorOutput discards
     // degenerate text) or the model returned nothing — both are failures.
     if (observations.trim().length > 0 && parsed.observations.trim().length === 0) {
-      throw new Error(
-        `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
-      );
+      const message = `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`;
+      throw parsed.degenerate ? new DegenerateReflectorOutputError(message) : new Error(message);
     }
 
     const structuredExtraction = await extractStructuredValues({

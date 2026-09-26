@@ -174,7 +174,24 @@ describe('reflector empty-output guard', () => {
     await expect(runner.call(SOURCE_OBSERVATIONS)).rejects.toThrow(/empty/i);
   });
 
-  it('keeps degenerate sync reflection failures fatal without committing a generation', async () => {
+  it("keeps degenerate sync reflection failures fatal under failurePolicy 'abort' without committing a generation", async () => {
+    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
+    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
+      reflectionConfig: { failurePolicy: 'abort' },
+    });
+
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+      }),
+    ).rejects.toThrow(/empty|degenerate/i);
+
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+  });
+
+  it("skips degenerate sync reflection under failurePolicy 'continue' without committing a generation", async () => {
     const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
     const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
       reflectionConfig: { failurePolicy: 'continue' },
@@ -186,7 +203,7 @@ describe('reflector empty-output guard', () => {
         observationTokens: SOURCE_OBSERVATIONS.length,
         threadId: 'thread-1',
       }),
-    ).rejects.toThrow(/empty|degenerate/i);
+    ).resolves.not.toThrow();
 
     expect(createReflectionGeneration).not.toHaveBeenCalled();
   });
@@ -201,6 +218,42 @@ describe('reflector empty-output guard', () => {
     // 0-token result), so the ladder escalates and the second attempt wins.
     expect(result.observations).toContain('recovered summary');
     expect(scripted.callCount).toBe(2);
+  });
+
+  it('falls back to the smallest earlier candidate when the final ladder attempt is degenerate', async () => {
+    const larger = `larger over-threshold candidate ${'y'.repeat(300)}`;
+    const smaller = `smaller over-threshold candidate ${'z'.repeat(150)}`;
+    const scripted = createScriptedModel([
+      observationsPayload(larger),
+      observationsPayload(smaller),
+      DEGENERATE_OUTPUT,
+      DEGENERATE_OUTPUT,
+    ]);
+    const { runner } = createReflectorRunner(scripted.model);
+
+    const result = await runner.call(SOURCE_OBSERVATIONS);
+
+    expect(scripted.callCount).toBe(4);
+    expect(result.observations).toContain('smaller over-threshold candidate');
+    expect(result.observations).not.toContain('larger over-threshold candidate');
+  });
+
+  it('falls back to the smallest earlier candidate when the final ladder attempt is larger', async () => {
+    const smaller = `smaller over-threshold candidate ${'z'.repeat(150)}`;
+    const larger = `larger over-threshold candidate ${'y'.repeat(300)}`;
+    const scripted = createScriptedModel([
+      observationsPayload(larger),
+      observationsPayload(smaller),
+      observationsPayload(larger),
+      observationsPayload(larger),
+    ]);
+    const { runner } = createReflectorRunner(scripted.model);
+
+    const result = await runner.call(SOURCE_OBSERVATIONS);
+
+    expect(scripted.callCount).toBe(4);
+    expect(result.observations).toContain('smaller over-threshold candidate');
+    expect(result.observations).not.toContain('larger over-threshold candidate');
   });
 
   it('refuses to write an empty buffered reflection', async () => {
@@ -246,6 +299,45 @@ describe('reflector empty-output guard', () => {
     expect(scripted.callCount).toBeGreaterThan(0);
     // The failure path must clear the boundary so future attempts aren't blocked.
     expect(BufferingCoordinator.lastBufferedBoundary.has(bufferKey)).toBe(false);
+  });
+
+  it("never fails the run on degenerate buffered reflection, even under the default 'abort' policy, and reports it to onReflectionEnd", async () => {
+    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
+    const updateBufferedReflection = vi.fn(async () => {});
+    const onReflectionEnd = vi.fn();
+    const multiLine = Array.from({ length: 20 }, (_, i) => `* observed fact number ${i}`).join('\n');
+    const record = makeRecord({ activeObservations: multiLine, observationTokenCount: multiLine.length });
+    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
+      storage: {
+        updateBufferedReflection,
+        getObservationalMemory: vi.fn(async () => record),
+        setBufferingReflectionFlag: vi.fn(async () => {}),
+      },
+      buffering: {
+        isAsyncReflectionEnabled: () => true,
+        getReflectionBufferKey: (lockKey: string) => `refl:${lockKey}`,
+        isAsyncBufferingInProgress: () => false,
+      },
+      reflectionConfig: { bufferActivation: 0.5 },
+    });
+
+    await expect(
+      runner.maybeReflect({
+        record,
+        observationTokens: 60,
+        threadId: 'thread-1',
+        reflectionHooks: { onReflectionEnd },
+      }),
+    ).resolves.toBeUndefined();
+
+    const op = BufferingCoordinator.asyncBufferingOps.get('refl:thread-1:resource-1');
+    expect(op).toBeDefined();
+    await expect(op).resolves.not.toThrow();
+
+    expect(updateBufferedReflection).not.toHaveBeenCalled();
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+    expect(onReflectionEnd).toHaveBeenCalledTimes(1);
+    expect(onReflectionEnd.mock.calls[0][0].error).toMatchObject({ name: 'DegenerateReflectorOutputError' });
   });
 });
 
