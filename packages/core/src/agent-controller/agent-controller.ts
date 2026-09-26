@@ -1099,11 +1099,7 @@ export class AgentController<TState = {}> {
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
     const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
-    const memory = callerMemory
-      ? callerMemory
-      : storage
-        ? await storage.getStore('memory')
-        : undefined;
+    const memory = callerMemory ? callerMemory : storage ? await storage.getStore('memory') : undefined;
     if (!memory) {
       throw new Error(
         storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
