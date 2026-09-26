@@ -45,7 +45,7 @@ function createVariableCompletionSource(
   return (context: CompletionContext): CompletionResult | null => {
     // Look for {{ pattern before cursor
     const beforeCursor = context.state.sliceDoc(Math.max(0, context.pos - 50), context.pos);
-    const match = beforeCursor.match(/\{\{([a-zA-Z0-9_.\[\]]*)?$/);
+    const match = beforeCursor.match(/\{\{([a-zA-Z0-9_.[\]]*)?$/);
 
     if (!match) {
       return null;
@@ -86,7 +86,7 @@ function createVariableCompletionSource(
     return {
       from: startPos,
       options: completions,
-      validFor: /^[a-zA-Z0-9_.\[\]]*$/,
+      validFor: /^[a-zA-Z0-9_.[\]]*$/,
     };
   };
 }

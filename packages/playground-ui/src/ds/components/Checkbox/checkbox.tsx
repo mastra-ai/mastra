@@ -35,7 +35,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         indeterminate={indeterminate ?? isCheckedIndeterminate}
         data-slot="checkbox"
         className={cn(
-          'peer rounded-[0.3125rem]',
+          'peer rounded-md',
           selectionControlStyle,
           // Indeterminate is checkbox-only and mirrors the checked chip.
           'data-[indeterminate]:border-foreground data-[indeterminate]:bg-foreground data-[indeterminate]:text-background',

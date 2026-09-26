@@ -48,14 +48,14 @@ export function MainHeaderRoot({
           <>&nbsp;</>
         ) : (
           <>
-            {icon && icon} {title}
+            {icon} {title}
           </>
         )}
       </h1>
       {description && (
         <p
           className={cn('m-0 text-caption text-muted-foreground', {
-            'w-[40rem] max-w-[80%] animate-pulse rounded-md bg-muted': descriptionIsLoading,
+            'w-160 max-w-4/5 animate-pulse rounded-md bg-muted': descriptionIsLoading,
           })}
         >
           {descriptionIsLoading ? <>&nbsp;</> : description}

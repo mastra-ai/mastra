@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Workflow } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { Badge } from '../Badge';
 import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
 import { Table, Thead, Th, Tbody, Row } from './Table';

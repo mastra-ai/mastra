@@ -21,11 +21,7 @@ import { cn } from '@/lib/utils';
 //   SVG as children.
 // Excluded from icon-mode because icon-mode wraps children in `<Icon>` and uses its own
 // `rounded-full` (circle).
-const TEXT_MODE_ADORNMENTS = cn(
-  'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em]',
-  '[&>svg]:mx-[-.3em]',
-);
+const TEXT_MODE_ADORNMENTS = cn('gap-2.5 rounded-full', '[&>[data-slot=button-icon]]:-ml-1', '[&>svg]:-mx-1');
 
 // An icon is secondary to the label beside it, and on a neutral surface it says so with
 // a colour token rather than opacity. Opacity dims against whatever sits behind the
@@ -79,9 +75,9 @@ export const buttonVariants = cva(
         ),
       },
       size: {
-        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-3', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-3', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-3.5', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.

@@ -22,7 +22,7 @@ export function ItemListPagination({ currentPage, hasMore, onNextPage, onPrevPag
           className={cn(
             'flex gap-4',
             '[&>button]:flex [&>button]:items-center [&>button]:gap-2 [&>button]:rounded-md [&>button]:border [&>button]:border-border [&>button]:p-1 [&>button]:px-2 [&>button]:text-muted-foreground [&>button]:transition-colors [&>button:hover]:text-foreground',
-            '[&_svg]:size-[1em] [&_svg]:text-muted-foreground',
+            '[&_svg]:size-icon-sm [&_svg]:text-muted-foreground',
           )}
         >
           {typeof currentPage === 'number' && currentPage > 0 && (

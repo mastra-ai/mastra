@@ -23,7 +23,7 @@ const SessionBar = () => (
 );
 
 const Composer = () => (
-  <div className={`${raisedSurfaceStyle} rounded-[22px] px-4 py-3 text-muted-foreground`}>Ask Mastra Code…</div>
+  <div className={`${raisedSurfaceStyle} rounded-3xl px-4 py-3 text-muted-foreground`}>Ask Mastra Code…</div>
 );
 
 const Turn = ({ children }: { children: React.ReactNode }) => (

@@ -27,7 +27,7 @@ export function ItemListItemStatus({ status }: ItemListItemStatusProps) {
     <div className={cn('relative flex w-full items-center justify-center')}>
       {status ? (
         <div
-          className={cn('size-[0.6rem] rounded-full', {
+          className={cn('size-2.5 rounded-full', {
             'bg-green-600': status === 'success',
             'bg-red-700': status === 'failed',
           })}

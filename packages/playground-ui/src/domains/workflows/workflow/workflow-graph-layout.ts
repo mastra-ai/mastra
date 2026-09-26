@@ -6,12 +6,12 @@ const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number }
   if (node.type === WORKFLOW_BOUNDARY_NODE_TYPE) {
     return {
       width: node.measured?.width ?? 112,
-      height: node.measured?.height ?? 38,
+      height: node.measured?.height ?? 40,
     };
   }
 
   return {
-    width: node.measured?.width ?? 274,
+    width: node.measured?.width ?? 276,
     height: node.measured?.height ?? (node.data.isLarge ? 260 : 100),
   };
 };

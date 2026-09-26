@@ -19,7 +19,7 @@ export function FluidHoverHighlight({ hover, className }: FluidHoverHighlightPro
       key={sessionRef.current}
       data-slot="fluid-hover-highlight"
       className={cn(
-        'bg-hover pointer-events-none absolute top-0 left-0 transition-[translate,width,height,opacity] duration-100 ease-out-custom motion-reduce:transition-opacity starting:opacity-0',
+        'pointer-events-none absolute top-0 left-0 transition-[translate,width,height,opacity] duration-100 ease-out-custom motion-reduce:transition-opacity starting:opacity-0',
         className,
       )}
       style={{ translate: `${rect.left}px ${rect.top}px`, width: rect.width, height: rect.height }}

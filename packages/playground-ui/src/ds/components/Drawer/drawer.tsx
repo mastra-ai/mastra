@@ -107,18 +107,18 @@ const drawerPopupVariants = cva(
       {
         side: 'left',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-r-xl border-y border-r',
+        className: 'h-full w-80 max-w-[85vw] rounded-r-xl border-y border-r',
       },
       {
         side: 'right',
         variant: 'default',
-        className: 'h-full w-[20rem] max-w-[85vw] rounded-l-xl border-y border-l',
+        className: 'h-full w-80 max-w-[85vw] rounded-l-xl border-y border-l',
       },
       {
         side: ['left', 'right'],
         variant: 'floating',
         className:
-          'h-[calc(100dvh-1.5rem)] w-[32rem] max-w-[calc(100vw-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]',
+          'h-[calc(100dvh-1.5rem)] w-128 max-w-[calc(100vw-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-2rem)]',
       },
       {
         side: ['top', 'bottom'],

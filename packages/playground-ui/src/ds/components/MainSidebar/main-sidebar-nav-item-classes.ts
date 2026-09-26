@@ -70,7 +70,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     '[&_svg]:size-4 [&_svg]:shrink-0',
     focusRing.visible,
     !isCollapsed && nestedExpandedItemClasses(level),
-    isCollapsed && 'gap-0 px-[13.5px] py-0',
+    isCollapsed && 'gap-0 px-3.5 py-0',
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>

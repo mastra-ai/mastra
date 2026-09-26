@@ -14,7 +14,7 @@ type Story = StoryObj<typeof Skeleton>;
 
 export const Default: Story = {
   args: {
-    className: 'h-4 w-[200px]',
+    className: 'h-4 w-50',
   },
 };
 
@@ -52,7 +52,7 @@ export const TableRows: Story = {
       {[1, 2, 3].map(i => (
         <div key={i} className="flex items-center gap-3">
           <Skeleton className="h-4 w-25" />
-          <Skeleton className="h-4 w-[150px]" />
+          <Skeleton className="h-4 w-38" />
           <Skeleton className="h-4 w-20" />
         </div>
       ))}

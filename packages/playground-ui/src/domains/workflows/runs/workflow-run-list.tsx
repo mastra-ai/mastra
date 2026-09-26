@@ -1,9 +1,8 @@
 import type { MastraClient } from '@mastra/client-js';
 import { ChevronRight } from 'lucide-react';
-import { useContext, useState } from 'react';
+import { useState } from 'react';
 import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
-import { WorkflowRunContext } from '../context/workflow-run-context';
 import { getRunResourceId, getRunTimestamp } from '../utils';
 import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@/domains/workflows/hooks/use-workflow-runs';
 import { AlertDialog } from '@/ds/components/AlertDialog';

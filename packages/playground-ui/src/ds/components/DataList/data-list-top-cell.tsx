@@ -28,7 +28,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
         className={cn(
           'flex h-10 max-w-full min-w-0 items-center overflow-hidden py-1 text-column whitespace-nowrap text-muted-foreground',
           sticky === 'start' && dataListStickyStartStyles,
-          sticky === 'start' && '-mr-3 -ml-3 w-auto max-w-none pr-3 pl-3',
+          sticky === 'start' && '-mx-3 w-auto max-w-none px-3',
           sticky === 'start' && 'z-20',
           className,
         )}
@@ -94,13 +94,13 @@ export function DataListTopCellSmart({
 
   if (tooltipText) {
     return (
-      <DataListTopCellWithTooltip tooltip={tooltipText} className={cn('flex [&_svg]:size-[1.3em]', className)}>
+      <DataListTopCellWithTooltip tooltip={tooltipText} className={cn('flex [&_svg]:size-icon-md', className)}>
         {content}
       </DataListTopCellWithTooltip>
     );
   }
 
-  return <DataListTopCell className={cn('flex [&_svg]:size-[1.3em]', className)}>{content}</DataListTopCell>;
+  return <DataListTopCell className={cn('flex [&_svg]:size-icon-md', className)}>{content}</DataListTopCell>;
 }
 
 export interface DataListTopSelectCellProps {

@@ -39,7 +39,7 @@ describe('Badge', () => {
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
       expect(Array.from(badge.classList)).toEqual(
-        expect.arrayContaining(['rounded-[7px]', 'inset-ring-1', 'inset-shadow-xs']),
+        expect.arrayContaining(['rounded-md', 'inset-ring-1', 'inset-shadow-xs']),
       );
     });
   });

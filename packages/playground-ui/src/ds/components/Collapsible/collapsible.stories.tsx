@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
 import { Button } from '../Button';
 import { ScrollArea } from '../ScrollArea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
@@ -18,7 +17,7 @@ type Story = StoryObj<typeof Collapsible>;
 
 export const Default: Story = {
   render: () => (
-    <Collapsible className="w-[350px]">
+    <Collapsible className="w-88">
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
           Click to expand
@@ -34,7 +33,7 @@ export const Default: Story = {
 
 export const DefaultOpen: Story = {
   render: () => (
-    <Collapsible defaultOpen className="w-[350px]">
+    <Collapsible defaultOpen className="w-88">
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
           Section Title
@@ -79,7 +78,7 @@ export const SettingsSection: Story = {
 
 export const MultipleCollapsibles: Story = {
   render: () => (
-    <div className="w-[350px] space-y-2">
+    <div className="w-88 space-y-2">
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
@@ -121,7 +120,7 @@ export const FillsConstrainedPanel: Story = {
   render: () => (
     <Collapsible
       defaultOpen
-      className="flex h-64 w-[350px] flex-col overflow-hidden rounded-md border border-border bg-background"
+      className="flex h-64 w-88 flex-col overflow-hidden rounded-md border border-border bg-background"
     >
       <CollapsibleTrigger className="flex w-full shrink-0 items-center justify-between px-4 py-2 text-subheading text-foreground">
         Recent runs

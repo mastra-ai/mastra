@@ -33,7 +33,7 @@ export interface WorkflowTracingRunOptionsProps {
  * dialog.
  */
 export const WorkflowTracingRunOptions = ({
-  editorClassName = 'h-[240px] max-h-[40vh]',
+  editorClassName = 'h-60 max-h-[40vh]',
   onSaved,
 }: WorkflowTracingRunOptionsProps) => {
   const theme = useCodemirrorTheme();

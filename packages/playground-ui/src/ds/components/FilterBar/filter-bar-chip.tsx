@@ -71,7 +71,7 @@ export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | 
   const Icon = field?.icon;
   return (
     <>
-      {Icon && <Icon className="size-[1.1em] shrink-0" aria-hidden />}
+      {Icon && <Icon className="size-icon-sm shrink-0" aria-hidden />}
       <span className="truncate">{label ?? field?.label}</span>
     </>
   );
@@ -278,7 +278,7 @@ export function FilterBarChip({
             className={cn(segmentClass, 'pr-0 text-muted-foreground [--filter-bar-segment-padding:0.5rem_0]')}
             title="This filter is locked"
           >
-            <LockIcon className="size-[1.1em]" />
+            <LockIcon className="size-icon-sm" />
           </span>
         )}
         {content}
@@ -690,7 +690,7 @@ export function FilterBarChipRemove() {
     // Keep the × on screen so it folds away with the other segments.
     return (
       <span className={removeClass}>
-        <XIcon className="size-[1.1em]" />
+        <XIcon className="size-icon-sm" />
       </span>
     );
   }
@@ -709,7 +709,7 @@ export function FilterBarChipRemove() {
         ctx.focusAfterRemove(chip.index);
       }}
     >
-      <XIcon className="size-[1.1em]" />
+      <XIcon className="size-icon-sm" />
     </button>
   );
 }
