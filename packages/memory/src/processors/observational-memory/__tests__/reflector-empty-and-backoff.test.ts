@@ -238,6 +238,24 @@ describe('reflector empty-output guard', () => {
     expect(result.observations).not.toContain('larger over-threshold candidate');
   });
 
+  it('falls back to the smallest earlier candidate when the final ladder attempt is larger', async () => {
+    const smaller = `smaller over-threshold candidate ${'z'.repeat(150)}`;
+    const larger = `larger over-threshold candidate ${'y'.repeat(300)}`;
+    const scripted = createScriptedModel([
+      observationsPayload(larger),
+      observationsPayload(smaller),
+      observationsPayload(larger),
+      observationsPayload(larger),
+    ]);
+    const { runner } = createReflectorRunner(scripted.model);
+
+    const result = await runner.call(SOURCE_OBSERVATIONS);
+
+    expect(scripted.callCount).toBe(4);
+    expect(result.observations).toContain('smaller over-threshold candidate');
+    expect(result.observations).not.toContain('larger over-threshold candidate');
+  });
+
   it('refuses to write an empty buffered reflection', async () => {
     const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
     const updateBufferedReflection = vi.fn(async () => {});

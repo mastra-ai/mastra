@@ -1997,6 +1997,9 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
     shortLineChars.set(trimmed, total);
   }
 
+  // The detector ignores anything under 2,000 characters; keep the fired flags
+  // consistent with that so diagnostics never name a strategy it would not use.
+  const eligible = text.length >= 2000;
   return {
     windowText,
     totalWindows,
@@ -2005,9 +2008,9 @@ function analyzeDegenerateRepetition(text: string): DegenerateAnalysis {
     topWindowCount,
     totalCountedLines,
     duplicateLines,
-    windowFired,
-    lineFired,
-    shortLineFired,
+    windowFired: eligible && windowFired,
+    lineFired: eligible && lineFired,
+    shortLineFired: eligible && shortLineFired,
   };
 }
 
@@ -2024,15 +2027,16 @@ export function detectDegenerateRepetition(text: string): boolean {
  * without it there is no way to tell a real repetition loop apart from a
  * detector false-positive on legitimately repetitive content.
  *
- * Shares the detector's analysis (same run collapsing, short-line filter,
- * window sampling and short-line budget), so the reported ratios, most-repeated
- * window and fired strategy match what triggered the detection. Snippets are
- * JSON-escaped so the result stays on one line.
+ * Runs the detector's analysis on the same sanitized text the detector judges
+ * (giant lines truncated), so `strategy=` names what triggered the rejection.
+ * For a short-line loop the window and line ratios read n/a or low, because
+ * short lines are excluded from both. `length` and `longestLine` describe the
+ * raw output. Snippets are JSON-escaped so the result stays on one line.
  */
 export function describeDegenerateOutput(text: string, snippetChars = 400): string {
-  const a = analyzeDegenerateRepetition(text ?? '');
+  const a = analyzeDegenerateRepetition(sanitizeObservationLines(text));
   let longestLine = 0;
-  for (const line of (text ?? '').split('\n')) {
+  for (const line of text.split('\n')) {
     if (line.length > longestLine) longestLine = line.length;
   }
   const fired =

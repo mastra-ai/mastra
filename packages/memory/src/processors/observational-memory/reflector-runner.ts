@@ -595,11 +595,12 @@ export class ReflectorRunner {
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
     }
 
-    // A later attempt that failed (degenerate or empty) must not discard a usable
-    // candidate from an earlier level: fall back to the smallest one instead.
-    if ((parsed.degenerate || emptyOutput) && bestCandidate) {
+    // Commit the smallest usable candidate. A later attempt that failed
+    // (degenerate or empty) or came back larger must not discard it. When the
+    // ladder stopped on a valid compression, that attempt is already the best.
+    if (bestCandidate && bestCandidate.parsed !== parsed) {
       omDebug(
-        `[OM:callReflector] final attempt unusable, falling back to smallest earlier candidate (${bestCandidate.reflectedTokens} tokens)`,
+        `[OM:callReflector] final attempt ${parsed.degenerate || emptyOutput ? 'unusable' : 'larger'}, falling back to smallest earlier candidate (${bestCandidate.reflectedTokens} tokens)`,
       );
       parsed = bestCandidate.parsed;
     }
