@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed Observational Memory discarding observations that contain one very long line, such as a progress bar or a minified payload. The degenerate-output check now runs on line-sanitized text, so line length alone no longer rejects a faithful summary (#24354).
+Fixed Observational Memory discarding a whole observation cycle when the model's summary contained one very long line, such as a minified payload. Long non-repeating lines are now shortened instead, and the surrounding observations are kept (#24354).
