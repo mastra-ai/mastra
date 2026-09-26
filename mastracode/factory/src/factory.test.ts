@@ -386,6 +386,105 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
+  it('lets a mapped caller act as the Factory session or supervisor they can access', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
+    const authorize = config.authorizeSessionResource as (args: {
+      resourceId: string;
+      mappedResourceId: string;
+      requestContext: RequestContext;
+    }) => Promise<boolean>;
+
+    await storage.init();
+    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+    const project = await storage
+      .getDomain<FactoryProjectsStorage>('projects')
+      .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-1',
+      baseBranch: 'main',
+    });
+
+    await sourceControl.sessions.create({
+      sessionId: 'session-private',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-private',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+
+    const as = (organizationId: string, workosId = 'user-1') => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId, organizationId });
+      return requestContext;
+    };
+    const check = (resourceId: string, organizationId: string, workosId?: string) =>
+      authorize({ resourceId, mappedResourceId: 'shared-workspace', requestContext: as(organizationId, workosId) });
+
+    await expect(check('session-1', 'org-1')).resolves.toBe(true);
+    // Rows created without a visibility read as org-visible, so an org peer
+    // may act as them; a private session stays owner-only.
+    await expect(check('session-1', 'org-1', 'peer')).resolves.toBe(true);
+    await expect(check('session-private', 'org-1')).resolves.toBe(true);
+    await expect(check('session-private', 'org-1', 'peer')).resolves.toBe(false);
+    await expect(check('session-1', 'org-2')).resolves.toBe(false);
+    await expect(check(`factory-supervisor:${project.id}`, 'org-1')).resolves.toBe(true);
+    await expect(check(`factory-supervisor:${project.id}`, 'org-2')).resolves.toBe(false);
+    await expect(check('shared-workspace', 'org-1')).resolves.toBe(false);
+  });
+
+  it.each(['source-control', 'projects'])(
+    'denies a mapped caller without touching the %s domain while it is not ready',
+    async domain => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const isDomainReady = storage.isDomainReady.bind(storage);
+      vi.spyOn(storage, 'isDomainReady').mockImplementation(name => name !== domain && isDomainReady(name));
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      const authorize = config.authorizeSessionResource as (args: object) => Promise<boolean>;
+      const projectsGet = vi.spyOn(storage.getDomain<FactoryProjectsStorage>('projects'), 'get');
+
+      await expect(
+        authorize({
+          resourceId: domain === 'projects' ? 'factory-supervisor:project-1' : 'session-1',
+          mappedResourceId: 'shared-workspace',
+          requestContext,
+        }),
+      ).resolves.toBe(false);
+      if (domain === 'projects') expect(projectsGet).not.toHaveBeenCalled();
+    },
+  );
+
   it('passes the sandbox callback through to integrations', async () => {
     const create = () => ({ id: 'sb-cb' }) as never;
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });

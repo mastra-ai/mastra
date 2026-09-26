@@ -85,6 +85,7 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { canCallerActAsFactorySession } from './session/authorize-session-resource.js';
 import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
@@ -926,6 +927,24 @@ export class MastraFactory {
           if (!storage.isDomainReady('source-control')) return;
           await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
         },
+        // Under `mapUserToResourceId` a signed-in caller carries a mapped
+        // resource, but Factory sessions own their threads under the session
+        // id. Let the caller act as the session only when the Factory access
+        // rule would let them open it anyway.
+        // An unready domain denies rather than provisioning storage from an
+        // authorization check, leaving the caller on main's behavior: runs fail
+        // the thread-ownership check. The workspace factory keys on the
+        // session's own resource and checks the caller itself, so this answer
+        // never changes which workspace a session gets.
+        authorizeSessionResource: ({ resourceId, requestContext }) =>
+          canCallerActAsFactorySession(
+            {
+              ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+              ...(storage.isDomainReady('projects') ? { projects: factoryProjectsStorage } : {}),
+            },
+            resourceId,
+            requestContext,
+          ),
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
