@@ -2024,5 +2024,43 @@ describe('TokenLimiterProcessor', () => {
     it('rejects a non-positive maxToolResultTokens', () => {
       expect(() => new TokenLimiterProcessor({ limit: 100, maxToolResultTokens: 0 })).toThrow(/maxToolResultTokens/);
     });
+
+    it.each([5, 20, 50])('always emits a truncation marker whose reported count matches the actual tokens shown (cap=%i)', async cap => {
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: cap });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      const value: string = part.providerMetadata.mastra.modelOutput.value;
+      const match = value.match(/\[truncated: showing (\d+) of ([\d,]+) tokens\]$/);
+      expect(match).not.toBeNull();
+      const reportedShown = Number(match![1]);
+      const slice = value.slice(0, value.length - match![0].length);
+      // The marker's reported count must match the actual token count of the slice it
+      // describes (not the requested cap) -- Tyler's review found cases where the two diverged.
+      expect(estimateTokenCount(slice)).toBe(reportedShown);
+      // Once any content is shown, the whole capped payload (slice + marker) must still fit
+      // inside the requested cap. When the cap is too small even for the marker alone, capText
+      // documents falling back to a marker-only "showing 0 of M" response (see capText docstring).
+      if (reportedShown > 0) {
+        expect(estimateTokenCount(value)).toBeLessThanOrEqual(cap);
+      }
+    });
+
+    it('caps regardless of trimMode, including memory-only', async () => {
+      const big = 'word '.repeat(2000);
+      const processor = new TokenLimiterProcessor({ limit: 400, maxToolResultTokens: 50, trimMode: 'memory-only' });
+      const messageList = new MessageList();
+      messageList.add(toolResult('tool-now', big, 1), 'response');
+
+      await runProcessToolResult(processor, messageList, 'tool-now', big);
+
+      const part = messageList.get.all.db().find(m => m.id === 'tool-now')!.content.parts[0] as any;
+      const modelOutput = part.providerMetadata?.mastra?.modelOutput;
+      expect(modelOutput?.value).toMatch(/\[truncated: showing \d+ of [\d,]+ tokens\]$/);
+    });
   });
 });

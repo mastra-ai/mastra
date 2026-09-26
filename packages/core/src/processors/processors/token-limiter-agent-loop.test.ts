@@ -6,7 +6,11 @@ import { createTool } from '../../tools';
 import { TokenLimiterProcessor } from './token-limiter';
 
 // Regression for #24110: the limiter must not drop the current run's tool result between steps.
-function setup(toolOutput: string, limiter: TokenLimiterProcessor) {
+function setup(
+  toolOutput: string,
+  limiter: TokenLimiterProcessor,
+  registration: { input?: boolean; output?: boolean } = { input: true, output: true },
+) {
   let executions = 0;
   const prompts: any[][] = [];
   const lookup = createTool({
@@ -52,8 +56,8 @@ function setup(toolOutput: string, limiter: TokenLimiterProcessor) {
     tools: { lookup },
     // maxToolResultTokens only takes effect via processToolResult, which only
     // fires for output processors, so the limiter must be registered on both.
-    inputProcessors: [limiter],
-    outputProcessors: [limiter],
+    inputProcessors: registration.input ? [limiter] : [],
+    outputProcessors: registration.output ? [limiter] : [],
   });
   return { agent, prompts, executions: () => executions };
 }
@@ -98,5 +102,21 @@ describe('TokenLimiterProcessor in the agent loop (#24110)', () => {
       const hasToolResult = p.some((m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'tool-result'));
       expect(hasToolResult).toBe(false);
     }
+  });
+
+  it('maxToolResultTokens has no effect unless the limiter is also registered as an outputProcessor', async () => {
+    const big = 'result '.repeat(3000);
+    const { agent, prompts, executions } = setup(big, new TokenLimiterProcessor({ limit: 2000, maxToolResultTokens: 100 }), {
+      input: true,
+      output: false,
+    });
+    const result = await (await agent.stream('question', { maxSteps: 5 })).getFullOutput();
+
+    // processToolResult never runs (no outputProcessor registration), so the cap never
+    // applies: this reproduces the same uncapped-loop symptom as the "no cap set" test above,
+    // even though maxToolResultTokens was configured.
+    expect(executions()).toBe(5);
+    expect(prompts).toHaveLength(5);
+    expect(result.text).toBe('');
   });
 });
