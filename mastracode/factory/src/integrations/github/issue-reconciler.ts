@@ -119,8 +119,8 @@ export function createGithubIssueReconciler(
             const createdAt = issue.createdAt ? Date.parse(issue.createdAt) : Number.NaN;
             if (!Number.isFinite(createdAt) || createdAt < linkedAt) continue;
             try {
-              await rules.ingest(reconciledIssueOpenedEvent(repository, issue.number, issue));
-              summary.created += 1;
+              const result = await rules.ingest(reconciledIssueOpenedEvent(repository, issue.number, issue));
+              if (result.status === 'committed') summary.created += 1;
             } catch (error) {
               recordFailure(repository, error, issue.number);
             }

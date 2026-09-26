@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed new GitHub issues silently never becoming work items. Issues opened, reopened, edited, or relabeled now reach the Factory rules when events are polled, and the issue reconcile sweep now creates cards for open issues filed after the repository was linked that have no card yet. Events the poller skips are logged at debug level.
+New GitHub issues now create Factory work items when events are polled. Open issues filed after a repository was linked are recovered by the issue reconcile sweep when they have no work item. Changes to existing issues re-evaluate their linked work items. Events skipped during polling are logged at debug level.
